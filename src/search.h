@@ -32,6 +32,7 @@
 #include <cstring>
 
 #include "history.h"
+#include "evaluate.h"
 #include "misc.h"
 #include "nnue/network.h"
 #include "nnue/nnue_accumulator.h"
@@ -406,6 +407,7 @@ class Worker {
     // Used by NNUE
     Eval::NNUE::AccumulatorStack  accumulatorStack;
     Eval::NNUE::AccumulatorCaches refreshTable;
+    Eval::UseNNUEMode             useNnueMode = Eval::UseNNUEMode::False;
 
     friend class Stockfish::ThreadPool;
     friend class SearchManager;

@@ -1,0 +1,35 @@
+{
+  "name": "@atomic-stockfish/ffish",
+  "version": "0.1.0",
+  "description": "Atomic-only rules API for JavaScript and WebAssembly",
+  "type": "commonjs",
+  "main": "dist/cjs/ffish.js",
+  "module": "dist/esm/ffish.mjs",
+  "types": "ffish.d.ts",
+  "exports": {
+    ".": {
+      "types": "./ffish.d.ts",
+      "require": "./dist/cjs/ffish.js",
+      "import": "./dist/esm/ffish.mjs"
+    }
+  },
+  "files": [
+    "dist/cjs/ffish.js",
+    "dist/cjs/ffish.wasm",
+    "dist/esm/ffish.mjs",
+    "dist/esm/ffish.wasm",
+    "ffish.d.ts"
+  ],
+  "scripts": {
+    "build": "docker compose run --rm emscripten make -f Makefile_js all",
+    "build:debug": "docker compose run --rm emscripten make -f Makefile_js all DEBUG=yes",
+    "test": "node test-commonjs.cjs && node test-esm.mjs",
+    "test:cjs": "node test-commonjs.cjs",
+    "test:esm": "node test-esm.mjs",
+    "repro": "docker compose run --rm emscripten make -f Makefile_js repro"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "GPL-3.0-or-later"
+}

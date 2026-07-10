@@ -29,11 +29,12 @@ class Position;
 
 namespace Eval {
 
-// The default net name MUST follow the format nn-[SHA256 first 12 digits].nnue
-// for the build process (profile-build and fishtest) to work. Do not change the
-// name of the macro or the location where this macro is defined, as it is used
-// in the Makefile/Fishtest.
-#define EvalFileDefaultName "nn-0ee0657fb25e.nnue"
+// Legacy Atomic V1 networks are selected by their header and architecture, not
+// by a Stockfish-style filename hash. Releases keep the net external until its
+// redistribution rights are explicitly confirmed.
+#define EvalFileDefaultName "atomic_run3b_e202_l05.nnue"
+
+enum class UseNNUEMode { False, True, Pure };
 
 namespace NNUE {
 class Network;
@@ -41,13 +42,14 @@ struct AccumulatorCaches;
 class AccumulatorStack;
 }
 
-std::string trace(Position& pos, const Eval::NNUE::Network& network);
+std::string trace(Position& pos, const Eval::NNUE::Network& network, UseNNUEMode mode);
 
 Value evaluate(const NNUE::Network&           network,
                const Position&                pos,
                Eval::NNUE::AccumulatorStack&  accumulators,
                Eval::NNUE::AccumulatorCaches& caches,
-               int                            optimism);
+               int                            optimism,
+               UseNNUEMode                    mode);
 }  // namespace Eval
 
 }  // namespace Stockfish

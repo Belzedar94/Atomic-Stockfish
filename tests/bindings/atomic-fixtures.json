@@ -1,0 +1,1224 @@
+{
+  "schemaVersion": 1,
+  "oracle": {
+    "commit": "fb78cb561aa01708338e35b3dc3b65a42149a3c4",
+    "engineSha256": "0d3e8d511a2395e6372eeff32ddbc06c0ca4cc1668eecbeca4b7483b04aeed56",
+    "moduleVersion": [
+      0,
+      0,
+      89
+    ],
+    "repository": "fairy-stockfish/Fairy-Stockfish"
+  },
+  "normalization": {
+    "gameResult": "Python uses side-to-move scores (-32000, 0, 32000); JS/WASM map terminal winners to 1-0/0-1 and draws to 1/2-1/2.",
+    "legalMoves": "Compare as sorted arrays; bindings may expose a whitespace-delimited string.",
+    "variants": "Atomic-Stockfish deliberately narrows Fairy's registry to exactly [atomic]."
+  },
+  "publicVariants": [
+    "atomic"
+  ],
+  "fixtures": [
+    {
+      "category": "atomic960",
+      "chess960": true,
+      "expected": [
+        "c1b2"
+      ],
+      "fen": "7k/8/8/8/8/8/2PP4/1RK4q w Q - 0 1",
+      "id": "atomic960.castle-illegal",
+      "moves": [],
+      "probe": "legal_moves",
+      "sourceRefs": [
+        "test.py:446-452"
+      ],
+      "tags": [
+        "castling",
+        "check",
+        "king-safety"
+      ],
+      "variant": "atomic"
+    },
+    {
+      "category": "atomic960",
+      "chess960": true,
+      "expected": [
+        "b1a1",
+        "b1b2",
+        "b1b3",
+        "b1b4",
+        "b1b5",
+        "b1b6",
+        "b1b7",
+        "b1b8",
+        "c1b1",
+        "c1b2",
+        "c1c2",
+        "c1d1",
+        "c1d2"
+      ],
+      "fen": "7k/8/8/8/8/8/8/1RK5 w Q - 0 1",
+      "id": "atomic960.castle-legal",
+      "moves": [],
+      "probe": "legal_moves",
+      "sourceRefs": [
+        "tests/perft.sh:Atomic960 section",
+        "frozen Atomic rule corpus"
+      ],
+      "tags": [
+        "castling",
+        "legal-moves"
+      ],
+      "variant": "atomic"
+    },
+    {
+      "category": "atomic960",
+      "chess960": true,
+      "expected": [
+        "a6b4",
+        "a6b8",
+        "a6c5",
+        "a6c7",
+        "b2a1",
+        "b2a3",
+        "b2c1",
+        "b2c3",
+        "b2d4",
+        "b2e5",
+        "b2f6",
+        "b2g7",
+        "b2h8",
+        "b7b5",
+        "b7b6",
+        "c6c5",
+        "c8b8",
+        "c8c7",
+        "d8c8",
+        "d8d7",
+        "d8e7",
+        "e8e4",
+        "e8e5",
+        "e8e6",
+        "e8e7",
+        "e8f8",
+        "f7f5",
+        "f7f6",
+        "g5h4",
+        "g8f8",
+        "g8g6",
+        "g8g7",
+        "g8h7",
+        "g8h8",
+        "h6h5"
+      ],
+      "fen": "b1rkr1q1/pp3p2/n1p4p/6p1/1P2P1PP/8/PbR2P1Q/BN1KRN1B b Eec - 0 10",
+      "id": "atomic960.legal-moves-js",
+      "moves": [],
+      "probe": "legal_moves",
+      "sourceRefs": [
+        "tests/js/test.js:86-91"
+      ],
+      "tags": [
+        "castling-rights",
+        "javascript",
+        "legal-moves"
+      ],
+      "variant": "atomic"
+    },
+    {
+      "category": "capture",
+      "chess960": true,
+      "expected": false,
+      "fen": "7k/8/8/8/8/8/8/1RK5 w Q - 0 1",
+      "id": "capture.atomic960-castle",
+      "move": "c1b1",
+      "moves": [],
+      "probe": "is_capture",
+      "sourceRefs": [
+        "test.py:1042-1045 adapted to Atomic960"
+      ],
+      "tags": [
+        "castling"
+      ],
+      "variant": "atomic"
+    },
+    {
+      "category": "capture",
+      "chess960": false,
+      "expected": true,
+      "fen": "7k/8/2N1b3/2ppP3/8/8/8/K7 w - d6 0 2",
+      "id": "capture.en-passant",
+      "move": "e5d6",
+      "moves": [],
+      "probe": "is_capture",
+      "sourceRefs": [
+        "test.py:1038-1040 adapted to Atomic",
+        "frozen Atomic rule corpus"
+      ],
+      "tags": [
+        "en-passant",
+        "explosion"
+      ],
+      "variant": "atomic"
+    },
+    {
+      "category": "capture",
+      "chess960": false,
+      "expected": false,
+      "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "id": "capture.quiet",
+      "move": "e2e4",
+      "moves": [],
+      "probe": "is_capture",
+      "sourceRefs": [
+        "test.py:1029-1031 adapted to Atomic"
+      ],
+      "tags": [
+        "quiet-move"
+      ],
+      "variant": "atomic"
+    },
+    {
+      "bindingExpected": {
+        "checkedPieces": [],
+        "isCheck": false
+      },
+      "category": "check",
+      "chess960": false,
+      "expected": false,
+      "fen": "8/8/kK6/8/8/8/Q7/8 b - - 0 1",
+      "id": "check.adjacent-kings",
+      "moves": [],
+      "probe": "gives_check",
+      "sourceRefs": [
+        "test.py:1009-1010",
+        "tests/js/test.js:489-490"
+      ],
+      "tags": [
+        "adjacent-kings",
+        "king-safety"
+      ],
+      "variant": "atomic"
+    },
+    {
+      "bindingExpected": {
+        "checkedPieces": [
+          "e8"
+        ],
+        "isCheck": true
+      },
+      "category": "check",
+      "chess960": false,
+      "expected": true,
+      "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "id": "check.bishop",
+      "moves": [
+        "e2e4",
+        "d7d5",
+        "f1b5"
+      ],
+      "probe": "gives_check",
+      "sourceRefs": [
+        "test.py:1003-1004",
+        "tests/js/test.js:529-530"
+      ],
+      "tags": [
+        "line-check"
+      ],
+      "variant": "atomic"
+    },
+    {
+      "bindingExpected": {
+        "checkedPieces": [
+          "e8"
+        ],
+        "isCheck": true
+      },
+      "category": "check",
+      "chess960": false,
+      "expected": true,
+      "fen": "rnbqkbnr/ppp2ppp/8/8/8/8/PPP2PPP/RNBQKBNR w KQkq - 0 4",
+      "id": "check.queen",
+      "moves": [
+        "d1d7"
+      ],
+      "probe": "gives_check",
+      "sourceRefs": [
+        "test.py:1006-1007",
+        "tests/js/test.js:531-533"
+      ],
+      "tags": [
+        "atomic-check",
+        "mate-threat"
+      ],
+      "variant": "atomic"
+    },
+    {
+      "bindingExpected": {
+        "checkedPieces": [],
+        "isCheck": false
+      },
+      "category": "check",
+      "chess960": false,
+      "expected": false,
+      "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "id": "check.quiet",
+      "moves": [
+        "e2e4"
+      ],
+      "probe": "gives_check",
+      "sourceRefs": [
+        "test.py:1000-1001"
+      ],
+      "tags": [
+        "quiet-move"
+      ],
+      "variant": "atomic"
+    },
+    {
+      "bindingExpected": {
+        "checkedPieces": [],
+        "isCheck": false
+      },
+      "category": "check",
+      "chess960": false,
+      "expected": false,
+      "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "id": "check.start",
+      "moves": [],
+      "probe": "gives_check",
+      "sourceRefs": [
+        "test.py:997-998",
+        "tests/js/test.js:527-528"
+      ],
+      "tags": [
+        "startpos"
+      ],
+      "variant": "atomic"
+    },
+    {
+      "category": "contract",
+      "expected": {
+        "prefix": "Atomic-Stockfish"
+      },
+      "id": "contract.engine-info",
+      "probe": "target_contract",
+      "sourceRefs": [
+        "test.py:312-314",
+        "tests/js/test.js:751-754"
+      ],
+      "tags": [
+        "identity"
+      ],
+      "variant": "atomic"
+    },
+    {
+      "category": "contract",
+      "expected": false,
+      "id": "contract.no-pockets",
+      "probe": "captures_to_hand",
+      "sourceRefs": [
+        "test.py:328-330 adapted to Atomic",
+        "tests/js/test.js:778-783 adapted to Atomic"
+      ],
+      "tags": [
+        "compatibility-api"
+      ],
+      "variant": "atomic"
+    },
+    {
+      "category": "contract",
+      "expected": {
+        "fiftyMoveClaimAtHalfmove": 100,
+        "repetitionClaimAfterMoves": [
+          "g1f3",
+          "b8c6",
+          "f3g1",
+          "c6b8",
+          "g1f3",
+          "b8c6",
+          "f3g1",
+          "c6b8"
+        ]
+      },
+      "id": "contract.optional-draw-policy",
+      "probe": "target_contract",
+      "sourceRefs": [
+        "test.py:1151-1215 adapted to Atomic",
+        "tests/js/test.js:373-444 adapted to Atomic"
+      ],
+      "tags": [
+        "50-move",
+        "repetition"
+      ],
+      "variant": "atomic"
+    },
+    {
+      "category": "contract",
+      "expected": false,
+      "id": "contract.single-board",
+      "probe": "two_boards",
+      "sourceRefs": [
+        "test.py:324-326 adapted to Atomic"
+      ],
+      "tags": [
+        "compatibility-api"
+      ],
+      "variant": "atomic"
+    },
+    {
+      "category": "contract",
+      "expected": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "id": "contract.start-fen",
+      "probe": "start_fen",
+      "sourceRefs": [
+        "test.py:332-346 adapted to Atomic",
+        "tests/js/test.js:785-789 adapted to Atomic"
+      ],
+      "tags": [
+        "startpos"
+      ],
+      "variant": "atomic"
+    },
+    {
+      "category": "contract",
+      "expected": {
+        "Hash": 16,
+        "Threads": 1
+      },
+      "id": "contract.thread-option",
+      "probe": "target_contract",
+      "sourceRefs": [
+        "tests/js/test.js:764-769"
+      ],
+      "tags": [
+        "options"
+      ],
+      "variant": "atomic"
+    },
+    {
+      "category": "contract",
+      "expected": [
+        "atomic"
+      ],
+      "id": "contract.variant-list",
+      "probe": "target_contract",
+      "sourceRefs": [
+        "test.py:316-318 narrowed to Atomic",
+        "tests/js/test.js:939-943 narrowed to Atomic"
+      ],
+      "tags": [
+        "atomic-only",
+        "variants"
+      ],
+      "variant": "atomic"
+    },
+    {
+      "category": "contract",
+      "expected": {
+        "length": 3,
+        "type": "integer-tuple"
+      },
+      "id": "contract.version-shape",
+      "probe": "target_contract",
+      "sourceRefs": [
+        "test.py:308-310"
+      ],
+      "tags": [
+        "abi"
+      ],
+      "variant": "atomic"
+    },
+    {
+      "category": "legal-moves",
+      "chess960": false,
+      "expected": [
+        "e1d1",
+        "e1d2",
+        "e1f1",
+        "e1f2"
+      ],
+      "fen": "8/8/8/8/8/8/4k3/4K3 w - - 0 1",
+      "id": "legal.adjacent-kings",
+      "moves": [],
+      "probe": "legal_moves",
+      "sourceRefs": [
+        "test.py:1009-1010",
+        "frozen Atomic rule corpus"
+      ],
+      "tags": [
+        "adjacent-kings"
+      ],
+      "variant": "atomic"
+    },
+    {
+      "category": "legal-moves",
+      "chess960": false,
+      "expected": [
+        "a1a2",
+        "a1b1",
+        "a1b2",
+        "c6a5",
+        "c6a7",
+        "c6b4",
+        "c6b8",
+        "c6d4",
+        "c6d8",
+        "c6e7",
+        "e5d6"
+      ],
+      "fen": "7k/8/2N1b3/2ppP3/8/8/8/K7 w - d6 0 2",
+      "id": "legal.atomic-en-passant",
+      "moves": [],
+      "probe": "legal_moves",
+      "sourceRefs": [
+        "frozen Atomic rule corpus"
+      ],
+      "tags": [
+        "en-passant",
+        "explosion"
+      ],
+      "variant": "atomic"
+    },
+    {
+      "category": "legal-moves",
+      "chess960": false,
+      "expected": [
+        "a1b1",
+        "a1b2",
+        "g7h8b",
+        "g7h8n",
+        "g7h8q",
+        "g7h8r"
+      ],
+      "fen": "k5br/6P1/8/8/8/8/8/K7 w - - 0 1",
+      "id": "legal.capture-promotion",
+      "moves": [],
+      "probe": "legal_moves",
+      "sourceRefs": [
+        "frozen Atomic rule corpus"
+      ],
+      "tags": [
+        "explosion",
+        "promotion"
+      ],
+      "variant": "atomic"
+    },
+    {
+      "category": "lifecycle",
+      "chess960": false,
+      "expected": {
+        "fen": "rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2",
+        "fenAfterPop": "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2",
+        "fenAfterReset": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+        "fullmoveNumber": 2,
+        "gamePly": 3,
+        "halfmoveClock": 1,
+        "is960": false,
+        "legalMoveCount": 29,
+        "moveStack": [
+          "e2e4",
+          "e7e5",
+          "g1f3"
+        ],
+        "sanMoves": [
+          "e4",
+          "e5",
+          "Nf3"
+        ],
+        "turn": "black"
+      },
+      "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "id": "lifecycle.quiet-opening",
+      "moves": [
+        "e2e4",
+        "e7e5",
+        "g1f3"
+      ],
+      "probe": "lifecycle",
+      "sourceRefs": [
+        "tests/js/test.js:119-340 adapted to Atomic",
+        "test.py:964-983 adapted to Atomic"
+      ],
+      "tags": [
+        "fen",
+        "push-pop",
+        "san",
+        "state"
+      ],
+      "variant": "atomic"
+    },
+    {
+      "category": "material",
+      "chess960": false,
+      "expected": [
+        true,
+        true
+      ],
+      "fen": "8/8/8/8/3K4/3k4/8/8 b - - 0 1",
+      "id": "material.k-v-k",
+      "moves": [],
+      "probe": "has_insufficient_material",
+      "sourceRefs": [
+        "test.py:163"
+      ],
+      "tags": [
+        "insufficient-material"
+      ],
+      "variant": "atomic"
+    },
+    {
+      "category": "material",
+      "chess960": false,
+      "expected": [
+        true,
+        false
+      ],
+      "fen": "k7/p7/8/8/8/8/8/K7 w - - 0 1",
+      "id": "material.k-v-kp",
+      "moves": [],
+      "probe": "has_insufficient_material",
+      "sourceRefs": [
+        "test.py:164"
+      ],
+      "tags": [
+        "insufficient-material"
+      ],
+      "variant": "atomic"
+    },
+    {
+      "category": "material",
+      "chess960": false,
+      "expected": [
+        true,
+        false
+      ],
+      "fen": "k7/q7/8/8/8/8/8/K7 w - - 0 1",
+      "id": "material.k-v-kq",
+      "moves": [],
+      "probe": "has_insufficient_material",
+      "sourceRefs": [
+        "test.py:165"
+      ],
+      "tags": [
+        "insufficient-material"
+      ],
+      "variant": "atomic"
+    },
+    {
+      "category": "material",
+      "chess960": false,
+      "expected": [
+        false,
+        false
+      ],
+      "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "id": "material.start",
+      "moves": [],
+      "probe": "has_insufficient_material",
+      "sourceRefs": [
+        "test.py:162"
+      ],
+      "tags": [
+        "insufficient-material",
+        "startpos"
+      ],
+      "variant": "atomic"
+    },
+    {
+      "category": "perft",
+      "chess960": false,
+      "depth": 4,
+      "expected": 197326,
+      "id": "perft.01-start",
+      "position": "startpos",
+      "probe": "perft",
+      "sourceRefs": [
+        "tests/perft.sh:atomic startpos"
+      ],
+      "tags": [
+        "normative-perft"
+      ],
+      "variant": "atomic"
+    },
+    {
+      "category": "perft",
+      "chess960": false,
+      "depth": 4,
+      "expected": 1434825,
+      "id": "perft.02-midgame-a",
+      "position": "fen rn2kb1r/1pp1p2p/p2q1pp1/3P4/2P3b1/4PN2/PP3PPP/R2QKB1R b KQkq - 0 1",
+      "probe": "perft",
+      "sourceRefs": [
+        "tests/perft.sh:atomic midgame 1"
+      ],
+      "tags": [
+        "normative-perft"
+      ],
+      "variant": "atomic"
+    },
+    {
+      "category": "perft",
+      "chess960": false,
+      "depth": 4,
+      "expected": 714499,
+      "id": "perft.03-midgame-b",
+      "position": "fen rn1qkb1r/p5pp/2p5/3p4/N3P3/5P2/PPP4P/R1BQK3 w Qkq - 0 1",
+      "probe": "perft",
+      "sourceRefs": [
+        "tests/perft.sh:atomic midgame 2"
+      ],
+      "tags": [
+        "normative-perft"
+      ],
+      "variant": "atomic"
+    },
+    {
+      "category": "perft",
+      "chess960": false,
+      "depth": 2,
+      "expected": 148,
+      "id": "perft.04-tactical",
+      "position": "fen r4b1r/2kb1N2/p2Bpnp1/8/2Pp3p/1P1PPP2/P5PP/R3K2R b KQ - 0 1",
+      "probe": "perft",
+      "sourceRefs": [
+        "tests/perft.sh:atomic tactical"
+      ],
+      "tags": [
+        "normative-perft"
+      ],
+      "variant": "atomic"
+    },
+    {
+      "category": "perft",
+      "chess960": true,
+      "depth": 4,
+      "expected": 61401,
+      "id": "perft.05-atomic960-a",
+      "position": "fen 8/8/8/8/8/8/2k5/rR4KR w KQ - 0 1",
+      "probe": "perft",
+      "sourceRefs": [
+        "tests/perft.sh:Atomic960 1"
+      ],
+      "tags": [
+        "atomic960",
+        "normative-perft"
+      ],
+      "variant": "atomic"
+    },
+    {
+      "category": "perft",
+      "chess960": true,
+      "depth": 4,
+      "expected": 98729,
+      "id": "perft.06-atomic960-b",
+      "position": "fen r3k1rR/5K2/8/8/8/8/8/8 b kq - 0 1",
+      "probe": "perft",
+      "sourceRefs": [
+        "tests/perft.sh:Atomic960 2"
+      ],
+      "tags": [
+        "atomic960",
+        "normative-perft"
+      ],
+      "variant": "atomic"
+    },
+    {
+      "category": "perft",
+      "chess960": true,
+      "depth": 4,
+      "expected": 241478,
+      "id": "perft.07-atomic960-c",
+      "position": "fen Rr2k1rR/3K4/3p4/8/8/8/7P/8 w kq - 0 1",
+      "probe": "perft",
+      "sourceRefs": [
+        "tests/perft.sh:Atomic960 3"
+      ],
+      "tags": [
+        "atomic960",
+        "normative-perft"
+      ],
+      "variant": "atomic"
+    },
+    {
+      "category": "perft",
+      "chess960": true,
+      "depth": 4,
+      "expected": 17915,
+      "id": "perft.08-atomic960-d",
+      "position": "fen 1R4kr/4K3/8/8/8/8/8/8 b k - 0 1",
+      "probe": "perft",
+      "sourceRefs": [
+        "tests/perft.sh:Atomic960 4"
+      ],
+      "tags": [
+        "atomic960",
+        "normative-perft"
+      ],
+      "variant": "atomic"
+    },
+    {
+      "bindingExpected": {
+        "isGameOver": true,
+        "javascript": "1-0",
+        "wasm": "1-0",
+        "winner": "white"
+      },
+      "category": "result",
+      "chess960": false,
+      "expected": -32000,
+      "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "id": "result.exploded-king",
+      "moves": [
+        "e2e4",
+        "e7e5",
+        "d1h5",
+        "a7a6",
+        "h5f7"
+      ],
+      "probe": "game_result",
+      "sourceRefs": [
+        "tests/js/test.js:454-460"
+      ],
+      "tags": [
+        "explosion",
+        "terminal"
+      ],
+      "variant": "atomic"
+    },
+    {
+      "bindingExpected": {
+        "isGameOver": true,
+        "javascript": "1-0",
+        "wasm": "1-0",
+        "winner": "white"
+      },
+      "category": "result",
+      "chess960": false,
+      "expected": -32000,
+      "fen": "3qk3/8/8/8/8/8/8/3QK3 w - - 0 1",
+      "id": "result.exploded-king-priority",
+      "moves": [
+        "d1d8"
+      ],
+      "probe": "game_result",
+      "sourceRefs": [
+        "tests/js/test.js:462-466"
+      ],
+      "tags": [
+        "explosion",
+        "insufficient-material",
+        "terminal-priority"
+      ],
+      "variant": "atomic"
+    },
+    {
+      "category": "result",
+      "chess960": false,
+      "expected": [
+        true,
+        -32000
+      ],
+      "fen": "6rk/8/8/8/8/8/8/K5R1 w - - 0 1",
+      "id": "result.immediate-king-explosion",
+      "moves": [
+        "g1g8"
+      ],
+      "probe": "is_immediate_game_end",
+      "sourceRefs": [
+        "tests/js/test.js:454-466",
+        "frozen Atomic rule corpus"
+      ],
+      "tags": [
+        "explosion",
+        "terminal"
+      ],
+      "variant": "atomic"
+    },
+    {
+      "bindingExpected": {
+        "isGameOver": true,
+        "javascript": "1-0",
+        "wasm": "1-0",
+        "winner": "white"
+      },
+      "category": "result",
+      "chess960": false,
+      "expected": -32000,
+      "fen": "BQ6/Rk6/8/8/8/8/8/4K3 b - - 0 1",
+      "id": "result.mate",
+      "moves": [],
+      "probe": "game_result",
+      "sourceRefs": [
+        "test.py:1102-1105"
+      ],
+      "tags": [
+        "checkmate",
+        "terminal"
+      ],
+      "variant": "atomic"
+    },
+    {
+      "category": "result",
+      "chess960": false,
+      "expected": [
+        true,
+        0
+      ],
+      "fen": "r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 100 80",
+      "id": "result.optional-50move",
+      "moves": [],
+      "probe": "is_optional_game_end",
+      "sourceRefs": [
+        "test.py:1151-1215 adapted to Atomic",
+        "tests/js/test.js:427-438 adapted to Atomic"
+      ],
+      "tags": [
+        "50-move",
+        "optional-draw"
+      ],
+      "variant": "atomic"
+    },
+    {
+      "category": "result",
+      "chess960": false,
+      "expected": [
+        true,
+        0
+      ],
+      "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "id": "result.optional-repetition",
+      "moves": [
+        "g1f3",
+        "b8c6",
+        "f3g1",
+        "c6b8",
+        "g1f3",
+        "b8c6",
+        "f3g1",
+        "c6b8"
+      ],
+      "probe": "is_optional_game_end",
+      "sourceRefs": [
+        "test.py:1151-1215 adapted to Atomic",
+        "tests/js/test.js:411-425 adapted to Atomic"
+      ],
+      "tags": [
+        "optional-draw",
+        "repetition"
+      ],
+      "variant": "atomic"
+    },
+    {
+      "bindingExpected": {
+        "isGameOver": true,
+        "javascript": "1/2-1/2",
+        "wasm": "1/2-1/2",
+        "winner": null
+      },
+      "category": "result",
+      "chess960": false,
+      "expected": 0,
+      "fen": "KQ6/Rk6/2B5/8/8/8/8/8 b - - 0 1",
+      "id": "result.stalemate",
+      "moves": [],
+      "probe": "game_result",
+      "sourceRefs": [
+        "test.py:1106-1108"
+      ],
+      "tags": [
+        "stalemate",
+        "terminal"
+      ],
+      "variant": "atomic"
+    },
+    {
+      "category": "san",
+      "chess960": true,
+      "expected": "O-O-O",
+      "fen": "7k/8/8/8/8/8/8/1RK5 w Q - 0 1",
+      "id": "san.atomic960-castle",
+      "move": "c1b1",
+      "probe": "get_san",
+      "sourceRefs": [
+        "test.py:446-452 adapted to SAN"
+      ],
+      "tags": [
+        "castling",
+        "notation"
+      ],
+      "variant": "atomic"
+    },
+    {
+      "category": "san",
+      "chess960": false,
+      "expected": "exd6",
+      "fen": "7k/8/2N1b3/2ppP3/8/8/8/K7 w - d6 0 2",
+      "id": "san.en-passant",
+      "move": "e5d6",
+      "probe": "get_san",
+      "sourceRefs": [
+        "test.py:707-962 adapted to Atomic",
+        "frozen Atomic rule corpus"
+      ],
+      "tags": [
+        "en-passant",
+        "notation"
+      ],
+      "variant": "atomic"
+    },
+    {
+      "category": "san",
+      "chess960": false,
+      "expected": "Qxd4",
+      "fen": "7k/8/8/2pBn3/3r4/2PQN3/8/K7 w - - 0 1",
+      "id": "san.explosion",
+      "move": "d3d4",
+      "probe": "get_san",
+      "sourceRefs": [
+        "test.py:707-962 adapted to Atomic",
+        "frozen Atomic rule corpus"
+      ],
+      "tags": [
+        "explosion",
+        "notation"
+      ],
+      "variant": "atomic"
+    },
+    {
+      "category": "san",
+      "chess960": false,
+      "expected": "gxh8=Q",
+      "fen": "k5br/6P1/8/8/8/8/8/K7 w - - 0 1",
+      "id": "san.promotion",
+      "move": "g7h8q",
+      "probe": "get_san",
+      "sourceRefs": [
+        "test.py:707-962 adapted to Atomic",
+        "frozen Atomic rule corpus"
+      ],
+      "tags": [
+        "explosion",
+        "notation",
+        "promotion"
+      ],
+      "variant": "atomic"
+    },
+    {
+      "category": "san",
+      "chess960": false,
+      "expected": "Nf3",
+      "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "id": "san.quiet",
+      "move": "g1f3",
+      "probe": "get_san",
+      "sourceRefs": [
+        "tests/js/test.js:229-251 adapted to Atomic"
+      ],
+      "tags": [
+        "notation",
+        "quiet-move"
+      ],
+      "variant": "atomic"
+    },
+    {
+      "category": "transition",
+      "chess960": false,
+      "expected": "6k1/8/8/8/8/8/8/4K2R w K - 0 2",
+      "fen": "6k1/8/8/8/8/8/1r6/RN2K2R b KQ - 0 1",
+      "id": "transition.castling-right-bycatch",
+      "moves": [
+        "b2b1"
+      ],
+      "probe": "get_fen",
+      "sourceRefs": [
+        "frozen Atomic rule corpus"
+      ],
+      "tags": [
+        "castling-rights",
+        "explosion"
+      ],
+      "variant": "atomic"
+    },
+    {
+      "category": "transition",
+      "chess960": false,
+      "expected": "8/8/8/8/8/8/8/K7 b - - 0 1",
+      "fen": "7k/7R/8/8/8/8/8/K7 w - - 0 1",
+      "id": "transition.direct-king-capture",
+      "moves": [
+        "h7h8"
+      ],
+      "probe": "get_fen",
+      "sourceRefs": [
+        "frozen Atomic rule corpus"
+      ],
+      "tags": [
+        "direct-king-capture",
+        "terminal"
+      ],
+      "variant": "atomic"
+    },
+    {
+      "category": "transition",
+      "chess960": false,
+      "expected": "7k/8/8/2p5/8/8/8/K7 b - - 0 2",
+      "fen": "7k/8/2N1b3/2ppP3/8/8/8/K7 w - d6 0 2",
+      "id": "transition.en-passant",
+      "moves": [
+        "e5d6"
+      ],
+      "probe": "get_fen",
+      "sourceRefs": [
+        "frozen Atomic rule corpus"
+      ],
+      "tags": [
+        "en-passant",
+        "explosion"
+      ],
+      "variant": "atomic"
+    },
+    {
+      "category": "transition",
+      "chess960": false,
+      "expected": "7k/8/8/2p5/8/2P5/8/K7 b - - 0 1",
+      "fen": "7k/8/8/2pBn3/3r4/2PQN3/8/K7 w - - 0 1",
+      "id": "transition.explosion",
+      "moves": [
+        "d3d4"
+      ],
+      "probe": "get_fen",
+      "sourceRefs": [
+        "frozen Atomic rule corpus"
+      ],
+      "tags": [
+        "bycatch",
+        "explosion",
+        "pawn-immunity"
+      ],
+      "variant": "atomic"
+    },
+    {
+      "category": "transition",
+      "chess960": false,
+      "expected": "8/8/8/8/8/8/8/K7 b - - 0 1",
+      "fen": "6rk/8/8/8/8/8/8/K5R1 w - - 0 1",
+      "id": "transition.king-explosion",
+      "moves": [
+        "g1g8"
+      ],
+      "probe": "get_fen",
+      "sourceRefs": [
+        "tests/js/test.js:454-466",
+        "frozen Atomic rule corpus"
+      ],
+      "tags": [
+        "explosion",
+        "terminal"
+      ],
+      "variant": "atomic"
+    },
+    {
+      "category": "transition",
+      "chess960": false,
+      "expected": "k7/8/8/8/8/8/8/K7 b - - 0 1",
+      "fen": "k5br/6P1/8/8/8/8/8/K7 w - - 0 1",
+      "id": "transition.promotion",
+      "moves": [
+        "g7h8q"
+      ],
+      "probe": "get_fen",
+      "sourceRefs": [
+        "frozen Atomic rule corpus"
+      ],
+      "tags": [
+        "explosion",
+        "promotion"
+      ],
+      "variant": "atomic"
+    },
+    {
+      "category": "validation",
+      "chess960": false,
+      "expected": -5,
+      "fen": "rnbqkbnr/pppppppp/8/8/8/RNBQKBNR/PPPPPPPP/8 w KQkq - 0 1",
+      "id": "validation.atomic-invalid-castling-rank",
+      "probe": "validate_fen",
+      "sourceRefs": [
+        "test.py:282-284"
+      ],
+      "tags": [
+        "castling-rights",
+        "invalid-fen"
+      ],
+      "variant": "atomic"
+    },
+    {
+      "category": "validation",
+      "chess960": false,
+      "expected": -10,
+      "fen": "rnb+qkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "id": "validation.atomic-plus-marker",
+      "probe": "validate_fen",
+      "sourceRefs": [
+        "test.py:1284-1298 adapted from non-Shogi validation"
+      ],
+      "tags": [
+        "invalid-fen",
+        "promotion"
+      ],
+      "variant": "atomic"
+    },
+    {
+      "category": "validation",
+      "chess960": true,
+      "expected": 1,
+      "fen": "7k/8/8/8/8/8/2PP4/1RK4q w Q - 0 1",
+      "id": "validation.atomic960-castling",
+      "probe": "validate_fen",
+      "sourceRefs": [
+        "test.py:446-452",
+        "test.py:1235-1238 adapted to Atomic960"
+      ],
+      "tags": [
+        "atomic960",
+        "castling-rights",
+        "valid-fen"
+      ],
+      "variant": "atomic"
+    },
+    {
+      "category": "validation",
+      "chess960": false,
+      "expected": 1,
+      "fen": "k5br/6P1/8/8/8/8/8/K7 w - - 0 1",
+      "id": "validation.capture-promotion-position",
+      "probe": "validate_fen",
+      "sourceRefs": [
+        "test.py:1244-1298 adapted to Atomic promotion"
+      ],
+      "tags": [
+        "promotion",
+        "valid-fen"
+      ],
+      "variant": "atomic"
+    },
+    {
+      "category": "validation",
+      "chess960": false,
+      "expected": 1,
+      "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "id": "validation.start",
+      "probe": "validate_fen",
+      "sourceRefs": [
+        "test.py:161-162",
+        "test.py:1224-1242"
+      ],
+      "tags": [
+        "startpos",
+        "valid-fen"
+      ],
+      "variant": "atomic"
+    }
+  ]
+}

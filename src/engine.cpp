@@ -41,7 +41,7 @@
 #include "shm.h"
 #include "syzygy/tbprobe.h"
 #include "types.h"
-#include "uci.h"
+#include "uci_move.h"
 #include "ucioption.h"
 
 namespace Stockfish {
@@ -50,6 +50,8 @@ namespace NN = Eval::NNUE;
 
 constexpr int MaxHashMB  = Is64Bit ? 33554432 : 2048;
 int           MaxThreads = std::max(1024, 4 * int(get_hardware_concurrency()));
+constexpr auto AtomicStartFEN =
+  "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
 // The default configuration will attempt to group L3 domains up to 32 threads.
 // This size was found to be a good balance between the Elo gain of increased
@@ -65,7 +67,7 @@ Engine::Engine(std::optional<std::filesystem::path> path) :
     networkFile{std::nullopt, ""},
     network(numaContext) {
 
-    pos.set(StartFEN, false, &states->back());
+    pos.set(AtomicStartFEN, false, &states->back());
 
     options.add(  //
       "Debug Log File", Option("", [](const Option& o) {
@@ -112,13 +114,16 @@ Engine::Engine(std::optional<std::filesystem::path> path) :
 
     options.add("UCI_Chess960", Option(false));
 
-    options.add("UCI_LimitStrength", Option(false));
+    // Atomic is a combo, even though it deliberately has a single value. This
+    // keeps the public UCI contract compatible with chess-variant GUIs while
+    // making it impossible to select rules this specialized engine does not
+    // implement.
+    options.add("UCI_Variant", Option("atomic var atomic", "atomic"));
 
-    options.add("UCI_Elo",
-                Option(Stockfish::Search::Skill::LowestElo, Stockfish::Search::Skill::LowestElo,
-                       Stockfish::Search::Skill::HighestElo));
-
-    options.add("UCI_ShowWDL", Option(false));
+    // Compatibility input used by variant-aware tournament runners. Atomic-
+    // Stockfish has compiled-in rules, so the configured file is intentionally
+    // ignored and UCI_Variant remains fixed to atomic.
+    options.add("VariantPath", Option(""));
 
     options.add(  //
       "SyzygyPath", Option("", [](const Option& o) {
@@ -127,10 +132,10 @@ Engine::Engine(std::optional<std::filesystem::path> path) :
       }));
 
     options.add("SyzygyProbeDepth", Option(1, 1, 100));
-
     options.add("Syzygy50MoveRule", Option(true));
+    options.add("SyzygyProbeLimit", Option(6, 0, 6));
 
-    options.add("SyzygyProbeLimit", Option(7, 0, 7));
+    options.add("Use NNUE", Option("true var false var true var pure", "true"));
 
     options.add(  //
       "EvalFile", Option(EvalFileDefaultName, [this](const Option& o) {
@@ -145,16 +150,19 @@ Engine::Engine(std::optional<std::filesystem::path> path) :
 }
 
 u64 Engine::perft(const std::string& fen, Depth depth, bool isChess960) {
-    verify_network();
+    if (!verify_network())
+        return 0;
 
     return Benchmark::perft(fen, depth, isChess960);
 }
 
-void Engine::go(Search::LimitsType& limits) {
+bool Engine::go(Search::LimitsType& limits) {
     assert(limits.perft == 0);
-    verify_network();
+    if (!verify_network())
+        return false;
 
     threads.start_thinking(options, pos, states, limits);
+    return true;
 }
 void Engine::stop() { threads.stop = true; }
 
@@ -165,7 +173,7 @@ void Engine::search_clear() {
     threads.clear();
 
     // @TODO wont work with multiple instances
-    Tablebases::init(options["SyzygyPath"]);  // Free mapped files
+    Tablebases::init(options["SyzygyPath"]);  // Free and remap Atomic tables
 }
 
 void Engine::set_on_update_no_moves(std::function<void(const Engine::InfoShort&)>&& f) {
@@ -200,7 +208,7 @@ std::optional<PositionSetError> Engine::set_position(const std::string&         
 
     for (const auto& move : moves)
     {
-        auto m = UCIEngine::to_move(pos, move);
+        auto m = UCI::to_move(pos, move);
 
         if (m == Move::none())
             return PositionSetError("Illegal move: " + move);
@@ -257,9 +265,23 @@ void Engine::set_ponderhit(bool b) { threads.main_manager()->ponder = b; }
 
 // network related
 
-void Engine::verify_network() const {
+Eval::UseNNUEMode Engine::nnue_mode() const {
+    return options["Use NNUE"] == "pure" ? Eval::UseNNUEMode::Pure
+         : options["Use NNUE"] == "true" ? Eval::UseNNUEMode::True
+                                           : Eval::UseNNUEMode::False;
+}
+
+bool Engine::verify_network() const {
+    if (nnue_mode() == Eval::UseNNUEMode::False)
+    {
+        if (onVerifyNetwork)
+            onVerifyNetwork("Classical Atomic evaluation enabled (Use NNUE=false).");
+        return true;
+    }
+
     const auto file = path_from_utf8(std::string(options["EvalFile"]));
-    network->verify(onVerifyNetwork, networkFile, file);
+    if (!network->verify(onVerifyNetwork, networkFile, file))
+        return false;
 
     auto statuses = network.get_status_and_errors();
     for (usize i = 0; i < statuses.size(); ++i)
@@ -288,8 +310,11 @@ void Engine::verify_network() const {
             message += " " + *error;
         }
 
-        onVerifyNetwork(message);
+        if (onVerifyNetwork)
+            onVerifyNetwork(message);
     }
+
+    return true;
 }
 
 std::unique_ptr<Eval::NNUE::Network> Engine::get_default_network() {
@@ -320,9 +345,10 @@ void Engine::trace_eval() const {
     Position     p;
     p.set(pos.fen(), options["UCI_Chess960"], &trace_states->back());
 
-    verify_network();
+    if (!verify_network())
+        return;
 
-    sync_cout << "\n" << Eval::trace(p, *network) << sync_endl;
+    sync_cout << "\n" << Eval::trace(p, *network, nnue_mode()) << sync_endl;
 }
 
 const OptionsMap& Engine::get_options() const { return options; }

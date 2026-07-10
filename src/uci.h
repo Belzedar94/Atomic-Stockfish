@@ -45,6 +45,8 @@ class UCIEngine {
 
     static int         to_cp(Value v, const Position& pos);
     static std::string format_score(const Score& s);
+    // Compatibility wrappers. New protocol/binding code should include
+    // uci_move.h and call the Engine/Search-independent UCI namespace.
     static std::string square(Square s);
     static std::string move(Move m, bool chess960 = false);
     static std::string wdl(Value v, const Position& pos);

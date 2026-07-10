@@ -17,9 +17,21 @@ error()
 }
 trap 'error ${LINENO}' ERR
 
-# obtain
-EXE=${EXE:-./stockfish}
-eval "$RUN_PREFIX $EXE bench" > "$STDOUT_FILE" 2> "$STDERR_FILE" || error ${LINENO}
+# Obtain an Atomic-only signature with the frozen Legacy Atomic V1 network.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+EXE=${EXE:-$REPO_ROOT/src/atomic-stockfish}
+NET=${ATOMIC_NNUE_NET:-$REPO_ROOT/../atomic_run3b_e202_l05.nnue}
+
+[[ -x "$EXE" ]] || { echo "missing engine: $EXE" >&2; exit 2; }
+[[ -f "$NET" ]] || { echo "missing Atomic NNUE: $NET" >&2; exit 2; }
+
+{
+  printf 'setoption name EvalFile value %s\n' "$NET"
+  printf 'setoption name Use NNUE value true\n'
+  printf 'bench 16 1 13 default depth\n'
+  printf 'quit\n'
+} | "$EXE" > "$STDOUT_FILE" 2> "$STDERR_FILE" || error ${LINENO}
 signature=$(grep "Nodes searched  : " "$STDERR_FILE" | awk '{print $4}')
 
 rm -f "$STDOUT_FILE" "$STDERR_FILE"

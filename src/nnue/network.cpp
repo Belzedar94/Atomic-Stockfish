@@ -18,9 +18,10 @@
 
 #include "network.h"
 
-#include <cstdlib>
+#include <algorithm>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <optional>
 #include <type_traits>
 #include <vector>
@@ -36,7 +37,6 @@
 #include "nnue_architecture.h"
 #include "nnue_common.h"
 #include "nnue_misc.h"
-#include "nnz_helper.h"
 
 // Macro to embed the default efficiently updatable neural network (NNUE) file
 // data in the engine binary (using incbin.h, by Dale Weiler).
@@ -45,13 +45,14 @@
 //     const unsigned char *const gEmbeddedNNUEEnd;     // a marker to the end
 //     const unsigned int         gEmbeddedNNUESize;    // the size of the embedded file
 // Note that this does not work in Microsoft Visual Studio.
-#if !defined(UNIVERSAL_BINARY) && !defined(_MSC_VER) && !defined(NNUE_EMBEDDING_OFF)
+#if defined(ATOMIC_NNUE_EMBEDDING) && !defined(UNIVERSAL_BINARY) && !defined(_MSC_VER) \
+  && !defined(NNUE_EMBEDDING_OFF)
 INCBIN(EmbeddedNNUE, EvalFileDefaultName);
-#elif defined(UNIVERSAL_BINARY_MACOS_X86_SLICE)
+#elif defined(ATOMIC_NNUE_EMBEDDING) && defined(UNIVERSAL_BINARY_MACOS_X86_SLICE)
 // Determined at runtime, see universal/nnue_embed.cpp
 extern const unsigned char* const gEmbeddedNNUEData;
 extern const unsigned int         gEmbeddedNNUESize;
-#elif defined(UNIVERSAL_BINARY)
+#elif defined(ATOMIC_NNUE_EMBEDDING) && defined(UNIVERSAL_BINARY)
 extern const unsigned char gEmbeddedNNUEData[];
 extern const unsigned int  gEmbeddedNNUESize;
 #else
@@ -141,23 +142,30 @@ NetworkOutput Network::evaluate(const Position&    pos,
                                 AccumulatorStack&  accumulatorStack,
                                 AccumulatorCaches& cache) const {
 
+    const auto [psqt, positional] = evaluate_raw(pos, accumulatorStack, cache);
+    return {static_cast<Value>(psqt / OutputScale), static_cast<Value>(positional / OutputScale)};
+}
+
+
+RawNetworkOutput Network::evaluate_raw(const Position&    pos,
+                                       AccumulatorStack&  accumulatorStack,
+                                       AccumulatorCaches& cache) const {
+
     constexpr u64 alignment = CacheLineSize;
 
     alignas(alignment) TransformedFeatureType transformedFeatures[FeatureTransformer::BufferSize];
 
     ASSERT_ALIGNED(transformedFeatures, alignment);
 
-    NNZInfo<L1> nnzInfo;
-
-    const int  bucket     = (pos.count<ALL_PIECES>() - 1) / 4;
+    const int  bucket     = std::clamp((pos.count<ALL_PIECES>() - 1) / 4, 0, 7);
     const auto psqt       = featureTransformer.transform(pos, accumulatorStack, cache,
-                                                         transformedFeatures, bucket, nnzInfo);
-    const auto positional = network[bucket].propagate(transformedFeatures, nnzInfo);
-    return {static_cast<Value>(psqt / OutputScale), static_cast<Value>(positional / OutputScale)};
+                                                         transformedFeatures, bucket);
+    const auto positional = network[bucket].propagate(transformedFeatures);
+    return {psqt, positional};
 }
 
 
-void Network::verify(const std::function<void(std::string_view)>& f,
+bool Network::verify(const std::function<void(std::string_view)>& f,
                      const EvalFile&                              evalFile,
                      fs::path                                     evalfilePath) const {
     if (evalfilePath.empty())
@@ -167,24 +175,21 @@ void Network::verify(const std::function<void(std::string_view)>& f,
     {
         if (f)
         {
-            std::string msg1 =
-              "Network evaluation parameters compatible with the engine must be available.";
+            std::string msg1 = "Use NNUE is enabled, but a compatible Legacy Atomic V1 "
+                               "network is not available.";
             std::string msg2 =
               "The network file " + evalfilePath.string() + " was not loaded successfully.";
             std::string msg3 = "The UCI option EvalFile might need to specify the full path, "
                                "including the directory name, to the network file.";
-            std::string msg4 = "The default net can be downloaded from: "
-                               "https://tests.stockfishchess.org/api/nn/"
-                             + std::string(evalFile.defaultName);
-            std::string msg5 = "The engine will be terminated now.";
 
-            std::string msg = "ERROR: " + msg1 + '\n' + "ERROR: " + msg2 + '\n' + "ERROR: " + msg3
-                            + '\n' + "ERROR: " + msg4 + '\n' + "ERROR: " + msg5 + '\n';
+            std::string msg = "ERROR: " + msg1 + '\n' + "ERROR: " + msg2 + '\n'
+                            + "ERROR: " + msg3 + '\n'
+                            + "ERROR: Search was not started; the engine remains available.\n";
 
             f(msg);
         }
 
-        exit(EXIT_FAILURE);
+        return false;
     }
 
     if (f)
@@ -197,6 +202,8 @@ void Network::verify(const std::function<void(std::string_view)>& f,
           + std::to_string(network[0].FC_0_OUTPUTS) + ", " + std::to_string(network[0].FC_1_OUTPUTS)
           + ", 1))");
     }
+
+    return true;
 }
 
 
@@ -211,13 +218,12 @@ NnueEvalTrace Network::trace_evaluate(const Position&    pos,
     ASSERT_ALIGNED(transformedFeatures, alignment);
 
     NnueEvalTrace t{};
-    t.correctBucket = (pos.count<ALL_PIECES>() - 1) / 4;
+    t.correctBucket = std::clamp((pos.count<ALL_PIECES>() - 1) / 4, 0, 7);
     for (IndexType bucket = 0; bucket < LayerStacks; ++bucket)
     {
-        NNZInfo<L1> nnzInfo;
         const auto  materialist = featureTransformer.transform(pos, accumulatorStack, cache,
-                                                               transformedFeatures, bucket, nnzInfo);
-        const auto  positional  = network[bucket].propagate(transformedFeatures, nnzInfo);
+                                                               transformedFeatures, bucket);
+        const auto  positional  = network[bucket].propagate(transformedFeatures);
 
         t.psqt[bucket]       = static_cast<Value>(materialist / OutputScale);
         t.positional[bucket] = static_cast<Value>(positional / OutputScale);
@@ -229,10 +235,16 @@ NnueEvalTrace Network::trace_evaluate(const Position&    pos,
 
 void Network::load_external(const fs::path& dir, const fs::path& evalfilePath, EvalFile& evalFile) {
     std::ifstream stream(dir / evalfilePath, std::ios::binary);
-    auto          description = load(stream);
+    if (!stream)
+        return;
+
+    // A failed setoption must not leave a partially overwritten live network.
+    auto candidate   = std::make_unique<Network>();
+    auto description = candidate->load(stream);
 
     if (description.has_value())
     {
+        *this                   = std::move(*candidate);
         evalFile.current        = evalfilePath;
         evalFile.netDescription = description.value();
     }
@@ -258,10 +270,12 @@ void Network::load_internal(EvalFile& evalFile) {
                         usize(gEmbeddedNNUESize));
 
     std::istream stream(&buffer);
-    auto         description = load(stream);
+    auto         candidate   = std::make_unique<Network>();
+    auto         description = candidate->load(stream);
 
     if (description.has_value())
     {
+        *this                   = std::move(*candidate);
         evalFile.current        = evalFile.defaultName;
         evalFile.netDescription = description.value();
     }
@@ -297,15 +311,17 @@ usize Network::get_content_hash() const {
 
 // Read network header
 bool Network::read_header(std::istream& stream, u32* hashValue, std::string* desc) const {
+    constexpr u32 MaxDescriptionSize = 1U << 20;
     u32 version, size;
 
     version    = read_little_endian<u32>(stream);
     *hashValue = read_little_endian<u32>(stream);
     size       = read_little_endian<u32>(stream);
-    if (!stream || version != Version)
+    if (!stream || version != Version || size > MaxDescriptionSize)
         return false;
     desc->resize(size);
-    stream.read(&(*desc)[0], size);
+    if (size)
+        stream.read(desc->data(), size);
     return !stream.fail();
 }
 
@@ -315,7 +331,8 @@ bool Network::write_header(std::ostream& stream, u32 hashValue, const std::strin
     write_little_endian<u32>(stream, Version);
     write_little_endian<u32>(stream, hashValue);
     write_little_endian<u32>(stream, u32(desc.size()));
-    stream.write(&desc[0], desc.size());
+    if (!desc.empty())
+        stream.write(desc.data(), std::streamsize(desc.size()));
     return !stream.fail();
 }
 

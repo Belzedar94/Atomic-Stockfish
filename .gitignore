@@ -9,6 +9,10 @@ src/universal/network_dump.inc
 
 # Built binary
 src/stockfish*
+src/atomic-stockfish*
+src/atomic-unit-tests*
+src/atomic-api-tests*
+src/atomic-nnue-incremental-tests*
 src/-lstdc++.res
 
 # Neural network for the NNUE evaluation
@@ -19,3 +23,10 @@ tsan.supp
 __pycache__/
 tests/syzygy
 tests/bench_tmp.epd
+
+# Python extension and wheel build products
+/build/
+/dist/
+/*.pyd
+/*.so
+/*.egg-info/

@@ -62,7 +62,8 @@ using PSQTWeightType   = i32;
 using IndexType        = u32;
 
 // Version of the evaluation file
-constexpr u32 Version = 0x6A448AFAu;
+// Legacy Fairy-Stockfish Atomic NNUE file format (HalfKAv2, 512x2 inputs).
+constexpr u32 Version = 0x7AF32F20u;
 
 // Constant used in evaluation value calculation
 constexpr int OutputScale     = 16;

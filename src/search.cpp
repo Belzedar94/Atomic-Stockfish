@@ -46,7 +46,7 @@
 #include "timeman.h"
 #include "tt.h"
 #include "types.h"
-#include "uci.h"
+#include "uci_move.h"
 #include "ucioption.h"
 
 namespace Stockfish {
@@ -188,6 +188,9 @@ void Search::Worker::ensure_network_replicated() {
 void Search::Worker::start_searching() {
 
     accumulatorStack.reset();
+    useNnueMode = options["Use NNUE"] == "pure" ? Eval::UseNNUEMode::Pure
+                  : options["Use NNUE"] == "true" ? Eval::UseNNUEMode::True
+                                                    : Eval::UseNNUEMode::False;
 
     // Non-main threads go directly to iterative_deepening()
     if (!is_mainthread())
@@ -202,9 +205,13 @@ void Search::Worker::start_searching() {
 
     if (rootMoves.empty())
     {
-        main_manager()->updates.onUpdateNoMoves(
-          {0, {rootPos.checkers() ? -VALUE_MATE : VALUE_DRAW, rootPos}});
-        main_manager()->updates.onBestmove(UCIEngine::move(Move::none()), "");
+        const Color us     = rootPos.side_to_move();
+        const Value result = !rootPos.has_king(us)       ? -VALUE_MATE
+                           : !rootPos.has_king(~us)      ? VALUE_MATE
+                           : rootPos.atomic_in_check(us) ? -VALUE_MATE
+                                                         : VALUE_DRAW;
+        main_manager()->updates.onUpdateNoMoves({0, {result, rootPos}});
+        main_manager()->updates.onBestmove(UCI::move(Move::none()), "");
         return;
     }
 
@@ -234,8 +241,7 @@ void Search::Worker::start_searching() {
                                               - limits.inc[rootPos.side_to_move()]);
 
     Worker* bestThread = this;
-    Skill   skill =
-      Skill(options["Skill Level"], options["UCI_LimitStrength"] ? int(options["UCI_Elo"]) : 0);
+    Skill   skill      = Skill(options["Skill Level"], 0);
 
     if (!limits.depth && !skill.enabled())
         bestThread = threads.get_best_thread()->worker.get();
@@ -254,9 +260,9 @@ void Search::Worker::start_searching() {
     // In rare cases, pv() may change the ponder move through syzygy_extend_pv().
     std::string ponder;
     if (bestThread->rootMoves[0].pv.size() > 1)
-        ponder = UCIEngine::move(bestThread->rootMoves[0].pv[1], rootPos.is_chess960());
+        ponder = UCI::move(bestThread->rootMoves[0].pv[1], rootPos.is_chess960());
 
-    auto bestmove = UCIEngine::move(bestThread->rootMoves[0].pv[0], rootPos.is_chess960());
+    auto bestmove = UCI::move(bestThread->rootMoves[0].pv[0], rootPos.is_chess960());
     main_manager()->updates.onBestmove(bestmove, ponder);
 }
 
@@ -307,7 +313,7 @@ bool Search::Worker::iterative_deepening() {
     }
 
     usize multiPV = usize(options["MultiPV"]);
-    Skill skill(options["Skill Level"], options["UCI_LimitStrength"] ? int(options["UCI_Elo"]) : 0);
+    Skill skill(options["Skill Level"], 0);
 
     // When playing with strength handicap enable MultiPV search that we will
     // use behind-the-scenes to retrieve a set of possible moves.
@@ -636,7 +642,8 @@ void Search::Worker::do_move(
   Position& pos, const Move move, StateInfo& st, const bool givesCheck, Stack* const ss) {
     // prefetch_key does not model castling, en passant or promotion keys
     // exactly; for rare moves the prefetch lands on an unused line.
-    prefetch(tt.first_entry(pos.prefetch_key(move)));
+    if (!pos.capture(move))
+        prefetch(tt.first_entry(pos.prefetch_key(move)));
 
     bool capture = pos.capture_stage(move);
     ++nodes;
@@ -764,6 +771,11 @@ Value Search::Worker::search(
 
     if (!rootNode)
     {
+        if (!pos.has_king(us))
+            return mated_in(ss->ply);
+        if (!pos.has_king(~us))
+            return mate_in(ss->ply);
+
         // Step 2. Check for aborted search and immediate draw
         if (threads.stop.load(std::memory_order_relaxed) || pos.is_draw(ss->ply)
             || ss->ply >= MAX_PLY)
@@ -1122,15 +1134,16 @@ moves_loop:  // When in check, search starts here
         if (rootNode && is_mainthread() && nodes > NODES_LIMIT_OUTPUT)
         {
             main_manager()->updates.onIter(
-              {depth, UCIEngine::move(move, pos.is_chess960()), moveCount + pvIdx});
+              {depth, UCI::move(move, pos.is_chess960()), moveCount + pvIdx});
         }
         if (PvNode)
             (ss + 1)->pv = nullptr;
 
-        extension  = 0;
-        capture    = pos.capture_stage(move);
-        movedPiece = pos.moved_piece(move);
-        givesCheck = pos.gives_check(move);
+        extension            = 0;
+        capture              = pos.capture_stage(move);
+        movedPiece           = pos.moved_piece(move);
+        givesCheck           = pos.gives_check(move);
+        const bool atomicWin = pos.atomic_wins(move);
 
         // Calculate new depth for this move
         newDepth = depth - 1;
@@ -1161,7 +1174,7 @@ moves_loop:  // When in check, search starts here
                 int   captHist = captureHistory[movedPiece][move.to_sq()][type_of(capturedPiece)];
 
                 // Futility pruning for captures
-                if (!givesCheck && lmrDepth < 7)
+                if (!atomicWin && !givesCheck && lmrDepth < 7)
                 {
                     Value futilityValue = ss->staticEval + 231 + 232 * lmrDepth
                                         + PieceValue[capturedPiece] + 131 * captHist / 1024;
@@ -1173,7 +1186,8 @@ moves_loop:  // When in check, search starts here
                 // SEE based pruning for captures and checks
                 // Avoid pruning sacrifices of our last piece for stalemate
                 int margin = 175 * depth + captHist * 34 / 1024;
-                if ((alpha >= VALUE_DRAW || pos.non_pawn_material(us) != PieceValue[movedPiece])
+                if (!atomicWin
+                    && (alpha >= VALUE_DRAW || pos.non_pawn_material(us) != PieceValue[movedPiece])
                     && !pos.see_ge(move, -margin))
                     continue;
             }
@@ -1508,7 +1522,7 @@ moves_loop:  // When in check, search starts here
         bestValue = (bestValue * depth + beta) / (depth + 1);
 
     if (!moveCount)
-        bestValue = excludedMove ? alpha : ss->inCheck ? mated_in(ss->ply) : VALUE_DRAW;
+        bestValue = excludedMove ? alpha : pos.atomic_in_check(us) ? mated_in(ss->ply) : VALUE_DRAW;
 
     // If there is a move that produces search value greater than alpha,
     // we update the stats of searched moves.
@@ -1635,6 +1649,11 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
         selDepth = ss->ply + 1;
 
     // Step 2. Check for an immediate draw or maximum ply reached
+    if (!pos.has_king(pos.side_to_move()))
+        return mated_in(ss->ply);
+    if (!pos.has_king(~pos.side_to_move()))
+        return mate_in(ss->ply);
+
     if (pos.is_draw(ss->ply) || ss->ply >= MAX_PLY)
         return (ss->ply >= MAX_PLY && !ss->inCheck) ? evaluate(pos) : VALUE_DRAW;
 
@@ -1723,13 +1742,14 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
         if (!pos.legal(move))
             continue;
 
-        givesCheck = pos.gives_check(move);
-        capture    = pos.capture_stage(move);
+        givesCheck           = pos.gives_check(move);
+        capture              = pos.capture_stage(move);
+        const bool atomicWin = pos.atomic_wins(move);
 
         moveCount++;
 
         // Step 6. Pruning
-        if (!is_loss(bestValue))
+        if (!atomicWin && !is_loss(bestValue))
         {
             // Futility pruning and moveCount pruning
             if (!givesCheck && move.to_sq() != prevSq && !is_loss(futilityBase)
@@ -1842,7 +1862,7 @@ TimePoint Search::Worker::elapsed() const {
 
 Value Search::Worker::evaluate(const Position& pos) {
     return Eval::evaluate(network[numaAccessToken], pos, accumulatorStack, refreshTable,
-                          optimism[pos.side_to_move()]);
+                          optimism[pos.side_to_move()], useNnueMode);
 }
 
 namespace {
@@ -2231,13 +2251,13 @@ void SearchManager::pv(Search::Worker&           worker,
 
         std::string pv;
         for (Move m : usePreviousScore ? rootMoves[i].previousPV : rootMoves[i].pv)
-            pv += UCIEngine::move(m, pos.is_chess960()) + " ";
+            pv += UCI::move(m, pos.is_chess960()) + " ";
 
         // Remove last whitespace
         if (!pv.empty())
             pv.pop_back();
 
-        auto wdl   = worker.options["UCI_ShowWDL"] ? UCIEngine::wdl(v, pos) : "";
+        auto wdl   = std::string{};
         auto bound = rootMoves[i].scoreLowerbound
                      ? "lowerbound"
                      : (rootMoves[i].scoreUpperbound ? "upperbound" : "");

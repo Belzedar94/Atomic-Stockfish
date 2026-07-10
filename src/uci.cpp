@@ -19,7 +19,6 @@
 #include "uci.h"
 
 #include <algorithm>
-#include <cctype>
 #include <cmath>
 #include <cstdlib>
 #include <iterator>
@@ -33,12 +32,13 @@
 #include "benchmark.h"
 #include "engine.h"
 #include "memory.h"
-#include "movegen.h"
 #include "position.h"
 #include "score.h"
 #include "search.h"
 #include "types.h"
+#include "uci_move.h"
 #include "ucioption.h"
+#include "xboard.h"
 
 namespace Stockfish {
 
@@ -79,8 +79,7 @@ UCIEngine::UCIEngine(CommandLine cli_) :
 void UCIEngine::init_search_update_listeners() {
     engine.set_on_iter([](const auto& i) { on_iter(i); });
     engine.set_on_update_no_moves([](const auto& i) { on_update_no_moves(i); });
-    engine.set_on_update_full(
-      [this](const auto& i) { on_update_full(i, engine.get_options()["UCI_ShowWDL"]); });
+    engine.set_on_update_full([this](const auto& i) { on_update_full(i, false); });
     engine.set_on_bestmove([](const auto& bm, const auto& p) { on_bestmove(bm, p); });
     engine.set_on_verify_network([](const auto& s) { print_info_string(s); });
 }
@@ -112,6 +111,13 @@ void UCIEngine::loop() {
         // to the normal search.
         else if (token == "ponderhit")
             engine.set_ponderhit(false);
+
+        else if (token == "xboard")
+        {
+            XBoardProtocol protocol(engine);
+            protocol.loop();
+            return;
+        }
 
         else if (token == "uci")
         {
@@ -163,10 +169,10 @@ void UCIEngine::loop() {
         }
         else if (token == "--help" || token == "help" || token == "--license" || token == "license")
             sync_cout
-              << "\nStockfish is a powerful chess engine for playing and analyzing."
+              << "\nAtomic-Stockfish is a specialized Atomic Chess engine derived from Stockfish."
                  "\nIt is released as free software licensed under the GNU GPLv3 License."
-                 "\nStockfish is normally used with a graphical user interface (GUI) and implements"
-                 "\nthe Universal Chess Interface (UCI) protocol to communicate with a GUI, an API, etc."
+                 "\nAtomic-Stockfish is normally used with a graphical user interface (GUI) and implements"
+                 "\nthe UCI and XBoard/CECP protocols to communicate with a GUI, an API, etc."
                  "\nFor any further information, visit https://github.com/official-stockfish/Stockfish#readme"
                  "\nor read the corresponding README.md and Copying.txt files distributed along with this program.\n"
               << sync_endl;
@@ -186,7 +192,7 @@ Search::LimitsType UCIEngine::parse_limits(std::istream& is) {
     while (is >> token)
         if (token == "searchmoves")  // Needs to be the last command on the line
             while (is >> token)
-                limits.searchmoves.push_back(to_lower(token));
+                limits.searchmoves.push_back(UCI::to_lower(token));
 
         else if (token == "wtime")
             is >> limits.time[WHITE];
@@ -222,19 +228,18 @@ void UCIEngine::go(std::istringstream& is) {
 
     if (limits.perft)
         perft(limits);
-    else
-        engine.go(limits);
+    else if (!engine.go(limits))
+        on_bestmove("(none)", "");
 }
 
 void UCIEngine::bench(std::istream& args) {
     std::string token;
     u64         num, nodes = 0, cnt = 1;
     u64         nodesSearched = 0;
-    const auto& options       = engine.get_options();
 
     engine.set_on_update_full([&](const auto& i) {
         nodesSearched = i.nodes;
-        on_update_full(i, options["UCI_ShowWDL"]);
+        on_update_full(i, false);
     });
 
     std::vector<std::string> list = Benchmark::setup_bench(engine.fen(), args);
@@ -261,7 +266,13 @@ void UCIEngine::bench(std::istream& args) {
                     nodesSearched = perft(limits);
                 else
                 {
-                    engine.go(limits);
+                    if (!engine.go(limits))
+                    {
+                        engine.set_on_update_full(
+                          [&](const auto& i) { on_update_full(i, false); });
+                        std::cerr << "\nBench aborted: NNUE verification failed." << std::endl;
+                        return;
+                    }
                     engine.wait_for_search_finished();
                 }
 
@@ -292,7 +303,7 @@ void UCIEngine::bench(std::istream& args) {
               << "\nNodes/second    : " << 1000 * nodes / elapsed << std::endl;
 
     // reset callback, to not capture a dangling reference to nodesSearched
-    engine.set_on_update_full([&](const auto& i) { on_update_full(i, options["UCI_ShowWDL"]); });
+    engine.set_on_update_full([&](const auto& i) { on_update_full(i, false); });
 }
 
 void UCIEngine::benchmark(std::istream& args) {
@@ -308,7 +319,7 @@ void UCIEngine::benchmark(std::istream& args) {
     engine.set_on_iter([](const auto&) {});
     engine.set_on_update_no_moves([](const auto&) {});
     engine.set_on_bestmove([](const auto&, const auto&) {});
-    engine.set_on_verify_network([](const auto&) {});
+    engine.set_on_verify_network([](const auto& s) { print_info_string(s); });
 
     Benchmark::BenchmarkSetup setup = Benchmark::setup_benchmark(args);
 
@@ -339,7 +350,13 @@ void UCIEngine::benchmark(std::istream& args) {
             Search::LimitsType limits = parse_limits(is);
 
             // Run with silenced network verification
-            engine.go(limits);
+            if (!engine.go(limits))
+            {
+                std::cerr << "\nBenchmark aborted during warmup: NNUE verification failed."
+                          << std::endl;
+                init_search_update_listeners();
+                return;
+            }
             engine.wait_for_search_finished();
         }
         else if (token == "position")
@@ -393,7 +410,12 @@ void UCIEngine::benchmark(std::istream& args) {
             TimePoint elapsed = now();
 
             // Run with silenced network verification
-            engine.go(limits);
+            if (!engine.go(limits))
+            {
+                std::cerr << "\nBenchmark aborted: NNUE verification failed." << std::endl;
+                init_search_update_listeners();
+                return;
+            }
             engine.wait_for_search_finished();
 
             totalTime += now() - elapsed;
@@ -552,14 +574,10 @@ std::string UCIEngine::format_score(const Score& s) {
 // Turns a Value to an integer centipawn number,
 // without treatment of mate and similar special scores.
 int UCIEngine::to_cp(Value v, const Position& pos) {
-
-    // In general, the score can be defined via the WDL as
-    // (log(1/L - 1) - log(1/W - 1)) / (log(1/L - 1) + log(1/W - 1)).
-    // Based on our win_rate_model, this simply yields v / a.
-
-    auto [a, b] = win_rate_params(pos);
-
-    return int(std::round(100 * int(v) / a));
+    // Legacy Atomic V1 uses Fairy-Stockfish's fixed pawn normalization. The
+    // orthodox Stockfish WDL fit is neither calibrated nor meaningful here.
+    (void) pos;
+    return 100 * int(v) / PawnValue;
 }
 
 std::string UCIEngine::wdl(Value v, const Position& pos) {
@@ -574,45 +592,19 @@ std::string UCIEngine::wdl(Value v, const Position& pos) {
 }
 
 std::string UCIEngine::square(Square s) {
-    return std::string{char('a' + file_of(s)), char('1' + rank_of(s))};
+    return UCI::square(s);
 }
 
 std::string UCIEngine::move(Move m, bool chess960) {
-    if (m == Move::none())
-        return "(none)";
-
-    if (m == Move::null())
-        return "0000";
-
-    Square from = m.from_sq();
-    Square to   = m.to_sq();
-
-    if (m.type_of() == CASTLING && !chess960)
-        to = make_square(to > from ? FILE_G : FILE_C, rank_of(from));
-
-    std::string move = square(from) + square(to);
-
-    if (m.type_of() == PROMOTION)
-        move += " pnbrqk"[m.promotion_type()];
-
-    return move;
+    return UCI::move(m, chess960);
 }
 
-
 std::string UCIEngine::to_lower(std::string str) {
-    std::transform(str.begin(), str.end(), str.begin(), [](auto c) { return std::tolower(c); });
-
-    return str;
+    return UCI::to_lower(std::move(str));
 }
 
 Move UCIEngine::to_move(const Position& pos, std::string str) {
-    str = to_lower(str);
-
-    for (const auto& m : MoveList<LEGAL>(pos))
-        if (str == move(m, pos.is_chess960()))
-            return m;
-
-    return Move::none();
+    return UCI::to_move(pos, std::move(str));
 }
 
 void UCIEngine::on_update_no_moves(const Engine::InfoShort& info) {

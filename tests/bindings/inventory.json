@@ -1,0 +1,876 @@
+{
+  "schemaVersion": 1,
+  "scope": {
+    "publicVariants": [
+      "atomic"
+    ],
+    "surfaces": [
+      "python",
+      "javascript-commonjs",
+      "javascript-esm",
+      "wasm",
+      "wasm-nnue"
+    ],
+    "sourceCommit": "fb78cb561aa01708338e35b3dc3b65a42149a3c4"
+  },
+  "classificationSemantics": {
+    "adapt": "The API contract remains applicable, but chess/default or another 8x8 example is rewritten as Atomic.",
+    "not-applicable": "The behavior exists only for a removed board geometry, piece family, pocket, configurable variant, or variant-specific rule.",
+    "port": "An Atomic or Atomic960 assertion is carried over without changing its rule semantics.",
+    "replace": "The original assertion is removed, but the shared infrastructure receives an Atomic-specific replacement."
+  },
+  "sources": [
+    {
+      "path": "test.py",
+      "sha256": "02d4b922872bfcd026db9855f37731f694c54388afd93772c07a6463684b8b95"
+    },
+    {
+      "path": "tests/js/test.js",
+      "sha256": "bc3de655f0deb7c6532e1ede5a027864d4826a959f77631c403fdb239eadeece"
+    },
+    {
+      "path": "tests/perft.sh",
+      "sha256": "5c1c732211b8c5cbc8ac70da74af77813b7d92d3f73e18679b77f90f3928596d"
+    }
+  ],
+  "pythonTests": [
+    {
+      "fixtures": [
+        "contract.version-shape"
+      ],
+      "line": 308,
+      "rationale": "The version tuple remains part of the Python ABI.",
+      "sourceId": "test_version",
+      "status": "port"
+    },
+    {
+      "fixtures": [
+        "contract.engine-info"
+      ],
+      "line": 312,
+      "rationale": "Keep the string API but expect the Atomic-Stockfish identity.",
+      "sourceId": "test_info",
+      "status": "adapt"
+    },
+    {
+      "fixtures": [
+        "contract.variant-list"
+      ],
+      "line": 316,
+      "rationale": "The general variant registry is replaced by the single public value atomic.",
+      "sourceId": "test_variants_loaded",
+      "status": "replace"
+    },
+    {
+      "fixtures": [
+        "contract.variant-list"
+      ],
+      "line": 320,
+      "rationale": "Option dispatch remains, restricted to Atomic engine options.",
+      "sourceId": "test_set_option",
+      "status": "adapt"
+    },
+    {
+      "fixtures": [
+        "contract.single-board"
+      ],
+      "line": 324,
+      "rationale": "The compatibility API remains and must report that Atomic uses one board.",
+      "sourceId": "test_two_boards",
+      "status": "adapt"
+    },
+    {
+      "fixtures": [
+        "contract.no-pockets"
+      ],
+      "line": 328,
+      "rationale": "The compatibility API remains and must report no captures-to-hand.",
+      "sourceId": "test_captures_to_hand",
+      "status": "adapt"
+    },
+    {
+      "fixtures": [
+        "contract.start-fen"
+      ],
+      "line": 332,
+      "rationale": "All non-Atomic start positions are replaced by the canonical Atomic start FEN.",
+      "sourceId": "test_start_fen",
+      "status": "replace"
+    },
+    {
+      "fixtures": [
+        "atomic960.legal-moves-js",
+        "legal.adjacent-kings",
+        "legal.atomic-en-passant",
+        "legal.capture-promotion"
+      ],
+      "line": 348,
+      "rationale": "Configurable and large-board move cases are replaced by the frozen Atomic rule corpus.",
+      "sourceId": "test_legal_moves",
+      "status": "replace"
+    },
+    {
+      "fixtures": [
+        "atomic960.castle-illegal",
+        "atomic960.castle-legal"
+      ],
+      "line": 426,
+      "rationale": "Port the direct Atomic960 castling case; omit cannonatomic and other variant-only subcases.",
+      "sourceId": "test_castling",
+      "status": "port"
+    },
+    {
+      "fixtures": [
+        "lifecycle.quiet-opening",
+        "transition.castling-right-bycatch",
+        "transition.en-passant",
+        "transition.explosion",
+        "transition.king-explosion",
+        "transition.promotion"
+      ],
+      "line": 467,
+      "rationale": "FEN round-trips remain applicable and gain Atomic explosion transitions.",
+      "sourceId": "test_get_fen",
+      "status": "adapt"
+    },
+    {
+      "fixtures": [
+        "san.atomic960-castle",
+        "san.en-passant",
+        "san.explosion",
+        "san.promotion",
+        "san.quiet"
+      ],
+      "line": 707,
+      "rationale": "Preserve SAN and LAN infrastructure using Atomic legal moves and terminal notation.",
+      "sourceId": "test_get_san",
+      "status": "adapt"
+    },
+    {
+      "fixtures": [
+        "lifecycle.quiet-opening"
+      ],
+      "line": 964,
+      "rationale": "The move-list SAN conversion is variant-independent on a legal Atomic sequence.",
+      "sourceId": "test_get_san_moves",
+      "status": "adapt"
+    },
+    {
+      "fixtures": [
+        "check.adjacent-kings",
+        "check.bishop",
+        "check.queen",
+        "check.quiet",
+        "check.start"
+      ],
+      "line": 985,
+      "rationale": "All five direct Atomic check assertions are ported.",
+      "sourceId": "test_gives_check",
+      "status": "port"
+    },
+    {
+      "fixtures": [
+        "capture.atomic960-castle",
+        "capture.en-passant",
+        "capture.quiet"
+      ],
+      "line": 1028,
+      "rationale": "Capture classification remains applicable, including Atomic en passant and non-capturing castling.",
+      "sourceId": "test_is_capture",
+      "status": "adapt"
+    },
+    {
+      "fixtures": [],
+      "line": 1050,
+      "rationale": "Partner transfer exists only for drop/team variants and has no Atomic meaning.",
+      "sourceId": "test_piece_to_partner",
+      "status": "not-applicable"
+    },
+    {
+      "fixtures": [
+        "result.exploded-king",
+        "result.exploded-king-priority",
+        "result.mate",
+        "result.stalemate"
+      ],
+      "line": 1071,
+      "rationale": "Port Atomic mate and stalemate and add the JS exploded-king priority cases.",
+      "sourceId": "test_game_result",
+      "status": "port"
+    },
+    {
+      "fixtures": [
+        "result.immediate-king-explosion"
+      ],
+      "line": 1123,
+      "rationale": "Other immediate-goal variants are replaced by Atomic king explosion termination.",
+      "sourceId": "test_is_immediate_game_end",
+      "status": "replace"
+    },
+    {
+      "fixtures": [
+        "contract.optional-draw-policy",
+        "result.optional-50move",
+        "result.optional-repetition"
+      ],
+      "line": 1151,
+      "rationale": "Variant-specific chase and promotion rules are replaced by Atomic repetition and 50-move claims.",
+      "sourceId": "test_is_optional_game_end",
+      "status": "replace"
+    },
+    {
+      "fixtures": [
+        "material.k-v-k",
+        "material.k-v-kp",
+        "material.k-v-kq",
+        "material.start"
+      ],
+      "line": 1217,
+      "rationale": "Port all four Atomic entries from variant_positions.",
+      "sourceId": "test_has_insufficient_material",
+      "status": "port"
+    },
+    {
+      "fixtures": [
+        "validation.atomic-invalid-castling-rank",
+        "validation.atomic960-castling",
+        "validation.start"
+      ],
+      "line": 1224,
+      "rationale": "Port Atomic valid/invalid FENs and adapt the Chess960 validation to Atomic960.",
+      "sourceId": "test_validate_fen",
+      "status": "port"
+    },
+    {
+      "fixtures": [
+        "validation.atomic-plus-marker",
+        "validation.capture-promotion-position"
+      ],
+      "line": 1244,
+      "rationale": "Shogi promotion markers are removed; standard Atomic promotion syntax and invalid plus markers replace them.",
+      "sourceId": "test_validate_fen_promoted_pieces",
+      "status": "replace"
+    },
+    {
+      "fixtures": [],
+      "line": 1300,
+      "rationale": "Fog-of-war serialization is a removed variant-specific API.",
+      "sourceId": "test_get_fog_fen",
+      "status": "not-applicable"
+    }
+  ],
+  "javascriptTests": [
+    {
+      "fixtures": [],
+      "line": 15,
+      "rationale": "Runtime variant configuration is intentionally absent from a compile-time Atomic-only engine.",
+      "sourceId": "ffish.loadVariantConfig(config)",
+      "status": "not-applicable"
+    },
+    {
+      "fixtures": [
+        "contract.start-fen"
+      ],
+      "line": 31,
+      "rationale": "The default Board becomes Atomic and retains ownership/lifecycle semantics.",
+      "sourceId": "Board()",
+      "status": "adapt"
+    },
+    {
+      "fixtures": [
+        "contract.start-fen"
+      ],
+      "line": 40,
+      "rationale": "Construct explicitly with the only accepted variant, atomic.",
+      "sourceId": "Board(uciVariant)",
+      "status": "adapt"
+    },
+    {
+      "fixtures": [],
+      "line": 49,
+      "rationale": "Large-board allocation and geometry are removed from the 8x8 Atomic-only core.",
+      "sourceId": "Board(uciVariant) with large board",
+      "status": "not-applicable"
+    },
+    {
+      "fixtures": [
+        "lifecycle.quiet-opening"
+      ],
+      "line": 58,
+      "rationale": "Custom-FEN construction remains and uses an Atomic position.",
+      "sourceId": "Board(uciVariant, fen)",
+      "status": "adapt"
+    },
+    {
+      "fixtures": [
+        "atomic960.castle-legal"
+      ],
+      "line": 67,
+      "rationale": "Port constructor is960 behavior with Atomic960.",
+      "sourceId": "Board(uciVariant, fen, is960)",
+      "status": "adapt"
+    },
+    {
+      "fixtures": [
+        "atomic960.legal-moves-js"
+      ],
+      "line": 76,
+      "rationale": "Port the exact Atomic960 legal-move list and remove its Crazyhouse companion.",
+      "sourceId": "board.legalMoves()",
+      "status": "port"
+    },
+    {
+      "fixtures": [
+        "san.atomic960-castle",
+        "san.en-passant",
+        "san.promotion",
+        "san.quiet"
+      ],
+      "line": 95,
+      "rationale": "Crazyhouse SAN is replaced by Atomic SAN coverage.",
+      "sourceId": "board.legalMovesSan()",
+      "status": "replace"
+    },
+    {
+      "fixtures": [
+        "check.start",
+        "legal.adjacent-kings"
+      ],
+      "line": 108,
+      "rationale": "Retain the count API against Atomic legal-move fixtures.",
+      "sourceId": "board.numberLegalMoves()",
+      "status": "adapt"
+    },
+    {
+      "fixtures": [
+        "lifecycle.quiet-opening"
+      ],
+      "line": 119,
+      "rationale": "Push and invalid-move rollback are generic board-state behavior.",
+      "sourceId": "board.push(uciMove)",
+      "status": "adapt"
+    },
+    {
+      "fixtures": [
+        "lifecycle.quiet-opening"
+      ],
+      "line": 132,
+      "rationale": "SAN push remains applicable to Atomic.",
+      "sourceId": "board.pushSan(sanMove)",
+      "status": "adapt"
+    },
+    {
+      "fixtures": [
+        "lifecycle.quiet-opening"
+      ],
+      "line": 145,
+      "rationale": "Explicit SAN notation remains applicable to Atomic.",
+      "sourceId": "board.pushSan(sanMove, notation)",
+      "status": "adapt"
+    },
+    {
+      "fixtures": [
+        "lifecycle.quiet-opening",
+        "transition.explosion"
+      ],
+      "line": 156,
+      "rationale": "Undo is retained and must restore both ordinary and exploded pieces.",
+      "sourceId": "board.pop()",
+      "status": "adapt"
+    },
+    {
+      "fixtures": [
+        "contract.start-fen",
+        "lifecycle.quiet-opening"
+      ],
+      "line": 173,
+      "rationale": "Reset returns an Atomic board to the canonical start position.",
+      "sourceId": "board.reset()",
+      "status": "adapt"
+    },
+    {
+      "fixtures": [
+        "atomic960.castle-legal",
+        "contract.start-fen"
+      ],
+      "line": 185,
+      "rationale": "Port the false/true flag contract using Atomic and Atomic960.",
+      "sourceId": "board.is960()",
+      "status": "adapt"
+    },
+    {
+      "fixtures": [
+        "contract.start-fen"
+      ],
+      "line": 195,
+      "rationale": "FEN serialization is retained with Atomic as the default board.",
+      "sourceId": "board.fen()",
+      "status": "adapt"
+    },
+    {
+      "fixtures": [
+        "validation.capture-promotion-position"
+      ],
+      "line": 203,
+      "rationale": "Atomic has no persistent promoted marker; replace with a no-op flag assertion after standard promotion.",
+      "sourceId": "board.fen(showPromoted)",
+      "status": "replace"
+    },
+    {
+      "fixtures": [],
+      "line": 211,
+      "rationale": "countStarted is specific to Makruk/Ouk honor counting.",
+      "sourceId": "board.fen(showPromoted, countStarted)",
+      "status": "not-applicable"
+    },
+    {
+      "fixtures": [
+        "transition.en-passant",
+        "transition.explosion"
+      ],
+      "line": 220,
+      "rationale": "setFen remains and is exercised with Atomic special-rule positions.",
+      "sourceId": "board.setFen(fen)",
+      "status": "adapt"
+    },
+    {
+      "fixtures": [
+        "san.quiet"
+      ],
+      "line": 229,
+      "rationale": "UCI-to-SAN conversion remains applicable.",
+      "sourceId": "board.sanMove(uciMove)",
+      "status": "adapt"
+    },
+    {
+      "fixtures": [
+        "san.quiet"
+      ],
+      "line": 238,
+      "rationale": "Keep DEFAULT, SAN, and LAN; remove Shogi, Janggi, and Xiangqi notation assertions.",
+      "sourceId": "board.sanMove(ffish.Notation)",
+      "status": "adapt"
+    },
+    {
+      "fixtures": [
+        "lifecycle.quiet-opening"
+      ],
+      "line": 253,
+      "rationale": "Variation conversion and non-mutation remain generic board behavior.",
+      "sourceId": "board.variationSan(uciMoves)",
+      "status": "adapt"
+    },
+    {
+      "fixtures": [
+        "lifecycle.quiet-opening"
+      ],
+      "line": 265,
+      "rationale": "LAN variation conversion remains applicable.",
+      "sourceId": "board.variationSan(uciMoves, notation)",
+      "status": "adapt"
+    },
+    {
+      "fixtures": [
+        "lifecycle.quiet-opening"
+      ],
+      "line": 275,
+      "rationale": "Move-number suppression remains applicable.",
+      "sourceId": "board.variationSan(uciMoves, notation, moveNumbers)",
+      "status": "adapt"
+    },
+    {
+      "fixtures": [
+        "lifecycle.quiet-opening"
+      ],
+      "line": 285,
+      "rationale": "Side-to-move tracking is unchanged.",
+      "sourceId": "board.turn()",
+      "status": "adapt"
+    },
+    {
+      "fixtures": [
+        "lifecycle.quiet-opening"
+      ],
+      "line": 295,
+      "rationale": "Fullmove tracking is unchanged.",
+      "sourceId": "board.fullmoveNumber()",
+      "status": "adapt"
+    },
+    {
+      "fixtures": [
+        "lifecycle.quiet-opening",
+        "transition.explosion"
+      ],
+      "line": 310,
+      "rationale": "The counter remains, with captures and pawn moves resetting it under Atomic rules.",
+      "sourceId": "board.halfmoveClock()",
+      "status": "adapt"
+    },
+    {
+      "fixtures": [
+        "lifecycle.quiet-opening"
+      ],
+      "line": 326,
+      "rationale": "Game-ply tracking is unchanged.",
+      "sourceId": "board.gamePly()",
+      "status": "adapt"
+    },
+    {
+      "fixtures": [
+        "material.k-v-k",
+        "material.k-v-kp",
+        "material.k-v-kq",
+        "material.start"
+      ],
+      "line": 341,
+      "rationale": "Replace orthodox material examples with Fairy's Atomic tuples.",
+      "sourceId": "board.hasInsufficientMaterial(side)",
+      "status": "replace"
+    },
+    {
+      "fixtures": [
+        "material.k-v-k",
+        "material.k-v-kp",
+        "material.k-v-kq",
+        "material.start"
+      ],
+      "line": 359,
+      "rationale": "Replace orthodox aggregate examples with Atomic material fixtures.",
+      "sourceId": "board.isInsufficientMaterial()",
+      "status": "replace"
+    },
+    {
+      "fixtures": [
+        "contract.optional-draw-policy",
+        "result.exploded-king",
+        "result.mate",
+        "result.optional-50move",
+        "result.optional-repetition",
+        "result.stalemate"
+      ],
+      "line": 373,
+      "rationale": "Use Atomic terminal, repetition, and 50-move cases.",
+      "sourceId": "board.isGameOver()",
+      "status": "replace"
+    },
+    {
+      "fixtures": [
+        "result.exploded-king",
+        "result.exploded-king-priority",
+        "result.mate",
+        "result.stalemate"
+      ],
+      "line": 400,
+      "rationale": "Port both direct Atomic exploded-king assertions and replace orthodox result cases with Atomic terminals.",
+      "sourceId": "board.result()",
+      "status": "port"
+    },
+    {
+      "fixtures": [
+        "check.adjacent-kings",
+        "check.bishop",
+        "check.queen",
+        "check.start"
+      ],
+      "line": 471,
+      "rationale": "Port the direct Atomic checked-piece cases.",
+      "sourceId": "board.checkedPieces()",
+      "status": "port"
+    },
+    {
+      "fixtures": [
+        "check.adjacent-kings",
+        "check.bishop",
+        "check.queen",
+        "check.start"
+      ],
+      "line": 516,
+      "rationale": "Port the direct Atomic check-state cases.",
+      "sourceId": "board.isCheck()",
+      "status": "port"
+    },
+    {
+      "fixtures": [],
+      "line": 561,
+      "rationale": "Bikjang exists only in Janggi.",
+      "sourceId": "board.isBikjang()",
+      "status": "not-applicable"
+    },
+    {
+      "fixtures": [
+        "capture.atomic960-castle",
+        "capture.en-passant",
+        "capture.quiet",
+        "transition.explosion",
+        "transition.promotion"
+      ],
+      "line": 571,
+      "rationale": "Adapt capture classification to Atomic blast, en passant, promotion, and castling.",
+      "sourceId": "board.isCapture(move)",
+      "status": "adapt"
+    },
+    {
+      "fixtures": [
+        "lifecycle.quiet-opening"
+      ],
+      "line": 594,
+      "rationale": "Move-stack ordering remains applicable.",
+      "sourceId": "board.moveStack()",
+      "status": "adapt"
+    },
+    {
+      "fixtures": [
+        "lifecycle.quiet-opening"
+      ],
+      "line": 609,
+      "rationale": "Bulk UCI push remains applicable.",
+      "sourceId": "board.pushMoves(uciMoves)",
+      "status": "adapt"
+    },
+    {
+      "fixtures": [
+        "lifecycle.quiet-opening"
+      ],
+      "line": 618,
+      "rationale": "Bulk SAN push remains applicable.",
+      "sourceId": "board.pushSanMoves(sanMoves)",
+      "status": "adapt"
+    },
+    {
+      "fixtures": [
+        "lifecycle.quiet-opening"
+      ],
+      "line": 627,
+      "rationale": "Bulk SAN push with explicit notation remains applicable.",
+      "sourceId": "board.pushSanMoves(sanMoves, notation)",
+      "status": "adapt"
+    },
+    {
+      "fixtures": [],
+      "line": 636,
+      "rationale": "Atomic has no pockets; the pocket accessor is removed rather than returning a misleading value.",
+      "sourceId": "board.pocket(turn)",
+      "status": "not-applicable"
+    },
+    {
+      "fixtures": [
+        "lifecycle.quiet-opening"
+      ],
+      "line": 649,
+      "rationale": "Compact 8x8 rendering remains applicable with an Atomic position.",
+      "sourceId": "board.toString()",
+      "status": "adapt"
+    },
+    {
+      "fixtures": [
+        "lifecycle.quiet-opening"
+      ],
+      "line": 676,
+      "rationale": "Verbose 8x8 rendering remains applicable; variant-specific pieces are removed.",
+      "sourceId": "board.toVerboseString()",
+      "status": "adapt"
+    },
+    {
+      "fixtures": [
+        "contract.variant-list"
+      ],
+      "line": 731,
+      "rationale": "Port the atomic assertion and remove chess aliases.",
+      "sourceId": "board.variant()",
+      "status": "port"
+    },
+    {
+      "fixtures": [
+        "contract.engine-info"
+      ],
+      "line": 751,
+      "rationale": "The info API remains, with Atomic-Stockfish identity.",
+      "sourceId": "ffish.info()",
+      "status": "adapt"
+    },
+    {
+      "fixtures": [
+        "contract.variant-list"
+      ],
+      "line": 757,
+      "rationale": "String options remain, restricted to supported Atomic options.",
+      "sourceId": "ffish.setOption(name, value)",
+      "status": "adapt"
+    },
+    {
+      "fixtures": [
+        "contract.thread-option"
+      ],
+      "line": 764,
+      "rationale": "Integer option dispatch remains applicable to Threads and Hash.",
+      "sourceId": "ffish.setOptionInt(name, value)",
+      "status": "adapt"
+    },
+    {
+      "fixtures": [
+        "atomic960.castle-legal"
+      ],
+      "line": 771,
+      "rationale": "Boolean option dispatch remains applicable to UCI_Chess960.",
+      "sourceId": "ffish.setOptionBool(name, value)",
+      "status": "adapt"
+    },
+    {
+      "fixtures": [
+        "contract.no-pockets"
+      ],
+      "line": 778,
+      "rationale": "Retain the compatibility query with a fixed false result for Atomic.",
+      "sourceId": "ffish.capturesToHand(uciVariant)",
+      "status": "adapt"
+    },
+    {
+      "fixtures": [
+        "contract.start-fen"
+      ],
+      "line": 785,
+      "rationale": "Return the canonical Atomic start FEN.",
+      "sourceId": "ffish.startingFen(uciVariant)",
+      "status": "adapt"
+    },
+    {
+      "fixtures": [
+        "validation.start"
+      ],
+      "line": 791,
+      "rationale": "The default validation context becomes Atomic.",
+      "sourceId": "ffish.validateFen(fen)",
+      "status": "replace"
+    },
+    {
+      "fixtures": [
+        "validation.atomic-invalid-castling-rank",
+        "validation.atomic-plus-marker",
+        "validation.start"
+      ],
+      "line": 798,
+      "rationale": "The cross-variant loop is reduced to Atomic valid and invalid fixtures.",
+      "sourceId": "ffish.validateFen(fen, uciVariant)",
+      "status": "adapt"
+    },
+    {
+      "fixtures": [
+        "validation.atomic960-castling"
+      ],
+      "line": 838,
+      "rationale": "Port X-FEN validation using Atomic960 castling rights.",
+      "sourceId": "ffish.validateFen(fen, uciVariant, chess960)",
+      "status": "adapt"
+    },
+    {
+      "fixtures": [
+        "lifecycle.quiet-opening"
+      ],
+      "line": 845,
+      "rationale": "PGN parsing remains applicable with Variant Atomic and the shared lifecycle fixture.",
+      "sourceId": "ffish.readGamePGN(pgn)",
+      "status": "adapt"
+    },
+    {
+      "fixtures": [
+        "lifecycle.quiet-opening"
+      ],
+      "line": 883,
+      "rationale": "PGN header enumeration remains applicable to an Atomic game.",
+      "sourceId": "game.headerKeys()",
+      "status": "adapt"
+    },
+    {
+      "fixtures": [
+        "lifecycle.quiet-opening"
+      ],
+      "line": 901,
+      "rationale": "PGN Variant and FEN headers remain applicable to Atomic.",
+      "sourceId": "game.headers(key)",
+      "status": "adapt"
+    },
+    {
+      "fixtures": [
+        "lifecycle.quiet-opening"
+      ],
+      "line": 922,
+      "rationale": "Mainline extraction remains applicable with Atomic UCI moves.",
+      "sourceId": "game.mainlineMoves()",
+      "status": "adapt"
+    },
+    {
+      "fixtures": [
+        "contract.variant-list"
+      ],
+      "line": 939,
+      "rationale": "Replace the general registry assertion with the exact singleton list atomic.",
+      "sourceId": "ffish.variants()",
+      "status": "replace"
+    }
+  ],
+  "perftPolicy": {
+    "excluded": {
+      "rationale": "Every Fairy perft invocation whose UCI variant token is not exactly atomic is variant-specific and not applicable. This includes atomar and nocheckatomic; their explosion/check rules are not aliases for Atomic.",
+      "selector": "uciVariant != atomic",
+      "status": "not-applicable"
+    },
+    "ported": [
+      {
+        "chess960": false,
+        "depth": 4,
+        "fixture": "perft.01-start",
+        "nodes": 197326,
+        "position": "startpos"
+      },
+      {
+        "chess960": false,
+        "depth": 4,
+        "fixture": "perft.02-midgame-a",
+        "nodes": 1434825,
+        "position": "fen rn2kb1r/1pp1p2p/p2q1pp1/3P4/2P3b1/4PN2/PP3PPP/R2QKB1R b KQkq - 0 1"
+      },
+      {
+        "chess960": false,
+        "depth": 4,
+        "fixture": "perft.03-midgame-b",
+        "nodes": 714499,
+        "position": "fen rn1qkb1r/p5pp/2p5/3p4/N3P3/5P2/PPP4P/R1BQK3 w Qkq - 0 1"
+      },
+      {
+        "chess960": false,
+        "depth": 2,
+        "fixture": "perft.04-tactical",
+        "nodes": 148,
+        "position": "fen r4b1r/2kb1N2/p2Bpnp1/8/2Pp3p/1P1PPP2/P5PP/R3K2R b KQ - 0 1"
+      },
+      {
+        "chess960": true,
+        "depth": 4,
+        "fixture": "perft.05-atomic960-a",
+        "nodes": 61401,
+        "position": "fen 8/8/8/8/8/8/2k5/rR4KR w KQ - 0 1"
+      },
+      {
+        "chess960": true,
+        "depth": 4,
+        "fixture": "perft.06-atomic960-b",
+        "nodes": 98729,
+        "position": "fen r3k1rR/5K2/8/8/8/8/8/8 b kq - 0 1"
+      },
+      {
+        "chess960": true,
+        "depth": 4,
+        "fixture": "perft.07-atomic960-c",
+        "nodes": 241478,
+        "position": "fen Rr2k1rR/3K4/3p4/8/8/8/7P/8 w kq - 0 1"
+      },
+      {
+        "chess960": true,
+        "depth": 4,
+        "fixture": "perft.08-atomic960-d",
+        "nodes": 17915,
+        "position": "fen 1R4kr/4K3/8/8/8/8/8/8 b k - 0 1"
+      }
+    ]
+  }
+}

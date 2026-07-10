@@ -1,0 +1,96 @@
+# Atomic-Stockfish lightweight JavaScript/WebAssembly build.
+#
+# This target deliberately links only the rules API. Search, NNUE, protocols,
+# and native engine entry points are not part of the ffish.js artifact.
+
+CXX := em++
+OUT_ROOT ?= ../tests/js/dist
+CJS_DIR := $(OUT_ROOT)/cjs
+ESM_DIR := $(OUT_ROOT)/esm
+CJS_OUT := $(CJS_DIR)/ffish.js
+ESM_OUT := $(ESM_DIR)/ffish.mjs
+
+SOURCES := \
+	ffishjs.cpp \
+	attacks.cpp \
+	bitboard.cpp \
+	misc.cpp \
+	movegen.cpp \
+	position.cpp \
+	uci_move.cpp \
+	api/atomic_board.cpp \
+	api/atomic_fen.cpp \
+	api/atomic_notation.cpp \
+	api/atomic_outcome.cpp \
+	syzygy/tbprobe.cpp
+
+OPTIMIZE ?= yes
+DEBUG ?= no
+
+COMMON_FLAGS := \
+	--bind \
+	--no-entry \
+	-std=c++17 \
+	-fexceptions \
+	-DNO_TABLEBASES \
+	-DNO_PREFETCH \
+	-sDISABLE_EXCEPTION_CATCHING=0 \
+	-sMODULARIZE=1 \
+	-sEXPORT_NAME=createAtomicStockfish \
+	-sENVIRONMENT=web,worker,node \
+	-sALLOW_MEMORY_GROWTH=1 \
+	-sINITIAL_MEMORY=33554432 \
+	-sMAXIMUM_MEMORY=1073741824 \
+	-sFILESYSTEM=0 \
+	-sNO_EXIT_RUNTIME=1 \
+	-sWASM_BIGINT=1 \
+	-sMALLOC=emmalloc \
+	-sDETERMINISTIC=1 \
+	-ffile-prefix-map=$(abspath .)=. \
+	-Wall -Wextra -Wpedantic
+
+ifeq ($(DEBUG),yes)
+COMMON_FLAGS += -O1 -gsource-map -sASSERTIONS=2 -sSAFE_HEAP=1
+else
+COMMON_FLAGS += -DNDEBUG -sASSERTIONS=0 -sSAFE_HEAP=0
+ifeq ($(OPTIMIZE),yes)
+COMMON_FLAGS += -O3 -flto
+else
+COMMON_FLAGS += -O0
+endif
+endif
+
+.PHONY: all build cjs esm clean test repro help
+
+all build: cjs esm
+
+cjs: $(CJS_OUT)
+
+esm: $(ESM_OUT)
+
+$(CJS_OUT): $(SOURCES)
+	mkdir -p $(CJS_DIR)
+	SOURCE_DATE_EPOCH=0 $(CXX) $(COMMON_FLAGS) -sEXPORT_ES6=0 $(SOURCES) -o $@
+
+$(ESM_OUT): $(SOURCES)
+	mkdir -p $(ESM_DIR)
+	SOURCE_DATE_EPOCH=0 $(CXX) $(COMMON_FLAGS) -sEXPORT_ES6=1 -sUSE_ES6_IMPORT_META=1 $(SOURCES) -o $@
+
+test: all
+	cd ../tests/js && npm test
+
+repro:
+	rm -rf ../tests/js/dist ../tests/js/dist-repro
+	$(MAKE) -f Makefile_js all OUT_ROOT=../tests/js/dist
+	$(MAKE) -f Makefile_js all OUT_ROOT=../tests/js/dist-repro
+	diff -r ../tests/js/dist ../tests/js/dist-repro
+	@echo "reproducible WASM artifacts: byte-identical CJS and ESM builds"
+	rm -rf ../tests/js/dist-repro
+
+clean:
+	rm -rf $(OUT_ROOT)
+
+help:
+	@echo "make -f Makefile_js all      Build CommonJS and ES modules"
+	@echo "make -f Makefile_js test     Build and run both Node suites"
+	@echo "make -f Makefile_js repro    Build twice and compare SHA-256"

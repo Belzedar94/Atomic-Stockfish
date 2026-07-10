@@ -38,7 +38,7 @@
 #include "syzygy/tbprobe.h"
 #include "timeman.h"
 #include "types.h"
-#include "uci.h"
+#include "uci_move.h"
 #include "ucioption.h"
 
 namespace Stockfish {
@@ -303,7 +303,7 @@ void ThreadPool::start_thinking(const OptionsMap&  options,
 
     for (const auto& uciMove : limits.searchmoves)
     {
-        auto move = UCIEngine::to_move(pos, uciMove);
+        auto move = UCI::to_move(pos, uciMove);
 
         if (std::find(legalmoves.begin(), legalmoves.end(), move) != legalmoves.end())
             rootMoves.emplace_back(move);
@@ -313,7 +313,12 @@ void ThreadPool::start_thinking(const OptionsMap&  options,
         for (const auto& m : legalmoves)
             rootMoves.emplace_back(m);
 
-    Tablebases::Config tbConfig = Tablebases::rank_root_moves(options, pos, rootMoves);
+    // Atomic tablebases expose DTZ as their distance metric. Preserve that
+    // ordering at the root instead of treating every unconditional win (or
+    // loss) as an equal-rank bucket and letting the shallow search overwrite
+    // it. This is especially important for restricted searchmoves, where the
+    // caller expects the best available tablebase move among that subset.
+    Tablebases::Config tbConfig = Tablebases::rank_root_moves(options, pos, rootMoves, true);
 
     // After ownership transfer 'states' becomes empty, so if we stop the search
     // and call 'go' again without setting a new position states.get() == nullptr.

@@ -371,7 +371,7 @@ top:
         return select([]() { return true; });
 
     case PROBCUT :
-        return select([&]() { return pos.see_ge(*cur, threshold); });
+        return select([&]() { return pos.atomic_wins(*cur) || pos.see_ge(*cur, threshold); });
     }
 
     assert(false);

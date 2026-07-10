@@ -61,11 +61,11 @@ endif
 
 ### Executable name
 ifeq ($(target_windows),yes)
-	EXE = stockfish.exe
+	EXE = atomic-stockfish.exe
 else ifneq (,$(findstring wasm,$(ARCH)))
-	EXE = stockfish.js
+	EXE = atomic-stockfish.js
 else
-	EXE = stockfish
+	EXE = atomic-stockfish
 endif
 
 ### Installation dir definitions
@@ -78,24 +78,37 @@ PGOBENCH = $(RUN_PREFIX) ./$(EXE) bench
 ### Source and object files
 SRCS = attacks.cpp benchmark.cpp bitboard.cpp evaluate.cpp main.cpp \
 	misc.cpp movegen.cpp movepick.cpp position.cpp \
-	search.cpp thread.cpp timeman.cpp tt.cpp uci.cpp ucioption.cpp tune.cpp syzygy/tbprobe.cpp \
+	search.cpp thread.cpp timeman.cpp tt.cpp uci.cpp uci_move.cpp ucioption.cpp xboard.cpp tune.cpp syzygy/tbprobe.cpp \
+	api/atomic_notation.cpp api/atomic_outcome.cpp \
 	nnue/nnue_accumulator.cpp nnue/nnue_misc.cpp nnue/network.cpp \
-	nnue/features/half_ka_v2_hm.cpp nnue/features/full_threats.cpp \
+	nnue/features/half_ka_v2_hm.cpp nnue/features/half_ka_v2_atomic.cpp nnue/features/full_threats.cpp \
 	engine.cpp score.cpp memory.cpp
 
 OTHER_SRCS = universal/entry_x86.cpp universal/entry_arm64.cpp universal/entry_riscv64.cpp universal/nnue_embed.cpp
 
 HEADERS = attacks.h benchmark.h bitboard.h evaluate.h misc.h movegen.h movepick.h history.h \
-		nnue/nnue_misc.h nnue/features/half_ka_v2_hm.h nnue/features/full_threats.h \
+		api/atomic_fen.h api/atomic_notation.h api/atomic_outcome.h \
+		nnue/nnue_misc.h nnue/features/half_ka_v2_hm.h nnue/features/half_ka_v2_atomic.h nnue/features/full_threats.h \
 		nnue/layers/affine_transform.h nnue/layers/affine_transform_sparse_input.h \
 		nnue/layers/clipped_relu.h nnue/layers/sqr_clipped_relu.h nnue/nnue_accumulator.h \
 		nnue/nnue_architecture.h nnue/nnue_common.h nnue/nnue_feature_transformer.h nnue/simd.h \
 		nnue/nnz_helper.h position.h search.h syzygy/tbprobe.h thread.h thread_win32_osx.h timeman.h \
-		tt.h tune.h types.h uci.h ucioption.h perft.h nnue/network.h engine.h score.h numa.h memory.h shm.h shm_linux.h
+		tt.h tune.h types.h uci.h uci_move.h ucioption.h xboard.h perft.h nnue/network.h engine.h score.h numa.h memory.h shm.h shm_linux.h
 
 OBJS = $(notdir $(SRCS:.cpp=.o))
 
-VPATH = syzygy:nnue:nnue/features
+ATOMIC_UNIT_TEST_EXE  = atomic-unit-tests$(suffix $(EXE))
+ATOMIC_UNIT_TEST_OBJS = $(filter-out main.o,$(OBJS)) atomic_see_tests.o
+ATOMIC_API_TEST_EXE   = atomic-api-tests$(suffix $(EXE))
+ATOMIC_API_TEST_OBJS  = $(filter-out main.o,$(OBJS)) atomic_fen.o atomic_api_tests.o
+ATOMIC_NNUE_INCREMENTAL_TEST_EXE  = atomic-nnue-incremental-tests$(suffix $(EXE))
+ATOMIC_NNUE_INCREMENTAL_TEST_OBJS = $(filter-out main.o,$(OBJS)) atomic_nnue_incremental_tests.o
+
+PYTHON ?= python
+ATOMIC_NNUE_TEST_NET ?= ../../atomic_run3b_e202_l05.nnue
+ATOMIC_NNUE_TEST_MODE ?= smoke
+
+VPATH = api:syzygy:nnue:nnue/features
 
 ### ==========================================================================
 ### Section 2. High-level Configuration
@@ -1014,6 +1027,9 @@ help:
 	echo "help                    > Display architecture details" && \
 	echo "profile-build           > standard build with profile-guided optimization" && \
 	echo "build                   > skip profile-guided optimization" && \
+	echo "atomic-unit-tests       > build and run Atomic C++ unit tests" && \
+	echo "atomic-api-tests        > build and run Atomic shared-API unit tests" && \
+	echo "atomic-nnue-incremental-tests > verify LegacyAtomicV1 incremental updates" && \
 	echo "macos-lipo              > macOS x86-64 + Apple silicon universal binary" && \
 	echo "net                     > Download the default nnue nets" && \
 	echo "strip                   > Strip executable" && \
@@ -1085,21 +1101,21 @@ ifneq ($(SUPPORTED_ARCH), true)
 endif
 
 
-.PHONY: help analyze build profile-build macos-lipo strip install clean net \
+.PHONY: help analyze build profile-build atomic-unit-tests atomic-api-tests atomic-nnue-incremental-tests macos-lipo strip install clean net \
 	objclean profileclean config-sanity \
 	icx-profile-use icx-profile-make \
 	gcc-profile-use gcc-profile-make \
 	clang-profile-use clang-profile-make FORCE \
 	format analyze
 
-analyze: net config-sanity objclean
+analyze: config-sanity objclean
 	$(MAKE) -k ARCH=$(ARCH) COMP=$(COMP) $(OBJS)
 
 ifeq ($(UNIVERSAL_BUILD),false)
-build: net config-sanity
+build: config-sanity
 	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) all
 
-profile-build: net config-sanity objclean profileclean
+profile-build: config-sanity objclean profileclean
 	@echo ""
 	@echo "Step 1/4. Building instrumented executable ..."
 	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) $(profile_make)
@@ -1207,7 +1223,7 @@ clean: objclean profileclean universalclean
 
 # clean binaries and objects
 objclean:
-	@rm -f stockfish stockfish.exe *.o ./syzygy/*.o ./nnue/*.o ./nnue/features/*.o $(BUILD_SHA_FILE) $(BUILD_DATE_FILE)
+	@rm -f stockfish stockfish.exe atomic-unit-tests atomic-unit-tests.exe atomic-api-tests atomic-api-tests.exe atomic-nnue-incremental-tests atomic-nnue-incremental-tests.exe *.o ./api/*.o ./syzygy/*.o ./nnue/*.o ./nnue/features/*.o $(BUILD_SHA_FILE) $(BUILD_DATE_FILE)
 
 # clean auxiliary profiling files
 profileclean:
@@ -1223,9 +1239,11 @@ universalclean:
 	@rm -rf $(TEMP_DIR)
 	@rm -f universal/network_dump.inc
 
-# evaluation network (nnue)
+# Legacy Atomic V1 networks are intentionally external. The engine validates
+# their header and architecture at runtime; this target never downloads or
+# silently redistributes a network.
 net:
-	@$(SHELL) ../scripts/net.sh
+	@echo "Atomic NNUE networks are external; set EvalFile to a compatible Legacy Atomic V1 .nnue file."
 
 format:
 	$(CLANG-FORMAT) -i $(SRCS) $(OTHER_SRCS) $(HEADERS) -style=file
@@ -1236,7 +1254,16 @@ format:
 
 all: $(EXE) .depend
 
-config-sanity: net
+atomic-unit-tests: config-sanity $(ATOMIC_UNIT_TEST_EXE)
+	./$(ATOMIC_UNIT_TEST_EXE)
+
+atomic-api-tests: config-sanity $(ATOMIC_API_TEST_EXE)
+	./$(ATOMIC_API_TEST_EXE)
+
+atomic-nnue-incremental-tests: config-sanity $(ATOMIC_NNUE_INCREMENTAL_TEST_EXE)
+	$(PYTHON) ../tests/atomic_nnue_incremental.py --binary ./$(ATOMIC_NNUE_INCREMENTAL_TEST_EXE) --net "$(ATOMIC_NNUE_TEST_NET)" --mode "$(ATOMIC_NNUE_TEST_MODE)"
+
+config-sanity:
 	@echo ""
 	@echo "Config:" && \
 	echo "debug: '$(debug)'" && \
@@ -1309,6 +1336,24 @@ config-sanity: net
 
 $(EXE): $(OBJS)
 	+$(CXX) -o $@ $(OBJS) $(LDFLAGS)
+
+$(ATOMIC_UNIT_TEST_EXE): $(ATOMIC_UNIT_TEST_OBJS)
+	+$(CXX) -o $@ $(ATOMIC_UNIT_TEST_OBJS) $(LDFLAGS)
+
+$(ATOMIC_API_TEST_EXE): $(ATOMIC_API_TEST_OBJS)
+	+$(CXX) -o $@ $(ATOMIC_API_TEST_OBJS) $(LDFLAGS)
+
+$(ATOMIC_NNUE_INCREMENTAL_TEST_EXE): $(ATOMIC_NNUE_INCREMENTAL_TEST_OBJS)
+	+$(CXX) -o $@ $(ATOMIC_NNUE_INCREMENTAL_TEST_OBJS) $(LDFLAGS)
+
+atomic_see_tests.o: ../tests/atomic_see.cpp
+	$(strip $(CXX) $(CPPFLAGS) $(CXXFLAGS)) -I. -c -o $@ $<
+
+atomic_api_tests.o: ../tests/atomic_api.cpp
+	$(strip $(CXX) $(CPPFLAGS) $(CXXFLAGS)) -I. -c -o $@ $<
+
+atomic_nnue_incremental_tests.o: ../tests/atomic_nnue_incremental.cpp
+	$(strip $(CXX) $(CPPFLAGS) $(CXXFLAGS)) -I. -c -o $@ $<
 
 %.o: %.cpp
 	$(strip $(CXX) $(CPPFLAGS) $(CXXFLAGS)) -c -o $@ $<
