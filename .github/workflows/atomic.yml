@@ -98,8 +98,15 @@ jobs:
         env:
           ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
           UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
-          TSAN_OPTIONS: halt_on_error=1
-        run: python3 tests/xboard_protocol.py --candidate src/atomic-stockfish
+          TSAN_OPTIONS: halt_on_error=1:log_path=tsan-report
+        run: |
+          set +e
+          python3 tests/xboard_protocol.py --candidate src/atomic-stockfish
+          status=$?
+          if compgen -G 'tsan-report.*' > /dev/null; then
+            cat tsan-report.*
+          fi
+          exit "$status"
 
   python:
     name: Python stable ABI
@@ -123,13 +130,13 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
-      - name: Install Emscripten
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y emscripten
       - name: Build Board WASM
-        working-directory: src
-        run: make -f Makefile_js all
+        run: >-
+          docker run --rm
+          --volume "$PWD:/src"
+          --workdir /src/src
+          emscripten/emsdk:3.1.46@sha256:2491bc4bf6caf8c41993660822341bc72759cb577363dfe0781f0a2d05f7d357
+          make -f Makefile_js all
       - name: Test CommonJS and ES modules
         working-directory: tests/js
         run: npm test

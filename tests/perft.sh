@@ -26,7 +26,7 @@ if [[ ! -x "$ENGINE" ]]; then
     exit 2
 fi
 
-"$SCRIPT_DIR/atomic.sh" --perft "$ENGINE"
+bash "$SCRIPT_DIR/atomic.sh" --perft "$ENGINE"
 "$PYTHON_BIN" "$SCRIPT_DIR/atomic_rules.py" --candidate-only --candidate "$ENGINE"
 
 echo "Atomic perft and rule-transition suite passed"
