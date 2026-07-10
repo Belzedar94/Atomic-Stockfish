@@ -97,14 +97,25 @@ HEADERS = attacks.h benchmark.h bitboard.h evaluate.h misc.h movegen.h movepick.
 
 OBJS = $(notdir $(SRCS:.cpp=.o))
 
-ATOMIC_UNIT_TEST_EXE  = atomic-unit-tests$(suffix $(EXE))
+ifeq ($(target_windows),yes)
+	ATOMIC_TEST_EXE_SUFFIX = .exe
+else
+	# Keep the executable distinct from the phony runner target on Unix.
+	ATOMIC_TEST_EXE_SUFFIX = .bin
+endif
+
+ATOMIC_UNIT_TEST_EXE  = atomic-unit-tests$(ATOMIC_TEST_EXE_SUFFIX)
 ATOMIC_UNIT_TEST_OBJS = $(filter-out main.o,$(OBJS)) atomic_see_tests.o
-ATOMIC_API_TEST_EXE   = atomic-api-tests$(suffix $(EXE))
+ATOMIC_API_TEST_EXE   = atomic-api-tests$(ATOMIC_TEST_EXE_SUFFIX)
 ATOMIC_API_TEST_OBJS  = $(filter-out main.o,$(OBJS)) atomic_fen.o atomic_api_tests.o
-ATOMIC_NNUE_INCREMENTAL_TEST_EXE  = atomic-nnue-incremental-tests$(suffix $(EXE))
+ATOMIC_NNUE_INCREMENTAL_TEST_EXE  = atomic-nnue-incremental-tests$(ATOMIC_TEST_EXE_SUFFIX)
 ATOMIC_NNUE_INCREMENTAL_TEST_OBJS = $(filter-out main.o,$(OBJS)) atomic_nnue_incremental_tests.o
 
-PYTHON ?= python
+ifeq ($(target_windows),yes)
+	PYTHON ?= python
+else
+	PYTHON ?= python3
+endif
 ATOMIC_NNUE_TEST_NET ?= ../../atomic_run3b_e202_l05.nnue
 ATOMIC_NNUE_TEST_MODE ?= smoke
 
@@ -1223,7 +1234,7 @@ clean: objclean profileclean universalclean
 
 # clean binaries and objects
 objclean:
-	@rm -f stockfish stockfish.exe atomic-unit-tests atomic-unit-tests.exe atomic-api-tests atomic-api-tests.exe atomic-nnue-incremental-tests atomic-nnue-incremental-tests.exe *.o ./api/*.o ./syzygy/*.o ./nnue/*.o ./nnue/features/*.o $(BUILD_SHA_FILE) $(BUILD_DATE_FILE)
+	@rm -f stockfish stockfish.exe atomic-stockfish atomic-stockfish.exe atomic-stockfish.js atomic-unit-tests atomic-unit-tests.exe atomic-unit-tests.bin atomic-api-tests atomic-api-tests.exe atomic-api-tests.bin atomic-nnue-incremental-tests atomic-nnue-incremental-tests.exe atomic-nnue-incremental-tests.bin *.o ./api/*.o ./syzygy/*.o ./nnue/*.o ./nnue/features/*.o $(BUILD_SHA_FILE) $(BUILD_DATE_FILE)
 
 # clean auxiliary profiling files
 profileclean:

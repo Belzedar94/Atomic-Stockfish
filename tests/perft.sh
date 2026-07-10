@@ -13,6 +13,13 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 ENGINE="${1:-$REPO_ROOT/src/atomic-stockfish}"
+if [[ -n "${PYTHON:-}" ]]; then
+    PYTHON_BIN="$PYTHON"
+elif command -v python3 >/dev/null 2>&1; then
+    PYTHON_BIN=python3
+else
+    PYTHON_BIN=python
+fi
 
 if [[ ! -x "$ENGINE" ]]; then
     echo "Atomic perft engine is not executable: $ENGINE" >&2
@@ -20,6 +27,6 @@ if [[ ! -x "$ENGINE" ]]; then
 fi
 
 "$SCRIPT_DIR/atomic.sh" --perft "$ENGINE"
-python "$SCRIPT_DIR/atomic_rules.py" --candidate-only --candidate "$ENGINE"
+"$PYTHON_BIN" "$SCRIPT_DIR/atomic_rules.py" --candidate-only --candidate "$ENGINE"
 
 echo "Atomic perft and rule-transition suite passed"

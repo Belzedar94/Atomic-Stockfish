@@ -46,7 +46,7 @@ COMMON_FLAGS := \
 	-sWASM_BIGINT=1 \
 	-sMALLOC=emmalloc \
 	-sDETERMINISTIC=1 \
-	-ffile-prefix-map=$(abspath .)=. \
+	"-ffile-prefix-map=$(abspath .)=." \
 	-Wall -Wextra -Wpedantic
 
 ifeq ($(DEBUG),yes)

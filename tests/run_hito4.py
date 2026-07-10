@@ -198,7 +198,7 @@ def validate_inputs(args: argparse.Namespace) -> dict[str, object]:
         )
 
     native = require_path(args.native, "native engine")
-    suffix = native.suffix if native.suffix.lower() == ".exe" else ""
+    suffix = ".exe" if native.suffix.lower() == ".exe" else ".bin"
     cpp_unit = require_path(
         args.cpp_unit or native.with_name(f"atomic-unit-tests{suffix}"), "C++ rule unit test"
     )

@@ -38,7 +38,18 @@ def prefix(args: argparse.Namespace) -> list[str]:
             "--errors-for-leak-kinds=definite,indirect,possible",
         ]
     if args.valgrind_thread:
-        return ["valgrind", "--tool=helgrind", "--error-exitcode=99"]
+        # Match Stockfish's proven threaded-Valgrind contract: run the real
+        # multi-thread workload under Memcheck with fair scheduling. Helgrind
+        # reports condition-variable signalling without the associated mutex
+        # as "dubious" for Stockfish's intentional worker protocol; TSan is the
+        # race detector used by the native Linux CI job.
+        return [
+            "valgrind",
+            "--error-exitcode=99",
+            "--fair-sched=try",
+            "--leak-check=full",
+            "--errors-for-leak-kinds=definite,indirect,possible",
+        ]
     return []
 
 
