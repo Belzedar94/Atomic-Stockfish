@@ -292,6 +292,11 @@ bool XBoardProtocol::apply_move(const std::string& move, bool reportIllegal) {
 void XBoardProtocol::start_search(bool analysis) {
     stop_search(true);
 
+    // Search workers read OptionsMap without locking. Keep the engine's UCI
+    // option in sync only after the preceding search has been joined, never
+    // directly from a hard/easy command while a worker may be reading it.
+    set_option("Ponder", ponderEnabled ? "true" : "false");
+
     Search::LimitsType searchLimits = analysis ? Search::LimitsType{} : limits;
     searchLimits.startTime          = now();
     searchLimits.ponderMode         = false;
@@ -321,6 +326,10 @@ void XBoardProtocol::start_ponder() {
     if (!ponderEnabled || hintMove.empty()
         || searchMode.load(std::memory_order_acquire) != SearchMode::Idle)
         return;
+
+    // start_ponder() is only entered while idle, so this is a safe point to
+    // apply a hard command that may have arrived during the previous search.
+    set_option("Ponder", "true");
 
     const std::string        predicted    = UCI::to_lower(hintMove);
     std::vector<std::string> hypothetical = moves;
@@ -445,12 +454,22 @@ void XBoardProtocol::restore_actual_position() {
 
 void XBoardProtocol::set_pondering(bool enabled) {
     ponderEnabled = enabled;
-    set_option("Ponder", enabled ? "true" : "false");
 
-    const SearchMode mode = searchMode.load(std::memory_order_acquire);
+    SearchMode mode = searchMode.load(std::memory_order_acquire);
     if (!enabled && mode == SearchMode::Pondering)
+    {
         stop_search(true);
-    else if (enabled && mode == SearchMode::Idle)
+        mode = SearchMode::Idle;
+    }
+
+    // OptionsMap is shared with the search workers and is intentionally not a
+    // concurrently mutable container. If hard/easy arrives during a playing
+    // or analysis search, remember it in ponderEnabled and apply it at the
+    // next idle search boundary instead of racing TimeManagement::init().
+    if (mode == SearchMode::Idle)
+        set_option("Ponder", enabled ? "true" : "false");
+
+    if (enabled && mode == SearchMode::Idle)
         start_ponder();
 }
 
