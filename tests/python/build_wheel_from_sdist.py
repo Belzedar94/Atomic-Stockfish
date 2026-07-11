@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import tarfile
 from pathlib import Path
 
 
@@ -21,6 +22,22 @@ def main() -> int:
             f"expected exactly one sdist in {source_directory}, "
             f"found {len(source_distributions)}"
         )
+
+    with tarfile.open(source_distributions[0], "r:gz") as archive:
+        members = archive.getnames()
+    required_suffixes = (
+        "/pyffish.pyi",
+        "/src/api/atomic_board.h",
+        "/src/position.h",
+        "/src/syzygy/tbprobe.h",
+    )
+    missing = [
+        suffix.lstrip("/")
+        for suffix in required_suffixes
+        if not any(member.endswith(suffix) for member in members)
+    ]
+    if missing:
+        fail(f"sdist omits required binding inputs: {', '.join(missing)}")
 
     output_directory.mkdir(parents=True, exist_ok=True)
     subprocess.run(
