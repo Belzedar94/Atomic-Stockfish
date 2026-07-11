@@ -3,8 +3,7 @@ name: Atomic CI
 on:
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
+  pull_request: {}
 
 concurrency:
   group: atomic-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
