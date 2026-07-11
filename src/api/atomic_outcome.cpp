@@ -78,7 +78,7 @@ Outcome outcome(const Position& pos, bool claimDraw, int repetitionPly) {
     if (has_insufficient_material(WHITE, pos) && has_insufficient_material(BLACK, pos))
         return drawn(Termination::InsufficientMaterial);
 
-    if (MoveList<LEGAL>(pos).size() == 0)
+    if (!pos.has_legal_move())
         return pos.atomic_in_check(sideToMove)
                ? decisive(Termination::Checkmate, -VALUE_MATE, sideToMove)
                : drawn(Termination::Stalemate);

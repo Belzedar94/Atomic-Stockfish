@@ -61,6 +61,7 @@ struct StateInfo {
     int    rule50;
     int    pliesFromNull;
     Square epSquare;
+    bool   atomicOpponentInCheck;
 
     // Not copied when making a move (will be recomputed anyhow)
     Key                                                   key;
@@ -152,6 +153,8 @@ class Position {
     bool  is_atomic_terminal() const;
     bool  atomic_in_check(Color c) const;
     bool  atomic_wins(Move m) const;
+    bool  has_legal_quiet() const;
+    bool  has_legal_move() const;
     Piece moved_piece(Move m) const;
     Piece captured_piece() const;
 

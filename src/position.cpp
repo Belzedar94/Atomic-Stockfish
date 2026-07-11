@@ -429,6 +429,7 @@ Position::set(const string& fenStr, bool isChess960, StateInfo* si) {
 
     chess960 = isChess960;
     set_state();
+    st->atomicOpponentInCheck = atomic_in_check(~sideToMove);
 
     assert(pos_is_ok());
 
@@ -601,8 +602,8 @@ string Position::fen() const {
     if (!can_castle(ANY_CASTLING))
         ss << '-';
 
-    ss << (ep_square() == SQ_NONE ? " - " : " " + UCI::square(ep_square()) + " ")
-       << st->rule50 << " " << 1 + (gamePly - (sideToMove == BLACK)) / 2;
+    ss << (ep_square() == SQ_NONE ? " - " : " " + UCI::square(ep_square()) + " ") << st->rule50
+       << " " << 1 + (gamePly - (sideToMove == BLACK)) / 2;
 
     return ss.str();
 }
@@ -816,15 +817,104 @@ bool Position::pseudo_legal(const Move m) const {
 }
 
 
-// Tests whether a pseudo-legal move gives a check
-bool Position::gives_check([[maybe_unused]] Move m) const {
+// Tests whether a pseudo-legal move gives an Atomic check.
+bool Position::gives_check(Move m) const {
 
     assert(m.is_ok());
     assert(color_of(moved_piece(m)) == sideToMove);
 
-    // The Atomic royal is deliberately handled outside Stockfish's orthodox
-    // check/evasion fast path. legal() validates the full post-explosion board.
-    return false;
+    const Color us   = sideToMove;
+    const Color them = ~us;
+
+    if (!has_king(them))
+        return false;
+
+    const Square from           = m.from_sq();
+    const Square to             = m.to_sq();
+    const Piece  pc             = moved_piece(m);
+    const Square theirKing      = square<KING>(them);
+    const Square currentOurKing = square<KING>(us);
+    const bool   kingsAdjacent  = bool(attacks_bb<KING>(currentOurKing) & theirKing);
+
+    // The common case is a normal quiet. Existing check-squares detect its
+    // direct checks, and only a blocker move (or a king leaving mutual
+    // immunity) needs the full hypothetical-occupancy calculation below.
+    if (m.type_of() == NORMAL && !capture(m))
+    {
+        if (kingsAdjacent)
+        {
+            if (type_of(pc) != KING || (attacks_bb<KING>(to) & theirKing))
+                return false;
+        }
+        else
+        {
+            if (type_of(pc) != KING && (check_squares(type_of(pc)) & to))
+                return true;
+            if (!st->atomicOpponentInCheck && !(blockers_for_king(them) & from))
+                return false;
+        }
+    }
+
+    Bitboard occupied;
+    Bitboard vacated = square_bb(from);
+    Square   ourKing;
+    Square   checkerSquare;
+    Piece    checker;
+
+    if (m.type_of() == CASTLING)
+    {
+        const Square rfrom = to;
+        const Square kto   = relative_square(us, rfrom > from ? SQ_G1 : SQ_C1);
+        const Square rto   = relative_square(us, rfrom > from ? SQ_F1 : SQ_D1);
+
+        occupied = (pieces() ^ from ^ rfrom) | kto | rto;
+        vacated |= rfrom;
+        ourKing       = kto;
+        checker       = make_piece(us, ROOK);
+        checkerSquare = rto;
+    }
+    else
+    {
+        occupied = (pieces() ^ from) | to;
+
+        if (m.type_of() == EN_PASSANT)
+            occupied ^= to - pawn_push(us);
+
+        ourKing       = type_of(pc) == KING ? to : square<KING>(us);
+        checker       = m.type_of() == PROMOTION ? make_piece(us, m.promotion_type()) : pc;
+        checkerSquare = to;
+
+        if (capture(m))
+        {
+            // The capturing piece always disappears. Adjacent pawns survive;
+            // every adjacent non-pawn is removed before check is evaluated.
+            const Bitboard blast = to | (attacks_bb<KING>(to) & (pieces() ^ pieces(PAWN)));
+            occupied &= ~blast;
+            checker = NO_PIECE;
+        }
+    }
+
+    // A missing opposing king is a terminal explosion, handled separately by
+    // atomic_wins(). A missing friendly king is an illegal self-explosion.
+    if (!(occupied & theirKing) || !(occupied & ourKing))
+        return false;
+
+    // Adjacent kings are mutually immune in Atomic chess, including from all
+    // other nominal attacks on either king.
+    if (attacks_bb<KING>(ourKing) & theirKing)
+        return false;
+
+    // Existing pieces can give a discovered check after the move or blast.
+    // Mask the moved origins explicitly because Chess960 can reoccupy one of
+    // those squares with the other castling piece.
+    if (attackers_to(theirKing, occupied) & pieces(us) & occupied & ~vacated)
+        return true;
+
+    // The moved piece is absent from the pre-move piece bitboards, so test its
+    // final square separately. Atomic captures set checker to NO_PIECE because
+    // the capturer has exploded.
+    return checker != NO_PIECE && (occupied & checkerSquare)
+        && (attacks_bb(checker, checkerSquare, occupied) & theirKing);
 }
 
 
@@ -850,9 +940,10 @@ void Position::do_move(Move                      m,
     // ones which are going to be recalculated from scratch anyway and then switch
     // our state pointer to point to the new (ready to be updated) state.
     std::memcpy(&newSt, st, offsetof(StateInfo, key));
-    newSt.previous       = st;
-    st                   = &newSt;
-    st->atomicBlastCount = 0;
+    newSt.previous            = st;
+    st                        = &newSt;
+    st->atomicBlastCount      = 0;
+    st->atomicOpponentInCheck = false;
 
     // Increment ply counters. In particular, rule50 will be reset to zero later on
     // in case of a capture or a pawn move.
@@ -1456,8 +1547,9 @@ void Position::do_null_move(StateInfo& newSt) {
 
     std::memcpy(&newSt, st, sizeof(StateInfo));
 
-    newSt.previous = st;
-    st             = &newSt;
+    newSt.previous            = st;
+    st                        = &newSt;
+    st->atomicOpponentInCheck = false;
 
     if (st->epSquare != SQ_NONE)
     {
@@ -1584,10 +1676,95 @@ bool Position::see_ge(Move m, int threshold) const {
 // or by repetition. It does not detect stalemates.
 bool Position::is_draw(int ply) const {
 
-    if (st->rule50 > 99 && (!checkers() || MoveList<LEGAL>(*this).size()))
+    if (st->rule50 > 99 && (!atomic_in_check(sideToMove) || has_legal_move()))
         return true;
 
     return is_repetition(ply);
+}
+
+bool Position::has_legal_quiet() const {
+
+    if (is_atomic_terminal())
+        return false;
+
+    const Color     us           = sideToMove;
+    const Direction up           = pawn_push(us);
+    const Bitboard  emptySquares = ~pieces();
+    const Bitboard  seventhRank  = us == WHITE ? Rank7BB : Rank2BB;
+    const Bitboard  thirdRank    = us == WHITE ? Rank3BB : Rank6BB;
+    const Bitboard  pawnsOn7     = pieces(us, PAWN) & seventhRank;
+    const Bitboard  pawnsNotOn7  = pieces(us, PAWN) & ~seventhRank;
+    const Bitboard  blockers     = blockers_for_king(us);
+    const bool      inCheck      = atomic_in_check(us);
+
+    // Outside check, moving a non-king that is not the sole blocker of a
+    // slider cannot expose our king. Such a pseudo-legal quiet is therefore
+    // already a proof of mobility and avoids a full post-move attack scan in
+    // the overwhelmingly common qsearch case.
+    const auto legalNonKing = [&](Move move) {
+        return (!inCheck && !(blockers & move.from_sq())) || legal(move);
+    };
+
+    Bitboard singlePushes = pawn_single_push_bb(us, pawnsNotOn7) & emptySquares;
+    Bitboard doublePushes = pawn_single_push_bb(us, singlePushes & thirdRank) & emptySquares;
+
+    while (singlePushes)
+    {
+        const Square to = pop_lsb(singlePushes);
+        if (legalNonKing(Move(to - up, to)))
+            return true;
+    }
+
+    while (doublePushes)
+    {
+        const Square to = pop_lsb(doublePushes);
+        if (legalNonKing(Move(to - up - up, to)))
+            return true;
+    }
+
+    Bitboard promotions = pawn_single_push_bb(us, pawnsOn7) & emptySquares;
+    while (promotions)
+    {
+        const Square to = pop_lsb(promotions);
+        // Promotion type cannot change friendly-king safety: all four choices
+        // remove and occupy the same squares. One queen probe proves mobility.
+        if (legalNonKing(Move::make<PROMOTION>(to - up, to, QUEEN)))
+            return true;
+    }
+
+    for (PieceType pt : {KNIGHT, BISHOP, ROOK, QUEEN, KING})
+    {
+        Bitboard movers = pieces(us, pt);
+        while (movers)
+        {
+            const Square from    = pop_lsb(movers);
+            Bitboard     targets = attacks_bb(pt, from, pieces()) & emptySquares;
+            while (targets)
+                if (const Move move(from, pop_lsb(targets));
+                    (pt != KING && legalNonKing(move)) || (pt == KING && legal(move)))
+                    return true;
+        }
+    }
+
+    if (can_castle(us & ANY_CASTLING))
+        for (CastlingRights cr : {us & KING_SIDE, us & QUEEN_SIDE})
+            if (!castling_impeded(cr) && can_castle(cr)
+                && legal(Move::make<CASTLING>(square<KING>(us), castling_rook_square(cr))))
+                return true;
+
+    return false;
+}
+
+bool Position::has_legal_move() const {
+
+    if (has_legal_quiet())
+        return true;
+
+    for (Move move : MoveList<CAPTURES>(*this))
+        if (legal(move))
+            return true;
+
+    return false;
 }
 
 // Return a draw score if a position repeats once earlier but strictly

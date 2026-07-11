@@ -155,9 +155,15 @@ try {
   child.stdin.write(`setoption name EvalFile value ${netForUci}\n`);
   child.stdin.write('setoption name Use NNUE value true\n');
 
+  // Perft is deliberately independent of evaluation. Prove the requested
+  // network loads in the same NNUE-enabled session before running its rules
+  // vectors instead of making go perft depend on EvalFile.
   child.stdin.write('position startpos\n');
-  const atomicPerft = await command('go perft 4', /Nodes searched: 197326/, 180_000);
-  assert.match(atomicPerft, /NNUE evaluation using .*atomic_run3b_e202_l05\.nnue/);
+  const nnueLoad = await command('go nodes 1', /bestmove\s+(?!\(none\))\S+/, 180_000);
+  assert.match(nnueLoad, /NNUE evaluation using .*atomic_run3b_e202_l05\.nnue/);
+
+  child.stdin.write('position startpos\n');
+  await command('go perft 4', /Nodes searched: 197326/, 180_000);
 
   child.stdin.write('setoption name UCI_Chess960 value true\n');
   child.stdin.write('position fen 8/8/8/8/8/8/2k5/rR4KR w KQ - 0 1\n');

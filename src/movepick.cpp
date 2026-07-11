@@ -314,21 +314,40 @@ top:
         ++stage;
         [[fallthrough]];
 
-    case QUIET_INIT :
-        if (!skipQuiets)
+    case QUIET_INIT : {
+        MoveList<QUIETS> ml(pos);
+
+        if (skipQuiets)
         {
-            MoveList<QUIETS> ml(pos);
-
+            // Bulk pruning must retain quiet Atomic checks, but scoring every
+            // quiet through all history tables would erase the speed benefit.
+            // Compact only checks into the remaining move buffer instead.
+            quietChecksOnly = true;
+            endGenerated    = cur;
+            for (Move move : ml)
+                if (pos.gives_check(move))
+                {
+                    *endGenerated       = move;
+                    endGenerated->value = 0;
+                    ++endGenerated;
+                }
+            endCur = endGenerated;
+        }
+        else
+        {
             endCur = endGenerated = score<QUIETS>(ml);
-
             partial_insertion_sort(cur, endCur, -3560 * depth);
         }
 
         ++stage;
         [[fallthrough]];
+    }
 
     case GOOD_QUIET :
-        if (!skipQuiets && select([&]() { return cur->value > goodQuietThreshold; }))
+        if (select([&]() {
+                return quietChecksOnly
+                    || (cur->value > goodQuietThreshold && (!skipQuiets || pos.gives_check(*cur)));
+            }))
             return *(cur - 1);
 
         // Prepare the pointers to loop over the bad captures
@@ -350,10 +369,12 @@ top:
         [[fallthrough]];
 
     case BAD_QUIET :
-        if (!skipQuiets)
-            return select([&]() { return cur->value <= goodQuietThreshold; });
+        if (quietChecksOnly)
+            return Move::none();
 
-        return Move::none();
+        return select([&]() {
+            return cur->value <= goodQuietThreshold && (!skipQuiets || pos.gives_check(*cur));
+        });
 
     case EVASION_INIT : {
         MoveList<EVASIONS> ml(pos);

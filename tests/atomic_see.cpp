@@ -148,6 +148,72 @@ bool expect_atomic_wins() {
     return ok;
 }
 
+bool expect_atomic_gives_check() {
+    struct GivesCheckCase {
+        std::string_view name;
+        std::string_view fen;
+        Move             move;
+        bool             chess960;
+        bool             expected;
+    };
+
+    const std::array<GivesCheckCase, 14> tests = {{
+      {"quiet direct check", "7k/8/8/8/8/8/8/KR6 w - - 0 1", Move(SQ_B1, SQ_H1), false, true},
+      {"quiet discovered check", "R2B3k/8/8/8/8/8/8/K7 w - - 0 1", Move(SQ_D8, SQ_C7), false, true},
+      {"capturer explosion removes checker", "8/p6k/8/8/8/8/8/R6K w - - 0 1", Move(SQ_A1, SQ_A7),
+       false, false},
+      {"capture blast discovers check", "R2n3k/8/8/8/8/8/8/K2R4 w - - 0 1", Move(SQ_D1, SQ_D8),
+       false, true},
+      {"en passant discovers check", "8/8/8/R2pP2k/8/8/8/K7 w - d6 0 1",
+       Move::make<EN_PASSANT>(SQ_E5, SQ_D6), false, true},
+      {"promotion gives check", "7k/6P1/8/8/8/8/8/K7 w - - 0 1",
+       Move::make<PROMOTION>(SQ_G7, SQ_G8, QUEEN), false, true},
+      {"castling rook gives check", "5k2/8/8/8/8/8/8/4K2R w K - 0 1",
+       Move::make<CASTLING>(SQ_E1, SQ_H1), false, true},
+      {"adjacent kings suppress discovered check", "R4K1k/8/8/8/8/8/8/8 w - - 0 1",
+       Move(SQ_F8, SQ_G7), false, false},
+      {"analysis check survives unrelated quiet", "4k3/8/8/1B6/8/8/8/4K3 w - - 0 1",
+       Move(SQ_E1, SQ_D1), false, true},
+      {"analysis rook check survives b1 quiet", "k7/8/8/8/8/8/7B/RN5K w - - 0 1",
+       Move(SQ_B1, SQ_C3), false, true},
+      {"Atomic960 castling with king already on g1", "5k2/8/8/8/8/8/8/6KR w H - 0 1",
+       Move::make<CASTLING>(SQ_G1, SQ_H1), true, true},
+      {"Atomic960 castling with rook already on f1", "5k2/8/8/8/8/8/8/4KR2 w F - 0 1",
+       Move::make<CASTLING>(SQ_E1, SQ_F1), true, true},
+      {"Atomic960 castling with king starting on f1", "5k2/8/8/8/8/8/8/5K1R w H - 0 1",
+       Move::make<CASTLING>(SQ_F1, SQ_H1), true, true},
+      {"Atomic960 castling with rook starting on g1", "5k2/8/8/8/8/8/8/4K1R1 w G - 0 1",
+       Move::make<CASTLING>(SQ_E1, SQ_G1), true, true},
+    }};
+
+    bool ok = true;
+    for (const auto& test : tests)
+    {
+        Position  pos;
+        StateInfo state{};
+
+        if (pos.set(std::string(test.fen), test.chess960, &state)
+            || !MoveList<LEGAL>(pos).contains(test.move))
+        {
+            std::cerr << "FAIL " << test.name << ": invalid or illegal gives_check fixture\n";
+            ok = false;
+            continue;
+        }
+
+        const bool actual = pos.gives_check(test.move);
+        if (actual != test.expected)
+        {
+            std::cerr << "FAIL " << test.name << ": expected gives_check=" << test.expected
+                      << ", got " << actual << '\n';
+            ok = false;
+        }
+        else
+            std::cout << "PASS " << test.name << " gives_check=" << actual << '\n';
+    }
+
+    return ok;
+}
+
 bool same_incremental_state(const Position& actual, const Position& rebuilt) {
     return actual.fen() == rebuilt.fen() && actual.key() == rebuilt.key()
         && actual.material_key() == rebuilt.material_key()
@@ -283,16 +349,20 @@ bool expect_rule50_state() {
     Position  quiet;
     Position  pawn;
     Position  capture;
+    Position  mate;
     StateInfo quietRoot{};
     StateInfo quietNext{};
     StateInfo pawnRoot{};
     StateInfo pawnNext{};
     StateInfo captureRoot{};
     StateInfo captureNext{};
+    StateInfo mateRoot{};
+    StateInfo mateNext{};
 
     if (quiet.set("7k/8/8/8/8/8/6N1/K7 w - - 99 1", false, &quietRoot)
         || pawn.set("7k/8/8/8/8/8/4P3/K7 w - - 99 1", false, &pawnRoot)
-        || capture.set("7k/8/8/8/3q4/2P1Q3/8/K7 w - - 99 1", false, &captureRoot))
+        || capture.set("7k/8/8/8/3q4/2P1Q3/8/K7 w - - 99 1", false, &captureRoot)
+        || mate.set("B7/Rk6/8/8/8/8/7Q/4K3 w - - 99 1", false, &mateRoot))
     {
         std::cerr << "FAIL rule50: invalid fixture\n";
         return false;
@@ -301,6 +371,7 @@ bool expect_rule50_state() {
     quiet.do_move(Move(SQ_G2, SQ_F4), quietNext);
     pawn.do_move(Move(SQ_E2, SQ_E3), pawnNext);
     capture.do_move(Move(SQ_C3, SQ_D4), captureNext);
+    mate.do_move(Move(SQ_H2, SQ_B8), mateNext);
 
     if (quiet.rule50_count() != 100 || !quiet.is_draw(1))
     {
@@ -315,6 +386,12 @@ bool expect_rule50_state() {
     if (capture.rule50_count() != 0 || capture.is_draw(1))
     {
         std::cerr << "FAIL rule50: Atomic capture did not reset the counter\n";
+        return false;
+    }
+    if (mate.rule50_count() != 100 || !mate.atomic_in_check(BLACK) || MoveList<LEGAL>(mate).size()
+        || mate.is_draw(1))
+    {
+        std::cerr << "FAIL rule50: draw claim obscured Atomic checkmate\n";
         return false;
     }
 
@@ -379,6 +456,7 @@ int main() {
 
     ok &= expect_special_moves_are_neutral();
     ok &= expect_atomic_wins();
+    ok &= expect_atomic_gives_check();
     ok &= expect_make_undo_state();
     ok &= expect_repetition_state();
     ok &= expect_rule50_state();
@@ -387,7 +465,7 @@ int main() {
     if (!ok)
         return 1;
 
-    constexpr usize TestCount = SeeCases.size() + 3 + 7 + 8 + 3;
+    constexpr usize TestCount = SeeCases.size() + 3 + 7 + 8 + 14 + 3;
     std::cout << "Atomic C++ unit tests passed: " << TestCount << "/" << TestCount << '\n';
     return 0;
 }

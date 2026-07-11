@@ -4,9 +4,28 @@ import platform
 from pathlib import Path
 
 from setuptools import Extension, setup
+from setuptools.command.build_ext import build_ext
 
 
 ROOT = Path(__file__).parent
+
+
+class BuildExtWithStub(build_ext):
+    """Install both the adjacent stub and its PEP 561 stub-only package."""
+
+    def run(self) -> None:
+        super().run()
+        stub_package = Path(self.build_lib) / "pyffish-stubs"
+        self.mkpath(str(stub_package))
+        self.copy_file(
+            str(ROOT / "pyffish.pyi"),
+            str(Path(self.build_lib) / "pyffish.pyi"),
+        )
+        self.copy_file(
+            str(ROOT / "pyffish.pyi"),
+            str(stub_package / "__init__.pyi"),
+        )
+
 
 SOURCES = [
     "src/pyffish.cpp",
@@ -73,7 +92,7 @@ setup(
     license="GPL-3.0-or-later",
     python_requires=">=3.9",
     ext_modules=[pyffish],
-    data_files=[("", ["pyffish.pyi"])],
+    cmdclass={"build_ext": BuildExtWithStub},
     options={"bdist_wheel": {"py_limited_api": "cp39"}},
     classifiers=[
         "Development Status :: 3 - Alpha",
