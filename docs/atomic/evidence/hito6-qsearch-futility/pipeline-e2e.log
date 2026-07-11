@@ -1,5 +1,5 @@
 Legacy Atomic V1 cross-repository local snapshot gate
-Snapshot: path=C:\Users\djime\Documents\Chess_variants\Codex\Fairy-Stockfish organization\Atomic Project\Atomic-Stockfish\docs\atomic\evidence\hito6-qsearch-futility\pipeline-local-snapshot.json bytes=20692 sha256=E41348E7E350231B5F59049056D793988FCCEA84904A3383A393D7804FC06DF6
+Snapshot: path=C:\Users\djime\Documents\Chess_variants\Codex\Fairy-Stockfish organization\Atomic Project\Atomic-Stockfish\docs\atomic\evidence\hito6-qsearch-futility\pipeline-local-snapshot.json bytes=20936 sha256=91863007CA4A6A1BA7F2A03E5A424A40752C357C944C19FE3FB79B62A8267C2B
 Tools: base_head=c8df2c39515a2654d5b52ba55b4ee585b20430a8 path=C:\Users\djime\Documents\Chess_variants\Codex\Fairy-Stockfish organization\Atomic Project\variant-nnue-tools\src\stockfish-tools-release.exe bytes=5521822 sha256=CC17E29E8B4953A2219F3AB63FDF25180DBBF5B3D6AA1CFBCBDE17DC75A024F1
 Trainer: base_head=b15df38a9aae8ab9b40b2378020b3099c7c5d179 loader_bytes=79872 loader_sha256=F4349EA5125F13F807087BA5EC15FE4801B6A3567A847B5598CD7741D787DFF7
 Engine: path=C:\Users\djime\Documents\Chess_variants\Codex\Fairy-Stockfish organization\Atomic Project\reports\hito6-qsearch-futility-e13f11\Atomic-Stockfish-hito6-qsearch-E13F11.exe bytes=4263216 sha256=E13F11F4FBC0459F8349B4F6D0B0BDD03600292B1027BFC311C42D236480976B

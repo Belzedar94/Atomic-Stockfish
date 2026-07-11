@@ -163,7 +163,7 @@ and Clang
 `sha256:e987da8a4ed17dbb42a67319a502bd5fac6759821388949165490dbd20bf7079`.
 It is versioned as `evidence/hito6-qsearch-futility/linux/manifest.json`
 (14,508 bytes, SHA-256
-`8524F353225AF209EC8164FB7999F18CABEB899238B4EB1B51B14A846892E9A3`).
+`04B662BE5CB8B36AB98B95861CF1D922A7298900AF7A947CB5AFE2C6FEA08C63`).
 The exact 2,938-byte gate script used by the four jobs is preserved beside the
 manifest at SHA-256
 `1DE69881B68C9E9000750ABF01E8B0F2E801DF23F2ED3257D3681D77D8331FC0`.
@@ -224,13 +224,18 @@ in the engine for evaluation and search. The final block-3 rerun passed with:
 This rerun used an explicitly identified **local dirty snapshot**, not a clean
 multi-repository release claim. `variant-nnue-tools` is based on
 `c8df2c39515a2654d5b52ba55b4ee585b20430a8` with canonical changed-content
-SHA-256 `E02495240AD1346312DD01BE4E9414992393A0027897B10EEE2FE00BEEF1E6D0`;
+SHA-256 `EDA1693CBA433B32DE2B9406FBB16394465DDDF087FA9776AD40E81AE1C557C6`;
 `variant-nnue-pytorch` is based on
 `b15df38a9aae8ab9b40b2378020b3099c7c5d179` with canonical changed-content
-SHA-256 `4FF804CBB8EF1E4B902B567DE8F66A31E43F3C98D318D1B000C7E4DBD5821CCC`.
-The 20,692-byte content manifest is
+SHA-256 `57DEC6EA66CA9D58477A72CAC57560D69E972BAAB73E7D3681B9010A38954B35`.
+That canonical hash is the SHA-256 of a UTF-8/LF stream beginning with
+`label=<value>`, `base_head=<value>` and `branch=<value>` lines, followed by
+file entries sorted ordinally by path as
+`kind|path|bytes|UPPERCASE_SHA256|base_blob`. Every line has a final LF and
+`base_blob` is empty for untracked files.
+The 20,936-byte content manifest is
 `evidence/hito6-qsearch-futility/pipeline-local-snapshot.json`, SHA-256
-`E41348E7E350231B5F59049056D793988FCCEA84904A3383A393D7804FC06DF6`.
+`91863007CA4A6A1BA7F2A03E5A424A40752C357C944C19FE3FB79B62A8267C2B`.
 It records all 16 tools and 20 trainer changed/untracked files plus the exact
 tools executable
 (`CC17E29E8B4953A2219F3AB63FDF25180DBBF5B3D6AA1CFBCBDE17DC75A024F1`)
@@ -240,7 +245,7 @@ These hashes identify the local state but cannot
 reconstruct uncommitted content from the base commits alone.
 
 The normalized rerun log is 2,591 bytes, SHA-256
-`7BC9B357AB17243AF0682E4E7A27E441F1CA865CBAC320DAF5BBF9214E888F5B`,
+`7C84B8C2C21CBE242742B0140C06A0978282273884DC99012633FCA52AFCCCBA`,
 at `evidence/hito6-qsearch-futility/pipeline-e2e.log`. It records the candidate,
 network, generator, loader, runner and snapshot hashes and ends with
 `pipeline_exit_code=0`. The clean, pinned multi-repository CI job remains a

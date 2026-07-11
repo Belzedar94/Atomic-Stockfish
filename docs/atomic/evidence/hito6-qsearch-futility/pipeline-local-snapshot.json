@@ -2,6 +2,7 @@
     "schema":  "atomic-local-pipeline-snapshot-v1",
     "captured_at_utc":  "2026-07-11T15:55:30.564Z",
     "reproducibility":  "local dirty snapshot identity only; base commits plus content hashes identify but do not reconstruct uncommitted files",
+    "canonical_content_definition":  "SHA-256 of UTF-8/LF: label, base_head and branch lines, then all file entries sorted ordinally by path as kind|path|bytes|sha256|base_blob with LF after every line; base_blob is empty for untracked files",
     "tools":  {
                   "label":  "variant-nnue-tools",
                   "base_head":  "c8df2c39515a2654d5b52ba55b4ee585b20430a8",
@@ -18,7 +19,7 @@
                                                          "sha256":  "F828CE7746D860AAC8781E399A62170952226FE7A601A863FE1BD1A8C3D7BFCD"
                                                      },
                   "aggregate_fingerprint":  "588A7F2FD99462CB3FC622C0A277789497539A267D64CC10A5D994BD7196D4AA",
-                  "canonical_content_sha256":  "E02495240AD1346312DD01BE4E9414992393A0027897B10EEE2FE00BEEF1E6D0",
+                  "canonical_content_sha256":  "EDA1693CBA433B32DE2B9406FBB16394465DDDF087FA9776AD40E81AE1C557C6",
                   "files":  [
                                 {
                                     "kind":  "tracked-modified",
@@ -150,7 +151,7 @@
                                                            "sha256":  "47FADB5E4E003874B164429689FB530708F788B355DA688BEDA0F4AE5D8CE4A8"
                                                        },
                     "aggregate_fingerprint":  "4ADF140E134A67771A5B057E35F35D955DBEC9F4022A17C99CEBCEA927B4BA28",
-                    "canonical_content_sha256":  "4FF804CBB8EF1E4B902B567DE8F66A31E43F3C98D318D1B000C7E4DBD5821CCC",
+                    "canonical_content_sha256":  "57DEC6EA66CA9D58477A72CAC57560D69E972BAAB73E7D3681B9010A38954B35",
                     "files":  [
                                   {
                                       "kind":  "tracked-modified",

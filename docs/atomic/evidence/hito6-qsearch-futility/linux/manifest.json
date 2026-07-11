@@ -1,6 +1,6 @@
 {
     "schema":  "atomic-linux-hito-gate-v1",
-    "generated_at_utc":  "2026-07-11T15:49:03.012Z",
+    "finalized_at_utc":  "2026-07-11T16:02:44.107Z",
     "source":  {
                    "head":  "125d6d446d1fd407c6122f0409e62314206a202e",
                    "tree":  "a54c9eea85b5e3ecbb49f3b1e47bc771dd90eead",
