@@ -24,6 +24,7 @@ tsan.supp
 __pycache__/
 tests/syzygy
 tests/bench_tmp.epd
+/.pipeline/
 
 # Python extension and wheel build products
 /build/

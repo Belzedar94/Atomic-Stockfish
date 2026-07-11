@@ -1,0 +1,123 @@
+{
+    "schema":  "atomic-stockfish-hito6-windows-debug-v1",
+    "head":  "0c45a9bf711814621607f3d0bed546a026cdf4d1",
+    "tree":  "f92e23c5104bf30d7e909be558ef23934c401d14",
+    "commit_epoch":  1783787095,
+    "git_date":  "20260711",
+    "build_sha":  "0c45a9bf",
+    "build_date":  "20260711",
+    "configuration":  {
+                          "platform":  "Windows MinGW",
+                          "arch":  "x86-64-avx2",
+                          "comp":  "mingw",
+                          "debug":  "yes",
+                          "optimize":  "no",
+                          "syzygy":  "yes"
+                      },
+    "toolchain":  {
+                      "compiler":  "x86_64-w64-mingw32-c++.exe (Rev8, Built by MSYS2 project) 15.2.0",
+                      "make":  "GNU Make 4.4.1",
+                      "python":  "Python 3.12.0"
+                  },
+    "network":  {
+                    "name":  "atomic_run3b_e202_l05.nnue",
+                    "bytes":  47721376,
+                    "sha256":  "99DC67EABF26A64FAEECA3A88B4C38597A840B8D4A874B9F2CF658C6F92A04A6"
+                },
+    "tables":  "C:\\Users\\djime\\Documents\\Chess_variants\\Codex\\Fairy-Stockfish organization\\Atomic Project\\research\\shakmaty\\shakmaty-syzygy\\tables\\atomic",
+    "tracked_worktree_clean":  true,
+    "result":  "PASS",
+    "markers":  {
+                    "unit_pass":  63,
+                    "api_pass":  34,
+                    "perft_normative":  8,
+                    "perft_rules":  19,
+                    "search_false":  16,
+                    "search_true":  16,
+                    "syzygy_driver":  5
+                },
+    "binaries":  [
+                     {
+                         "name":  "atomic-stockfish.exe",
+                         "bytes":  36706922,
+                         "sha256":  "E1D2348FDF332F72E5E5DB8C7D3037BB750AB824C9D7A1E2E5DF0F09A2955956"
+                     },
+                     {
+                         "name":  "atomic-unit-tests.exe",
+                         "bytes":  34685923,
+                         "sha256":  "0B3381E2A84C01BA50F90D17A5B28F7ED58F69B7D6F0E07CB7E790202DB58A7B"
+                     },
+                     {
+                         "name":  "atomic-api-tests.exe",
+                         "bytes":  35386358,
+                         "sha256":  "F7B312211E05BA053C8418855C2157038F5103F66251D2E3801DE29E5821DC59"
+                     },
+                     {
+                         "name":  "atomic-syzygy-driver.exe",
+                         "bytes":  9702070,
+                         "sha256":  "B2C645B7BEE858CC9B508A037F11CAB928A143364C5B9FE67CB23CD8EB5567E1"
+                     },
+                     {
+                         "name":  "atomic-nnue-incremental-tests.exe",
+                         "bytes":  36154928,
+                         "sha256":  "F8A5E985BE4BCB0FE1D7D9E29C2B46B8ED69DF2B0D7313D8EFD1021B767CB5F2"
+                     }
+                 ],
+    "logs":  [
+                 {
+                     "name":  "api.log",
+                     "bytes":  2004,
+                     "sha256":  "AA0F7F0CDF4101729F6B0798F754A0B3299FDA03118A9EFFB429C418E49B29DA"
+                 },
+                 {
+                     "name":  "build-debug.log",
+                     "bytes":  47692,
+                     "sha256":  "5A09C32A154908F05F069EE17E2B74A84050C42E800D4DF561141D37A5978075"
+                 },
+                 {
+                     "name":  "engine-identity.log",
+                     "bytes":  1276,
+                     "sha256":  "8CC7B49174A6C314886D4C356049C9E0C38C4BA8F8F43402C63F7BB7463C7DF0"
+                 },
+                 {
+                     "name":  "perft.log",
+                     "bytes":  3386,
+                     "sha256":  "4858CE793C8EDBB1A0704B5CECAA756B7A9C1B790406AE7D9F07D95DAD38D525"
+                 },
+                 {
+                     "name":  "search-false.log",
+                     "bytes":  2442,
+                     "sha256":  "229EAFAABF31D88633020108330262B52D4AEA744A957E48EE24A493DC8EE71A"
+                 },
+                 {
+                     "name":  "search-true.log",
+                     "bytes":  2558,
+                     "sha256":  "8878A0781875C31722E06ABF6BD9801C4324F49F08DDC1459888C5FBA98B0C53"
+                 },
+                 {
+                     "name":  "syzygy-driver.log",
+                     "bytes":  800,
+                     "sha256":  "A57162E61A9EB13AEE73285FF2221060EF022FEF51319F80D14D4C9B8593056B"
+                 },
+                 {
+                     "name":  "syzygy-uci.log",
+                     "bytes":  280,
+                     "sha256":  "5072C916FED1CED0CBF3D1874593508698EDD518324BEFDB9994E3F1F4DDDAEE"
+                 },
+                 {
+                     "name":  "uci-protocol.log",
+                     "bytes":  76,
+                     "sha256":  "2756ABBCFD1DE8563608593F746AD46CC6686DF84F9383C2D2733C54D873A225"
+                 },
+                 {
+                     "name":  "unit.log",
+                     "bytes":  6416,
+                     "sha256":  "2362EAEC22537E4236B00F10522B1989814559C0F16B9B5630DD52EE71C0A02E"
+                 },
+                 {
+                     "name":  "xboard-protocol.log",
+                     "bytes":  64,
+                     "sha256":  "5E2A32C32E3B5DE97E5334AF017A5B7617FF07621375DB1A6E2EA3404F33BFB8"
+                 }
+             ]
+}

@@ -174,16 +174,40 @@ def parse_args() -> argparse.Namespace:
         "--pipeline-tools-engine",
         type=Path,
         help=(
-            "optional variant-nnue-tools executable; must be supplied together "
-            "with --pipeline-trainer-root to run the cross-repository E2E gate"
+            "optional variant-nnue-tools executable; all five --pipeline-* "
+            "inputs must be supplied together to run the cross-repository E2E gate"
         ),
     )
     parser.add_argument(
         "--pipeline-trainer-root",
         type=Path,
         help=(
-            "optional built variant-nnue-pytorch checkout; must be supplied "
-            "together with --pipeline-tools-engine"
+            "optional built variant-nnue-pytorch checkout; all five "
+            "--pipeline-* inputs must be supplied together"
+        ),
+    )
+    parser.add_argument(
+        "--pipeline-tools-build-manifest",
+        type=Path,
+        help=(
+            "clean-build manifest for --pipeline-tools-engine; all five "
+            "--pipeline-* inputs are required together"
+        ),
+    )
+    parser.add_argument(
+        "--pipeline-trainer-build-manifest",
+        type=Path,
+        help=(
+            "clean-build manifest for the trainer native loader; all five "
+            "--pipeline-* inputs are required together"
+        ),
+    )
+    parser.add_argument(
+        "--pipeline-atomic-build-manifest",
+        type=Path,
+        help=(
+            "clean-build manifest for --native; all five --pipeline-* inputs "
+            "are required together"
         ),
     )
     parser.add_argument("--python", default=sys.executable)
@@ -245,20 +269,23 @@ def main() -> int:
         pipeline_options = (
             args.pipeline_tools_engine,
             args.pipeline_trainer_root,
+            args.pipeline_tools_build_manifest,
+            args.pipeline_trainer_build_manifest,
+            args.pipeline_atomic_build_manifest,
         )
         if any(value is not None for value in pipeline_options) and not all(
             value is not None for value in pipeline_options
         ):
             raise GateFailure(
-                "--pipeline-tools-engine and --pipeline-trainer-root must be "
-                "supplied together"
+                "pipeline tools/trainer paths and all three clean-build "
+                "manifests must be supplied together"
             )
         if args.mode == "release" and not all(
             value is not None for value in pipeline_options
         ):
             raise GateFailure(
-                "release mode requires --pipeline-tools-engine and "
-                "--pipeline-trainer-root"
+                "release mode requires pipeline tools/trainer paths and "
+                "all three clean-build manifests"
             )
 
         python = command_path(args.python, "Python")
@@ -292,6 +319,38 @@ def main() -> int:
             "incremental NNUE test binary",
         )
 
+        pipeline_unit_launcher = (
+            "import pytest,sys; code=pytest.main(sys.argv[1:]); "
+            "print('Legacy pipeline lock/profile unit suite passed') "
+            "if code == 0 else None; raise SystemExit(code)"
+        )
+        run_step(
+            "Legacy Atomic V1 pipeline lock/profile units",
+            [
+                python,
+                "-c",
+                pipeline_unit_launcher,
+                "-q",
+                "--maxfail=1",
+                str(
+                    REPO_ROOT
+                    / "tests/python/test_legacy_pipeline_lock.py"
+                ),
+                str(
+                    REPO_ROOT
+                    / "tests/python/test_legacy_pipeline_build_manifest.py"
+                ),
+                str(
+                    REPO_ROOT
+                    / "tests/python/test_legacy_pipeline_e2e.py"
+                ),
+            ],
+            timeout=300.0,
+            required_markers=(
+                "Legacy pipeline lock/profile unit suite passed",
+            ),
+        )
+
         if args.pipeline_tools_engine is not None:
             pipeline_tools_engine = require_file(
                 args.pipeline_tools_engine, "variant-nnue-tools engine"
@@ -304,18 +363,27 @@ def main() -> int:
                 [
                     python,
                     str(REPO_ROOT / "tests" / "legacy_pipeline_e2e.py"),
+                    "--profile",
+                    "strong-local",
                     "--tools-engine",
                     str(pipeline_tools_engine),
                     "--trainer-root",
                     str(pipeline_trainer_root),
                     "--engine",
                     str(native),
+                    "--tools-build-manifest",
+                    str(args.pipeline_tools_build_manifest),
+                    "--trainer-build-manifest",
+                    str(args.pipeline_trainer_build_manifest),
+                    "--atomic-build-manifest",
+                    str(args.pipeline_atomic_build_manifest),
                     "--source-net",
                     str(net),
                 ],
                 timeout=args.pipeline_timeout,
                 required_markers=(
                     "LEGACY PIPELINE E2E PASSED ",
+                    "profile=strong-local",
                     f"source_sha256={EXPECTED_NET_SHA256}",
                     "ft_delta=",
                     "fc_delta=",
@@ -324,8 +392,8 @@ def main() -> int:
         else:
             print(
                 "\n=== Legacy Atomic V1 cross-repository data-to-engine pipeline ===\n"
-                "LEGACY PIPELINE E2E NOT REQUESTED (NON-RELEASE): supply both "
-                "--pipeline-tools-engine and --pipeline-trainer-root to run it",
+                "LEGACY PIPELINE E2E NOT REQUESTED (NON-RELEASE): supply the "
+                "tools/trainer paths and all three clean-build manifests",
                 flush=True,
             )
 

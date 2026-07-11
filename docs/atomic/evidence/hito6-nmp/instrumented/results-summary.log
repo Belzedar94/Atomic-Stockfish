@@ -1,0 +1,10 @@
+Hito 6 NMP exact instrumented Linux matrix: PASS
+HEAD: 0c45a9bf711814621607f3d0bed546a026cdf4d1
+tree: f92e23c5104bf30d7e909be558ef23934c401d14
+ASan+UBSan: PASS (unit 63/63, API 34/34, perft 8/8 + 19/19, UCI/XBoard/NNUE)
+TSan: PASS (Threads=2, UCI/XBoard/NNUE)
+Valgrind: PASS (Memcheck leak policy, UCI/XBoard/NNUE)
+Valgrind-thread: PASS (Threads=2, fair scheduling, UCI/XBoard/NNUE)
+No sanitizer, Valgrind, assertion or runtime-error diagnostics found.
+Docker/WSL2 limitation: ASan memory mode uses Threads=1 by repository design; threaded memory/race workloads are covered by TSan and Valgrind-thread.
+All four worktrees have no tracked changes.

@@ -1,0 +1,398 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+import subprocess
+import sys
+
+import pytest
+
+
+TESTS_DIR = Path(__file__).resolve().parents[1]
+if str(TESTS_DIR) not in sys.path:
+    sys.path.insert(0, str(TESTS_DIR))
+
+import legacy_pipeline_lock as pipeline_lock
+import legacy_pipeline_build_manifest as build_manifest
+
+
+def resolved_document() -> dict[str, object]:
+    return {
+        "schema_version": 1,
+        "repositories": {
+            "tools": {
+                "repository": "Belzedar94/variant-nnue-tools",
+                "commit": "a" * 40,
+                "resolved": True,
+            },
+            "trainer": {
+                "repository": "Belzedar94/variant-nnue-pytorch",
+                "commit": "b" * 40,
+                "resolved": True,
+            },
+        },
+        "profiles": {
+            "strong-local": {
+                "source_kind": "external",
+                "records": 8,
+                "seed": "20260711",
+                "source_net_sha256": "e" * 64,
+                "data_sha256": "f" * 64,
+                "hashes_resolved": True,
+                "build_recipes": pipeline_lock.EXPECTED_BUILD_RECIPES[
+                    "strong-local"
+                ],
+            },
+            "synthetic-ci": {
+                "source_kind": "trainer-generated-zero",
+                "records": 8,
+                "seed": "20260711",
+                "synthetic_model_seed": 20260711,
+                "source_net_sha256": "c" * 64,
+                "data_sha256": "d" * 64,
+                "hashes_resolved": True,
+                "build_recipes": pipeline_lock.EXPECTED_BUILD_RECIPES[
+                    "synthetic-ci"
+                ],
+            },
+        },
+    }
+
+
+def placeholder_document() -> dict[str, object]:
+    document = resolved_document()
+    for name in ("tools", "trainer"):
+        document["repositories"][name].update(
+            commit=pipeline_lock.ZERO_COMMIT,
+            resolved=False,
+            placeholder=f"REPLACE_WITH_{name.upper()}_COMMIT",
+        )
+    document["profiles"]["synthetic-ci"].update(
+        source_net_sha256=pipeline_lock.ZERO_SHA256,
+        data_sha256=pipeline_lock.ZERO_SHA256,
+        hashes_resolved=False,
+        placeholder="REPLACE_WITH_SYNTHETIC_HASHES",
+    )
+    return document
+
+
+def write_document(path: Path, document: dict[str, object]) -> Path:
+    path.write_text(json.dumps(document), encoding="utf-8")
+    return path
+
+
+def test_checked_in_lock_is_structurally_valid() -> None:
+    lock = pipeline_lock.load_pipeline_lock(
+        pipeline_lock.DEFAULT_LOCK_FILE, allow_placeholders=True
+    )
+    assert set(lock.repositories) == {"tools", "trainer"}
+    assert set(lock.profiles) == {"strong-local", "synthetic-ci"}
+
+
+def test_lock_rejects_duplicate_json_keys_at_any_depth(tmp_path: Path) -> None:
+    encoded = json.dumps(resolved_document())
+    repository = '"repository": "Belzedar94/variant-nnue-tools"'
+    encoded = encoded.replace(
+        repository, f"{repository}, {repository}", 1
+    )
+    lock_path = tmp_path / "lock.json"
+    lock_path.write_text(encoded, encoding="utf-8")
+    with pytest.raises(AssertionError, match="duplicate JSON key"):
+        pipeline_lock.load_pipeline_lock(lock_path)
+
+
+def test_lock_schema_version_rejects_json_boolean(tmp_path: Path) -> None:
+    document = resolved_document()
+    document["schema_version"] = True
+    lock_path = write_document(tmp_path / "lock.json", document)
+    with pytest.raises(AssertionError, match="schema_version must be exactly 1"):
+        pipeline_lock.load_pipeline_lock(lock_path)
+
+
+@pytest.mark.parametrize(
+    "case",
+    (
+        "root-extra",
+        "resolved-repository-extra",
+        "unresolved-repository-missing-placeholder",
+        "external-profile-synthetic-seed",
+        "generated-profile-missing-seed",
+        "resolved-profile-placeholder",
+        "unresolved-profile-missing-placeholder",
+    ),
+)
+def test_lock_requires_exact_schema_dependent_keys(
+    tmp_path: Path, case: str
+) -> None:
+    document = (
+        placeholder_document()
+        if case.startswith("unresolved-")
+        else resolved_document()
+    )
+    if case == "root-extra":
+        document["extra"] = True
+    elif case == "resolved-repository-extra":
+        document["repositories"]["tools"]["extra"] = True
+    elif case == "unresolved-repository-missing-placeholder":
+        document["repositories"]["tools"].pop("placeholder")
+    elif case == "external-profile-synthetic-seed":
+        document["profiles"]["strong-local"]["synthetic_model_seed"] = 1
+    elif case == "generated-profile-missing-seed":
+        document["profiles"]["synthetic-ci"].pop("synthetic_model_seed")
+    elif case == "resolved-profile-placeholder":
+        document["profiles"]["strong-local"]["placeholder"] = "REPLACE_WITH_HASHES"
+    else:
+        document["profiles"]["synthetic-ci"].pop("placeholder")
+    lock_path = write_document(tmp_path / "lock.json", document)
+    with pytest.raises(AssertionError, match="keys must be exactly"):
+        pipeline_lock.load_pipeline_lock(lock_path, allow_placeholders=True)
+
+
+def test_release_load_rejects_an_unresolved_pin(tmp_path: Path) -> None:
+    lock_path = write_document(tmp_path / "lock.json", placeholder_document())
+    with pytest.raises(AssertionError, match="unresolved"):
+        pipeline_lock.load_pipeline_lock(lock_path)
+
+
+def test_resolved_lock_requires_full_hashes(tmp_path: Path) -> None:
+    lock_path = write_document(tmp_path / "lock.json", resolved_document())
+    lock = pipeline_lock.load_pipeline_lock(lock_path)
+    assert lock.repositories["tools"].commit == "a" * 40
+    assert lock.profiles["synthetic-ci"].source_net_sha256 == "c" * 64
+
+    document = resolved_document()
+    document["repositories"]["tools"]["commit"] = "abc123"
+    write_document(lock_path, document)
+    with pytest.raises(AssertionError, match="full 40-character SHA"):
+        pipeline_lock.load_pipeline_lock(lock_path)
+
+
+@pytest.mark.parametrize("resolved", (True, False))
+def test_profile_rejects_mixed_zero_and_real_hashes(
+    tmp_path: Path, resolved: bool
+) -> None:
+    document = resolved_document()
+    synthetic = document["profiles"]["synthetic-ci"]
+    synthetic.update(
+        source_net_sha256=pipeline_lock.ZERO_SHA256,
+        data_sha256="d" * 64,
+        hashes_resolved=resolved,
+    )
+    if not resolved:
+        synthetic["placeholder"] = "REPLACE_WITH_SYNTHETIC_HASHES"
+    lock_path = write_document(tmp_path / "lock.json", document)
+    with pytest.raises(AssertionError, match="all-zero|two all-zero"):
+        pipeline_lock.load_pipeline_lock(lock_path, allow_placeholders=True)
+
+
+def test_github_outputs_emit_only_resolved_repository_pins(tmp_path: Path) -> None:
+    lock_path = write_document(tmp_path / "lock.json", resolved_document())
+    lock = pipeline_lock.load_pipeline_lock(lock_path)
+    output = tmp_path / "github-output.txt"
+    pipeline_lock._write_github_outputs(lock, output)
+    assert output.read_text(encoding="utf-8").splitlines() == [
+        "tools_repository=Belzedar94/variant-nnue-tools",
+        f"tools_commit={'a' * 40}",
+        "trainer_repository=Belzedar94/variant-nnue-pytorch",
+        f"trainer_commit={'b' * 40}",
+        "synthetic_hashes_resolved=true",
+    ]
+
+
+def test_github_outputs_can_bootstrap_only_unresolved_synthetic_hashes(
+    tmp_path: Path,
+) -> None:
+    document = resolved_document()
+    document["profiles"]["synthetic-ci"].update(
+        source_net_sha256=pipeline_lock.ZERO_SHA256,
+        data_sha256=pipeline_lock.ZERO_SHA256,
+        hashes_resolved=False,
+        placeholder="REPLACE_WITH_SYNTHETIC_HASHES",
+    )
+    lock_path = write_document(tmp_path / "lock.json", document)
+    output = tmp_path / "github-output.txt"
+
+    assert pipeline_lock.main(
+        [
+            "--lock-file",
+            str(lock_path),
+            "github-outputs",
+            "--output",
+            str(output),
+            "--allow-unresolved-hashes",
+        ]
+    ) == 0
+    assert output.read_text(encoding="utf-8").splitlines()[-1] == (
+        "synthetic_hashes_resolved=false"
+    )
+
+
+def test_github_outputs_rejects_unresolved_synthetic_hashes_without_bootstrap(
+    tmp_path: Path,
+) -> None:
+    document = resolved_document()
+    document["profiles"]["synthetic-ci"].update(
+        source_net_sha256=pipeline_lock.ZERO_SHA256,
+        data_sha256=pipeline_lock.ZERO_SHA256,
+        hashes_resolved=False,
+        placeholder="REPLACE_WITH_SYNTHETIC_HASHES",
+    )
+    lock_path = write_document(tmp_path / "lock.json", document)
+
+    with pytest.raises(AssertionError, match="hashes are unresolved"):
+        pipeline_lock.main(
+            [
+                "--lock-file",
+                str(lock_path),
+                "github-outputs",
+                "--output",
+                str(tmp_path / "github-output.txt"),
+            ]
+        )
+
+
+def test_github_outputs_bootstrap_still_rejects_unresolved_repository_pins(
+    tmp_path: Path,
+) -> None:
+    document = placeholder_document()
+    lock_path = write_document(tmp_path / "lock.json", document)
+
+    with pytest.raises(
+        AssertionError, match="requires resolved repository pins: tools, trainer"
+    ):
+        pipeline_lock.main(
+            [
+                "--lock-file",
+                str(lock_path),
+                "github-outputs",
+                "--output",
+                str(tmp_path / "github-output.txt"),
+                "--allow-unresolved-hashes",
+            ]
+        )
+
+
+def test_github_outputs_bootstrap_rejects_other_unresolved_profile_hashes(
+    tmp_path: Path,
+) -> None:
+    document = resolved_document()
+    document["profiles"]["strong-local"].update(
+        source_net_sha256=pipeline_lock.ZERO_SHA256,
+        data_sha256=pipeline_lock.ZERO_SHA256,
+        hashes_resolved=False,
+        placeholder="REPLACE_WITH_STRONG_LOCAL_HASHES",
+    )
+    lock_path = write_document(tmp_path / "lock.json", document)
+
+    with pytest.raises(
+        AssertionError, match="only permits unresolved synthetic-ci hashes"
+    ):
+        pipeline_lock.main(
+            [
+                "--lock-file",
+                str(lock_path),
+                "github-outputs",
+                "--output",
+                str(tmp_path / "github-output.txt"),
+                "--allow-unresolved-hashes",
+            ]
+        )
+
+
+def run_git(root: Path, *arguments: str) -> str:
+    result = subprocess.run(
+        ["git", "-C", str(root), *arguments],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=True,
+    )
+    return result.stdout.strip()
+
+
+def test_checkout_enforcement_rejects_wrong_head_and_dirty_tree(
+    tmp_path: Path,
+) -> None:
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    run_git(checkout, "init", "--quiet")
+    tracked = checkout / "tracked.txt"
+    tracked.write_text("fixture\n", encoding="utf-8")
+    run_git(checkout, "add", "tracked.txt")
+    run_git(
+        checkout,
+        "-c",
+        "user.name=Atomic CI",
+        "-c",
+        "user.email=atomic-ci@example.invalid",
+        "commit",
+        "--quiet",
+        "-m",
+        "fixture",
+    )
+    head = run_git(checkout, "rev-parse", "HEAD")
+    state = pipeline_lock.enforce_clean_checkout(checkout, "fixture", head)
+    assert state.head == head
+
+    with pytest.raises(AssertionError, match="HEAD mismatch"):
+        pipeline_lock.enforce_clean_checkout(checkout, "fixture", "f" * 40)
+
+    (checkout / "untracked.txt").write_text("dirty\n", encoding="utf-8")
+    with pytest.raises(AssertionError, match="not clean"):
+        pipeline_lock.enforce_clean_checkout(checkout, "fixture", head)
+
+
+def test_path_containment_rejects_cross_checkout_artifacts(tmp_path: Path) -> None:
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    artifact = tmp_path / "outside.exe"
+    artifact.write_bytes(b"")
+    with pytest.raises(AssertionError, match="outside its pinned checkout"):
+        pipeline_lock.require_path_within(artifact, checkout, "artifact")
+
+
+@pytest.mark.parametrize("engine_argument", ("tools_engine", "engine"))
+def test_release_checkout_verification_rejects_missing_engine_files(
+    tmp_path: Path, engine_argument: str
+) -> None:
+    lock_path = write_document(tmp_path / "lock.json", resolved_document())
+    lock = pipeline_lock.load_pipeline_lock(lock_path)
+    tools_root = tmp_path / "tools"
+    trainer_root = tmp_path / "trainer"
+    atomic_root = tmp_path / "atomic"
+    for root in (tools_root, trainer_root, atomic_root):
+        root.mkdir()
+    arguments = {
+        "tools_root": tools_root,
+        "trainer_root": trainer_root,
+        "atomic_root": atomic_root,
+        engine_argument: (
+            tools_root / "missing-engine"
+            if engine_argument == "tools_engine"
+            else atomic_root / "missing-engine"
+        ),
+    }
+    with pytest.raises(AssertionError, match="is not an existing file"):
+        pipeline_lock.verify_release_checkouts(lock, **arguments)
+
+
+def test_locked_build_recipes_exist_with_expected_roles_and_platforms() -> None:
+    expected_platform = {"strong-local": "win32", "synthetic-ci": "linux"}
+    expected_target = {
+        "strong-local": {
+            "tools": build_manifest.X86_64_RELEASE_TARGET,
+            "trainer": None,
+            "atomic": build_manifest.X86_64_BMI2_RELEASE_TARGET,
+        },
+        "synthetic-ci": {
+            "tools": build_manifest.X86_64_RELEASE_TARGET,
+            "trainer": None,
+            "atomic": build_manifest.X86_64_RELEASE_TARGET,
+        },
+    }
+    for profile, recipes in pipeline_lock.EXPECTED_BUILD_RECIPES.items():
+        for role, recipe_name in recipes.items():
+            recipe = build_manifest.RECIPES[recipe_name]
+            assert recipe.role == role
+            assert recipe.platform == expected_platform[profile]
+            assert recipe.expected_engine_target == expected_target[profile][role]

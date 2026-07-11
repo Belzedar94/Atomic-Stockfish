@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "repositories": {
+    "tools": {
+      "repository": "Belzedar94/variant-nnue-tools",
+      "commit": "4e4b4493b9911d062135321fe6555df3213de48c",
+      "resolved": true
+    },
+    "trainer": {
+      "repository": "Belzedar94/variant-nnue-pytorch",
+      "commit": "dafec1daa594ff7eff3dca79064ed10660702a36",
+      "resolved": true
+    }
+  },
+  "profiles": {
+    "strong-local": {
+      "source_kind": "external",
+      "records": 8,
+      "seed": "20260711",
+      "source_net_sha256": "99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f92a04a6",
+      "data_sha256": "7de72b1385dbc8e37312a513d1cf4c7d99f889ec8b747f548ed32e8d7a261a2d",
+      "build_recipes": {
+        "tools": "strong-local-tools-windows-v1",
+        "trainer": "strong-local-trainer-windows-v1",
+        "atomic": "strong-local-atomic-windows-v1"
+      },
+      "hashes_resolved": true
+    },
+    "synthetic-ci": {
+      "source_kind": "trainer-generated-zero",
+      "records": 8,
+      "seed": "20260711",
+      "synthetic_model_seed": 20260711,
+      "source_net_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "data_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "build_recipes": {
+        "tools": "synthetic-ci-tools-linux-v1",
+        "trainer": "synthetic-ci-trainer-linux-v1",
+        "atomic": "synthetic-ci-atomic-linux-v1"
+      },
+      "hashes_resolved": false,
+      "placeholder": "REPLACE_WITH_MEASURED_SYNTHETIC_NET_AND_DATA_SHA256"
+    }
+  }
+}

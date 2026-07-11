@@ -7,10 +7,11 @@ the frozen rules and playing-strength reference.
 
 > [!WARNING]
 > This repository is under active development and has no strength-qualified
-> release yet. Hito 4 interfaces and Hito 5 Legacy NNUE are closed; Hito 6
-> search blocks 1 through 3 each pass correctness, the Fairy speed gate and all
-> three exact LOS controls. Remaining Hito 6 search blocks and the final release
-> matrix are still open.
+> release yet. The Hito 4 interface matrix and Hito 5 engine/backend matrix have
+> passed, while the stricter clean, commit-pinned cross-repository pipeline
+> closeout remains open. Hito 6 search blocks 1 through 4 are implemented; the
+> final hardened BMI2 speed rerun, all three exact LOS reruns, locked pipeline
+> evidence and complete release matrix are still required before acceptance.
 
 ## Scope
 
@@ -52,11 +53,12 @@ The file is not distributed here.
 ## Native build
 
 From `src`, inspect the available architectures with `make help`, then build an
-appropriate target. For a typical modern x86-64 machine:
+appropriate target. On a machine with BMI2/PEXT support, the optimized target
+used by the normative Hito 6 comparison is:
 
 ```sh
 cd src
-make -j build ARCH=x86-64-avx2
+make -j build ARCH=x86-64-bmi2
 ```
 
 The resulting executable is `atomic-stockfish` (or

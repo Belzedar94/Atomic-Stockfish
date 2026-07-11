@@ -1,10 +1,10 @@
 # Hito 6 search integration validation
 
 Hito 6 integrates Atomic search policy in small, attributable blocks. This
-record is cumulative: blocks 1 through 3 are accepted after correctness,
-pipeline, speed and all three exact strength gates. The milestone and its PR
-remain open until the remaining search blocks and the full release matrix are
-closed.
+record is cumulative: blocks 1 through 3 retain their block-local acceptance
+evidence, and block 4 is the current candidate. The milestone and its PR remain
+open until the clean commit-pinned pipeline, hardened matched-BMI2 speed rerun,
+all three current exact LOS reruns and full release matrix are closed.
 
 `Use NNUE=true` is the only playing mode used for speed and strength. `pure`
 remains a data-generation mode: its option and network-loading contract is
@@ -58,8 +58,9 @@ complete logs are identified below.
 The same destination-victim estimate also guarded qsearch futility. Block 3
 reuses the reviewed Atomic capture-futility eligibility rule there, preserving
 en passant and captures with non-pawn blast bycatch from the orthodox bound.
-The final block passed correctness, pipeline, speed and every normative strength
-gate against the exact immutable artifact identified below.
+That block passed its then-current correctness, pipeline, speed and normative
+strength gates against the exact immutable artifact identified below. It is
+historical block-local evidence; block 4 is the current milestone candidate.
 
 The immutable block-2 artifact `CB35D5` fails both new depth-one regressions:
 it prunes the `e6d5` non-pawn blast and the `e4d3` en passant blast in qsearch.
@@ -75,10 +76,13 @@ sample inverted that small ordering, so block-local wall-clock data is treated
 as diagnostic rather than a strength claim. The versioned 2,424-byte
 `evidence/hito6-qsearch-futility/speed-vs-block2.log` is SHA-256
 `17663569E64710272DD897C83AA0CAD0D3ADE3EED281E91911B7F84E6B31F220`.
-The normative paired Fairy speed gate passes by `+33.12%`, and all three
-strength gates pass.
+The original paired Fairy speed sample reported `+33.12%`, and all three
+strength samples passed. Those runs are retained as historical search-block
+evidence only: the candidate was AVX2 while the old Fairy executable was SSE.
+The final acceptance section below repeats speed and strength with matched
+BMI2 release builds.
 
-## Block 4: shallower Atomic null-move reduction (preliminary)
+## Block 4: shallower Atomic null-move reduction
 
 Modern Stockfish reduces a null-move search by `7 + depth / 3`. Atomic threats
 make a speculative pass less trustworthy, and Fairy's historical Atomic search
@@ -106,9 +110,74 @@ spread make this coverage evidence, not a speed claim. The normalized raw log
 is `evidence/hito6-nmp/diagnostic-counters.log` (6,274 bytes, SHA-256
 `1D40421F700F32B0F6C183821734B725F6388B5E9F2DEFBD86CCAFE74C870BB6`).
 
-This block remains **PRELIMINARY**. The complete release/debug/sanitizer/
-binding/pipeline matrix, paired speed evidence and all three exact LOS gates are
-still pending; no strength or performance acceptance is claimed here.
+### Prior matched-BMI2 evidence (current gate rerun pending)
+
+The immutable candidate is source commit
+`0c45a9bf711814621607f3d0bed546a026cdf4d1`, tree
+`f92e23c5104bf30d7e909be558ef23934c401d14`, 4,263,216 bytes and SHA-256
+`289267DEEC8A082D375EC25CC6385475487CF6BD7BF907AA1B0D5730F1FC2901`.
+Two deterministic MinGW 15.2 BMI2 builds were byte-identical; their independent
+build logs are also byte-identical at SHA-256
+`D8D2B99B878861028A64DCCC5530E6D3C65D063F1323471842105FF265DB0DC8`.
+The frozen Fairy comparison artifact is 4,281,871 bytes, SHA-256
+`4EACAAB40DCA84F5A255EA57231F2795D43B5DDA85CE50EBBA1A1B2937B46331`,
+built from `fb78cb561aa01708338e35b3dc3b65a42149a3c4` with
+`ARCH=x86-64-bmi2`, `all=no`, `largeboards=no`, O3/LTO and no PGO. Both real
+`compiler` commands report `64bit BMI2 AVX2 SSE41 SSSE3 SSE2 POPCNT` and
+`g++ (GNUC) 15.2.0`.
+
+The prior serialized same-core speed run used the fixed 13-position
+Atomic/Atomic960 corpus, one warm-up and five alternating repetitions at
+100,000 nodes per position:
+
+| Binary | Median NPS | Bytes |
+| --- | ---: | ---: |
+| Atomic-Stockfish block 4 | 1,287,967 | 4,263,216 |
+| Frozen Fairy BMI2 | 1,145,124 | 4,281,871 |
+
+The candidate was `+12.47%` faster and 18,655 bytes smaller in that run. Its
+then-current runner re-hashed both binaries and the network after engine
+shutdown and emitted `PERFORMANCE GATE: PASS`. Its 3,262-byte log is
+`evidence/hito6-nmp/bmi2/bench-reproducible-vs-fairy.log`, SHA-256
+`DDA7C37F70C22CE34522C86DE22186B482CBFA56C16D6929ACE4E483C511E8A2`.
+That log predates the current full psutil-module provenance and affinity
+readback checks, so it is historical evidence rather than the final speed gate.
+
+All three prior strength runs met the statistical threshold against that exact
+Fairy artifact with
+the frozen network and the normative `Use NNUE=true`, `Threads=1`, `Hash=512`,
+Atomic book, four runner workers and color-swapped pairs:
+
+| TC | Total | W-L-D | Elo (95%) | Normalised Elo | Pentanomial | Draws | Time losses | LOS |
+| --- | ---: | ---: | ---: | ---: | --- | ---: | ---: | ---: |
+| 2+0.02 | 108 | 53-13-42 | +135.10 +/-52.8 | +172.82 | `[0,3,17,25,9]` | 38.89% | 0 / 0 | 100.0% |
+| 10+0.1 | 108 | 39-9-60 | +99.11 +/-43.2 | +148.67 | `[0,4,20,26,4]` | 55.56% | 0 / 0 | 100.0% |
+| 30+0.3 | 120 | 41-15-64 | +76.49 +/-42.4 | +111.97 | `[0,1,34,23,2]` | 53.33% | 0 / 0 | 100.0% |
+
+Those prior logs are respectively SHA-256
+`D4A8CA60855D0E6E9F897494F9560BF1192F285B9BAF4E54AF9337B1592B4C90`,
+`5FBAC4B0987796244F2FF5886A1E7D674EC01390DC309844DE896EE4D3E16D51`
+and `5059A326F6A3164CA5048F4E33CDFCFFCEC3283F2FCCE5A63FBE6C75B4CFCD68`
+under `evidence/hito6-nmp/bmi2/`. TC3 correctly continued after transient
+post-threshold LOS values while already-started worker pairs joined; only its
+final `Total: 120` / `LOS: 100.0%` state produced the PASS marker.
+
+A separate audit replays all three configurations without claiming new match
+results. It pins the external runner, its `stat_util.py`, config, book, network,
+candidate and baseline, verifies the exact compiler signature, and re-hashes
+all eight inputs after each TC preflight. The 6,244-byte audit is SHA-256
+`6A545AF088D5629F5BBA87100A30C9E8B18594295E92B4861BB4052B0EE72AF7`.
+The canonical package index is `evidence/hito6-nmp/manifest.json`.
+
+These samples establish that the NNUE search block was materially stronger and
+faster in the matched-BMI2 setup, but they do not close current Hito 6
+acceptance. The immutable candidate and Fairy artifacts must be rerun through
+the final `atomic_bench_compare.py` and all three current
+`atomic_los_gate.py` controls; only those new logs can clear speed and strength.
+The material-only `Use NNUE=false` curiosity
+match in the evidence package is explicitly non-normative: Fairy retains a
+much richer handcrafted Atomic evaluation, so that sample does not isolate
+search strength and is not an acceptance gate.
 
 ## Accepted block-3 correctness snapshot
 
@@ -156,11 +225,11 @@ positions in the fixed corpus.
 The reproducible NNUE WASM build produced a 103,600-byte JavaScript loader
 (`D0BD0C360BB8ADC636952F6833F0DD280EC732D00D379D63F0FE99F8857DF0E5`),
 a 545,027-byte module
-(`006825C9CD5923BDBF7CAF42E5380F2FAE15F9412F2DB36DF2AFB05A9105028E`),
+(`DC2FDB8DDBB56C82BA20AA8C184FEC5C35DE5A0D8BAC1C4699B412AEA8EE1D8B`),
 a 2,828-byte worker
 (`C18C2918C9F8FEDF3009F4A260A1185E919B0C6D421FF5403CB918B61C358A24`)
-and a 3,234-byte Node wrapper
-(`F9B40EAA35C7B3338F92754127B02B4EE26E480B1321D6BC55141105C2C3737D`).
+and a 3,342-byte Node wrapper
+(`885E7A161EF8D447D41F54BD8ABE413DA3113B14E8B421C4848798C1B02D6DEB`).
 
 The independent build matrix also passed:
 
@@ -274,26 +343,46 @@ tools executable
 and native loader
 (`F4349EA5125F13F807087BA5EC15FE4801B6A3567A847B5598CD7741D787DFF7`).
 These hashes identify the local state but cannot
-reconstruct uncommitted content from the base commits alone.
+reconstruct uncommitted content from the base commits alone. They therefore
+remain historical evidence and are not inputs to the new release lock.
 
 The normalized rerun log is 2,591 bytes, SHA-256
 `898C172E2A2540E4DD87F1B10DF5101E31F35858C8F03CF80B620443C070F697`,
 at `evidence/hito6-qsearch-futility/pipeline-e2e.log`. It records the candidate,
 network, generator, loader, runner and snapshot hashes and ends with
-`pipeline_exit_code=0`. The clean, pinned multi-repository CI job remains a
-hard Hito 6 closeout requirement; the local pass does not waive it.
+`pipeline_exit_code=0`. The local pass does not waive the clean pinned gate.
 
-The normative Hito 5 release runner now requires
-`--pipeline-tools-engine` and `--pipeline-trainer-root`, reusing its already
-SHA-pinned `--net`. Only smoke mode may omit both cross-repo paths, and it then
-receives the explicit `LEGACY PIPELINE E2E NOT REQUESTED (NON-RELEASE)` marker;
-partial configuration is always a hard error. A pinned multi-repository CI job
-is still required before Hito 6 closes. Automatic continuation from an
-existing `.nnue` and the production general dataset validator remain separate
-trainer/tools release debts; this gate does not claim to implement either
-feature.
+The normative Hito 5 release runner now requires one all-or-none set containing
+`--pipeline-tools-engine`, `--pipeline-trainer-root` and the three tools,
+trainer and Atomic clean-build manifests. It reuses its already SHA-pinned
+`--net` through the explicit `strong-local` profile. The E2E reads
+`tests/legacy_pipeline.lock.json` and fails on a floating/wrong HEAD, dirty
+worktree, cross-checkout artifact, stale manifest or artifact not produced by
+the tracked recipe. Only smoke mode may omit the complete five-input set, and
+it then receives the explicit non-release omission marker; partial
+configuration is always a hard error.
 
-## Block 1 selectivity and speed
+The dedicated `Pinned Legacy Atomic V1 pipeline` GitHub Actions job implements
+the public counterpart without redistributing the strong network. It checks
+out the Belzedar94 tools and trainer repositories at lock-file commits, runs
+their internal native/CPU suites, builds and tests Atomic-Stockfish, creates an
+ephemeral deterministic zero-weight HalfKAv2 network with the pinned trainer,
+and runs the complete generator-to-engine E2E in `synthetic-ci`. The job is
+present but is intentionally fail-closed during release preparation: the lock
+already pins the final tools and trainer commits but still has explicit
+placeholders for the first measured synthetic source/data hashes. Hito 6 cannot
+close until those values are real and the job is green. Automatic continuation
+from an existing `.nnue`
+and the production general dataset validator remain separate trainer/tools
+release debts; this gate does not claim to implement either feature.
+
+## Historical pre-BMI2 selectivity and speed
+
+The following block-local records predate the compiler-target preflight. They
+compare an AVX2 Atomic candidate with the historical SSE Fairy executable and
+are therefore useful for tree/selectivity diagnostics, not for a normative
+speed claim. Hito 6 acceptance uses only the matched BMI2 comparison later in
+this document.
 
 At fixed depth 13, the deterministic Atomic signature changed from `404217` to
 `347633`, a `14.0%` smaller tree. On CPU 0, the clean five-run snapshot was:
@@ -317,7 +406,8 @@ one thread, 64 MiB hash, CPU 0, one warm-up and five measured repetitions at
 | Frozen Fairy baseline | 1,109,003 | 4,477,632 |
 
 The NPS ratio is `1.3210`, or `+32.10%`, and the specialized binary is 214,839
-bytes smaller. The performance gate therefore passes.
+bytes smaller. This historical invocation reported a pass under the old
+runner, but it is not an accepted performance gate because the ISAs differ.
 
 ### Block 2 clean performance snapshot
 
@@ -331,8 +421,8 @@ futility block produced:
 | Frozen Fairy baseline | 1,104,296 | 4,477,632 | `1AE6D680F03128C8404F31A3F264F28B132B557ED3A91A6445EC563A7A33F623` |
 
 The clean ratio is `1.3432`, or `+34.32%`; the candidate is 213,819 bytes
-smaller. This passes the speed gate; the independently executed strength gates
-are recorded below.
+smaller. This is an ISA-confounded historical result; the independently
+executed strength samples are retained below for attribution only.
 
 ### Block 3 clean performance snapshot
 
@@ -346,6 +436,8 @@ measured repetitions at 100,000 nodes per position:
 | Frozen Fairy baseline | 1,085,861 | 4,477,632 | `1AE6D680F03128C8404F31A3F264F28B132B557ED3A91A6445EC563A7A33F623` |
 
 The ratio is `1.3312`, or `+33.12%`; the candidate is 214,416 bytes smaller.
+Because the baseline was SSE and the candidate AVX2, this is not the final
+performance gate.
 The complete persisted log is
 `evidence/hito6-qsearch-futility/speed-vs-fairy.log` (1,222 bytes, SHA-256
 `BE73B069406F8928C45C46800923B01383B77AEF0F1047F4138B8E7FA7C25793`).
@@ -353,7 +445,13 @@ The table records the preflight-verified immutable candidate and frozen Fairy
 artifacts used by that invocation; the raw runner output itself does not print
 their paths or hashes.
 
-## Normative strength gates
+## Historical block strength samples before BMI2 parity
+
+Blocks 1 through 3 used the old SSE Fairy executable. They remain useful
+evidence that each small search change was not catastrophically weak, but the
+ISA mismatch also changes effective nodes per second and disqualifies these
+matches from the final strength gate. The accepted BMI2-vs-BMI2 matches are
+recorded in the final block-4 section.
 
 All matches used the original `variantfishtest_new1.py`, runner SHA-256
 `37D1790096520D9F3A1003746CDFBED59D2CC125A9B3D3192FF3399295EC9D70`,

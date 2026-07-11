@@ -1,0 +1,26 @@
+Hito 6 deterministic Windows BMI2 build: PASS
+HEAD: 0c45a9bf711814621607f3d0bed546a026cdf4d1
+tree: f92e23c5104bf30d7e909be558ef23934c401d14
+SOURCE_DATE_EPOCH: 1783787095
+ZERO_AR_DATE: 1
+LC_ALL: C
+TZ: UTC
+ARCH: x86-64-bmi2
+COMP: mingw
+optimization: O3 plus LTO, no PGO
+linker reproducibility flag: -Wl,--no-insert-timestamp
+pass 1 bytes: 4263216
+pass 1 SHA-256: 289267DEEC8A082D375EC25CC6385475487CF6BD7BF907AA1B0D5730F1FC2901
+pass 2 bytes: 4263216
+pass 2 SHA-256: 289267DEEC8A082D375EC25CC6385475487CF6BD7BF907AA1B0D5730F1FC2901
+pass 1/pass 2 byte identity: PASS
+pass 1/pass 2 build-log SHA-256: D8D2B99B878861028A64DCCC5530E6D3C65D063F1323471842105FF265DB0DC8
+non-deterministic control SHA-256: 291082076AF511D266F7CE9A569C428D7A4DBF1F1873A4839D8B18E8212DDEC5
+control/final differing offsets (zero based): 136,137,138,139,216,217
+offsets 136-139: PE COFF timestamp
+offsets 216-217: PE checksum
+all other bytes identical: PASS
+retained canonical artifact: Atomic-Stockfish-0c45a9bf-bmi2.exe
+retained content-addressed copy: Atomic-Stockfish-0c45a9bf-bmi2-sha256-289267DE.exe
+canonical and content-addressed copies read-only: true
+Fairy baseline read-only: true

@@ -1,0 +1,15 @@
+Windows MinGW debug/assert gate: PASS
+HEAD: 0c45a9bf711814621607f3d0bed546a026cdf4d1
+tree: f92e23c5104bf30d7e909be558ef23934c401d14
+ARCH=x86-64-avx2 COMP=mingw debug=yes optimize=no
+GIT_SHA=0c45a9bf GIT_DATE=20260711
+unit: 63/63
+API: 34/34
+incremental NNUE smoke: PASS
+UCI protocol: PASS
+perft: 8/8 normative + 19/19 rules/transitions
+search: 16/16 Use NNUE=false + 16/16 Use NNUE=true
+XBoard: PASS
+Syzygy driver: 5/5
+Syzygy UCI: PASS (NNUE=false/true)
+tracked worktree clean: true

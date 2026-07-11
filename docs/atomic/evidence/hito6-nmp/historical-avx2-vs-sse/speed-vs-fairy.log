@@ -1,0 +1,18 @@
+Corpus: positions=13 atomic=10 atomic960=3 sha256=2738065a8a70d61da46fa3c75f95d645e50e601b43792df0e7b3cc97b1d891a1
+Configuration: net_sha256=99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f92a04a6 threads=1 hash_mb=64 cpu=0 nodes_per_fen=100000 warmups=1 repetitions=5
+Warm-up candidate: nodes=1300847 time_ms=888 nps=1464918
+Warm-up baseline: nodes=1300861 time_ms=1201 nps=1083148
+Run 1/5 candidate: nodes=1300847 time_ms=890 nps=1461626
+Run 1/5 baseline: nodes=1300861 time_ms=1238 nps=1050776
+Run 2/5 baseline: nodes=1300861 time_ms=1190 nps=1093161
+Run 2/5 candidate: nodes=1300847 time_ms=892 nps=1458349
+Run 3/5 candidate: nodes=1300847 time_ms=927 nps=1403287
+Run 3/5 baseline: nodes=1300861 time_ms=1197 nps=1086768
+Run 4/5 baseline: nodes=1300861 time_ms=1182 nps=1100559
+Run 4/5 candidate: nodes=1300847 time_ms=887 nps=1466569
+Run 5/5 candidate: nodes=1300847 time_ms=875 nps=1486682
+Run 5/5 baseline: nodes=1300861 time_ms=1185 nps=1097773
+Candidate: median_nps=1461626 binary_bytes=4263216
+Baseline: median_nps=1093161 binary_bytes=4477632
+Comparison: nps_ratio=1.3371 speed_delta_pct=33.71 size_ratio=0.9521 size_delta_bytes=-214416
+PERFORMANCE GATE: PASS (candidate median NPS is strictly higher)

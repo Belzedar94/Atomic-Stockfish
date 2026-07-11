@@ -333,9 +333,10 @@ def main() -> int:
             required_markers=("Ran 22 tests", "OK"),
         )
 
-        pytest_launcher = (
+        pytest_marker_launcher = (
             "import pytest,sys; sys.path.insert(0,sys.argv[1]); "
-            "raise SystemExit(pytest.main(sys.argv[2:]))"
+            "code=pytest.main(sys.argv[3:]); "
+            "print(sys.argv[2]) if code == 0 else None; raise SystemExit(code)"
         )
         run_step(
             "pytest binding and concurrent lifecycle suite",
@@ -343,15 +344,16 @@ def main() -> int:
                 python,
                 "-P",
                 "-c",
-                pytest_launcher,
+                pytest_marker_launcher,
                 str(paths["pyffish_root"]),
+                "pyffish pytest lifecycle suite passed",
                 "-q",
                 "--maxfail=1",
                 str(REPO_ROOT / "tests/python/test_pyffish.py"),
             ],
             env=python_env,
             timeout=args.timeout,
-            required_markers=("60 passed",),
+            required_markers=("pyffish pytest lifecycle suite passed",),
         )
 
         run_step(
@@ -360,15 +362,37 @@ def main() -> int:
                 python,
                 "-P",
                 "-c",
-                pytest_launcher,
+                pytest_marker_launcher,
                 str(paths["pyffish_root"]),
+                "Atomic LOS gate unit suite passed",
                 "-q",
                 "--maxfail=1",
                 str(REPO_ROOT / "tests/python/test_atomic_los_gate.py"),
             ],
             env=python_env,
             timeout=args.timeout,
-            required_markers=("16 passed",),
+            required_markers=("Atomic LOS gate unit suite passed",),
+        )
+
+        run_step(
+            "compiler target preflight units",
+            [
+                python,
+                "-P",
+                "-c",
+                pytest_marker_launcher,
+                str(paths["pyffish_root"]),
+                "Atomic compiler preflight unit suite passed",
+                "-q",
+                "--maxfail=1",
+                str(
+                    REPO_ROOT
+                    / "tests/python/test_atomic_compiler_preflight.py"
+                ),
+            ],
+            env=python_env,
+            timeout=args.timeout,
+            required_markers=("Atomic compiler preflight unit suite passed",),
         )
 
         cjs_launcher = r"""

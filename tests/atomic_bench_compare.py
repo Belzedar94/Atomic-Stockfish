@@ -12,17 +12,39 @@ import hashlib
 import queue
 import statistics
 import subprocess
+import sys
 import threading
 from contextlib import ExitStack
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Optional
 
 import psutil
 
+TESTS_DIR = Path(__file__).resolve().parent
+if str(TESTS_DIR) not in sys.path:
+    sys.path.insert(0, str(TESTS_DIR))
 
-EXPECTED_NET_SHA256 = "99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f92a04a6"
+from atomic_compiler_preflight import (
+    CompilerPreflightError,
+    NORMATIVE_BASELINE_SHA256,
+    fingerprint_files,
+    require_matching_compilation_settings,
+    require_sha256,
+    verify_file_fingerprints,
+)
+from atomic_los_gate import (
+    EXPECTED_PSUTIL_VERSION,
+    GateConfigurationError,
+    normative_psutil_fingerprints,
+)
+
+
+EXPECTED_NET_SHA256 = "99DC67EABF26A64FAEECA3A88B4C38597A840B8D4A874B9F2CF658C6F92A04A6"
 MEASURED_REPETITIONS = 5
+NORMATIVE_NODES_PER_FEN = 100_000
+NORMATIVE_HASH_MB = 64
+CANDIDATE_NNUE_ARCHITECTURE_MARKER = "(45MiB, (45056, 1024, 16, 32, 1))"
 
 
 @dataclass(frozen=True)
@@ -110,6 +132,27 @@ class Measurement:
         return 1000.0 * self.nodes / self.elapsed_ms
 
 
+def require_nnue_ready_output(label: str, net: Path, output: list[str]) -> None:
+    if any("ERROR:" in line.upper() for line in output):
+        raise RuntimeError(f"{label} reported an NNUE/protocol error: {output[-10:]}")
+    selected_net = str(net)
+    expected_prefix = f"NNUE evaluation using {selected_net} "
+    net_lines = [
+        line
+        for line in output
+        if expected_prefix in line
+    ]
+    marker_ok = (
+        any(CANDIDATE_NNUE_ARCHITECTURE_MARKER in line for line in net_lines)
+        if label == "candidate"
+        else any("enabled" in line for line in net_lines)
+    )
+    if not marker_ok:
+        raise RuntimeError(
+            f"{label} did not confirm selected NNUE {selected_net}: {output[-10:]}"
+        )
+
+
 class UciEngine:
     def __init__(
         self,
@@ -122,7 +165,7 @@ class UciEngine:
     ) -> None:
         self.label = label
         self.timeout = timeout
-        self.chess960: bool | None = None
+        self.chess960: Optional[bool] = None
         self.process = subprocess.Popen(
             [str(executable)],
             stdin=subprocess.PIPE,
@@ -133,40 +176,53 @@ class UciEngine:
             errors="replace",
             bufsize=1,
         )
-        psutil.Process(self.process.pid).cpu_affinity([affinity])
-        assert self.process.stdin is not None and self.process.stdout is not None
-        self.lines: queue.Queue[str | None] = queue.Queue()
-        threading.Thread(target=self._reader, daemon=True).start()
+        try:
+            process_info = psutil.Process(self.process.pid)
+            process_info.cpu_affinity([affinity])
+            observed_affinity = process_info.cpu_affinity()
+            if observed_affinity != [affinity]:
+                raise RuntimeError(
+                    f"{label} affinity readback mismatch: requested "
+                    f"[{affinity}], got {observed_affinity}"
+                )
+            assert self.process.stdin is not None and self.process.stdout is not None
+            self.lines: queue.Queue[Optional[str]] = queue.Queue()
+            threading.Thread(target=self._reader, daemon=True).start()
 
-        self.send("uci")
-        uci_output = self.read_until(lambda line: line == "uciok")
-        options = {
-            line[len("option name ") : line.index(" type ")].casefold()
-            for line in uci_output
-            if line.startswith("option name ") and " type " in line
-        }
-        required = {
-            "threads",
-            "hash",
-            "clear hash",
-            "uci_chess960",
-            "uci_variant",
-            "use nnue",
-            "evalfile",
-        }
-        missing = sorted(required - options)
-        if missing:
-            raise RuntimeError(f"{label} is missing UCI options: {', '.join(missing)}")
+            self.send("uci")
+            uci_output = self.read_until(lambda line: line == "uciok")
+            options = {
+                line[len("option name ") : line.index(" type ")].casefold()
+                for line in uci_output
+                if line.startswith("option name ") and " type " in line
+            }
+            required = {
+                "threads",
+                "hash",
+                "clear hash",
+                "uci_chess960",
+                "uci_variant",
+                "use nnue",
+                "evalfile",
+            }
+            missing = sorted(required - options)
+            if missing:
+                raise RuntimeError(
+                    f"{label} is missing UCI options: {', '.join(missing)}"
+                )
 
-        self.send("setoption name UCI_Variant value atomic")
-        self.send("setoption name Threads value 1")
-        self.send(f"setoption name Hash value {hash_mb}")
-        self.send("setoption name Ponder value false")
-        self.send("setoption name MultiPV value 1")
-        self.send("setoption name Use NNUE value true")
-        self.send(f"setoption name EvalFile value {net}")
-        self.set_chess960(False)
-        self.ready()
+            self.send("setoption name UCI_Variant value atomic")
+            self.send("setoption name Threads value 1")
+            self.send(f"setoption name Hash value {hash_mb}")
+            self.send("setoption name Ponder value false")
+            self.send("setoption name MultiPV value 1")
+            self.send("setoption name Use NNUE value true")
+            self.send(f"setoption name EvalFile value {net}")
+            self.set_chess960(False)
+            require_nnue_ready_output(label, net, self.ready())
+        except BaseException:
+            self.close()
+            raise
 
     def __enter__(self) -> UciEngine:
         return self
@@ -203,9 +259,9 @@ class UciEngine:
             if predicate(line):
                 return output
 
-    def ready(self) -> None:
+    def ready(self) -> list[str]:
         self.send("isready")
-        self.read_until(lambda line: line == "readyok")
+        return self.read_until(lambda line: line == "readyok")
 
     def set_chess960(self, enabled: bool) -> None:
         if self.chess960 != enabled:
@@ -269,14 +325,6 @@ class UciEngine:
                 self.process.wait()
 
 
-def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as source:
-        for chunk in iter(lambda: source.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
 def corpus_sha256() -> str:
     digest = hashlib.sha256()
     for position in CORPUS:
@@ -293,18 +341,30 @@ def print_measurement(prefix: str, measurement: Measurement) -> None:
     )
 
 
-def main() -> int:
+def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser(
         description="Strict Atomic-Stockfish versus Fairy-Stockfish speed gate"
     )
     parser.add_argument("--candidate", type=Path, required=True)
     parser.add_argument("--baseline", type=Path, required=True)
     parser.add_argument("--eval-file", type=Path, required=True)
-    parser.add_argument("--nodes", type=int, default=100_000, help="nodes per FEN")
-    parser.add_argument("--hash", type=int, default=64, dest="hash_mb")
-    parser.add_argument("--affinity", type=int)
+    parser.add_argument(
+        "--nodes",
+        type=int,
+        default=NORMATIVE_NODES_PER_FEN,
+        help="normative value is 100000 nodes per FEN",
+    )
+    parser.add_argument(
+        "--hash", type=int, default=NORMATIVE_HASH_MB, dest="hash_mb"
+    )
+    parser.add_argument(
+        "--affinity",
+        type=int,
+        required=True,
+        help="explicit logical CPU used for every serialized search",
+    )
     parser.add_argument("--timeout", type=float, default=60.0, help="per-search seconds")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     candidate = args.candidate.resolve()
     baseline = args.baseline.resolve()
@@ -320,16 +380,49 @@ def main() -> int:
         parser.error("candidate and baseline must be different executables")
     if args.nodes <= 0 or args.hash_mb <= 0 or args.timeout <= 0:
         parser.error("--nodes, --hash, and --timeout must be positive")
-
-    net_sha = sha256_file(net)
-    if net_sha != EXPECTED_NET_SHA256:
+    if args.nodes != NORMATIVE_NODES_PER_FEN:
         parser.error(
-            f"unexpected Legacy Atomic V1 network SHA-256: {net_sha}; "
-            f"expected {EXPECTED_NET_SHA256}"
+            f"--nodes must be exactly {NORMATIVE_NODES_PER_FEN} for the "
+            "normative performance gate"
+        )
+    if args.hash_mb != NORMATIVE_HASH_MB:
+        parser.error(
+            f"--hash must be exactly {NORMATIVE_HASH_MB} for the normative "
+            "performance gate"
         )
 
+    try:
+        artifacts = normative_psutil_fingerprints() + fingerprint_files(
+            (
+                ("candidate", candidate),
+                ("baseline", baseline),
+                ("eval_file", net),
+            )
+        )
+        artifact_map = {artifact.label: artifact for artifact in artifacts}
+        require_sha256(
+            artifact_map["baseline"],
+            NORMATIVE_BASELINE_SHA256,
+            description="frozen Fairy-Stockfish BMI2 baseline",
+        )
+        require_sha256(
+            artifact_map["eval_file"],
+            EXPECTED_NET_SHA256,
+            description="Legacy Atomic V1 network",
+        )
+        require_matching_compilation_settings(
+            candidate,
+            baseline,
+            expected_fingerprints=artifact_map,
+            expected_baseline_sha256=NORMATIVE_BASELINE_SHA256,
+        )
+    except (CompilerPreflightError, GateConfigurationError) as exc:
+        parser.error(str(exc))
+
+    net_sha = artifact_map["eval_file"].sha256
+
     allowed = psutil.Process().cpu_affinity()
-    affinity = args.affinity if args.affinity is not None else allowed[0]
+    affinity = args.affinity
     if affinity not in allowed:
         parser.error(f"CPU {affinity} is outside this process affinity: {allowed}")
 
@@ -341,55 +434,75 @@ def main() -> int:
     )
     print(
         f"Configuration: net_sha256={net_sha} threads=1 hash_mb={args.hash_mb} "
-        f"cpu={affinity} nodes_per_fen={args.nodes} warmups=1 repetitions=5"
+        f"cpu={affinity} psutil={EXPECTED_PSUTIL_VERSION} "
+        f"nodes_per_fen={args.nodes} warmups=1 "
+        f"repetitions={MEASURED_REPETITIONS}"
     )
 
     samples: dict[str, list[Measurement]] = {"candidate": [], "baseline": []}
-    with ExitStack() as stack:
-        engines = {
-            "candidate": stack.enter_context(
-                UciEngine(
-                    "candidate",
-                    candidate,
-                    net,
-                    args.hash_mb,
-                    affinity,
-                    args.timeout,
-                )
-            ),
-            "baseline": stack.enter_context(
-                UciEngine(
-                    "baseline",
-                    baseline,
-                    net,
-                    args.hash_mb,
-                    affinity,
-                    args.timeout,
-                )
-            ),
-        }
+    try:
+        try:
+            with ExitStack() as stack:
+                engines = {
+                    "candidate": stack.enter_context(
+                        UciEngine(
+                            "candidate",
+                            candidate,
+                            net,
+                            args.hash_mb,
+                            affinity,
+                            args.timeout,
+                        )
+                    ),
+                    "baseline": stack.enter_context(
+                        UciEngine(
+                            "baseline",
+                            baseline,
+                            net,
+                            args.hash_mb,
+                            affinity,
+                            args.timeout,
+                        )
+                    ),
+                }
 
-        # All searches are serialized on the same logical CPU. Alternating the
-        # measured order reduces systematic heat/frequency bias.
-        print_measurement("Warm-up candidate", engines["candidate"].run_corpus(args.nodes))
-        print_measurement("Warm-up baseline", engines["baseline"].run_corpus(args.nodes))
-        for index in range(MEASURED_REPETITIONS):
-            order = ("candidate", "baseline") if index % 2 == 0 else (
-                "baseline",
-                "candidate",
-            )
-            for label in order:
-                measurement = engines[label].run_corpus(args.nodes)
-                samples[label].append(measurement)
+                # All searches are serialized on the same logical CPU.
+                # Alternating the order reduces heat/frequency bias.
                 print_measurement(
-                    f"Run {index + 1}/{MEASURED_REPETITIONS} {label}", measurement
+                    "Warm-up candidate", engines["candidate"].run_corpus(args.nodes)
                 )
+                print_measurement(
+                    "Warm-up baseline", engines["baseline"].run_corpus(args.nodes)
+                )
+                for index in range(MEASURED_REPETITIONS):
+                    order = (
+                        ("candidate", "baseline")
+                        if index % 2 == 0
+                        else ("baseline", "candidate")
+                    )
+                    for label in order:
+                        measurement = engines[label].run_corpus(args.nodes)
+                        samples[label].append(measurement)
+                        print_measurement(
+                            f"Run {index + 1}/{MEASURED_REPETITIONS} {label}",
+                            measurement,
+                        )
+        finally:
+            verify_file_fingerprints(
+                artifacts,
+                emit=print,
+                pass_label="Benchmark artifact postflight",
+            )
+    except CompilerPreflightError as exc:
+        parser.error(str(exc))
+    except Exception as exc:
+        parser.error(f"benchmark infrastructure failure: {exc}")
 
     candidate_median = statistics.median(sample.nps for sample in samples["candidate"])
     baseline_median = statistics.median(sample.nps for sample in samples["baseline"])
     ratio = candidate_median / baseline_median
-    candidate_size = candidate.stat().st_size
-    baseline_size = baseline.stat().st_size
+    candidate_size = artifact_map["candidate"].size
+    baseline_size = artifact_map["baseline"].size
     print(
         f"Candidate: median_nps={candidate_median:.0f} binary_bytes={candidate_size}"
     )

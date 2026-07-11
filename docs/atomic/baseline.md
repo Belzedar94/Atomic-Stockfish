@@ -19,7 +19,7 @@ to simplify in place.
 - Windows 10 / PowerShell
 - MSYS2 MinGW g++ 15.2.0
 - GNU Make 4.4.1
-- Python 3.12.12
+- CPython 3.12.0 for the Windows LOS runner
 - Node.js 24.15.0 and npm 11.13.0
 - Emscripten 3.1.46
 
@@ -32,14 +32,32 @@ oldest and current versions instead of relying on an unversioned workstation.
 | Artifact | Size | SHA-256 |
 | --- | ---: | --- |
 | `atomic_run3b_e202_l05.nnue` | 47,721,376 | `99DC67EABF26A64FAEECA3A88B4C38597A840B8D4A874B9F2CF658C6F92A04A6` |
-| `FSF_Atomic_baseline.exe` | 4,477,632 | `1AE6D680F03128C8404F31A3F264F28B132B557ED3A91A6445EC563A7A33F623` |
+| Fairy BMI2 (`all=no`, `largeboards=no`) | 4,281,871 | `4EACAAB40DCA84F5A255EA57231F2795D43B5DDA85CE50EBBA1A1B2937B46331` |
+| Historical Fairy SSE baseline | 4,477,632 | `1AE6D680F03128C8404F31A3F264F28B132B557ED3A91A6445EC563A7A33F623` |
 | `variantfishtest_new1.py` | 22,676 | `37D1790096520D9F3A1003746CDFBED59D2CC125A9B3D3192FF3399295EC9D70` |
+| Match `stat_util.py` | 4,476 | `06AF2F59CC22EB17213F67D243BAFC0FB2E4BB6627026787EDE9D4CF337387EA` |
+| Match `chess/__init__.py` 0.8.0 | 105,072 | `28BB8423AE3D64752713CB7430821D5B0E7CE3DC9872CA329EC3EC39FAD8EE5E` |
+| Match `chess/uci.py` | 45,087 | `B9E5AAD44EB2047698866AB3E141B22B6744DA6A504D96268F3A330654278991` |
+| CPython `python.exe` | 103,192 | `42AC541168E97DEDB9AABD8BE335539FC41C682E414B9E8D137B164FB68683B0` |
+| CPython `python312.dll` | 6,972,184 | `E7890E38256F04EE0B55AC5276BBF3AC61392C3A3CE150BB5497B709803E17CE` |
+| psutil 7.2.2 `__init__.py` | 92,363 | `7B6A0675824EB1FA2FF0CB1EB36E358DC454703E51DFA4E9A0E6CCD26A159F0C` |
+| psutil 7.2.2 `_common.py` | 26,115 | `6FC6BF5F86491BA962521374472570238929003CEBEA8E9B6C55224084B52BB0` |
+| psutil 7.2.2 `_ntuples.py` | 11,399 | `96F42BC24549636B5707A949B7CC92E89C87F7CEA7D343A6D17821AC670DFCD2` |
+| psutil 7.2.2 `_psutil_windows.pyd` | 70,656 | `0035450801BD7D938E9E146C5EC28E619CB5A5F4A18CDC53AC7E9734C7F94F78` |
+| psutil 7.2.2 `_pswindows.py` | 36,466 | `0BBD52DCB214735BE4168D11A2AE192D5BC7265C8CF72C611179476479687F54` |
 | Match `variants.ini` | 74,756 | `30A4779FDE75B5259F732A148872AA81DCA96DA7C766238D0153A591D6624E37` |
 | Atomic opening book | 394,785 | `28ED51C2F42E723D5E127D2D3F21C0BFA4A9B318615AFDB299B93EA62DEA2B1E` |
 
-The baseline executable is stored outside this Git repository in the workspace
-`baseline-artifacts` directory. The network is also an external test artifact;
-its hash, not its path or filename, is normative.
+The normative Fairy executable is stored outside this Git repository under
+`reports/fsf-baseline-fb78cb56-bmi2`; its reproducible build manifest is
+versioned with the Hito 6 evidence. It uses `ARCH=x86-64-bmi2`, `all=no`,
+`largeboards=no`, O3 and LTO without PGO. `nnue=no` disables embedding only;
+the external Legacy Atomic network loader remains enabled and passed a load
+smoke. Fairy has no engine-side `largedata` option at this revision, so that
+setting is not applicable. The older `baseline-artifacts` executable is kept
+as historical evidence but is not valid for performance or strength gates
+against a BMI2 candidate. The network is also external; its hash, not its path
+or filename, is normative.
 
 ## Existing Atomic correctness signatures
 
@@ -79,6 +97,18 @@ CPU. Hash is cleared before every corpus pass. Searches are serialized, with
 one warm-up per engine followed by five measured repetitions in alternating
 order.
 
+Before any search, the runner snapshots both executables and the network. It
+requires the exact frozen Fairy BMI2 SHA, the exact Legacy Atomic V1 network,
+all five loaded psutil 7.2.2 Python/native modules that enforce affinity, and
+the compiler-reported release signature
+`64bit BMI2 AVX2 SSE41 SSSE3 SSE2 POPCNT` from both engines. Compiler family
+and version must also match. A BMI2 candidate paired with the historical SSE
+baseline, or two equal but non-normative targets, therefore fails configuration
+instead of producing an ISA-confounded result. After both engines close, all
+three workload files and all psutil modules are hashed again; mutation is a
+hard error and an unchanged run
+prints `Benchmark artifact postflight: PASS`.
+
 The reported measurement is `sum(nodes) / sum(engine-reported time)` for each
 complete corpus pass. The gate compares the median of the five passes and
 passes only when Atomic-Stockfish's median NPS is **strictly greater** than the
@@ -89,14 +119,16 @@ Example:
 ```powershell
 python tests/atomic_bench_compare.py `
   --candidate src/atomic-stockfish.exe `
-  --baseline ../baseline-artifacts/FSF_Atomic_baseline.exe `
+  --baseline ../reports/fsf-baseline-fb78cb56-bmi2/artifacts/FSF-fb78cb56-bmi2-all-no-largeboards-no.exe `
   --eval-file ../atomic_run3b_e202_l05.nnue `
   --nodes 100000 --hash 64 --affinity 0
 ```
 
-Omitting `--affinity` selects the first CPU in the caller's existing affinity
-mask. The default node budget keeps a local gate reasonably short; release
-reports must preserve the full five measured repetitions.
+`--affinity` is mandatory so the selected logical CPU is explicit in the log.
+The normative runner rejects any node budget other than 100,000 per FEN or any
+hash other than 64 MiB, and always preserves the full five measured
+repetitions. Shorter or differently configured diagnostics must not use this
+release-gate command.
 
 ## Frozen baseline suite
 

@@ -27,9 +27,11 @@ release pass.
 | Cross-surface parity | Exact native/Python/CommonJS/ESM results | `40` shared fixtures; `25` native UCI intersections |
 | Move generation | Eight historical Atomic/Atomic960 vectors plus focused rule/transition corpus | eight exact perfts and `19/19` focused checks |
 | UCI search | Quiet Atomic checks/evasions, preserved analysis checks, mate-before-rule-50, stalemate ordering, terminal explosions, preservation of explosive captures in main search/qsearch and the Atomic NMP tactical-defense fixture | `16/16` with NNUE disabled and with the frozen network loaded |
+| Comparison provenance | Stockfish/Fairy compiler-output parsing, bitness/ISA/debug-mode mismatch rejection, canonical immutable assets including every loaded psutil Python/native module, exact playing-net smoke, fail-fast workers/watchdog and process cleanup | combined LOS/compiler units `85/85` |
 | XBoard/CECP | Atomic-only negotiation, clocks, state edits, analyze, playother, hard/easy and live ponder cancellation/promotion | complete protocol suite passed |
 | Search repeatability | Two-position Atomic NNUE corpus over increasing node budgets | `12/12`; signature `338376` |
 | Legacy Atomic NNUE | `false`, `true`, `pure`, invalid/truncated recovery, transactional load and byte-exact export | mode contract passed; network SHA-256 pinned |
+| Pipeline reproducibility | Machine-readable sibling commits, tracked clean-build recipes, strict build manifests, exact HEAD/clean-tree/artifact pre/postflight, pinned Python runtime/dependency provenance, locked strong-local fixture and trainer-generated synthetic CI fixture | lock/build/profile units `69/69`; public job fails closed while the measured synthetic hashes remain staged |
 | Atomic Syzygy | Atomic magics/suffixes, connected-kings domain 518, real WDL/DTZ, root/interior, Atomic960 eligibility and recoverable paths | same-checkout Makefile driver; 13 fixture headers/hashes, driver `5/5`, production UCI suite with NNUE false/true |
 | Full engine UCI/NNUE WASM | Interactive Node launcher, external NNUE, true/pure, perft, terminal positions and pthread operation | integration passed; all four artifact hashes match the reproducible manifest |
 
@@ -57,7 +59,7 @@ required Elo/LOS matches.
 | Python packaging | Import the exact requested `pyffish` artifact, run historical and extended tests, and exercise concurrent calls. |
 | Board WASM lifecycle | Repeated construction/destruction, push/pop/reset, perft, Atomic terminals and error rollback share the 58-fixture suite. |
 | UCI/NNUE WASM | Run the actual interactive search engine and load the external SHA-pinned network; this is distinct from the lightweight Board WASM library. |
-| NNUE pipeline | Generator/decode/train/serialize/re-import belongs to the later pipeline milestone and must retain every special move kind. |
+| NNUE pipeline | The Legacy Atomic V1 generator/decode/train/serialize/re-import E2E is mandatory from Hito 5 onward and must run from clean, SHA-pinned sibling repositories. `strong-local` uses the external frozen playing net; `synthetic-ci` creates a deterministic ephemeral trainer net so public CI redistributes no strong weights. Hito 7 adds `atomic-bin-v2` and generator consolidation without weakening either profile. |
 
 ## Mandatory execution matrix
 

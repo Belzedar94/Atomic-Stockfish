@@ -13,7 +13,9 @@ from contextlib import redirect_stdout
 from dataclasses import dataclass
 import hashlib
 import importlib
+from importlib import metadata as importlib_metadata
 import io
+import json
 import math
 import os
 from pathlib import Path
@@ -22,11 +24,28 @@ import shutil
 import struct
 import subprocess
 import sys
+import sysconfig
 import tempfile
 import threading
 import time
 from types import ModuleType
-from typing import Callable, Sequence
+from typing import Callable, Mapping, Sequence
+
+from atomic_compiler_preflight import (
+    CompilerPreflightError,
+    FileFingerprint,
+    fingerprint_file,
+    fingerprint_files,
+    verify_file_fingerprints,
+)
+from legacy_pipeline_build_manifest import verify_build_manifest
+from legacy_pipeline_lock import (
+    DEFAULT_LOCK_FILE,
+    PipelineProfile,
+    find_checkout_root,
+    load_pipeline_lock,
+    verify_release_checkouts,
+)
 
 
 RECORD_SIZE = 72
@@ -36,15 +55,18 @@ RESULT_OFFSET = 70
 PADDING_OFFSET = 71
 LEGACY_NNUE_VERSION = 0x7AF32F20
 LEGACY_NNUE_ARCHITECTURE = 0x3C103E72
-SOURCE_NET_SHA256 = "99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f92a04a6"
-EXPECTED_PURE_DATA_SHA256 = (
-    "7de72b1385dbc8e37312a513d1cf4c7d99f889ec8b747f548ed32e8d7a261a2d"
-)
 TOOLS_PURE_OPTION = "option name Use NNUE type combo default true var true var false var pure"
-DEFAULT_RECORDS = 8
-DEFAULT_SEED = "20260711"
+TOOLS_PURE_LOAD_SUFFIX = " enabled (Use NNUE=pure)"
 TOOLS_TIMEOUT_SECONDS = 180.0
 ENGINE_TIMEOUT_SECONDS = 60.0
+REPO_ROOT = Path(__file__).resolve().parents[1]
+SYNTHETIC_DESCRIPTION = "Atomic-Stockfish LegacyAtomicV1 synthetic CI source"
+PYTHON_DEPENDENCIES = (
+    ("torch", "torch"),
+    ("numpy", "numpy"),
+    ("pytorch_lightning", "pytorch-lightning"),
+    ("torchmetrics", "torchmetrics"),
+)
 
 
 @dataclass(frozen=True)
@@ -56,8 +78,526 @@ class PlainRecord:
     result: int
 
 
+@dataclass(frozen=True)
+class PythonDependencyProvenance:
+    """Exact imported identity of one trainer runtime dependency."""
+
+    module_name: str
+    distribution_name: str
+    version: str
+    module_origin: Path
+    metadata_origin: Path
+    installed_files: int
+    installed_files_sha256: str
+    fingerprints: tuple[FileFingerprint, ...]
+
+    @property
+    def manifest_sha256(self) -> str:
+        return fingerprint_manifest_sha256(self.fingerprints)
+
+
+@dataclass(frozen=True)
+class PythonEnvironmentProvenance:
+    """Preflight snapshot of CPython and every imported dependency artifact."""
+
+    implementation: str
+    version: str
+    version_info: tuple[int, int, int, str, int]
+    cache_tag: str
+    hexversion: int
+    executable: Path
+    runtime_fingerprints: tuple[FileFingerprint, ...]
+    dependencies: tuple[PythonDependencyProvenance, ...]
+
+    @property
+    def fingerprints(self) -> tuple[FileFingerprint, ...]:
+        return self.runtime_fingerprints + tuple(
+            fingerprint
+            for dependency in self.dependencies
+            for fingerprint in dependency.fingerprints
+        )
+
+    @property
+    def manifest_sha256(self) -> str:
+        return fingerprint_manifest_sha256(self.fingerprints)
+
+
 def sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+
+def fingerprint_manifest_sha256(
+    fingerprints: Sequence[FileFingerprint],
+) -> str:
+    """Hash paths and file identities into one compact, auditable manifest ID."""
+
+    digest = hashlib.sha256()
+    for fingerprint in fingerprints:
+        row = json.dumps(
+            (
+                fingerprint.label,
+                str(fingerprint.path),
+                fingerprint.size,
+                fingerprint.sha256,
+            ),
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        digest.update(row.encode("utf-8"))
+        digest.update(b"\n")
+    return digest.hexdigest().upper()
+
+
+def path_manifest_sha256(paths: Sequence[Path]) -> str:
+    digest = hashlib.sha256()
+    for path in paths:
+        digest.update(str(path).encode("utf-8"))
+        digest.update(b"\n")
+    return digest.hexdigest().upper()
+
+
+def _require_version(value: object, label: str) -> str:
+    if not isinstance(value, str) or not value or value != value.strip():
+        raise AssertionError(f"{label} has no exact non-empty version string")
+    return value
+
+
+def _python_runtime_paths() -> tuple[Path, ...]:
+    candidates: list[Path] = []
+
+    def add(raw_path: object) -> None:
+        if not isinstance(raw_path, (str, os.PathLike)) or not raw_path:
+            return
+        path = Path(raw_path).expanduser()
+        if path.is_file():
+            resolved = path.resolve()
+            if resolved not in candidates:
+                candidates.append(resolved)
+
+    add(sys.executable)
+    add(getattr(sys, "_base_executable", None))
+
+    library_names = {
+        value
+        for key in ("LDLIBRARY", "INSTSONAME")
+        if isinstance((value := sysconfig.get_config_var(key)), str) and value
+    }
+    library_roots = {
+        Path(value)
+        for value in (
+            sysconfig.get_config_var("LIBDIR"),
+            sys.prefix,
+            sys.base_prefix,
+        )
+        if isinstance(value, str) and value
+    }
+    for library_name in library_names:
+        library = Path(library_name)
+        if library.is_absolute():
+            add(library)
+        else:
+            for root in library_roots:
+                add(root / library)
+
+    if sys.platform == "win32":
+        dll_name = f"python{sys.version_info.major}{sys.version_info.minor}.dll"
+        for root in (Path(sys.prefix), Path(sys.base_prefix)):
+            add(root / dll_name)
+            add(root / "DLLs" / dll_name)
+
+    executable = Path(sys.executable).expanduser().resolve()
+    if not executable.is_file() or executable not in candidates:
+        raise AssertionError(f"CPython executable does not exist: {executable}")
+    return tuple(sorted(candidates, key=lambda path: os.path.normcase(str(path))))
+
+
+def _distribution_artifacts(
+    distribution: object, distribution_name: str
+) -> tuple[set[Path], Path, Path]:
+    entries = getattr(distribution, "files", None)
+    if entries is None:
+        raise AssertionError(
+            f"Python distribution {distribution_name} exposes no installed file list"
+        )
+    entries = tuple(entries)
+    if not entries:
+        raise AssertionError(
+            f"Python distribution {distribution_name} has an empty installed file list"
+        )
+
+    located: list[tuple[Path, Path]] = []
+    for entry in entries:
+        try:
+            installed = Path(distribution.locate_file(entry)).resolve()
+        except (AttributeError, OSError, TypeError, ValueError) as exc:
+            raise AssertionError(
+                f"could not resolve {distribution_name} distribution file {entry!r}: "
+                f"{exc}"
+            ) from exc
+        located.append((Path(str(entry)), installed))
+
+    def unique_metadata_file(filename: str) -> Path:
+        matches = [
+            installed
+            for entry, installed in located
+            if entry.name == filename and entry.parent.name.endswith(".dist-info")
+        ]
+        if len(matches) != 1:
+            raise AssertionError(
+                f"Python distribution {distribution_name} must expose exactly one "
+                f"{filename} file, found {len(matches)}"
+            )
+        if not matches[0].is_file():
+            raise AssertionError(
+                f"Python distribution {distribution_name} {filename} does not exist: "
+                f"{matches[0]}"
+            )
+        return matches[0]
+
+    return (
+        {installed for _, installed in located},
+        unique_metadata_file("METADATA"),
+        unique_metadata_file("RECORD"),
+    )
+
+
+def _capture_dependency_provenance(
+    module_name: str,
+    distribution_name: str,
+    module: ModuleType,
+    module_table: Mapping[str, object],
+    distribution_resolver: Callable[[str], object],
+) -> PythonDependencyProvenance:
+    module_version = _require_version(
+        getattr(module, "__version__", None), f"Python module {module_name}"
+    )
+    module_file = getattr(module, "__file__", None)
+    if not isinstance(module_file, (str, os.PathLike)) or not module_file:
+        raise AssertionError(f"Python module {module_name} has no filesystem origin")
+    module_origin = Path(module_file).expanduser().resolve()
+    if not module_origin.is_file():
+        raise AssertionError(
+            f"Python module {module_name} origin does not exist: {module_origin}"
+        )
+
+    try:
+        distribution = distribution_resolver(distribution_name)
+    except Exception as exc:
+        raise AssertionError(
+            f"Python distribution metadata is unavailable for {distribution_name}: {exc}"
+        ) from exc
+    distribution_version = _require_version(
+        getattr(distribution, "version", None),
+        f"Python distribution {distribution_name}",
+    )
+    if module_version != distribution_version:
+        raise AssertionError(
+            f"Python dependency {module_name} version mismatch: "
+            f"module={module_version!r} distribution={distribution_version!r}"
+        )
+
+    installed_files, metadata_origin, record_origin = _distribution_artifacts(
+        distribution, distribution_name
+    )
+    if module_origin not in installed_files:
+        raise AssertionError(
+            f"Python module {module_name} came from {module_origin}, which is not "
+            f"owned by distribution {distribution_name} at {metadata_origin.parent}"
+        )
+
+    package_root = module_origin.parent
+    imported_files = {module_origin, metadata_origin, record_origin}
+    for loaded_name, loaded_module in tuple(module_table.items()):
+        if loaded_name != module_name and not loaded_name.startswith(module_name + "."):
+            continue
+        loaded_file = getattr(loaded_module, "__file__", None)
+        # Namespace and synthetic package nodes have no executable file. Their
+        # concrete child modules are still captured independently below.
+        if loaded_file is None:
+            continue
+        if not isinstance(loaded_file, (str, os.PathLike)) or not loaded_file:
+            raise AssertionError(
+                f"loaded Python module {loaded_name} has an invalid origin"
+            )
+        loaded_path = Path(loaded_file).expanduser()
+        if not loaded_path.is_absolute():
+            spec_origin = getattr(getattr(loaded_module, "__spec__", None), "origin", None)
+            if not isinstance(spec_origin, (str, os.PathLike)) or not Path(
+                spec_origin
+            ).is_absolute():
+                # torch.ops/torch.classes are dynamic ModuleType proxies. They
+                # advertise a relative pseudo-file, while their implementation
+                # lives in ordinary torch._ops/torch._classes modules that are
+                # captured separately.
+                proxy_owner = type(loaded_module).__module__
+                if (
+                    proxy_owner == loaded_name
+                    or (
+                        proxy_owner != module_name
+                        and not proxy_owner.startswith(module_name + ".")
+                    )
+                    or proxy_owner not in module_table
+                ):
+                    raise AssertionError(
+                        f"loaded Python module {loaded_name} has unresolved relative "
+                        f"origin {loaded_file!r}"
+                    )
+                continue
+            loaded_path = Path(spec_origin).expanduser()
+        origin = loaded_path.resolve()
+        if not origin.is_file():
+            raise AssertionError(
+                f"loaded Python module {loaded_name} origin does not exist: {origin}"
+            )
+        if not origin.is_relative_to(package_root):
+            raise AssertionError(
+                f"loaded Python module {loaded_name} came from mixed origin {origin}; "
+                f"expected it below {package_root}"
+            )
+        if origin not in installed_files:
+            raise AssertionError(
+                f"loaded Python module {loaded_name} came from unowned file {origin}; "
+                f"distribution={distribution_name}"
+            )
+        imported_files.add(origin)
+
+    safe_label = module_name.replace(".", "_")
+    try:
+        fingerprints = fingerprint_files(
+            (
+                (f"python_{safe_label}_file_{index:04d}", path)
+                for index, path in enumerate(
+                    sorted(imported_files, key=lambda item: os.path.normcase(str(item)))
+                )
+            )
+        )
+    except CompilerPreflightError as exc:
+        raise AssertionError(str(exc)) from exc
+    return PythonDependencyProvenance(
+        module_name=module_name,
+        distribution_name=distribution_name,
+        version=module_version,
+        module_origin=module_origin,
+        metadata_origin=metadata_origin,
+        installed_files=len(installed_files),
+        installed_files_sha256=path_manifest_sha256(
+            tuple(sorted(installed_files, key=lambda path: os.path.normcase(str(path))))
+        ),
+        fingerprints=fingerprints,
+    )
+
+
+def capture_python_environment_provenance(
+    *,
+    dependency_modules: Mapping[str, ModuleType] | None = None,
+    module_table: Mapping[str, object] | None = None,
+    distribution_resolver: Callable[[str], object] = importlib_metadata.distribution,
+) -> PythonEnvironmentProvenance:
+    """Capture exact CPython and imported trainer dependency provenance."""
+
+    implementation = getattr(sys.implementation, "name", None)
+    if implementation != "cpython":
+        raise AssertionError(
+            f"legacy pipeline requires CPython, got {implementation!r}"
+        )
+    cache_tag = getattr(sys.implementation, "cache_tag", None)
+    if not isinstance(cache_tag, str) or not cache_tag:
+        raise AssertionError("CPython implementation has no cache tag")
+
+    if dependency_modules is None:
+        dependency_modules = {
+            module_name: importlib.import_module(module_name)
+            for module_name, _ in PYTHON_DEPENDENCIES
+        }
+    expected_names = {module_name for module_name, _ in PYTHON_DEPENDENCIES}
+    if set(dependency_modules) != expected_names:
+        raise AssertionError(
+            "Python dependency snapshot must contain exactly "
+            + ", ".join(sorted(expected_names))
+        )
+    loaded_modules = sys.modules if module_table is None else module_table
+
+    try:
+        runtime_fingerprints = fingerprint_files(
+            (
+                (f"python_runtime_file_{index:04d}", path)
+                for index, path in enumerate(_python_runtime_paths())
+            )
+        )
+    except CompilerPreflightError as exc:
+        raise AssertionError(str(exc)) from exc
+
+    dependencies = tuple(
+        _capture_dependency_provenance(
+            module_name,
+            distribution_name,
+            dependency_modules[module_name],
+            loaded_modules,
+            distribution_resolver,
+        )
+        for module_name, distribution_name in PYTHON_DEPENDENCIES
+    )
+    version_info = sys.version_info
+    return PythonEnvironmentProvenance(
+        implementation=implementation,
+        version=sys.version,
+        version_info=(
+            version_info.major,
+            version_info.minor,
+            version_info.micro,
+            version_info.releaselevel,
+            version_info.serial,
+        ),
+        cache_tag=cache_tag,
+        hexversion=sys.hexversion,
+        executable=Path(sys.executable).expanduser().resolve(),
+        runtime_fingerprints=runtime_fingerprints,
+        dependencies=dependencies,
+    )
+
+
+def emit_python_environment_provenance(
+    provenance: PythonEnvironmentProvenance,
+    *,
+    emit: Callable[[str], None] = print,
+) -> None:
+    emit(
+        "LEGACY PIPELINE PYTHON RUNTIME PREFLIGHT "
+        f"implementation={provenance.implementation} "
+        f"version={json.dumps(provenance.version)} "
+        f"version_info={provenance.version_info} "
+        f"cache_tag={provenance.cache_tag} "
+        f"hexversion=0x{provenance.hexversion:08X} "
+        f"executable={json.dumps(str(provenance.executable))} "
+        f"files={len(provenance.runtime_fingerprints)} "
+        f"manifest_sha256={fingerprint_manifest_sha256(provenance.runtime_fingerprints)}"
+    )
+    for dependency in provenance.dependencies:
+        emit(
+            "LEGACY PIPELINE PYTHON DEPENDENCY PREFLIGHT "
+            f"module={dependency.module_name} "
+            f"distribution={dependency.distribution_name} "
+            f"version={json.dumps(dependency.version)} "
+            f"origin={json.dumps(str(dependency.module_origin))} "
+            f"metadata={json.dumps(str(dependency.metadata_origin))} "
+            f"installed_files={dependency.installed_files} "
+            f"installed_files_sha256={dependency.installed_files_sha256} "
+            f"imported_files={len(dependency.fingerprints)} "
+            f"imported_manifest_sha256={dependency.manifest_sha256}"
+        )
+    emit(
+        "LEGACY PIPELINE PYTHON ENVIRONMENT PREFLIGHT "
+        f"files={len(provenance.fingerprints)} "
+        f"manifest_sha256={provenance.manifest_sha256}"
+    )
+
+
+def _fingerprints_by_path(
+    fingerprints: Sequence[FileFingerprint],
+) -> dict[Path, FileFingerprint]:
+    return {fingerprint.path: fingerprint for fingerprint in fingerprints}
+
+
+def verify_python_environment_provenance(
+    expected: PythonEnvironmentProvenance,
+    *,
+    emit: Callable[[str], None] = print,
+    recapture: Callable[[], PythonEnvironmentProvenance] = (
+        capture_python_environment_provenance
+    ),
+) -> None:
+    """Re-import and rehash Python runtime inputs after the E2E workload."""
+
+    actual = recapture()
+    expected_runtime = (
+        expected.implementation,
+        expected.version,
+        expected.version_info,
+        expected.cache_tag,
+        expected.hexversion,
+        expected.executable,
+    )
+    actual_runtime = (
+        actual.implementation,
+        actual.version,
+        actual.version_info,
+        actual.cache_tag,
+        actual.hexversion,
+        actual.executable,
+    )
+    if actual_runtime != expected_runtime:
+        raise AssertionError(
+            "CPython runtime identity changed after preflight: "
+            f"before={expected_runtime!r} after={actual_runtime!r}"
+        )
+
+    expected_dependencies = {
+        dependency.module_name: dependency for dependency in expected.dependencies
+    }
+    actual_dependencies = {
+        dependency.module_name: dependency for dependency in actual.dependencies
+    }
+    if actual_dependencies.keys() != expected_dependencies.keys():
+        raise AssertionError(
+            "Python dependency set changed after preflight: "
+            f"before={sorted(expected_dependencies)} "
+            f"after={sorted(actual_dependencies)}"
+        )
+    for module_name, before in expected_dependencies.items():
+        after = actual_dependencies[module_name]
+        before_identity = (
+            before.distribution_name,
+            before.version,
+            before.module_origin,
+            before.metadata_origin,
+            before.installed_files,
+            before.installed_files_sha256,
+        )
+        after_identity = (
+            after.distribution_name,
+            after.version,
+            after.module_origin,
+            after.metadata_origin,
+            after.installed_files,
+            after.installed_files_sha256,
+        )
+        if after_identity != before_identity:
+            raise AssertionError(
+                f"Python dependency {module_name} identity changed after preflight: "
+                f"before={before_identity!r} after={after_identity!r}"
+            )
+
+    before_files = _fingerprints_by_path(expected.fingerprints)
+    after_files = _fingerprints_by_path(actual.fingerprints)
+    removed_paths = before_files.keys() - after_files.keys()
+    if removed_paths:
+        removed = sorted(str(path) for path in removed_paths)
+        raise AssertionError(
+            "Python imported/runtime preflight artifacts disappeared: "
+            f"removed={removed}"
+        )
+    for path, before in before_files.items():
+        after = after_files[path]
+        if before.size != after.size or before.sha256 != after.sha256:
+            raise AssertionError(
+                f"Python artifact changed after preflight: {path} "
+                f"before_bytes={before.size} before_sha256={before.sha256} "
+                f"after_bytes={after.size} after_sha256={after.sha256}"
+            )
+
+    # PyTorch legitimately imports some modules lazily during optimizer and
+    # serialization calls. The recapture above validates each added file as an
+    # installed member of the same unchanged distribution and package root.
+    # Every file that existed at preflight remains mandatory and is rehashed.
+    added_files = after_files.keys() - before_files.keys()
+    emit(
+        "LEGACY PIPELINE PYTHON ENVIRONMENT POSTFLIGHT: PASS "
+        f"preflight_files={len(expected.fingerprints)} "
+        f"postflight_files={len(actual.fingerprints)} "
+        f"lazy_added_files={len(added_files)} "
+        f"preflight_manifest_sha256={expected.manifest_sha256} "
+        f"postflight_manifest_sha256={actual.manifest_sha256}"
+    )
 
 
 def require_file(path: Path, label: str) -> Path:
@@ -166,10 +706,12 @@ def run_generation_command(
         raise AssertionError(
             "tools engine does not expose the required pure NNUE mode:\n" + output
         )
-    expected_marker = f"info string NNUE evaluation using {source_net} enabled"
+    expected_marker = (
+        f"info string NNUE evaluation using {source_net}{TOOLS_PURE_LOAD_SUFFIX}"
+    )
     if output.splitlines().count(expected_marker) != 1:
         raise AssertionError(
-            "generator did not load the exact frozen source network; expected "
+            "generator did not load the selected source network in pure mode; expected "
             f"one {expected_marker!r}:\n{output}"
         )
     if "INFO: generate_training_data finished." not in output.splitlines():
@@ -713,6 +1255,57 @@ def writer_bytes(serialize: ModuleType, network: object, description: str) -> by
         return bytes(serialize.NNUEWriter(network, description).buf)
 
 
+def generate_synthetic_source_network(
+    root: Path,
+    profile: PipelineProfile,
+    features: ModuleType,
+    model_module: ModuleType,
+    serialize: ModuleType,
+    torch: ModuleType,
+    *,
+    verify_hash: bool = True,
+) -> tuple[Path, bytes]:
+    """Create a redistributable, deterministic zero-weight Legacy V1 net.
+
+    The trainer defines the model, feature hashes and wire serializer.  Zeroing
+    every parameter after construction avoids depending on a PyTorch RNG or
+    BLAS implementation while still exercising the pinned trainer's complete
+    LegacyAtomicV1 HalfKAv2 serialization path.
+    """
+
+    if profile.source_kind != "trainer-generated-zero":
+        raise AssertionError(
+            f"profile {profile.name!r} is not a synthetic trainer profile"
+        )
+    if profile.synthetic_model_seed is None:
+        raise AssertionError("synthetic profile has no model seed")
+    torch.manual_seed(profile.synthetic_model_seed)
+    factorized_features = features.get_feature_set_from_name("HalfKAv2^")
+    network = model_module.NNUE(factorized_features, lambda_=1.0)
+    with torch.no_grad():
+        for parameter in network.parameters():
+            parameter.zero_()
+    network.eval()
+    serialized = writer_bytes(serialize, network, SYNTHETIC_DESCRIPTION)
+    version, architecture = struct.unpack_from("<II", serialized, 0)
+    if version != LEGACY_NNUE_VERSION or architecture != LEGACY_NNUE_ARCHITECTURE:
+        raise AssertionError(
+            "synthetic trainer network has the wrong LegacyAtomicV1 header: "
+            f"version=0x{version:08X} architecture=0x{architecture:08X}"
+        )
+    source_hash = sha256(serialized)
+    if verify_hash and source_hash != profile.source_net_sha256:
+        raise AssertionError(
+            "synthetic source network fixture changed: "
+            f"expected {profile.source_net_sha256}, got {source_hash}"
+        )
+    # Fairy's Atomic Legacy V1 selector intentionally requires an Atomic net
+    # basename (or alias); a generic filename would silently leave NNUE off.
+    output = root / "atomic-synthetic-source.nnue"
+    output.write_bytes(serialized)
+    return output, serialized
+
+
 def serialize_and_reimport(
     network: object,
     root: Path,
@@ -924,15 +1517,71 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--tools-engine", type=Path, required=True)
     parser.add_argument("--trainer-root", type=Path, required=True)
     parser.add_argument("--engine", type=Path, required=True)
-    parser.add_argument("--source-net", type=Path, required=True)
-    parser.add_argument("--records", type=int, default=DEFAULT_RECORDS)
-    parser.add_argument("--seed", default=DEFAULT_SEED)
+    parser.add_argument("--tools-build-manifest", type=Path, required=True)
+    parser.add_argument("--trainer-build-manifest", type=Path, required=True)
+    parser.add_argument("--atomic-build-manifest", type=Path, required=True)
+    parser.add_argument(
+        "--profile",
+        choices=("strong-local", "synthetic-ci"),
+        default="strong-local",
+    )
+    parser.add_argument("--lock-file", type=Path, default=DEFAULT_LOCK_FILE)
+    parser.add_argument(
+        "--source-net",
+        type=Path,
+        help="required only by strong-local; synthetic-ci creates its own network",
+    )
+    parser.add_argument(
+        "--records",
+        type=int,
+        help="must equal the selected profile's locked record count",
+    )
+    parser.add_argument(
+        "--seed", help="must equal the selected profile's locked generator seed"
+    )
+    parser.add_argument("--atomic-root", type=Path, default=REPO_ROOT)
+    parser.add_argument(
+        "--atomic-commit",
+        help="optional exact Atomic-Stockfish HEAD expected by release automation",
+    )
+    parser.add_argument(
+        "--measure-synthetic-fixture",
+        action="store_true",
+        help=(
+            "NON-RELEASE: print the synthetic source/data hashes needed to "
+            "finalize the lock; valid only with synthetic-ci"
+        ),
+    )
     args = parser.parse_args(argv)
-    if args.records <= 0:
+    if args.records is not None and args.records <= 0:
         parser.error("--records must be greater than zero")
-    if any(character.isspace() for character in args.seed):
+    if args.seed is not None and any(character.isspace() for character in args.seed):
         parser.error("--seed cannot contain whitespace in the tools command wire")
+    if args.measure_synthetic_fixture and args.profile != "synthetic-ci":
+        parser.error("--measure-synthetic-fixture requires --profile synthetic-ci")
     return args
+
+
+def resolve_profile_arguments(
+    args: argparse.Namespace, profile: PipelineProfile
+) -> tuple[int, str]:
+    records = profile.records if args.records is None else args.records
+    seed = profile.seed if args.seed is None else args.seed
+    if records != profile.records:
+        raise AssertionError(
+            f"--records {records} does not match locked {profile.name} value "
+            f"{profile.records}"
+        )
+    if seed != profile.seed:
+        raise AssertionError(
+            f"--seed {seed!r} does not match locked {profile.name} value "
+            f"{profile.seed!r}"
+        )
+    if profile.source_kind == "external" and args.source_net is None:
+        raise AssertionError("strong-local requires --source-net")
+    if profile.source_kind != "external" and args.source_net is not None:
+        raise AssertionError("synthetic-ci generates its source net; omit --source-net")
+    return records, seed
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -940,16 +1589,89 @@ def main(argv: Sequence[str] | None = None) -> int:
     tools_engine = require_file(args.tools_engine, "tools engine")
     trainer_root = require_directory(args.trainer_root, "trainer root")
     engine = require_file(args.engine, "Atomic-Stockfish engine")
-    source_net = require_file(args.source_net, "frozen source network")
-    source_net_hash = sha256(source_net.read_bytes())
-    if source_net_hash != SOURCE_NET_SHA256:
+    build_manifest_paths = {
+        "tools": require_file(args.tools_build_manifest, "tools build manifest"),
+        "trainer": require_file(
+            args.trainer_build_manifest, "trainer build manifest"
+        ),
+        "atomic": require_file(args.atomic_build_manifest, "Atomic build manifest"),
+    }
+    atomic_root = require_directory(args.atomic_root, "Atomic-Stockfish checkout")
+    lock = load_pipeline_lock(
+        args.lock_file, allow_placeholders=args.measure_synthetic_fixture
+    )
+    profile = lock.profiles[args.profile]
+    records, seed = resolve_profile_arguments(args, profile)
+    tools_root = find_checkout_root(tools_engine, "tools engine")
+    checkouts = verify_release_checkouts(
+        lock,
+        tools_root=tools_root,
+        trainer_root=trainer_root,
+        atomic_root=atomic_root,
+        tools_engine=tools_engine,
+        engine=engine,
+        atomic_commit=args.atomic_commit,
+    )
+    library_suffix = ".dll" if sys.platform == "win32" else (
+        ".dylib" if sys.platform == "darwin" else ".so"
+    )
+    native_loaders = tuple(
+        sorted(trainer_root.glob(f"*training_data_loader*{library_suffix}"))
+    )
+    if len(native_loaders) != 1:
         raise AssertionError(
-            "source network is not atomic_run3b_e202_l05.nnue: "
-            f"expected {SOURCE_NET_SHA256}, got {source_net_hash}"
+            "trainer checkout must contain exactly one platform native loader; "
+            f"found {len(native_loaders)} in {trainer_root}"
         )
-    native_loader = tuple(trainer_root.glob("*training_data_loader.*"))
-    if not any(path.suffix.lower() in (".dll", ".so", ".dylib") for path in native_loader):
-        raise AssertionError(f"trainer native loader is not built in {trainer_root}")
+    try:
+        artifact_fingerprints = fingerprint_files(
+            (
+                ("tools_engine", tools_engine),
+                ("trainer_native_loader", native_loaders[0]),
+                ("atomic_engine", engine),
+                ("tools_build_manifest", build_manifest_paths["tools"]),
+                ("trainer_build_manifest", build_manifest_paths["trainer"]),
+                ("atomic_build_manifest", build_manifest_paths["atomic"]),
+            )
+        )
+    except CompilerPreflightError as exc:
+        raise AssertionError(str(exc)) from exc
+    print(
+        "LEGACY PIPELINE ARTIFACTS PREFLIGHT "
+        + " ".join(item.display() for item in artifact_fingerprints)
+    )
+    build_manifests = {
+        "tools": verify_build_manifest(
+            build_manifest_paths["tools"],
+            expected_recipe=profile.build_recipes["tools"],
+            repository_root=tools_root,
+            artifact=tools_engine,
+            expected_commit=checkouts["tools"].head,
+        ),
+        "trainer": verify_build_manifest(
+            build_manifest_paths["trainer"],
+            expected_recipe=profile.build_recipes["trainer"],
+            repository_root=trainer_root,
+            artifact=native_loaders[0],
+            expected_commit=checkouts["trainer"].head,
+        ),
+        "atomic": verify_build_manifest(
+            build_manifest_paths["atomic"],
+            expected_recipe=profile.build_recipes["atomic"],
+            repository_root=atomic_root,
+            artifact=engine,
+            expected_commit=checkouts["atomic"].head,
+        ),
+    }
+    print(
+        "LEGACY PIPELINE CLEAN BUILDS VERIFIED "
+        + " ".join(
+            f"{name}={manifest.recipe}:{manifest.artifact_sha256}"
+            for name, manifest in build_manifests.items()
+        )
+    )
+    source_fingerprint: FileFingerprint | None = None
+    python_environment: PythonEnvironmentProvenance | None = None
 
     temp_name = tempfile.mkdtemp(prefix="atomic-pipeline-e2e-")
     root = Path(temp_name).resolve()
@@ -960,41 +1682,76 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
 
     try:
+        modules = import_trainer_modules(trainer_root)
+        nnue_dataset, features, model_module, ranger_module, serialize, torch = modules
+        python_environment = capture_python_environment_provenance()
+        emit_python_environment_provenance(python_environment)
+        if profile.source_kind == "external":
+            assert args.source_net is not None
+            source_net = require_file(args.source_net, "frozen source network")
+            source_net_bytes = source_net.read_bytes()
+        else:
+            source_net, source_net_bytes = generate_synthetic_source_network(
+                root,
+                profile,
+                features,
+                model_module,
+                serialize,
+                torch,
+                verify_hash=not args.measure_synthetic_fixture,
+            )
+        source_net_hash = sha256(source_net_bytes)
+        try:
+            source_fingerprint = fingerprint_file(
+                source_net, label="source_network"
+            )
+        except CompilerPreflightError as exc:
+            raise AssertionError(str(exc)) from exc
+        if (
+            not args.measure_synthetic_fixture
+            and source_net_hash != profile.source_net_sha256
+        ):
+            raise AssertionError(
+                f"{profile.name} source network SHA-256 mismatch: "
+                f"expected {profile.source_net_sha256}, got {source_net_hash}"
+            )
+
         first_path = root / "generated-a.bin"
         second_path = root / "generated-b.bin"
         first = generate_data(
-            tools_engine, source_net, first_path, args.records, str(args.seed)
+            tools_engine, source_net, first_path, records, seed
         )
         second = generate_data(
-            tools_engine, source_net, second_path, args.records, str(args.seed)
+            tools_engine, source_net, second_path, records, seed
         )
-        validate_legacy_records(first, args.records)
-        validate_legacy_records(second, args.records)
+        validate_legacy_records(first, records)
+        validate_legacy_records(second, records)
         if first != second:
             raise AssertionError(
                 "seeded generation is not byte-identical: "
                 f"first={sha256(first)}, second={sha256(second)}"
             )
         data_hash = sha256(first)
-        if (
-            args.records == DEFAULT_RECORDS
-            and args.seed == DEFAULT_SEED
-            and data_hash != EXPECTED_PURE_DATA_SHA256
-        ):
+        if not args.measure_synthetic_fixture and data_hash != profile.data_sha256:
             raise AssertionError(
-                "pure generation fixture changed or Use NNUE=pure was not applied: "
-                f"expected {EXPECTED_PURE_DATA_SHA256}, got {data_hash}"
+                f"{profile.name} pure generation fixture changed or "
+                "Use NNUE=pure was not applied: "
+                f"expected {profile.data_sha256}, got {data_hash}"
             )
+        if args.measure_synthetic_fixture:
+            print(
+                "SYNTHETIC PIPELINE FIXTURE MEASURED (NON-RELEASE) "
+                f"source_sha256={source_net_hash} data_sha256={data_hash}"
+            )
+            return 0
 
         roundtrip, plain = convert_roundtrip(tools_engine, first_path, root)
-        plain_records = parse_plain_records(plain, args.records)
-        modules = import_trainer_modules(trainer_root)
-        nnue_dataset, features, model_module, ranger_module, serialize, torch = modules
+        plain_records = parse_plain_records(plain, records)
         batch = decode_batch(
             nnue_dataset,
             roundtrip,
-            args.records,
-            loader_seed(str(args.seed)),
+            records,
+            loader_seed(seed),
         )
         factorized_feature_set = features.get_feature_set_from_name("HalfKAv2^")
         validate_batch_semantics(
@@ -1010,7 +1767,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             model_module,
             ranger_module,
             torch,
-            loader_seed(str(args.seed)),
+            loader_seed(seed),
         )
         network_file, network_bytes = serialize_and_reimport(
             network, root, features, model_module, serialize
@@ -1020,7 +1777,11 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         print(
             "LEGACY PIPELINE E2E PASSED "
-            f"records={args.records} source_sha256={source_net_hash} "
+            f"profile={profile.name} records={records} "
+            f"tools_commit={checkouts['tools'].head} "
+            f"trainer_commit={checkouts['trainer'].head} "
+            f"atomic_commit={checkouts['atomic'].head} "
+            f"source_sha256={source_net_hash} "
             f"data_sha256={data_hash} "
             f"nnue_sha256={network_hash} loss={loss:.9g} "
             f"ft_delta={ft_delta:.9g} fc_delta={fc_delta:.9g} "
@@ -1028,9 +1789,40 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         return 0
     finally:
-        # All native streams are destroyed before this point.  Keep cleanup
-        # strict so a Windows handle leak makes the gate fail visibly.
-        shutil.rmtree(root)
+        try:
+            if python_environment is not None:
+                verify_python_environment_provenance(python_environment)
+            postflight = artifact_fingerprints
+            if source_fingerprint is not None:
+                postflight += (source_fingerprint,)
+            try:
+                verify_file_fingerprints(
+                    postflight,
+                    emit=print,
+                    pass_label="LEGACY PIPELINE ARTIFACT POSTFLIGHT",
+                )
+            except CompilerPreflightError as exc:
+                raise AssertionError(str(exc)) from exc
+            post_checkouts = verify_release_checkouts(
+                lock,
+                tools_root=tools_root,
+                trainer_root=trainer_root,
+                atomic_root=atomic_root,
+                tools_engine=tools_engine,
+                engine=engine,
+                atomic_commit=args.atomic_commit,
+            )
+            print(
+                "LEGACY PIPELINE CHECKOUT POSTFLIGHT "
+                + " ".join(
+                    f"{name}={state.head}"
+                    for name, state in post_checkouts.items()
+                )
+            )
+        finally:
+            # All native streams are destroyed before this point. Keep cleanup
+            # strict so a Windows handle leak makes the gate fail visibly.
+            shutil.rmtree(root)
 
 
 if __name__ == "__main__":
