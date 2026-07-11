@@ -193,6 +193,20 @@ def test_fen_validation_rejects_nonnumeric_move_counters(fen, expected):
     assert pyffish.validate_fen(fen, "atomic") == expected
 
 
+@pytest.mark.parametrize(
+    "fen",
+    [
+        "7k/8/8/8/8/8/8/K7 w - -",
+        "7k/8/8/8/8/8/8/K7 w - - not-a-number 1",
+    ],
+)
+def test_board_backed_apis_reject_invalid_fen(fen):
+    with pytest.raises(ValueError, match="Atomic FEN validation failed"):
+        pyffish.legal_moves("atomic", fen, [])
+    with pytest.raises(ValueError, match="Atomic FEN validation failed"):
+        pyffish.get_fen("atomic", fen, [])
+
+
 def test_fen_validation_reports_the_earliest_invalid_field():
     assert (
         pyffish.validate_fen(

@@ -56,7 +56,7 @@ This block remains pending until all three exact LOS gates pass.
 
 The final clean release build currently reports:
 
-- C++ rules/state `56/56` and shared API `33/33`;
+- C++ rules/state `56/56` and shared API `34/34`;
 - search regressions `13/13` with NNUE disabled and with the frozen network;
 - all eight historical Atomic/Atomic960 perft vectors;
 - all `19/19` focused rule transitions and terminal outcomes.

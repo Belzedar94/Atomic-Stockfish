@@ -261,11 +261,29 @@ function testContractsAndLifetime(ffish) {
   assertThrows(() => ffish.setOptionInt('Threads', 0), 'invalid thread count must fail');
   assertThrows(() => new ffish.Board('chess'), 'non-Atomic Board must fail');
 
+  const invalidFens = [
+    '7k/8/8/8/8/8/8/K7 w - -',
+    '7k/8/8/8/8/8/8/K7 w - - not-a-number 1',
+  ];
+  const liveBoardsBeforeInvalidFen = ffish.debugLiveBoards();
+  invalidFens.forEach((fen) => {
+    assertThrows(() => new ffish.Board('atomic', fen), 'invalid FEN construction must fail');
+    assert.equal(
+      ffish.debugLiveBoards(),
+      liveBoardsBeforeInvalidFen,
+      'failed FEN construction must not commit a Board',
+    );
+  });
+
   const board = new ffish.Board('atomic');
   try {
     const original = board.fen();
     assertThrows(() => board.setFen('not a fen'), 'invalid FEN must throw');
     assert.equal(board.fen(), original, 'setFen failure must be transactional');
+    invalidFens.forEach((fen) => {
+      assertThrows(() => board.setFen(fen), 'strictly invalid FEN must throw');
+      assert.equal(board.fen(), original, 'invalid FEN must not replace the current position');
+    });
   } finally {
     board.delete();
   }

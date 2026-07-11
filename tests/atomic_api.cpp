@@ -8,15 +8,17 @@
 
 #include <array>
 #include <deque>
+#include <exception>
 #include <iostream>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
 
+#include "api/atomic_board.h"
+#include "api/atomic_fen.h"
 #include "api/atomic_notation.h"
 #include "api/atomic_outcome.h"
-#include "api/atomic_fen.h"
 #include "attacks.h"
 #include "bitboard.h"
 #include "position.h"
@@ -252,6 +254,44 @@ void test_fen_validation() {
            "empty FEN must retain the legacy result code");
 }
 
+void test_board_fen_validation_is_transactional() {
+    constexpr std::array<std::string_view, 2> InvalidFens = {
+      "7k/8/8/8/8/8/8/K7 w - -",
+      "7k/8/8/8/8/8/8/K7 w - - not-a-number 1",
+    };
+
+    bool constructorRejectedAll = true;
+    for (const std::string_view fen : InvalidFens)
+    {
+        try
+        {
+            Atomic::Board invalid("atomic", std::string(fen));
+            constructorRejectedAll = false;
+        } catch (const std::exception&)
+        {}
+    }
+
+    Atomic::Board board("atomic");
+    const bool    moved            = board.push("e2e4");
+    const auto    beforeInvalidSet = board.fen();
+    bool          setRejectedAll   = true;
+    for (const std::string_view fen : InvalidFens)
+    {
+        try
+        {
+            board.set_fen(std::string(fen));
+            setRejectedAll = false;
+        } catch (const std::exception&)
+        {}
+
+        setRejectedAll = setRejectedAll && board.fen() == beforeInvalidSet;
+    }
+
+    expect(constructorRejectedAll && moved && setRejectedAll,
+           "validation.board-construction-and-set",
+           "Board must reject invalid FENs without replacing a valid position");
+}
+
 }  // namespace
 
 int main() {
@@ -265,6 +305,7 @@ int main() {
     test_material_fixtures();
     test_checked_squares_and_optional_draws();
     test_fen_validation();
+    test_board_fen_validation_is_transactional();
 
     if (Failures)
     {

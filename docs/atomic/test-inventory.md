@@ -18,9 +18,9 @@ release pass.
 | Surface | Migrated coverage | Current evidence |
 | --- | --- | --- |
 | C++ Atomic rules/state | Atomic SEE, explosion deltas, terminal captures, en passant, promotions, castling/Atomic960, repetition, rule 50, UCI moves, Atomic move-count thresholds and capture-futility eligibility | `56/56` PASS lines and terminal success marker |
-| Shared C++ board API | SAN, outcomes, checked pieces, material, FEN validation and Atomic960 | `33/33` PASS lines and terminal success marker |
+| Shared C++ board API | SAN, outcomes, checked pieces, material, FEN validation and Atomic960 | `34/34` PASS lines and terminal success marker |
 | Historical Python API | Frozen Fairy `test.py` contracts | `22/22`; two removed-variant APIs are classified, not skipped |
-| Extended Python API | Fixtures, perft, errors, transactional calls, wheel layout and concurrent independent calls | `pytest`: `58 passed`; sdist-to-wheel import and PEP 561 discovery passed |
+| Extended Python API | Fixtures, perft, errors, transactional calls, wheel layout and concurrent independent calls | `pytest`: `60 passed`; sdist-to-wheel import and PEP 561 discovery passed |
 | Fixture accounting | Frozen Python, JavaScript and perft source inventory | `58` fixtures, `22` Python source tests, `58` JavaScript source tests, eight perft vectors |
 | CommonJS Board WASM | Full Atomic binding/lifecycle suite | `58` fixtures passed |
 | ES-module Board WASM | Full Atomic binding/lifecycle suite | `58` fixtures passed |
@@ -30,7 +30,7 @@ release pass.
 | XBoard/CECP | Atomic-only negotiation, clocks, state edits, analyze, playother, hard/easy and live ponder cancellation/promotion | complete protocol suite passed |
 | Search repeatability | Two-position Atomic NNUE corpus over increasing node budgets | `12/12`; signature `379531` |
 | Legacy Atomic NNUE | `false`, `true`, `pure`, invalid/truncated recovery, transactional load and byte-exact export | mode contract passed; network SHA-256 pinned |
-| Atomic Syzygy | Atomic magics/suffixes, connected-kings domain 518, real WDL/DTZ, root/interior, Atomic960 eligibility and recoverable paths | 11 fixture headers/hashes, driver `5/5`, production UCI suite with NNUE false/true |
+| Atomic Syzygy | Atomic magics/suffixes, connected-kings domain 518, real WDL/DTZ, root/interior, Atomic960 eligibility and recoverable paths | 13 fixture headers/hashes, driver `5/5`, production UCI suite with NNUE false/true |
 | Full engine UCI/NNUE WASM | Interactive Node launcher, external NNUE, true/pure, perft, terminal positions and pthread operation | integration passed; all four artifact hashes match the reproducible manifest |
 
 The boundary between structural FEN validation and legal-game-history
