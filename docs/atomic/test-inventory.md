@@ -10,14 +10,14 @@ counts.
 
 ## Current executable coverage
 
-The following evidence was reproduced locally on 2026-07-10 by
+The following evidence was reproduced locally on 2026-07-11 by
 `tests/run_hito4.py` in release mode, including the full Node UCI/NNUE WASM
 launcher. The development-only `--allow-missing-wasm` switch cannot produce a
 release pass.
 
 | Surface | Migrated coverage | Current evidence |
 | --- | --- | --- |
-| C++ Atomic rules/state | Atomic SEE, explosion deltas, terminal captures, en passant, promotions, castling/Atomic960, repetition, rule 50, UCI moves | `44/44` PASS lines and terminal success marker |
+| C++ Atomic rules/state | Atomic SEE, explosion deltas, terminal captures, en passant, promotions, castling/Atomic960, repetition, rule 50, UCI moves and Atomic move-count thresholds | `50/50` PASS lines and terminal success marker |
 | Shared C++ board API | SAN, outcomes, checked pieces, material, FEN validation and Atomic960 | `33/33` PASS lines and terminal success marker |
 | Historical Python API | Frozen Fairy `test.py` contracts | `22/22`; two removed-variant APIs are classified, not skipped |
 | Extended Python API | Fixtures, perft, errors, transactional calls, wheel layout and concurrent independent calls | `pytest`: `58 passed`; sdist-to-wheel import and PEP 561 discovery passed |
@@ -28,7 +28,7 @@ release pass.
 | Move generation | Eight historical Atomic/Atomic960 vectors plus focused rule/transition corpus | eight exact perfts and `19/19` focused checks |
 | UCI search | Quiet Atomic checks/evasions, preserved analysis checks, mate-before-rule-50 and stalemate ordering, plus direct and bycatch king explosions, en passant and capture-promotion terminals | `11/11` with the frozen NNUE loaded |
 | XBoard/CECP | Atomic-only negotiation, clocks, state edits, analyze, playother, hard/easy and live ponder cancellation/promotion | complete protocol suite passed |
-| Search repeatability | Two-position Atomic NNUE corpus over increasing node budgets | `12/12`; signature `404217` |
+| Search repeatability | Two-position Atomic NNUE corpus over increasing node budgets | `12/12`; signature `347633` |
 | Legacy Atomic NNUE | `false`, `true`, `pure`, invalid/truncated recovery, transactional load and byte-exact export | mode contract passed; network SHA-256 pinned |
 | Atomic Syzygy | Atomic magics/suffixes, connected-kings domain 518, real WDL/DTZ, root/interior, Atomic960 eligibility and recoverable paths | 11 fixture headers/hashes, driver `5/5`, production UCI suite with NNUE false/true |
 | Full engine UCI/NNUE WASM | Interactive Node launcher, external NNUE, true/pure, perft, terminal positions and pthread operation | integration passed; all four artifact hashes match the reproducible manifest |

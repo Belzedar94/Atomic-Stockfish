@@ -14,6 +14,7 @@
 #include "bitboard.h"
 #include "movegen.h"
 #include "position.h"
+#include "search.h"
 #include "types.h"
 #include "uci_move.h"
 
@@ -443,6 +444,35 @@ bool expect_uci_move_notation() {
     return true;
 }
 
+bool expect_atomic_move_count_thresholds() {
+    struct ThresholdCase {
+        bool improving;
+        int  depth;
+        int  expected;
+    };
+
+    constexpr std::array<ThresholdCase, 6> tests = {
+      {{false, 3, 4}, {false, 4, 7}, {false, 6, 13}, {true, 3, 7}, {true, 4, 10}, {true, 6, 20}}};
+
+    bool ok = true;
+    for (const auto& test : tests)
+    {
+        const int actual = Search::atomic_move_count_pruning_threshold(test.improving, test.depth);
+        if (actual != test.expected)
+        {
+            std::cerr << "FAIL Atomic move-count threshold: improving=" << test.improving
+                      << " depth=" << test.depth << " expected=" << test.expected
+                      << " actual=" << actual << '\n';
+            ok = false;
+        }
+        else
+            std::cout << "PASS Atomic move-count threshold improving=" << test.improving
+                      << " depth=" << test.depth << " threshold=" << actual << '\n';
+    }
+
+    return ok;
+}
+
 }  // namespace
 
 int main() {
@@ -461,11 +491,12 @@ int main() {
     ok &= expect_repetition_state();
     ok &= expect_rule50_state();
     ok &= expect_uci_move_notation();
+    ok &= expect_atomic_move_count_thresholds();
 
     if (!ok)
         return 1;
 
-    constexpr usize TestCount = SeeCases.size() + 3 + 7 + 8 + 14 + 3;
+    constexpr usize TestCount = SeeCases.size() + 3 + 7 + 8 + 14 + 3 + 6;
     std::cout << "Atomic C++ unit tests passed: " << TestCount << "/" << TestCount << '\n';
     return 0;
 }

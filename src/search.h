@@ -58,6 +58,11 @@ class OptionsMap;
 
 namespace Search {
 
+// Fairy's move-count formula specialized with blast_on_capture=1 and walling=0.
+constexpr int atomic_move_count_pruning_threshold(bool improving, Depth depth) {
+    return (5 + depth * depth) / (3 - improving);
+}
+
 struct PVMoves {
     Move  moves[MAX_PLY + 1];
     usize length = 0;

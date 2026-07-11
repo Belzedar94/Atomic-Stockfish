@@ -25,7 +25,7 @@ WORKSPACE_ROOT = REPO_ROOT.parent
 EXPECTED_NET_SHA256 = (
     "99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f92a04a6"
 )
-EXPECTED_SIGNATURE = "404217"
+EXPECTED_SIGNATURE = "347633"
 
 
 class GateFailure(RuntimeError):
@@ -268,8 +268,8 @@ def main() -> int:
             "C++ Atomic rule/state units",
             [str(paths["cpp_unit"])],
             timeout=args.timeout,
-            required_markers=("Atomic C++ unit tests passed: 44/44",),
-            expected_pass_lines=44,
+            required_markers=("Atomic C++ unit tests passed: 50/50",),
+            expected_pass_lines=50,
         )
         run_step(
             "C++ shared Atomic API units",
