@@ -77,6 +77,11 @@ pyffish = Extension(
     "pyffish",
     sources=SOURCES,
     depends=HEADERS,
+    include_dirs=[
+        str(ROOT / "src"),
+        str(ROOT / "src" / "api"),
+        str(ROOT / "src" / "syzygy"),
+    ],
     define_macros=define_macros,
     extra_compile_args=compile_args,
     libraries=["shell32"] if platform.system() == "Windows" else [],
