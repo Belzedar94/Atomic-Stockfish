@@ -142,13 +142,21 @@ color-swapped pairs. Each stopped only after `Total > 100` and exact displayed
 | 10+0.1 | 102 | 34-6-62 | +97.88 +/-41.2 | `[0,1,23,25,2]` | 60.78% | 0 / 0 | 100.0% |
 | 30+0.3 | 104 | 35-8-61 | +92.31 +/-42.3 | `[0,2,21,29,0]` | 58.65% | 0 / 0 | 100.0% |
 
-The complete logs are versioned beside this record:
+The complete logs are versioned beside this record, normalized from the
+PowerShell capture encoding to reviewable UTF-8/LF without changing their
+textual contents:
+
+The startup `Variant template ... does not exist` / `NativeCommandError`
+diagnostics are emitted while the shared `variants.ini` enumerates non-Atomic
+templates that this specialized engine intentionally does not expose. The
+requested `atomic` template loads, every match continues normally, and the
+recorded time-loss counters remain zero for both engines.
 
 | Log | Bytes | SHA-256 |
 | --- | ---: | --- |
-| `evidence/hito6-movecount/tc1-2000-20.log` | 195,278 | `9B397ACDB97296C9887C6E68DD4DF32CE5452AC7F1292A8F74AD6A8D20F1C105` |
-| `evidence/hito6-movecount/tc2-10000-100.log` | 154,806 | `F2F7E7BEA03FE0A85A787853BBE4BA8971C8A1A128AF67D3BD227379AA1D0326` |
-| `evidence/hito6-movecount/tc3-30000-300.log` | 166,774 | `2A85EC6276B6E9AF32F233DC50FDA549B36D7E4C2DEA5837A4A14401060121E8` |
+| `evidence/hito6-movecount/tc1-2000-20.log` | 96,482 | `9F8327D11E092071C8D579A70A163C0886AF5508314CF8D3EF78420342C3C3DE` |
+| `evidence/hito6-movecount/tc2-10000-100.log` | 76,485 | `9ED196A835E36EA8DEE5C78FD04A05DE527ECC0B24BB04EDCFE3F2BC64CFB3FA` |
+| `evidence/hito6-movecount/tc3-30000-300.log` | 82,452 | `9C728F5CE3A3530F9C36E13F152E2C178D66018BFF5CB9EFE65CCB1916A733A4` |
 
 All three matches used the final clean rebuilt binary, size 4,262,793 and
 SHA-256

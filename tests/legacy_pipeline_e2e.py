@@ -37,6 +37,9 @@ PADDING_OFFSET = 71
 LEGACY_NNUE_VERSION = 0x7AF32F20
 LEGACY_NNUE_ARCHITECTURE = 0x3C103E72
 SOURCE_NET_SHA256 = "99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f92a04a6"
+EXPECTED_PURE_DATA_SHA256 = (
+    "7de72b1385dbc8e37312a513d1cf4c7d99f889ec8b747f548ed32e8d7a261a2d"
+)
 TOOLS_PURE_OPTION = "option name Use NNUE type combo default true var true var false var pure"
 DEFAULT_RECORDS = 8
 DEFAULT_SEED = "20260711"
@@ -973,6 +976,15 @@ def main(argv: Sequence[str] | None = None) -> int:
                 f"first={sha256(first)}, second={sha256(second)}"
             )
         data_hash = sha256(first)
+        if (
+            args.records == DEFAULT_RECORDS
+            and args.seed == DEFAULT_SEED
+            and data_hash != EXPECTED_PURE_DATA_SHA256
+        ):
+            raise AssertionError(
+                "pure generation fixture changed or Use NNUE=pure was not applied: "
+                f"expected {EXPECTED_PURE_DATA_SHA256}, got {data_hash}"
+            )
 
         roundtrip, plain = convert_roundtrip(tools_engine, first_path, root)
         plain_records = parse_plain_records(plain, args.records)
