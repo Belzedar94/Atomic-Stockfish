@@ -1,9 +1,10 @@
 # Hito 6 search integration validation
 
 Hito 6 integrates Atomic search policy in small, attributable blocks. This
-record is cumulative: block 1 is accepted, while the milestone and its PR are
-not complete until the remaining search blocks and the full release matrix are
-closed.
+record is cumulative: block 1 is accepted and block 2 has passed correctness,
+pipeline and speed validation. Block 2 is not accepted until its three strength
+gates pass; the milestone and its PR remain open until the remaining search
+blocks and the full release matrix are closed.
 
 `Use NNUE=true` is the only playing mode used for speed and strength. `pure`
 remains a data-generation mode: its option and network-loading contract is
@@ -30,12 +31,33 @@ against the clean control. Fairy's historical change was relative (`9` to `6`),
 so copying its final absolute value into the modern search disabled eleven
 additional plies of pruning.
 
+## Block 2: capture-futility safety
+
+Modern Stockfish's main-search capture futility prices only the victim on the
+destination square. In Atomic that can be an unsafe lower estimate when the
+explosion also removes opposing non-pawns; en passant has no victim on the
+destination square at all. The specialized guard therefore retains the
+orthodox pruning only for normal captures whose blast ring has no non-pawn
+bycatch. It excludes the capturer's origin square and adjacent pawns, which are
+immune to the explosion.
+
+Six direct C++ cases cover a normal capture (including capturer exclusion),
+pawn immunity, non-pawn bycatch, en passant, capture-promotion and a quiet move.
+Two depth-two UCI regressions pin the previously pruned `e6d5` non-pawn blast
+and `e4d3` en passant blast in both classical and frozen-NNUE modes. The
+qsearch futility policy is deliberately unchanged and will be evaluated as a
+separate search block.
+
+The current signature is `379531`, up from block 1's `347633`, because the
+engine now searches explosive tactical replies that the unsafe bound discarded.
+This block remains pending until all three exact LOS gates pass.
+
 ## Correctness snapshot
 
 The final clean release build currently reports:
 
-- C++ rules/state `50/50` and shared API `33/33`;
-- search regressions `11/11` with NNUE disabled and with the frozen network;
+- C++ rules/state `56/56` and shared API `33/33`;
+- search regressions `13/13` with NNUE disabled and with the frozen network;
 - all eight historical Atomic/Atomic960 perft vectors;
 - all `19/19` focused rule transitions and terminal outcomes.
 
@@ -50,8 +72,8 @@ The independent build matrix also passed:
 - Windows MinGW release and debug/assert builds;
 - a Python `sdist` rebuilt into an ABI3 wheel, isolated import and PEP 561
   discovery with mypy;
-- Linux GCC 15.2 and Clang 20 portable release builds, including `50/50` C++
-  units, `33/33` API units, both perft suites and `11/11` NNUE search cases;
+- Linux GCC 15.2 and Clang 20 portable release builds, including `56/56` C++
+  units, both perft suites and `13/13` search cases in classical and NNUE modes;
 - Linux Clang 20 ASan+UBSan over the same rules/API/perft/search surfaces;
 - Linux Clang 20 TSan over the C++ rules, shared API and live XBoard suite.
 
@@ -100,7 +122,7 @@ from an existing `.nnue` and the production general dataset validator remain
 separate trainer/tools release debts; this gate does not claim to implement
 either feature.
 
-## Selectivity and speed
+## Block 1 selectivity and speed
 
 At fixed depth 13, the deterministic Atomic signature changed from `404217` to
 `347633`, a `14.0%` smaller tree. On CPU 0, the clean five-run snapshot was:

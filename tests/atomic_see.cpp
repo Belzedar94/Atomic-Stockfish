@@ -473,6 +473,61 @@ bool expect_atomic_move_count_thresholds() {
     return ok;
 }
 
+bool expect_atomic_capture_futility_eligibility() {
+    struct EligibilityCase {
+        std::string_view name;
+        std::string_view fen;
+        std::string_view move;
+        bool             expected;
+    };
+
+    constexpr std::array<EligibilityCase, 6> tests = {{
+      {"normal victim only", "7k/8/8/8/3p4/2B5/8/K7 w - - 0 1", "c3d4", true},
+      {"adjacent pawn survives", "7k/8/8/8/3pP3/2B5/8/K7 w - - 0 1", "c3d4", true},
+      {"non-pawn explosion bycatch", "7k/8/8/8/3pR3/2B5/8/K7 w - - 0 1", "c3d4", false},
+      {"en passant", "7k/8/8/3pP3/8/8/8/K7 w - d6 0 1", "e5d6", false},
+      {"capture promotion", "k5br/6P1/8/8/8/8/8/K7 w - - 0 1", "g7h8q", false},
+      {"quiet normal move",
+       "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", "e2e4", false},
+    }};
+
+    bool ok = true;
+    for (const auto& test : tests)
+    {
+        Position  pos;
+        StateInfo state{};
+        if (pos.set(std::string(test.fen), false, &state))
+        {
+            std::cerr << "FAIL Atomic capture-futility eligibility " << test.name
+                      << ": invalid fixture\n";
+            ok = false;
+            continue;
+        }
+
+        const Move move = UCI::to_move(pos, std::string(test.move));
+        if (!move)
+        {
+            std::cerr << "FAIL Atomic capture-futility eligibility " << test.name
+                      << ": move is not legal\n";
+            ok = false;
+            continue;
+        }
+
+        const bool actual = Search::atomic_capture_futility_eligible(pos, move);
+        if (actual != test.expected)
+        {
+            std::cerr << "FAIL Atomic capture-futility eligibility " << test.name
+                      << ": expected=" << test.expected << " actual=" << actual << '\n';
+            ok = false;
+        }
+        else
+            std::cout << "PASS Atomic capture-futility eligibility " << test.name
+                      << " eligible=" << actual << '\n';
+    }
+
+    return ok;
+}
+
 }  // namespace
 
 int main() {
@@ -492,11 +547,12 @@ int main() {
     ok &= expect_rule50_state();
     ok &= expect_uci_move_notation();
     ok &= expect_atomic_move_count_thresholds();
+    ok &= expect_atomic_capture_futility_eligibility();
 
     if (!ok)
         return 1;
 
-    constexpr usize TestCount = SeeCases.size() + 3 + 7 + 8 + 14 + 3 + 6;
+    constexpr usize TestCount = SeeCases.size() + 3 + 7 + 8 + 14 + 3 + 6 + 6;
     std::cout << "Atomic C++ unit tests passed: " << TestCount << "/" << TestCount << '\n';
     return 0;
 }

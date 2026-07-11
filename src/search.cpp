@@ -32,6 +32,7 @@
 #include <string>
 #include <utility>
 
+#include "attacks.h"
 #include "bitboard.h"
 #include "evaluate.h"
 #include "history.h"
@@ -63,6 +64,15 @@ void syzygy_extend_pv(const OptionsMap&            options,
                       Value&                       v);
 
 using namespace Search;
+
+bool Search::atomic_capture_futility_eligible(const Position& pos, Move move) {
+    if (move.type_of() != NORMAL || !pos.capture_stage(move))
+        return false;
+
+    const Bitboard nonPawnBycatch = Attacks::attacks_bb<KING>(move.to_sq()) & pos.pieces()
+                                  & ~pos.pieces(PAWN) & ~square_bb(move.from_sq());
+    return !nonPawnBycatch;
+}
 
 namespace {
 
@@ -1184,7 +1194,8 @@ moves_loop:  // When in check, search starts here
                 int   captHist = captureHistory[movedPiece][move.to_sq()][type_of(capturedPiece)];
 
                 // Futility pruning for captures
-                if (!atomicWin && !givesCheck && lmrDepth < 7)
+                if (!atomicWin && !givesCheck && lmrDepth < 7
+                    && atomic_capture_futility_eligible(pos, move))
                 {
                     Value futilityValue = ss->staticEval + 231 + 232 * lmrDepth
                                         + PieceValue[capturedPiece] + 131 * captHist / 1024;

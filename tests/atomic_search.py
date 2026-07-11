@@ -120,6 +120,22 @@ SEARCH_CASES = (
         expected_mate=1,
         expected_pv=("g7h8q",),
     ),
+    SearchCase(
+        name="main capture futility preserves explosive non-pawn bycatch",
+        fen="2n5/7k/1p2p2p/Q2PQ1R1/2B1R3/8/8/K5N1 w - - 0 1",
+        searchmove="g1h3",
+        expected_mate=None,
+        expected_pv=("g1h3", "e6d5"),
+        depth=2,
+    ),
+    SearchCase(
+        name="main capture futility preserves explosive en passant bycatch",
+        fen="2n5/7k/1p6/Q7/4p3/2Q5/2RP4/K7 w - - 0 1",
+        searchmove="d2d4",
+        expected_mate=None,
+        expected_pv=("d2d4", "e4d3"),
+        depth=2,
+    ),
 )
 
 

@@ -43,7 +43,9 @@ corrected behavior.
 Hito 6 subsequently changed the current signature to `347633` through the
 independently gated Atomic move-count pruning block. The table above remains
 the historical Hito 4 closeout record; current runners use the Hito 6
-signature documented in `hito6-validation.md`.
+signature documented in `hito6-validation.md`. The second Hito 6 search block,
+which protects explosive captures from orthodox futility pruning, moved the
+live signature again to `379531`; `347633` remains the block-one artifact.
 
 ## Validation snapshot
 

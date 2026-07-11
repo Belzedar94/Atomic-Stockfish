@@ -25,7 +25,7 @@ WORKSPACE_ROOT = REPO_ROOT.parent
 EXPECTED_NET_SHA256 = (
     "99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f92a04a6"
 )
-EXPECTED_SIGNATURE = "347633"
+EXPECTED_SIGNATURE = "379531"
 
 
 class GateFailure(RuntimeError):
@@ -268,8 +268,8 @@ def main() -> int:
             "C++ Atomic rule/state units",
             [str(paths["cpp_unit"])],
             timeout=args.timeout,
-            required_markers=("Atomic C++ unit tests passed: 50/50",),
-            expected_pass_lines=50,
+            required_markers=("Atomic C++ unit tests passed: 56/56",),
+            expected_pass_lines=56,
         )
         run_step(
             "C++ shared Atomic API units",
@@ -443,6 +443,19 @@ await suite.runSuite(module, 'ES module/WASM');
             required_markers=("Atomic perft and rule-transition suite passed",),
         )
         run_step(
+            "Atomic terminal-search regressions without NNUE",
+            [
+                python,
+                str(REPO_ROOT / "tests/atomic_search.py"),
+                "--candidate",
+                str(native),
+                "--use-nnue",
+                "false",
+            ],
+            timeout=args.timeout,
+            required_markers=("Atomic search regressions passed: 13/13",),
+        )
+        run_step(
             "Atomic terminal-search regressions with NNUE",
             [
                 python,
@@ -455,7 +468,7 @@ await suite.runSuite(module, 'ES module/WASM');
                 "true",
             ],
             timeout=args.timeout,
-            required_markers=("Atomic search regressions passed: 11/11",),
+            required_markers=("Atomic search regressions passed: 13/13",),
         )
         run_step(
             "XBoard/CECP Atomic, analyze and live ponder",
