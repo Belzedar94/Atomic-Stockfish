@@ -1,10 +1,9 @@
 # Hito 6 search integration validation
 
 Hito 6 integrates Atomic search policy in small, attributable blocks. This
-record is cumulative: block 1 is accepted and block 2 has passed correctness,
-pipeline and speed validation. Block 2 is not accepted until its three strength
-gates pass; the milestone and its PR remain open until the remaining search
-blocks and the full release matrix are closed.
+record is cumulative: blocks 1 and 2 are accepted after correctness, pipeline,
+speed and all three exact strength gates. The milestone and its PR remain open
+until the remaining search blocks and the full release matrix are closed.
 
 `Use NNUE=true` is the only playing mode used for speed and strength. `pure`
 remains a data-generation mode: its option and network-loading contract is
@@ -50,7 +49,8 @@ separate search block.
 
 The current signature is `379531`, up from block 1's `347633`, because the
 engine now searches explosive tactical replies that the unsafe bound discarded.
-This block remains pending until all three exact LOS gates pass.
+All three exact LOS gates passed for this block; the immutable artifact and
+complete logs are identified below.
 
 ## Correctness snapshot
 
@@ -163,8 +163,8 @@ futility block produced:
 | Frozen Fairy baseline | 1,104,296 | 4,477,632 | `1AE6D680F03128C8404F31A3F264F28B132B557ED3A91A6445EC563A7A33F623` |
 
 The clean ratio is `1.3432`, or `+34.32%`; the candidate is 213,819 bytes
-smaller. This passes the speed gate. It does not replace the three strength
-gates below, which remain mandatory for block 2.
+smaller. This passes the speed gate; the independently executed strength gates
+are recorded below.
 
 ## Normative strength gates
 
@@ -175,6 +175,8 @@ the frozen network SHA-256
 `Use NNUE=true`, one thread, 512 MiB hash, four workers, the Atomic book and
 color-swapped pairs. Each stopped only after `Total > 100` and exact displayed
 `LOS: 100.0%`.
+
+### Block 1: Atomic move-count pruning
 
 | TC | Total | W-L-D | Elo (95%) | Pentanomial | Draws | Time losses | LOS |
 | --- | ---: | ---: | ---: | --- | ---: | ---: | ---: |
@@ -203,3 +205,30 @@ SHA-256
 `DF7BB853E5DF7FC4F418F49F5AF8135B892D388D44A7E6D5D4CDE44E2883FDAE`.
 The logs therefore exercise the exact artifact identified by this record,
 without transferring results from a semantically equivalent earlier build.
+
+### Block 2: capture-futility safety
+
+The final clean capture-futility artifact passed every control at `Total 108`.
+The normalized Elo values were respectively `137.20`, `147.38` and `158.96`.
+
+| TC | Total | W-L-D | Elo (95%) | Pentanomial | Draws | Time losses | LOS |
+| --- | ---: | ---: | ---: | --- | ---: | ---: | ---: |
+| 2+0.02 | 108 | 51-18-39 | +109.66 +/-53.9 | `[0,2,24,21,7]` | 36.11% | 0 / 0 | 100.0% |
+| 10+0.1 | 108 | 44-12-52 | +106.13 +/-47.4 | `[0,3,20,27,4]` | 48.15% | 0 / 0 | 100.0% |
+| 30+0.3 | 108 | 38-7-63 | +102.61 +/-41.5 | `[0,0,24,29,1]` | 58.33% | 0 / 0 | 100.0% |
+
+Each raw capture ended with the wrapper's exact
+`Atomic LOS gate: PASS Total: 108 LOS: 100.0% complete_pairs: True` marker.
+The versioned copies are UTF-8/LF normalizations of those captures:
+
+| Log | Bytes | SHA-256 |
+| --- | ---: | --- |
+| `evidence/hito6-capture-futility/tc1-2000-20.log` | 78,813 | `EBE4A16B6832375114633EB1F0106EA74A98D5EF6E6E77FBF4A20D162F298465` |
+| `evidence/hito6-capture-futility/tc2-10000-100.log` | 79,566 | `7E0DCCF36AF5E6E96249BEA1454EC7A034A6AAB1C19C91D0A5A55FF9B3776794` |
+| `evidence/hito6-capture-futility/tc3-30000-300.log` | 85,748 | `977927475E2AEC55C221246E86E07696AB94CC79DE30C8F5F3ACE2924E39C406` |
+
+All three matches used the 4,263,813-byte artifact with SHA-256
+`CB35D57E3AD107C279781AF3E764EC412D59341C21D5FDC75AFAB08239CFFC14`.
+The logs identify that exact candidate path and record `EvalFile`,
+`Use NNUE=true`, `Threads=1`, `Hash=512`, Atomic book use, four workers and
+the absence of SPRT. Both engines finished with zero time losses.
