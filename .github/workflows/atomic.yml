@@ -247,6 +247,7 @@ jobs:
           --tools-engine .pipeline/tools/src/stockfish
           --engine src/atomic-stockfish
           --atomic-commit "$(git rev-parse HEAD)"
+          --allow-unresolved-hashes
       - name: Measure unresolved synthetic pipeline fixture
         if: steps.pipeline_lock.outputs.synthetic_hashes_resolved == 'false'
         env:

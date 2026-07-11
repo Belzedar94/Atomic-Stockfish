@@ -40,7 +40,9 @@ from atomic_compiler_preflight import (
 )
 from legacy_pipeline_build_manifest import verify_build_manifest
 from legacy_pipeline_lock import (
+    CheckoutState,
     DEFAULT_LOCK_FILE,
+    PipelineLock,
     PipelineProfile,
     find_checkout_root,
     load_pipeline_lock,
@@ -1584,6 +1586,30 @@ def resolve_profile_arguments(
     return records, seed
 
 
+def verify_pipeline_checkouts(
+    lock: PipelineLock,
+    *,
+    tools_root: Path,
+    trainer_root: Path,
+    atomic_root: Path,
+    tools_engine: Path,
+    engine: Path,
+    atomic_commit: str | None,
+    measure_synthetic_fixture: bool,
+) -> Mapping[str, CheckoutState]:
+    """Apply the same narrow measurement exception before and after E2E."""
+    return verify_release_checkouts(
+        lock,
+        tools_root=tools_root,
+        trainer_root=trainer_root,
+        atomic_root=atomic_root,
+        tools_engine=tools_engine,
+        engine=engine,
+        atomic_commit=atomic_commit,
+        allow_unresolved_hashes=measure_synthetic_fixture,
+    )
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     tools_engine = require_file(args.tools_engine, "tools engine")
@@ -1603,7 +1629,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     profile = lock.profiles[args.profile]
     records, seed = resolve_profile_arguments(args, profile)
     tools_root = find_checkout_root(tools_engine, "tools engine")
-    checkouts = verify_release_checkouts(
+    checkouts = verify_pipeline_checkouts(
         lock,
         tools_root=tools_root,
         trainer_root=trainer_root,
@@ -1611,6 +1637,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         tools_engine=tools_engine,
         engine=engine,
         atomic_commit=args.atomic_commit,
+        measure_synthetic_fixture=args.measure_synthetic_fixture,
     )
     library_suffix = ".dll" if sys.platform == "win32" else (
         ".dylib" if sys.platform == "darwin" else ".so"
@@ -1803,7 +1830,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 )
             except CompilerPreflightError as exc:
                 raise AssertionError(str(exc)) from exc
-            post_checkouts = verify_release_checkouts(
+            post_checkouts = verify_pipeline_checkouts(
                 lock,
                 tools_root=tools_root,
                 trainer_root=trainer_root,
@@ -1811,6 +1838,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 tools_engine=tools_engine,
                 engine=engine,
                 atomic_commit=args.atomic_commit,
+                measure_synthetic_fixture=args.measure_synthetic_fixture,
             )
             print(
                 "LEGACY PIPELINE CHECKOUT POSTFLIGHT "

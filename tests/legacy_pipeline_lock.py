@@ -404,11 +404,15 @@ def verify_release_checkouts(
     tools_engine: Path | None = None,
     engine: Path | None = None,
     atomic_commit: str | None = None,
+    allow_unresolved_hashes: bool = False,
 ) -> Mapping[str, CheckoutState]:
+    _require_resolution_policy(
+        lock,
+        operation="verify-checkouts",
+        allow_unresolved_hashes=allow_unresolved_hashes,
+    )
     tools_pin = lock.repositories["tools"]
     trainer_pin = lock.repositories["trainer"]
-    if not tools_pin.resolved or not trainer_pin.resolved:
-        raise AssertionError("release checkout verification requires resolved pins")
     if tools_engine is not None:
         require_file_within(tools_engine, tools_root, "tools engine")
     if engine is not None:
@@ -426,18 +430,19 @@ def verify_release_checkouts(
     }
 
 
-def _write_github_outputs(
+def _require_resolution_policy(
     lock: PipelineLock,
-    path: Path,
     *,
+    operation: str,
     allow_unresolved_hashes: bool = False,
-) -> None:
+) -> bool:
+    """Enforce the single narrow bootstrap exception used before measurement."""
     unresolved_repositories = [
         name for name, pin in lock.repositories.items() if not pin.resolved
     ]
     if unresolved_repositories:
         raise AssertionError(
-            "github-outputs requires resolved repository pins: "
+            f"{operation} requires resolved repository pins: "
             + ", ".join(sorted(unresolved_repositories))
         )
     unresolved_non_synthetic_profiles = [
@@ -447,7 +452,7 @@ def _write_github_outputs(
     ]
     if unresolved_non_synthetic_profiles:
         raise AssertionError(
-            "github-outputs only permits unresolved synthetic-ci hashes; "
+            f"{operation} only permits unresolved synthetic-ci hashes; "
             "unresolved profiles: "
             + ", ".join(sorted(unresolved_non_synthetic_profiles))
         )
@@ -457,6 +462,20 @@ def _write_github_outputs(
             "synthetic-ci hashes are unresolved; pass "
             "--allow-unresolved-hashes only for the measurement bootstrap"
         )
+    return synthetic_hashes_resolved
+
+
+def _write_github_outputs(
+    lock: PipelineLock,
+    path: Path,
+    *,
+    allow_unresolved_hashes: bool = False,
+) -> None:
+    synthetic_hashes_resolved = _require_resolution_policy(
+        lock,
+        operation="github-outputs",
+        allow_unresolved_hashes=allow_unresolved_hashes,
+    )
     lines: list[str] = []
     for name in ("tools", "trainer"):
         pin = lock.repositories[name]
@@ -500,14 +519,21 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     verify_parser.add_argument("--tools-engine", type=Path)
     verify_parser.add_argument("--engine", type=Path)
     verify_parser.add_argument("--atomic-commit")
+    verify_parser.add_argument(
+        "--allow-unresolved-hashes",
+        action="store_true",
+        help=(
+            "allow only unresolved synthetic-ci fixture hashes during the "
+            "pre-measurement clean-checkout gate; repository pins and every "
+            "other profile remain fail-closed"
+        ),
+    )
     return parser.parse_args(argv)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
-    allow_placeholders = (
-        args.command == "github-outputs" and args.allow_unresolved_hashes
-    )
+    allow_placeholders = args.allow_unresolved_hashes
     lock = load_pipeline_lock(
         args.lock_file, allow_placeholders=allow_placeholders
     )
@@ -526,6 +552,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         tools_engine=args.tools_engine,
         engine=args.engine,
         atomic_commit=args.atomic_commit,
+        allow_unresolved_hashes=args.allow_unresolved_hashes,
     )
     print(
         "LEGACY PIPELINE CHECKOUTS VERIFIED "

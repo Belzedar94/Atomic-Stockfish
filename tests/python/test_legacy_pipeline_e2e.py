@@ -30,6 +30,42 @@ class FakeDistribution:
         return self.root / entry
 
 
+@pytest.mark.parametrize("measurement", (False, True))
+def test_e2e_checkout_verification_forwards_measurement_policy(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    measurement: bool,
+) -> None:
+    observed: list[bool] = []
+
+    def verify(lock: object, **arguments: object) -> dict[str, object]:
+        del lock
+        observed.append(bool(arguments.pop("allow_unresolved_hashes")))
+        assert arguments == {
+            "tools_root": tmp_path / "tools",
+            "trainer_root": tmp_path / "trainer",
+            "atomic_root": tmp_path / "atomic",
+            "tools_engine": tmp_path / "tools" / "stockfish",
+            "engine": tmp_path / "atomic" / "atomic-stockfish",
+            "atomic_commit": "a" * 40,
+        }
+        return {}
+
+    monkeypatch.setattr(pipeline, "verify_release_checkouts", verify)
+    pipeline.verify_pipeline_checkouts(
+        object(),
+        tools_root=tmp_path / "tools",
+        trainer_root=tmp_path / "trainer",
+        atomic_root=tmp_path / "atomic",
+        tools_engine=tmp_path / "tools" / "stockfish",
+        engine=tmp_path / "atomic" / "atomic-stockfish",
+        atomic_commit="a" * 40,
+        measure_synthetic_fixture=measurement,
+    )
+
+    assert observed == [measurement]
+
+
 def fake_python_environment(
     tmp_path: Path,
 ) -> tuple[

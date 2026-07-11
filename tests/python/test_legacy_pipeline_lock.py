@@ -299,6 +299,181 @@ def test_github_outputs_bootstrap_rejects_other_unresolved_profile_hashes(
         )
 
 
+def _stub_clean_checkouts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def clean_checkout(
+        root: Path, label: str, expected_commit: str | None = None
+    ) -> pipeline_lock.CheckoutState:
+        del label
+        return pipeline_lock.CheckoutState(
+            root=root.resolve(), head=expected_commit or "c" * 40
+        )
+
+    monkeypatch.setattr(
+        pipeline_lock, "enforce_clean_checkout", clean_checkout
+    )
+
+
+def test_verify_checkouts_can_bootstrap_only_unresolved_synthetic_hashes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    document = resolved_document()
+    document["profiles"]["synthetic-ci"].update(
+        source_net_sha256=pipeline_lock.ZERO_SHA256,
+        data_sha256=pipeline_lock.ZERO_SHA256,
+        hashes_resolved=False,
+        placeholder="REPLACE_WITH_SYNTHETIC_HASHES",
+    )
+    lock_path = write_document(tmp_path / "lock.json", document)
+    lock = pipeline_lock.load_pipeline_lock(
+        lock_path, allow_placeholders=True
+    )
+    _stub_clean_checkouts(monkeypatch)
+
+    states = pipeline_lock.verify_release_checkouts(
+        lock,
+        tools_root=tmp_path / "tools",
+        trainer_root=tmp_path / "trainer",
+        atomic_root=tmp_path / "atomic",
+        allow_unresolved_hashes=True,
+    )
+
+    assert set(states) == {"tools", "trainer", "atomic"}
+
+
+def test_verify_checkouts_rejects_unresolved_synthetic_without_bootstrap(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    document = resolved_document()
+    document["profiles"]["synthetic-ci"].update(
+        source_net_sha256=pipeline_lock.ZERO_SHA256,
+        data_sha256=pipeline_lock.ZERO_SHA256,
+        hashes_resolved=False,
+        placeholder="REPLACE_WITH_SYNTHETIC_HASHES",
+    )
+    lock_path = write_document(tmp_path / "lock.json", document)
+    lock = pipeline_lock.load_pipeline_lock(
+        lock_path, allow_placeholders=True
+    )
+    _stub_clean_checkouts(monkeypatch)
+
+    with pytest.raises(AssertionError, match="hashes are unresolved"):
+        pipeline_lock.verify_release_checkouts(
+            lock,
+            tools_root=tmp_path / "tools",
+            trainer_root=tmp_path / "trainer",
+            atomic_root=tmp_path / "atomic",
+        )
+
+
+def test_verify_checkouts_bootstrap_rejects_unresolved_repository_pins(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    lock_path = write_document(tmp_path / "lock.json", placeholder_document())
+    lock = pipeline_lock.load_pipeline_lock(
+        lock_path, allow_placeholders=True
+    )
+    _stub_clean_checkouts(monkeypatch)
+
+    with pytest.raises(
+        AssertionError,
+        match="verify-checkouts requires resolved repository pins: tools, trainer",
+    ):
+        pipeline_lock.verify_release_checkouts(
+            lock,
+            tools_root=tmp_path / "tools",
+            trainer_root=tmp_path / "trainer",
+            atomic_root=tmp_path / "atomic",
+            allow_unresolved_hashes=True,
+        )
+
+
+def test_verify_checkouts_bootstrap_rejects_unresolved_strong_local(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    document = resolved_document()
+    document["profiles"]["strong-local"].update(
+        source_net_sha256=pipeline_lock.ZERO_SHA256,
+        data_sha256=pipeline_lock.ZERO_SHA256,
+        hashes_resolved=False,
+        placeholder="REPLACE_WITH_STRONG_LOCAL_HASHES",
+    )
+    lock_path = write_document(tmp_path / "lock.json", document)
+    lock = pipeline_lock.load_pipeline_lock(
+        lock_path, allow_placeholders=True
+    )
+    _stub_clean_checkouts(monkeypatch)
+
+    with pytest.raises(
+        AssertionError,
+        match="verify-checkouts only permits unresolved synthetic-ci hashes",
+    ):
+        pipeline_lock.verify_release_checkouts(
+            lock,
+            tools_root=tmp_path / "tools",
+            trainer_root=tmp_path / "trainer",
+            atomic_root=tmp_path / "atomic",
+            allow_unresolved_hashes=True,
+        )
+
+
+def test_verify_checkouts_cli_loads_and_forwards_measurement_bootstrap(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    document = resolved_document()
+    document["profiles"]["synthetic-ci"].update(
+        source_net_sha256=pipeline_lock.ZERO_SHA256,
+        data_sha256=pipeline_lock.ZERO_SHA256,
+        hashes_resolved=False,
+        placeholder="REPLACE_WITH_SYNTHETIC_HASHES",
+    )
+    lock_path = write_document(tmp_path / "lock.json", document)
+
+    def verify(
+        lock: pipeline_lock.PipelineLock, **arguments: object
+    ) -> dict[str, pipeline_lock.CheckoutState]:
+        assert lock.profiles["synthetic-ci"].hashes_resolved is False
+        assert arguments.pop("allow_unresolved_hashes") is True
+        assert set(arguments) == {
+            "tools_root",
+            "trainer_root",
+            "atomic_root",
+            "tools_engine",
+            "engine",
+            "atomic_commit",
+        }
+        return {
+            name: pipeline_lock.CheckoutState(
+                root=tmp_path / name, head=character * 40
+            )
+            for name, character in (
+                ("tools", "a"),
+                ("trainer", "b"),
+                ("atomic", "c"),
+            )
+        }
+
+    monkeypatch.setattr(pipeline_lock, "verify_release_checkouts", verify)
+    assert pipeline_lock.main(
+        [
+            "--lock-file",
+            str(lock_path),
+            "verify-checkouts",
+            "--tools-root",
+            "tools",
+            "--trainer-root",
+            "trainer",
+            "--atomic-root",
+            "atomic",
+            "--allow-unresolved-hashes",
+        ]
+    ) == 0
+    assert "LEGACY PIPELINE CHECKOUTS VERIFIED" in capsys.readouterr().out
+
+
 def run_git(root: Path, *arguments: str) -> str:
     result = subprocess.run(
         ["git", "-C", str(root), *arguments],

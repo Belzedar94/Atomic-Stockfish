@@ -31,7 +31,7 @@ release pass.
 | XBoard/CECP | Atomic-only negotiation, clocks, state edits, analyze, playother, hard/easy and live ponder cancellation/promotion | complete protocol suite passed |
 | Search repeatability | Two-position Atomic NNUE corpus over increasing node budgets | `12/12`; signature `338376` |
 | Legacy Atomic NNUE | `false`, `true`, `pure`, invalid/truncated recovery, transactional load and byte-exact export | mode contract passed; network SHA-256 pinned |
-| Pipeline reproducibility | Machine-readable sibling commits, tracked clean-build recipes, strict build manifests, exact HEAD/clean-tree/artifact pre/postflight, pinned Python runtime/dependency provenance, locked strong-local fixture and trainer-generated synthetic CI fixture | lock/build/profile units `69/69`; public job fails closed while the measured synthetic hashes remain staged |
+| Pipeline reproducibility | Machine-readable sibling commits, tracked clean-build recipes, strict build manifests, exact HEAD/clean-tree/artifact pre/postflight, pinned Python runtime/dependency provenance, locked strong-local fixture and trainer-generated synthetic CI fixture | lock/build/profile units `76/76`; public job fails closed while the measured synthetic hashes remain staged |
 | Atomic Syzygy | Atomic magics/suffixes, connected-kings domain 518, real WDL/DTZ, root/interior, Atomic960 eligibility and recoverable paths | same-checkout Makefile driver; 13 fixture headers/hashes, driver `5/5`, production UCI suite with NNUE false/true |
 | Full engine UCI/NNUE WASM | Interactive Node launcher, external NNUE, true/pure, perft, terminal positions and pthread operation | integration passed; all four artifact hashes match the reproducible manifest |
 
