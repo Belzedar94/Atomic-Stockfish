@@ -749,9 +749,9 @@ Value Search::Worker::search(
     SearchedList quietsSearched;
 
     // Step 1. Initialize node
-    ss->inCheck   = pos.checkers();
-    priorCapture  = pos.captured_piece();
     Color us      = pos.side_to_move();
+    ss->inCheck   = pos.atomic_in_check(us);
+    priorCapture  = pos.captured_piece();
     ss->moveCount = 0;
     bestValue     = -VALUE_INFINITE;
     maxValue      = VALUE_INFINITE;
@@ -1641,7 +1641,7 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
     }
 
     bestMove    = Move::none();
-    ss->inCheck = pos.checkers();
+    ss->inCheck = pos.atomic_in_check(pos.side_to_move());
     moveCount   = 0;
 
     // Used to send selDepth info to GUI (selDepth counts from 1, ply from 0)
@@ -1723,15 +1723,21 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
         futilityBase = ss->staticEval + 335;
     }
 
-    const PieceToHistory* contHist[] = {(ss - 1)->continuationHistory};
+    const PieceToHistory* contHist[] = {
+      (ss - 1)->continuationHistory, (ss - 2)->continuationHistory, (ss - 3)->continuationHistory,
+      (ss - 4)->continuationHistory, (ss - 5)->continuationHistory, (ss - 6)->continuationHistory};
 
     Square prevSq = ((ss - 1)->currentMove).is_ok() ? ((ss - 1)->currentMove).to_sq() : SQ_NONE;
 
-    // Initialize a MovePicker object for the current position, and prepare to search
-    // the moves. We presently use two stages of move generator in quiescence search:
-    // captures, or evasions only when in check.
-    MovePicker mp(pos, ttData.move, DEPTH_QS, &mainHistory, &lowPlyHistory, &captureHistory,
-                  contHist, &sharedHistory, ss->ply);
+    // Initialize a MovePicker object for the current position. Quiescence is
+    // capture-only normally, but an Atomic check requires every legal evasion.
+    // Atomic check evasions are not orthodox EVASIONS: adjacent kings are
+    // legal and an explosion can remove the checking piece. Keep checkersBB
+    // empty for move generation, but search every capture and quiet whenever
+    // the separate Atomic check predicate forbids stand-pat.
+    const Depth movePickerDepth = ss->inCheck ? 1 : DEPTH_QS;
+    MovePicker  mp(pos, ttData.move, movePickerDepth, &mainHistory, &lowPlyHistory,
+                   &captureHistory, contHist, &sharedHistory, ss->ply);
 
     // Step 5. Loop through all pseudo-legal moves until no moves remain or a beta
     // cutoff occurs.

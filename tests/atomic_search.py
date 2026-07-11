@@ -30,11 +30,25 @@ class SearchCase:
     name: str
     fen: str
     searchmove: str
-    expected_mate: int
+    expected_mate: int | None
     expected_pv: tuple[str, ...]
 
 
 SEARCH_CASES = (
+    SearchCase(
+        name="quiet atomic check remains forcing in qsearch",
+        fen="B7/Rk6/8/8/8/8/7Q/4K3 w - - 0 1",
+        searchmove="h2b8",
+        expected_mate=1,
+        expected_pv=("h2b8",),
+    ),
+    SearchCase(
+        name="qsearch explores quiet atomic check evasions",
+        fen="7k/8/8/8/8/8/R7/K7 w - - 0 1",
+        searchmove="a2h2",
+        expected_mate=None,
+        expected_pv=("a2h2",),
+    ),
     SearchCase(
         name="third qsearch capture is explosive mate",
         fen="4K1R1/RR6/8/8/8/8/qqq3p1/7k b - - 0 1",
@@ -176,13 +190,16 @@ def check_case(engine: UciProcess, test: SearchCase) -> None:
 
     final_info = info_lines[-1]
     score_match = SCORE_RE.search(final_info)
-    if score_match is None:
-        raise AssertionError(f"{test.name}: expected mate score, got: {final_info}")
-
-    mate = int(score_match.group(1))
-    if mate != test.expected_mate:
+    mate = int(score_match.group(1)) if score_match is not None else None
+    if test.expected_mate is None:
+        if mate is not None:
+            raise AssertionError(
+                f"{test.name}: expected a searched quiet evasion, got mate {mate}: {final_info}"
+            )
+    elif mate != test.expected_mate:
+        rendered = "non-mate" if mate is None else f"mate {mate}"
         raise AssertionError(
-            f"{test.name}: expected mate {test.expected_mate}, got mate {mate}: {final_info}"
+            f"{test.name}: expected mate {test.expected_mate}, got {rendered}: {final_info}"
         )
 
     pv_match = PV_RE.search(final_info)
@@ -199,7 +216,8 @@ def check_case(engine: UciProcess, test: SearchCase) -> None:
             f"{test.name}: expected bestmove {test.searchmove}, got: {output[-1]}"
         )
 
-    print(f"PASS {test.name}: mate {mate}, pv {' '.join(pv)}")
+    score = f"mate {mate}" if mate is not None else "non-mate"
+    print(f"PASS {test.name}: {score}, pv {' '.join(pv)}")
 
 
 def main() -> int:

@@ -21,13 +21,13 @@ On 2026-07-10 the fail-fast release run completed every built surface:
 | Exact cross-surface parity | Python/CommonJS/ESM `40/40`; native UCI `25/25` |
 | Historical perft | eight exact Atomic/Atomic960 vectors |
 | Focused rules/transitions | `19/19` |
-| NNUE terminal search | `5/5` |
+| NNUE terminal/check-aware search | `7/7` |
 | XBoard/CECP | passed, including live ponder promotion/cancellation and analyze |
 | Atomic Syzygy fixtures | 11 header/hash checks; driver `5/5` |
 | Atomic Syzygy UCI | passed with NNUE false/true |
 | Legacy Atomic V1 modes | false/true/pure, invalid recovery and byte-exact export passed |
 | Reprosearch | `12/12` |
-| Atomic search signature | `347885` |
+| Atomic search signature | `356852` |
 | Native protocol runtime | UCI/XBoard smoke passed |
 | Full UCI/NNUE WASM | passed: interactive false/true/pure, Atomic/Atomic960 perft, terminal handling and external net hash |
 
