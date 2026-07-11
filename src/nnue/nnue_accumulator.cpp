@@ -23,8 +23,11 @@
 #include "../position.h"
 #include "features/half_ka_v2_atomic.h"
 #include "nnue_feature_transformer.h"
+#include "simd.h"
 
 namespace Stockfish::Eval::NNUE {
+
+using namespace SIMD;
 
 const AccumulatorState& AccumulatorStack::latest() const noexcept { return accumulators[size - 1]; }
 
@@ -99,6 +102,57 @@ void AccumulatorStack::refresh(Color                     perspective,
     FeatureSet::IndexList active;
     FeatureSet::append_active_indices(pos, perspective, active);
 
+#ifdef VECTOR
+    using Tiling =
+      SIMDTiling<TransformedFeatureDimensions, TransformedFeatureDimensions, PSQTBuckets>;
+
+    vec_t      acc[Tiling::NumRegs];
+    psqt_vec_t psqt[Tiling::NumPsqtRegs];
+
+    for (IndexType tile = 0; tile < TransformedFeatureDimensions / Tiling::TileHeight; ++tile)
+    {
+        const IndexType tileOffset = tile * Tiling::TileHeight;
+        const auto*     biasTile =
+          reinterpret_cast<const vec_t*>(&featureTransformer.biases[tileOffset]);
+        auto* targetTile = reinterpret_cast<vec_t*>(&target.accumulation[perspective][tileOffset]);
+
+        for (IndexType reg = 0; reg < Tiling::NumRegs; ++reg)
+            acc[reg] = vec_load(&biasTile[reg]);
+
+        for (const IndexType index : active)
+        {
+            assert(index < FeatureTransformer::InputDimensions);
+            const auto* weightTile = reinterpret_cast<const vec_t*>(
+              &featureTransformer.weights[index * TransformedFeatureDimensions + tileOffset]);
+            for (IndexType reg = 0; reg < Tiling::NumRegs; ++reg)
+                acc[reg] = vec_add_16(acc[reg], weightTile[reg]);
+        }
+
+        for (IndexType reg = 0; reg < Tiling::NumRegs; ++reg)
+            vec_store(&targetTile[reg], acc[reg]);
+    }
+
+    for (IndexType tile = 0; tile < PSQTBuckets / Tiling::PsqtTileHeight; ++tile)
+    {
+        const IndexType tileOffset = tile * Tiling::PsqtTileHeight;
+        auto*           targetTile =
+          reinterpret_cast<psqt_vec_t*>(&target.psqtAccumulation[perspective][tileOffset]);
+
+        for (IndexType reg = 0; reg < Tiling::NumPsqtRegs; ++reg)
+            psqt[reg] = vec_zero_psqt();
+
+        for (const IndexType index : active)
+        {
+            const auto* weightTile = reinterpret_cast<const psqt_vec_t*>(
+              &featureTransformer.psqtWeights[index * PSQTBuckets + tileOffset]);
+            for (IndexType reg = 0; reg < Tiling::NumPsqtRegs; ++reg)
+                psqt[reg] = vec_add_psqt_32(psqt[reg], weightTile[reg]);
+        }
+
+        for (IndexType reg = 0; reg < Tiling::NumPsqtRegs; ++reg)
+            vec_store_psqt(&targetTile[reg], psqt[reg]);
+    }
+#else
     for (const IndexType index : active)
     {
         assert(index < FeatureTransformer::InputDimensions);
@@ -112,6 +166,7 @@ void AccumulatorStack::refresh(Color                     perspective,
             target.psqtAccumulation[perspective][bucket] +=
               featureTransformer.psqtWeights[index * PSQTBuckets + bucket];
     }
+#endif
 
     target.computed[perspective] = true;
 }
@@ -121,12 +176,82 @@ void AccumulatorStack::update(Color                     perspective,
                               const FeatureTransformer& featureTransformer,
                               const AccumulatorState&   source,
                               AccumulatorState&         target) noexcept {
-    target.accumulation[perspective]     = source.accumulation[perspective];
-    target.psqtAccumulation[perspective] = source.psqtAccumulation[perspective];
-
     FeatureSet::IndexList removed;
     FeatureSet::IndexList added;
     FeatureSet::append_changed_indices(perspective, ksq, target.dirtyPiece, removed, added);
+
+#ifdef VECTOR
+    using Tiling =
+      SIMDTiling<TransformedFeatureDimensions, TransformedFeatureDimensions, PSQTBuckets>;
+
+    vec_t      acc[Tiling::NumRegs];
+    psqt_vec_t psqt[Tiling::NumPsqtRegs];
+
+    for (IndexType tile = 0; tile < TransformedFeatureDimensions / Tiling::TileHeight; ++tile)
+    {
+        const IndexType tileOffset = tile * Tiling::TileHeight;
+        const auto*     sourceTile =
+          reinterpret_cast<const vec_t*>(&source.accumulation[perspective][tileOffset]);
+        auto* targetTile = reinterpret_cast<vec_t*>(&target.accumulation[perspective][tileOffset]);
+
+        for (IndexType reg = 0; reg < Tiling::NumRegs; ++reg)
+            acc[reg] = vec_load(&sourceTile[reg]);
+
+        for (const IndexType index : removed)
+        {
+            assert(index < FeatureTransformer::InputDimensions);
+            const auto* weightTile = reinterpret_cast<const vec_t*>(
+              &featureTransformer.weights[index * TransformedFeatureDimensions + tileOffset]);
+            for (IndexType reg = 0; reg < Tiling::NumRegs; ++reg)
+                acc[reg] = vec_sub_16(acc[reg], weightTile[reg]);
+        }
+
+        for (const IndexType index : added)
+        {
+            assert(index < FeatureTransformer::InputDimensions);
+            const auto* weightTile = reinterpret_cast<const vec_t*>(
+              &featureTransformer.weights[index * TransformedFeatureDimensions + tileOffset]);
+            for (IndexType reg = 0; reg < Tiling::NumRegs; ++reg)
+                acc[reg] = vec_add_16(acc[reg], weightTile[reg]);
+        }
+
+        for (IndexType reg = 0; reg < Tiling::NumRegs; ++reg)
+            vec_store(&targetTile[reg], acc[reg]);
+    }
+
+    for (IndexType tile = 0; tile < PSQTBuckets / Tiling::PsqtTileHeight; ++tile)
+    {
+        const IndexType tileOffset = tile * Tiling::PsqtTileHeight;
+        const auto*     sourceTile =
+          reinterpret_cast<const psqt_vec_t*>(&source.psqtAccumulation[perspective][tileOffset]);
+        auto* targetTile =
+          reinterpret_cast<psqt_vec_t*>(&target.psqtAccumulation[perspective][tileOffset]);
+
+        for (IndexType reg = 0; reg < Tiling::NumPsqtRegs; ++reg)
+            psqt[reg] = vec_load_psqt(&sourceTile[reg]);
+
+        for (const IndexType index : removed)
+        {
+            const auto* weightTile = reinterpret_cast<const psqt_vec_t*>(
+              &featureTransformer.psqtWeights[index * PSQTBuckets + tileOffset]);
+            for (IndexType reg = 0; reg < Tiling::NumPsqtRegs; ++reg)
+                psqt[reg] = vec_sub_psqt_32(psqt[reg], weightTile[reg]);
+        }
+
+        for (const IndexType index : added)
+        {
+            const auto* weightTile = reinterpret_cast<const psqt_vec_t*>(
+              &featureTransformer.psqtWeights[index * PSQTBuckets + tileOffset]);
+            for (IndexType reg = 0; reg < Tiling::NumPsqtRegs; ++reg)
+                psqt[reg] = vec_add_psqt_32(psqt[reg], weightTile[reg]);
+        }
+
+        for (IndexType reg = 0; reg < Tiling::NumPsqtRegs; ++reg)
+            vec_store_psqt(&targetTile[reg], psqt[reg]);
+    }
+#else
+    target.accumulation[perspective]     = source.accumulation[perspective];
+    target.psqtAccumulation[perspective] = source.psqtAccumulation[perspective];
 
     auto apply = [&](IndexType index, int sign) {
         assert(index < FeatureTransformer::InputDimensions);
@@ -145,6 +270,7 @@ void AccumulatorStack::update(Color                     perspective,
         apply(index, -1);
     for (const IndexType index : added)
         apply(index, 1);
+#endif
 
     target.computed[perspective] = true;
 }
