@@ -3,6 +3,7 @@
     "captured_at_utc":  "2026-07-11T15:55:30.564Z",
     "reproducibility":  "local dirty snapshot identity only; base commits plus content hashes identify but do not reconstruct uncommitted files",
     "canonical_content_definition":  "SHA-256 of UTF-8/LF: label, base_head and branch lines, then all file entries sorted ordinally by path as kind|path|bytes|sha256|base_blob with LF after every line; base_blob is empty for untracked files",
+    "aggregate_fingerprint_definition":  "SHA-256 of UTF-8 without BOM and three TAB-delimited LF lines with final LF: base_head and lowercase head; tracked_patch, decimal bytes and lowercase SHA-256; untracked_manifest, decimal file count, decimal bytes and lowercase SHA-256",
     "tools":  {
                   "label":  "variant-nnue-tools",
                   "base_head":  "c8df2c39515a2654d5b52ba55b4ee585b20430a8",

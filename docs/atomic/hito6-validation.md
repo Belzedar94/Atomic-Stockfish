@@ -233,9 +233,9 @@ That canonical hash is the SHA-256 of a UTF-8/LF stream beginning with
 file entries sorted ordinally by path as
 `kind|path|bytes|UPPERCASE_SHA256|base_blob`. Every line has a final LF and
 `base_blob` is empty for untracked files.
-The 20,936-byte content manifest is
+The 21,215-byte content manifest is
 `evidence/hito6-qsearch-futility/pipeline-local-snapshot.json`, SHA-256
-`489BC321EFCDA352BA5318F9CBC9E00B42A63BC80BED58D9D284863F932BF74C`.
+`5BBA7B3F50459A762A692702E67E8DC2E7B6253A4C07BC41407ED64B089A3E5A`.
 It records all 16 tools and 20 trainer changed/untracked files plus the exact
 tools executable
 (`CC17E29E8B4953A2219F3AB63FDF25180DBBF5B3D6AA1CFBCBDE17DC75A024F1`)
@@ -245,7 +245,7 @@ These hashes identify the local state but cannot
 reconstruct uncommitted content from the base commits alone.
 
 The normalized rerun log is 2,591 bytes, SHA-256
-`265A56A42E9D86D991917E42E2483DE248985971C061601C59DA444799666EC3`,
+`898C172E2A2540E4DD87F1B10DF5101E31F35858C8F03CF80B620443C070F697`,
 at `evidence/hito6-qsearch-futility/pipeline-e2e.log`. It records the candidate,
 network, generator, loader, runner and snapshot hashes and ends with
 `pipeline_exit_code=0`. The clean, pinned multi-repository CI job remains a
