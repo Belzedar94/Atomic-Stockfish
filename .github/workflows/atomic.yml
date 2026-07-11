@@ -38,6 +38,9 @@ jobs:
         run: |
           make -j2 ARCH=x86-64 COMP=${{ matrix.comp }} COMPCXX=${{ matrix.cxx }} atomic-unit-tests
           make -j2 ARCH=x86-64 COMP=${{ matrix.comp }} COMPCXX=${{ matrix.cxx }} atomic-api-tests
+          make -j2 ARCH=x86-64 COMP=${{ matrix.comp }} COMPCXX=${{ matrix.cxx }} atomic-syzygy-driver
+      - name: Atomic Syzygy source/domain contract
+        run: python3 tests/atomic_syzygy.py --contract-only
       - name: Atomic and Atomic960 perft
         run: bash tests/perft.sh src/atomic-stockfish
       - name: XBoard protocol
@@ -57,6 +60,7 @@ jobs:
         run: |
           make -C src -j2 ARCH=x86-64 debug=yes optimize=no atomic-unit-tests
           make -C src -j2 ARCH=x86-64 debug=yes optimize=no atomic-api-tests
+          make -C src -j2 ARCH=x86-64 debug=yes optimize=no atomic-syzygy-driver
           bash tests/perft.sh src/atomic-stockfish
 
   sanitizers:

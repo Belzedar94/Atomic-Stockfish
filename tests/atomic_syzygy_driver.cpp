@@ -18,6 +18,7 @@
 #include "syzygy/tbprobe.h"
 #include "tt.h"
 #include "uci_move.h"
+#include "ucioption.h"
 
 using namespace Stockfish;
 
@@ -86,7 +87,10 @@ int main(int argc, char* argv[]) {
 
     Search::RootMoves roots;
     for (const Move move : MoveList<LEGAL>(pos))
-        roots.emplace_back(move);
+    {
+        auto& root   = roots.emplace_back(move);
+        root.tbScore = VALUE_DRAW;
+    }
 
     auto withoutRule50 = roots;
     print_root_result("root_no_rule50",

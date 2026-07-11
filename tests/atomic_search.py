@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
-"""Deterministic black-box regressions for Atomic terminal captures in search.
+"""Deterministic black-box regressions for Atomic terminal and tactical search.
 
-The first fixture protects against move-count, futility, and SEE pruning hiding
-an explosive mate when it is the third capture considered in qsearch. The
-remaining fixtures cover every terminal-capture encoding accepted by
-``Position::atomic_wins``: direct king capture, adjacent by-catch, en passant,
-and capture-promotion.
+The suite protects quiet Atomic checks/evasions, every terminal-capture
+encoding accepted by ``Position::atomic_wins``, and explosive captures whose
+material cannot be bounded by orthodox main-search or qsearch futility.
 """
 
 from __future__ import annotations
@@ -135,6 +133,22 @@ SEARCH_CASES = (
         expected_mate=None,
         expected_pv=("d2d4", "e4d3"),
         depth=2,
+    ),
+    SearchCase(
+        name="qsearch capture futility preserves explosive non-pawn bycatch",
+        fen="2n5/7k/1p2p2p/Q2PQ1R1/2B1R3/8/8/K5N1 w - - 0 1",
+        searchmove="g1h3",
+        expected_mate=None,
+        expected_pv=("g1h3", "e6d5"),
+        depth=1,
+    ),
+    SearchCase(
+        name="qsearch capture futility preserves explosive en passant bycatch",
+        fen="2n5/7k/1p6/Q7/4p3/2Q5/2RP4/K7 w - - 0 1",
+        searchmove="d2d4",
+        expected_mate=None,
+        expected_pv=("d2d4", "e4d3"),
+        depth=1,
     ),
 )
 

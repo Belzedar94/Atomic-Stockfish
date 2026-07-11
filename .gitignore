@@ -12,6 +12,7 @@ src/stockfish*
 src/atomic-stockfish*
 src/atomic-unit-tests*
 src/atomic-api-tests*
+src/atomic-syzygy-driver*
 src/atomic-nnue-incremental-tests*
 src/-lstdc++.res
 

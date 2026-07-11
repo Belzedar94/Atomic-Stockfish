@@ -25,7 +25,7 @@ WORKSPACE_ROOT = REPO_ROOT.parent
 EXPECTED_NET_SHA256 = (
     "99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f92a04a6"
 )
-EXPECTED_SIGNATURE = "379531"
+EXPECTED_SIGNATURE = "380061"
 
 
 class GateFailure(RuntimeError):
@@ -178,7 +178,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--syzygy-driver",
         type=Path,
-        default=WORKSPACE_ROOT / "research" / "atomic-syzygy-driver.exe",
+        help="standalone driver built by make atomic-syzygy-driver",
     )
     parser.add_argument("--fairy-repo", type=Path, default=WORKSPACE_ROOT / "Fairy-Stockfish")
     parser.add_argument("--python", default=sys.executable)
@@ -205,6 +205,10 @@ def validate_inputs(args: argparse.Namespace) -> dict[str, object]:
     cpp_api = require_path(
         args.cpp_api or native.with_name(f"atomic-api-tests{suffix}"), "C++ API unit test"
     )
+    syzygy_driver = require_path(
+        args.syzygy_driver or native.with_name(f"atomic-syzygy-driver{suffix}"),
+        "Atomic Syzygy driver",
+    )
     net = require_path(args.net, "Legacy Atomic V1 network")
     actual_net_sha = sha256(net)
     if actual_net_sha != EXPECTED_NET_SHA256:
@@ -226,7 +230,7 @@ def validate_inputs(args: argparse.Namespace) -> dict[str, object]:
         "tables": require_path(args.tables, "Atomic Syzygy tables", directory=True),
         "cpp_unit": cpp_unit,
         "cpp_api": cpp_api,
-        "syzygy_driver": require_path(args.syzygy_driver, "Atomic Syzygy driver"),
+        "syzygy_driver": syzygy_driver,
         "fairy_repo": require_path(args.fairy_repo, "frozen Fairy repository", directory=True),
         "python": command_path(args.python, "Python"),
         "node": command_path(args.node, "Node"),
@@ -453,7 +457,7 @@ await suite.runSuite(module, 'ES module/WASM');
                 "false",
             ],
             timeout=args.timeout,
-            required_markers=("Atomic search regressions passed: 13/13",),
+            required_markers=("Atomic search regressions passed: 15/15",),
         )
         run_step(
             "Atomic terminal-search regressions with NNUE",
@@ -468,7 +472,7 @@ await suite.runSuite(module, 'ES module/WASM');
                 "true",
             ],
             timeout=args.timeout,
-            required_markers=("Atomic search regressions passed: 13/13",),
+            required_markers=("Atomic search regressions passed: 15/15",),
         )
         run_step(
             "XBoard/CECP Atomic, analyze and live ponder",

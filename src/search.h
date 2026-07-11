@@ -63,10 +63,11 @@ constexpr int atomic_move_count_pruning_threshold(bool improving, Depth depth) {
     return (5 + depth * depth) / (3 - improving);
 }
 
-// Orthodox capture futility prices only the victim on the destination square.
-// The capturer's explosion keeps that bound optimistic, but unpriced opponent
-// bycatch could make it unsafe. Conservatively require a normal capture with no
-// non-pawn explosion bycatch of either color.
+// Orthodox main-search and qsearch capture futility price only the victim on
+// the destination square. The capturer's explosion keeps that bound
+// optimistic, but unpriced opponent bycatch could make it unsafe.
+// Conservatively require a normal capture with no non-pawn explosion bycatch
+// of either color.
 bool atomic_capture_futility_eligible(const Position& pos, Move move);
 
 struct PVMoves {
