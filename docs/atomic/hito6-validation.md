@@ -44,20 +44,42 @@ Six direct C++ cases cover a normal capture (including capturer exclusion),
 pawn immunity, non-pawn bycatch, en passant, capture-promotion and a quiet move.
 Two depth-two UCI regressions pin the previously pruned `e6d5` non-pawn blast
 and `e4d3` en passant blast in both classical and frozen-NNUE modes. The
-qsearch futility policy is deliberately unchanged and will be evaluated as a
-separate search block.
+qsearch counterpart is evaluated separately in block 3 so its correctness,
+selectivity, speed and strength remain attributable.
 
 The current signature is `379531`, up from block 1's `347633`, because the
 engine now searches explosive tactical replies that the unsafe bound discarded.
 All three exact LOS gates passed for this block; the immutable artifact and
 complete logs are identified below.
 
+## Block 3: qsearch capture-futility safety (preliminary)
+
+The same destination-victim estimate also guarded qsearch futility. Block 3
+reuses the reviewed Atomic capture-futility eligibility rule there, preserving
+en passant and captures with non-pawn blast bycatch from the orthodox bound.
+This block is not accepted yet: code, correctness and speed validation below
+is **PRELIMINARY**, and all three normative strength gates are **PENDING**.
+
+The immutable block-2 artifact `CB35D5` fails both new depth-one regressions:
+it prunes the `e6d5` non-pawn blast and the `e4d3` en passant blast in qsearch.
+The current candidate passes `15/15` search regressions with NNUE disabled and
+with the frozen network loaded. Three independent signature runs produced
+`380061` each time.
+
+On the fixed search corpus, the current candidate visits `1,300,936` nodes,
+compared with `1,300,804` for block 2. The preliminary clean five-run speed
+snapshot measured a median `1,493,612` NPS for the 4,263,216-byte candidate and
+`1,098,700` NPS for frozen Fairy, a ratio of `1.3594`. A separate interleaved
+comparison against the block-2 artifact measured `1.0059x`; these measurements
+prove the current code and test shape only. No final artifact hash or strength
+result is claimed before the full block gate completes.
+
 ## Correctness snapshot
 
 The final clean release build currently reports:
 
 - C++ rules/state `56/56` and shared API `34/34`;
-- search regressions `13/13` with NNUE disabled and with the frozen network;
+- search regressions `15/15` with NNUE disabled and with the frozen network;
 - all eight historical Atomic/Atomic960 perft vectors;
 - all `19/19` focused rule transitions and terminal outcomes.
 
@@ -83,6 +105,16 @@ The independent build matrix also passed:
 No sanitizer reported an error. Clang's release build retains five existing
 upstream warnings: one unused lambda capture and four libstdc++ temporary-buffer
 deprecations.
+
+The full block-3 rerun exposed a stale external Syzygy test driver that had
+been linked before the quiet-mate fix in `92154082`. The old artifact
+deterministically returned DTZ 2 instead of 1 and is no longer accepted. A new
+cross-platform `make atomic-syzygy-driver` target now links the driver from the
+same checkout as the engine; Hito 4 derives that sibling from `--native`, and
+CI builds it before executing the source/domain contract. The rebuilt driver
+passes all 13 fixture hashes, the quiet-mate probe and the complete `5/5` suite.
+Its final release hash will be recorded after the block is committed and
+rebuilt from the committed HEAD.
 
 ## Generator and trainer compatibility
 
@@ -118,12 +150,15 @@ in the engine for evaluation and search. The current run passed with:
 - loss `0.0347999074`, FT delta `8.66651535e-05`, FC delta
   `8.454262e-07`, and final engine move `b2b3`.
 
-This is currently a normative manual gate because it needs three sibling
-checkouts and their built native extensions. It must be wired into a pinned
-multi-repository runner or CI job before Hito 6 closes. Automatic continuation
-from an existing `.nnue` and the production general dataset validator remain
-separate trainer/tools release debts; this gate does not claim to implement
-either feature.
+The normative Hito 5 release runner now requires
+`--pipeline-tools-engine` and `--pipeline-trainer-root`, reusing its already
+SHA-pinned `--net`. Only smoke mode may omit both cross-repo paths, and it then
+receives the explicit `LEGACY PIPELINE E2E NOT REQUESTED (NON-RELEASE)` marker;
+partial configuration is always a hard error. A pinned multi-repository CI job
+is still required before Hito 6 closes. Automatic continuation from an
+existing `.nnue` and the production general dataset validator remain separate
+trainer/tools release debts; this gate does not claim to implement either
+feature.
 
 ## Block 1 selectivity and speed
 

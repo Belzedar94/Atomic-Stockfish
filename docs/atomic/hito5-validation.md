@@ -20,6 +20,7 @@ mode.
 | NNUE modes | `false`, `true` and `pure`; invalid networks reject `go` without killing UCI |
 | NNUE export | Export/import is byte-exact for the frozen Legacy Atomic V1 network |
 | UCI/NNUE WASM | Supported Node launcher, external SHA-pinned network, true/pure and reproducible manifest |
+| Cross-repository pipeline | Required in release: generate twice with `pure`, validate/decode, train one Ranger step, serialize/reimport and load the resulting network in the native engine |
 | Incremental accumulator | Exactly 1,000,000 deterministic make/undo operations plus fixed special-move fixtures |
 | Atomic captures | At least one capture exercised and exact marker `capture-forced-refresh=0` |
 | Full refresh | Incremental raw output, scaled true/pure values and accumulator lanes equal a fresh accumulator |
@@ -67,6 +68,8 @@ replace those matches.
 ## Release invocation
 
 ```powershell
+make -C src -j2 ARCH=x86-64-avx2 COMP=mingw atomic-syzygy-driver
+
 python tests/run_hito5.py `
   --native src/atomic-stockfish.exe `
   --net ../atomic_run3b_e202_l05.nnue `
@@ -74,8 +77,18 @@ python tests/run_hito5.py `
   --cjs tests/js/dist/cjs/ffish.js `
   --esm tests/js/dist/esm/ffish.mjs `
   --tables ../research/shakmaty/shakmaty-syzygy/tables/atomic `
-  --wasm-wrapper build/wasm-engine/atomic-stockfish-nnue-node.mjs
+  --wasm-wrapper build/wasm-engine/atomic-stockfish-nnue-node.mjs `
+  --pipeline-tools-engine ../variant-nnue-tools/src/stockfish-tools-release.exe `
+  --pipeline-trainer-root ../variant-nnue-pytorch
 ```
+
+The two `--pipeline-*` paths are an all-or-none pair and are mandatory in
+release mode. The runner invokes `tests/legacy_pipeline_e2e.py` under a
+whole-process timeout and reuses the SHA-pinned `--net` as its `pure` source
+network. Smoke mode may omit both paths; it then emits the exact
+`LEGACY PIPELINE E2E NOT REQUESTED (NON-RELEASE)` marker. Supplying only one
+option, omitting the pair in release, a missing tools binary or an unbuilt
+trainer checkout is a hard configuration error.
 
 Release mode cannot reduce the fixed one-million operations or 10,000
 positions. Its final success marker is:
@@ -102,7 +115,9 @@ python tests/run_hito5.py `
   --cjs tests/js/dist/cjs/ffish.js `
   --esm tests/js/dist/esm/ffish.mjs `
   --tables ../research/shakmaty/shakmaty-syzygy/tables/atomic `
-  --wasm-wrapper build/wasm-engine/atomic-stockfish-nnue-node.mjs
+  --wasm-wrapper build/wasm-engine/atomic-stockfish-nnue-node.mjs `
+  --pipeline-tools-engine ../variant-nnue-tools/src/stockfish-tools-release.exe `
+  --pipeline-trainer-root ../variant-nnue-pytorch
 ```
 
 The operation count must be a positive multiple of eight so all four seeded

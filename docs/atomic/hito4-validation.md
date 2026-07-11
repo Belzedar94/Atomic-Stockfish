@@ -46,6 +46,16 @@ the historical Hito 4 closeout record; current runners use the Hito 6
 signature documented in `hito6-validation.md`. The second Hito 6 search block,
 which protects explosive captures from orthodox futility pruning, moved the
 live signature again to `379531`; `347633` remains the block-one artifact.
+The preliminary third Hito 6 block extends the same safety rule to qsearch and
+moves the live signature to `380061`. The table above remains the immutable
+historical Hito 4 closeout record.
+
+The historical Syzygy driver below predates commit `92154082` and is retained
+only as provenance for the original 11-fixture closeout. It is not accepted by
+the current 13-fixture suite: its orthodox checker test reports DTZ 2 for a
+quiet Atomic mate whose normative DTZ is 1. Current validation builds
+`src/atomic-syzygy-driver` from the same checkout via the Makefile target; the
+runner uses that sibling artifact by default.
 
 ## Validation snapshot
 
@@ -64,7 +74,7 @@ They are a local evidence snapshot, not release asset names.
 | CommonJS `ffish.wasm` | 268,622 | `416FBFA96B39EDE637EF3AE0EC18355A0A28E18828D36F12E46AFEBDB1AA8823` |
 | ES module `ffish.mjs` | 55,929 | `AF17E8BA6FC9BED8C56088446F28D87498A80842FD38D1F3125A83F821F9E122` |
 | ES module `ffish.wasm` | 268,622 | `416FBFA96B39EDE637EF3AE0EC18355A0A28E18828D36F12E46AFEBDB1AA8823` |
-| Atomic Syzygy test driver | 5,363,969 | `77B45E48B1534325A91614A282E9AA8D31ED51E6AA94CFC58D8E67B5B864EE36` |
+| Historical Atomic Syzygy driver (11-fixture suite; superseded) | 5,363,969 | `77B45E48B1534325A91614A282E9AA8D31ED51E6AA94CFC58D8E67B5B864EE36` |
 | `atomic-stockfish-nnue-node.mjs` | 3,342 | `885E7A161EF8D447D41F54BD8ABE413DA3113B14E8B421C4848798C1B02D6DEB` |
 | `atomic-stockfish-nnue.js` | 103,600 | `D0BD0C360BB8ADC636952F6833F0DD280EC732D00D379D63F0FE99F8857DF0E5` |
 | `atomic-stockfish-nnue.worker.js` | 2,828 | `C18C2918C9F8FEDF3009F4A260A1185E919B0C6D421FF5403CB918B61C358A24` |
@@ -81,14 +91,17 @@ separate public surface.
 
 ## Normative runner
 
-`tests/run_hito4.py` accepts explicit paths for every public artifact. It
-validates all inputs and the frozen network hash before running tests, executes
-gates in dependency order, checks exact coverage markers, and stops at the
-first error.
+`tests/run_hito4.py` accepts explicit paths for every public artifact and
+derives the C++ unit, API and Syzygy driver siblings from `--native` when they
+are omitted. It validates all inputs and the frozen network hash before running
+tests, executes gates in dependency order, checks exact coverage markers, and
+stops at the first error.
 
 Release invocation (WASM is mandatory by default):
 
 ```powershell
+make -C src -j2 ARCH=x86-64-avx2 COMP=mingw atomic-syzygy-driver
+
 python tests/run_hito4.py `
   --native src/atomic-stockfish.exe `
   --net ../atomic_run3b_e202_l05.nnue `
