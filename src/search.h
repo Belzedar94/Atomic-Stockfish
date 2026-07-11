@@ -63,6 +63,10 @@ constexpr int atomic_move_count_pruning_threshold(bool improving, Depth depth) {
     return (5 + depth * depth) / (3 - improving);
 }
 
+// Atomic threats make an orthodox null-move cutoff less trustworthy. Reduce
+// one ply less than modern Stockfish while preserving its depth scaling.
+constexpr Depth atomic_null_move_reduction(Depth depth) { return 6 + depth / 3; }
+
 // Orthodox main-search and qsearch capture futility price only the victim on
 // the destination square. The capturer's explosion keeps that bound
 // optimistic, but unpriced opponent bycatch could make it unsafe.

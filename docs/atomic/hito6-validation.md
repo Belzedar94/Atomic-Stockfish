@@ -65,7 +65,7 @@ The immutable block-2 artifact `CB35D5` fails both new depth-one regressions:
 it prunes the `e6d5` non-pawn blast and the `e4d3` en passant blast in qsearch.
 The final candidate passes `15/15` search regressions with NNUE disabled and
 with the frozen network loaded. Three independent signature runs produced
-`380061` each time; this is the current Atomic signature.
+`380061` each time; this is the block-3 Atomic signature.
 
 On the fixed search corpus, the candidate visits `1,300,936` nodes, compared
 with `1,300,804` for block 2: 132 additional nodes, or `+0.010%`, attributable
@@ -78,9 +78,41 @@ as diagnostic rather than a strength claim. The versioned 2,424-byte
 The normative paired Fairy speed gate passes by `+33.12%`, and all three
 strength gates pass.
 
-## Correctness snapshot
+## Block 4: shallower Atomic null-move reduction (preliminary)
 
-The final clean release build currently reports:
+Modern Stockfish reduces a null-move search by `7 + depth / 3`. Atomic threats
+make a speculative pass less trustworthy, and Fairy's historical Atomic search
+also moved toward a less aggressive reduction. Block 4 changes only that
+expression to the tested helper `6 + depth / 3`; it does not alter the NMP entry
+condition, verification threshold, `nmpMinPly`, child futility, ProbCut, LMR or
+time management.
+
+Seven direct C++ cases pin depths 1, 3, 6, 9, 15, 16 and 18, raising the current
+unit marker to `63/63`. A depth-14 black-box fixture uses
+`rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2`: the block-3
+artifact chooses `f7f6` without NNUE and `h7h6` with the frozen network under
+the test's fixed 16-MiB hash, while the block-4 candidate reproducibly searches
+`g7g5` and `f8b4` respectively.
+The current search suite passes `16/16` in both modes, and three independent
+NNUE signature runs produced `338376`. The historical and focused perft suites
+also pass unchanged.
+
+Temporary one-worker counters confirm that both reductions enter the same NMP
+code path and make the attribution observable without shipping instrumentation.
+Across four positions, R6 changed total nodes by `-19.1701%` at depth 18 and
+`+35.0623%` at depth 20; its verification rate rose from `7.7315%` to
+`11.5990%` over all eight searches. The sign reversal and strong per-position
+spread make this coverage evidence, not a speed claim. The normalized raw log
+is `evidence/hito6-nmp/diagnostic-counters.log` (6,274 bytes, SHA-256
+`1D40421F700F32B0F6C183821734B725F6388B5E9F2DEFBD86CCAFE74C870BB6`).
+
+This block remains **PRELIMINARY**. The complete release/debug/sanitizer/
+binding/pipeline matrix, paired speed evidence and all three exact LOS gates are
+still pending; no strength or performance acceptance is claimed here.
+
+## Accepted block-3 correctness snapshot
+
+The final clean block-3 release build reports:
 
 - C++ rules/state `56/56` and shared API `34/34`;
 - search regressions `15/15` with NNUE disabled and with the frozen network;

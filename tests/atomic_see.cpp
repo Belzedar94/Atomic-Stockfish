@@ -473,6 +473,33 @@ bool expect_atomic_move_count_thresholds() {
     return ok;
 }
 
+bool expect_atomic_null_move_reductions() {
+    struct ReductionCase {
+        int depth;
+        int expected;
+    };
+
+    constexpr std::array<ReductionCase, 7> tests = {
+      {{1, 6}, {3, 7}, {6, 8}, {9, 9}, {15, 11}, {16, 11}, {18, 12}}};
+
+    bool ok = true;
+    for (const auto& test : tests)
+    {
+        const int actual = Search::atomic_null_move_reduction(test.depth);
+        if (actual != test.expected)
+        {
+            std::cerr << "FAIL Atomic null-move reduction: depth=" << test.depth
+                      << " expected=" << test.expected << " actual=" << actual << '\n';
+            ok = false;
+        }
+        else
+            std::cout << "PASS Atomic null-move reduction depth=" << test.depth
+                      << " reduction=" << actual << '\n';
+    }
+
+    return ok;
+}
+
 bool expect_atomic_capture_futility_eligibility() {
     struct EligibilityCase {
         std::string_view name;
@@ -547,12 +574,13 @@ int main() {
     ok &= expect_rule50_state();
     ok &= expect_uci_move_notation();
     ok &= expect_atomic_move_count_thresholds();
+    ok &= expect_atomic_null_move_reductions();
     ok &= expect_atomic_capture_futility_eligibility();
 
     if (!ok)
         return 1;
 
-    constexpr usize TestCount = SeeCases.size() + 3 + 7 + 8 + 14 + 3 + 6 + 6;
+    constexpr usize TestCount = SeeCases.size() + 3 + 7 + 8 + 14 + 3 + 6 + 7 + 6;
     std::cout << "Atomic C++ unit tests passed: " << TestCount << "/" << TestCount << '\n';
     return 0;
 }

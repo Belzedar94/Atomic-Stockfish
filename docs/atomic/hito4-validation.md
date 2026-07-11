@@ -44,9 +44,11 @@ Hito 6 subsequently changed the signature to `347633` through the independently
 gated Atomic move-count pruning block. The second Hito 6 search block, which
 protects explosive captures from orthodox futility pruning, moved it again to
 `379531`; both values remain historical block artifacts. The third block extends
-the same safety rule to qsearch and moves the live signature to `380061`.
-Current runners use the signature documented in `hito6-validation.md`; the
-table above remains the immutable historical Hito 4 closeout record.
+the same safety rule to qsearch and moved it to `380061`. The preliminary fourth
+block uses a shallower Atomic null-move reduction and moves the live signature
+to `338376`.
+Current runners use the signature documented in `hito6-validation.md`; the table
+above remains the immutable historical Hito 4 closeout record.
 
 The historical Syzygy driver below predates commit `92154082` and is retained
 only as provenance for the original 11-fixture closeout. It is not accepted by
