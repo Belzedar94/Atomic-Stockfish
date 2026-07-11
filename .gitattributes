@@ -1,1 +1,3 @@
 docs/atomic/evidence/**/*.log text eol=lf
+docs/atomic/evidence/**/*.json text eol=lf
+docs/atomic/evidence/**/*.sh text eol=lf

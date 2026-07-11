@@ -1,0 +1,522 @@
+job=clang20-release
+head=125d6d446d1fd407c6122f0409e62314206a202e
+mode=release
+comp=clang
+cxx=clang++-20
+source_date_epoch=1783780430
+PRETTY_NAME="Debian GNU/Linux 12 (bookworm)"
+NAME="Debian GNU/Linux"
+VERSION_ID="12"
+VERSION="12 (bookworm)"
+VERSION_CODENAME=bookworm
+ID=debian
+HOME_URL="https://www.debian.org/"
+SUPPORT_URL="https://www.debian.org/support"
+BUG_REPORT_URL="https://bugs.debian.org/"
+Linux 26def2424928 6.18.33.2-microsoft-standard-WSL2 #1 SMP PREEMPT_DYNAMIC Thu Jun 18 21:54:43 UTC 2026 x86_64 GNU/Linux
+Debian clang version 20.1.8 (++20250708063551+0c9f909b7976-1~exp1~20250708183702.136)
+Target: x86_64-pc-linux-gnu
+Thread model: posix
+InstalledDir: /usr/lib/llvm-20/bin
+Python 3.11.2
+GNU Make 4.3
+Built for x86_64-pc-linux-gnu
+Copyright (C) 1988-2020 Free Software Foundation, Inc.
+License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.
+/fixtures/atomic.nnue: OK
+make: Entering directory '/work/src'
+make: Leaving directory '/work/src'
+make: Entering directory '/work/src'
+
+Config:
+debug: 'no'
+sanitize: 'none'
+optimize: 'yes'
+arch: 'x86_64'
+bits: '64'
+kernel: 'Linux'
+os: 'GNU/Linux'
+prefetch: 'yes'
+popcnt: 'no'
+pext: 'no'
+sse: 'yes'
+mmx: 'no'
+sse2: 'yes'
+ssse3: 'no'
+sse41: 'no'
+avx2: 'no'
+avxvnni: 'no'
+avx512: 'no'
+vnni512: 'no'
+avx512icl: 'no'
+altivec: 'no'
+vsx: 'no'
+neon: 'no'
+dotprod: 'no'
+arm_version: '0'
+lsx: 'no'
+lasx: 'no'
+syzygy: 'yes'
+target_windows: ''
+
+Flags:
+CXX: clang++-20
+CXXFLAGS:  -Wall -Wcast-qual -fno-exceptions -std=c++17  -pedantic -Wextra -Wshadow -Wmissing-prototypes -Wconditional-uninitialized -flax-vector-conversions=none -fconstexpr-steps=500000000 -m64 -DUSE_PTHREADS -DNDEBUG -O3 -funroll-loops -DIS_64BIT -msse -DUSE_SSE2 -msse2 -DARCH=x86-64 -flto=full -Xclang -mllvm -Xclang -inline-threshold=500
+LDFLAGS:   -latomic -m64 -lpthread -lrt -fuse-ld=lld  -Wall -Wcast-qual -fno-exceptions -std=c++17  -pedantic -Wextra -Wshadow -Wmissing-prototypes -Wconditional-uninitialized -flax-vector-conversions=none -fconstexpr-steps=500000000 -m64 -DUSE_PTHREADS -DNDEBUG -O3 -funroll-loops -DIS_64BIT -msse -DUSE_SSE2 -msse2 -DARCH=x86-64 -flto=full -Xclang -mllvm -Xclang -inline-threshold=500
+
+Testing config sanity. If this fails, try 'make help' ...
+
+make ARCH=x86-64 COMP=clang all
+make[1]: Entering directory '/work/src'
+clang++-20 -Wall -Wcast-qual -fno-exceptions -std=c++17 -pedantic -Wextra -Wshadow -Wmissing-prototypes -Wconditional-uninitialized -flax-vector-conversions=none -fconstexpr-steps=500000000 -m64 -DUSE_PTHREADS -DNDEBUG -O3 -funroll-loops -DIS_64BIT -msse -DUSE_SSE2 -msse2 -DARCH=x86-64 -flto=full -Xclang -mllvm -Xclang -inline-threshold=500 -c -o attacks.o attacks.cpp
+clang++-20 -Wall -Wcast-qual -fno-exceptions -std=c++17 -pedantic -Wextra -Wshadow -Wmissing-prototypes -Wconditional-uninitialized -flax-vector-conversions=none -fconstexpr-steps=500000000 -m64 -DUSE_PTHREADS -DNDEBUG -O3 -funroll-loops -DIS_64BIT -msse -DUSE_SSE2 -msse2 -DARCH=x86-64 -flto=full -Xclang -mllvm -Xclang -inline-threshold=500 -c -o benchmark.o benchmark.cpp
+clang++-20 -Wall -Wcast-qual -fno-exceptions -std=c++17 -pedantic -Wextra -Wshadow -Wmissing-prototypes -Wconditional-uninitialized -flax-vector-conversions=none -fconstexpr-steps=500000000 -m64 -DUSE_PTHREADS -DNDEBUG -O3 -funroll-loops -DIS_64BIT -msse -DUSE_SSE2 -msse2 -DARCH=x86-64 -flto=full -Xclang -mllvm -Xclang -inline-threshold=500 -c -o bitboard.o bitboard.cpp
+clang++-20 -Wall -Wcast-qual -fno-exceptions -std=c++17 -pedantic -Wextra -Wshadow -Wmissing-prototypes -Wconditional-uninitialized -flax-vector-conversions=none -fconstexpr-steps=500000000 -m64 -DUSE_PTHREADS -DNDEBUG -O3 -funroll-loops -DIS_64BIT -msse -DUSE_SSE2 -msse2 -DARCH=x86-64 -flto=full -Xclang -mllvm -Xclang -inline-threshold=500 -c -o evaluate.o evaluate.cpp
+clang++-20 -Wall -Wcast-qual -fno-exceptions -std=c++17 -pedantic -Wextra -Wshadow -Wmissing-prototypes -Wconditional-uninitialized -flax-vector-conversions=none -fconstexpr-steps=500000000 -m64 -DUSE_PTHREADS -DNDEBUG -O3 -funroll-loops -DIS_64BIT -msse -DUSE_SSE2 -msse2 -DARCH=x86-64 -flto=full -Xclang -mllvm -Xclang -inline-threshold=500 -c -o main.o main.cpp
+clang++-20 -Wall -Wcast-qual -fno-exceptions -std=c++17 -pedantic -Wextra -Wshadow -Wmissing-prototypes -Wconditional-uninitialized -flax-vector-conversions=none -fconstexpr-steps=500000000 -m64 -DUSE_PTHREADS -DNDEBUG -O3 -funroll-loops -DIS_64BIT -msse -DUSE_SSE2 -msse2 -DARCH=x86-64 -flto=full -Xclang -mllvm -Xclang -inline-threshold=500 -DGIT_SHA=125d6d44 -DGIT_DATE=20260711 -c -o misc.o misc.cpp
+clang++-20 -Wall -Wcast-qual -fno-exceptions -std=c++17 -pedantic -Wextra -Wshadow -Wmissing-prototypes -Wconditional-uninitialized -flax-vector-conversions=none -fconstexpr-steps=500000000 -m64 -DUSE_PTHREADS -DNDEBUG -O3 -funroll-loops -DIS_64BIT -msse -DUSE_SSE2 -msse2 -DARCH=x86-64 -flto=full -Xclang -mllvm -Xclang -inline-threshold=500 -c -o movegen.o movegen.cpp
+clang++-20 -Wall -Wcast-qual -fno-exceptions -std=c++17 -pedantic -Wextra -Wshadow -Wmissing-prototypes -Wconditional-uninitialized -flax-vector-conversions=none -fconstexpr-steps=500000000 -m64 -DUSE_PTHREADS -DNDEBUG -O3 -funroll-loops -DIS_64BIT -msse -DUSE_SSE2 -msse2 -DARCH=x86-64 -flto=full -Xclang -mllvm -Xclang -inline-threshold=500 -c -o movepick.o movepick.cpp
+clang++-20 -Wall -Wcast-qual -fno-exceptions -std=c++17 -pedantic -Wextra -Wshadow -Wmissing-prototypes -Wconditional-uninitialized -flax-vector-conversions=none -fconstexpr-steps=500000000 -m64 -DUSE_PTHREADS -DNDEBUG -O3 -funroll-loops -DIS_64BIT -msse -DUSE_SSE2 -msse2 -DARCH=x86-64 -flto=full -Xclang -mllvm -Xclang -inline-threshold=500 -c -o position.o position.cpp
+clang++-20 -Wall -Wcast-qual -fno-exceptions -std=c++17 -pedantic -Wextra -Wshadow -Wmissing-prototypes -Wconditional-uninitialized -flax-vector-conversions=none -fconstexpr-steps=500000000 -m64 -DUSE_PTHREADS -DNDEBUG -O3 -funroll-loops -DIS_64BIT -msse -DUSE_SSE2 -msse2 -DARCH=x86-64 -flto=full -Xclang -mllvm -Xclang -inline-threshold=500 -c -o search.o search.cpp
+clang++-20 -Wall -Wcast-qual -fno-exceptions -std=c++17 -pedantic -Wextra -Wshadow -Wmissing-prototypes -Wconditional-uninitialized -flax-vector-conversions=none -fconstexpr-steps=500000000 -m64 -DUSE_PTHREADS -DNDEBUG -O3 -funroll-loops -DIS_64BIT -msse -DUSE_SSE2 -msse2 -DARCH=x86-64 -flto=full -Xclang -mllvm -Xclang -inline-threshold=500 -c -o thread.o thread.cpp
+In file included from search.cpp:19:
+In file included from ./search.h:22:
+In file included from /usr/lib/gcc/x86_64-linux-gnu/12/../../../../include/c++/12/algorithm:61:
+In file included from /usr/lib/gcc/x86_64-linux-gnu/12/../../../../include/c++/12/bits/stl_algo.h:61:
+/usr/lib/gcc/x86_64-linux-gnu/12/../../../../include/c++/12/bits/stl_tempbuf.h:263:8: warning: 'get_temporary_buffer<Stockfish::Search::RootMove>' is deprecated [-Wdeprecated-declarations]
+  263 |                 std::get_temporary_buffer<value_type>(_M_original_len));
+      |                      ^
+/usr/lib/gcc/x86_64-linux-gnu/12/../../../../include/c++/12/bits/stl_algo.h:4996:15: note: in instantiation of member function 'std::_Temporary_buffer<__gnu_cxx::__normal_iterator<Stockfish::Search::RootMove *, std::vector<Stockfish::Search::RootMove>>, Stockfish::Search::RootMove>::_Temporary_buffer' requested here
+ 4996 |       _TmpBuf __buf(__first, (__last - __first + 1) / 2);
+      |               ^
+/usr/lib/gcc/x86_64-linux-gnu/12/../../../../include/c++/12/bits/stl_algo.h:5034:23: note: in instantiation of function template specialization 'std::__stable_sort<__gnu_cxx::__normal_iterator<Stockfish::Search::RootMove *, std::vector<Stockfish::Search::RootMove>>, __gnu_cxx::__ops::_Iter_less_iter>' requested here
+ 5034 |       _GLIBCXX_STD_A::__stable_sort(__first, __last,
+      |                       ^
+search.cpp:417:22: note: in instantiation of function template specialization 'std::stable_sort<__gnu_cxx::__normal_iterator<Stockfish::Search::RootMove *, std::vector<Stockfish::Search::RootMove>>>' requested here
+  417 |                 std::stable_sort(rootMoves.begin() + pvIdx, rootMoves.begin() + pvLast);
+      |                      ^
+/usr/lib/gcc/x86_64-linux-gnu/12/../../../../include/c++/12/bits/stl_tempbuf.h:99:5: note: 'get_temporary_buffer<Stockfish::Search::RootMove>' has been explicitly marked deprecated here
+   99 |     _GLIBCXX17_DEPRECATED
+      |     ^
+/usr/lib/gcc/x86_64-linux-gnu/12/../../../../include/x86_64-linux-gnu/c++/12/bits/c++config.h:119:34: note: expanded from macro '_GLIBCXX17_DEPRECATED'
+  119 | # define _GLIBCXX17_DEPRECATED [[__deprecated__]]
+      |                                  ^
+1 warning generated.
+clang++-20 -Wall -Wcast-qual -fno-exceptions -std=c++17 -pedantic -Wextra -Wshadow -Wmissing-prototypes -Wconditional-uninitialized -flax-vector-conversions=none -fconstexpr-steps=500000000 -m64 -DUSE_PTHREADS -DNDEBUG -O3 -funroll-loops -DIS_64BIT -msse -DUSE_SSE2 -msse2 -DARCH=x86-64 -flto=full -Xclang -mllvm -Xclang -inline-threshold=500 -c -o timeman.o timeman.cpp
+clang++-20 -Wall -Wcast-qual -fno-exceptions -std=c++17 -pedantic -Wextra -Wshadow -Wmissing-prototypes -Wconditional-uninitialized -flax-vector-conversions=none -fconstexpr-steps=500000000 -m64 -DUSE_PTHREADS -DNDEBUG -O3 -funroll-loops -DIS_64BIT -msse -DUSE_SSE2 -msse2 -DARCH=x86-64 -flto=full -Xclang -mllvm -Xclang -inline-threshold=500 -c -o tt.o tt.cpp
+clang++-20 -Wall -Wcast-qual -fno-exceptions -std=c++17 -pedantic -Wextra -Wshadow -Wmissing-prototypes -Wconditional-uninitialized -flax-vector-conversions=none -fconstexpr-steps=500000000 -m64 -DUSE_PTHREADS -DNDEBUG -O3 -funroll-loops -DIS_64BIT -msse -DUSE_SSE2 -msse2 -DARCH=x86-64 -flto=full -Xclang -mllvm -Xclang -inline-threshold=500 -c -o uci.o uci.cpp
+In file included from tt.cpp:19:
+In file included from ./tt.h:24:
+In file included from ./misc.h:22:
+In file included from /usr/lib/gcc/x86_64-linux-gnu/12/../../../../include/c++/12/algorithm:61:
+In file included from /usr/lib/gcc/x86_64-linux-gnu/12/../../../../include/c++/12/bits/stl_algo.h:61:
+/usr/lib/gcc/x86_64-linux-gnu/12/../../../../include/c++/12/bits/stl_tempbuf.h:263:8: warning: 'get_temporary_buffer<unsigned long>' is deprecated [-Wdeprecated-declarations]
+  263 |                 std::get_temporary_buffer<value_type>(_M_original_len));
+      |                      ^
+/usr/lib/gcc/x86_64-linux-gnu/12/../../../../include/c++/12/bits/stl_algo.h:4996:15: note: in instantiation of member function 'std::_Temporary_buffer<__gnu_cxx::__normal_iterator<unsigned long *, std::vector<unsigned long>>, unsigned long>::_Temporary_buffer' requested here
+ 4996 |       _TmpBuf __buf(__first, (__last - __first + 1) / 2);
+      |               ^
+/usr/lib/gcc/x86_64-linux-gnu/12/../../../../include/c++/12/bits/stl_algo.h:5070:23: note: in instantiation of function template specialization 'std::__stable_sort<__gnu_cxx::__normal_iterator<unsigned long *, std::vector<unsigned long>>, __gnu_cxx::__ops::_Iter_comp_iter<(lambda at tt.cpp:204:54)>>' requested here
+ 5070 |       _GLIBCXX_STD_A::__stable_sort(__first, __last,
+      |                       ^
+tt.cpp:204:14: note: in instantiation of function template specialization 'std::stable_sort<__gnu_cxx::__normal_iterator<unsigned long *, std::vector<unsigned long>>, (lambda at tt.cpp:204:54)>' requested here
+  204 |         std::stable_sort(order.begin(), order.end(), [&threadToNuma](usize t1, usize t2) {
+      |              ^
+/usr/lib/gcc/x86_64-linux-gnu/12/../../../../include/c++/12/bits/stl_tempbuf.h:99:5: note: 'get_temporary_buffer<unsigned long>' has been explicitly marked deprecated here
+   99 |     _GLIBCXX17_DEPRECATED
+      |     ^
+/usr/lib/gcc/x86_64-linux-gnu/12/../../../../include/x86_64-linux-gnu/c++/12/bits/c++config.h:119:34: note: expanded from macro '_GLIBCXX17_DEPRECATED'
+  119 | # define _GLIBCXX17_DEPRECATED [[__deprecated__]]
+      |                                  ^
+1 warning generated.
+clang++-20 -Wall -Wcast-qual -fno-exceptions -std=c++17 -pedantic -Wextra -Wshadow -Wmissing-prototypes -Wconditional-uninitialized -flax-vector-conversions=none -fconstexpr-steps=500000000 -m64 -DUSE_PTHREADS -DNDEBUG -O3 -funroll-loops -DIS_64BIT -msse -DUSE_SSE2 -msse2 -DARCH=x86-64 -flto=full -Xclang -mllvm -Xclang -inline-threshold=500 -c -o uci_move.o uci_move.cpp
+uci.cpp:82:32: warning: lambda capture 'this' is not used [-Wunused-lambda-capture]
+   82 |     engine.set_on_update_full([this](const auto& i) { on_update_full(i, false); });
+      |                                ^~~~
+clang++-20 -Wall -Wcast-qual -fno-exceptions -std=c++17 -pedantic -Wextra -Wshadow -Wmissing-prototypes -Wconditional-uninitialized -flax-vector-conversions=none -fconstexpr-steps=500000000 -m64 -DUSE_PTHREADS -DNDEBUG -O3 -funroll-loops -DIS_64BIT -msse -DUSE_SSE2 -msse2 -DARCH=x86-64 -flto=full -Xclang -mllvm -Xclang -inline-threshold=500 -c -o ucioption.o ucioption.cpp
+1 warning generated.
+clang++-20 -Wall -Wcast-qual -fno-exceptions -std=c++17 -pedantic -Wextra -Wshadow -Wmissing-prototypes -Wconditional-uninitialized -flax-vector-conversions=none -fconstexpr-steps=500000000 -m64 -DUSE_PTHREADS -DNDEBUG -O3 -funroll-loops -DIS_64BIT -msse -DUSE_SSE2 -msse2 -DARCH=x86-64 -flto=full -Xclang -mllvm -Xclang -inline-threshold=500 -c -o xboard.o xboard.cpp
+clang++-20 -Wall -Wcast-qual -fno-exceptions -std=c++17 -pedantic -Wextra -Wshadow -Wmissing-prototypes -Wconditional-uninitialized -flax-vector-conversions=none -fconstexpr-steps=500000000 -m64 -DUSE_PTHREADS -DNDEBUG -O3 -funroll-loops -DIS_64BIT -msse -DUSE_SSE2 -msse2 -DARCH=x86-64 -flto=full -Xclang -mllvm -Xclang -inline-threshold=500 -c -o tune.o tune.cpp
+clang++-20 -Wall -Wcast-qual -fno-exceptions -std=c++17 -pedantic -Wextra -Wshadow -Wmissing-prototypes -Wconditional-uninitialized -flax-vector-conversions=none -fconstexpr-steps=500000000 -m64 -DUSE_PTHREADS -DNDEBUG -O3 -funroll-loops -DIS_64BIT -msse -DUSE_SSE2 -msse2 -DARCH=x86-64 -flto=full -Xclang -mllvm -Xclang -inline-threshold=500 -c -o tbprobe.o syzygy/tbprobe.cpp
+clang++-20 -Wall -Wcast-qual -fno-exceptions -std=c++17 -pedantic -Wextra -Wshadow -Wmissing-prototypes -Wconditional-uninitialized -flax-vector-conversions=none -fconstexpr-steps=500000000 -m64 -DUSE_PTHREADS -DNDEBUG -O3 -funroll-loops -DIS_64BIT -msse -DUSE_SSE2 -msse2 -DARCH=x86-64 -flto=full -Xclang -mllvm -Xclang -inline-threshold=500 -c -o atomic_notation.o api/atomic_notation.cpp
+In file included from syzygy/tbprobe.cpp:19:
+In file included from syzygy/tbprobe.h:22:
+In file included from /usr/lib/gcc/x86_64-linux-gnu/12/../../../../include/c++/12/functional:64:
+In file included from /usr/lib/gcc/x86_64-linux-gnu/12/../../../../include/c++/12/bits/stl_algo.h:61:
+/usr/lib/gcc/x86_64-linux-gnu/12/../../../../include/c++/12/bits/stl_tempbuf.h:263:8: warning: 'get_temporary_buffer<Stockfish::Square>' is deprecated [-Wdeprecated-declarations]
+  263 |                 std::get_temporary_buffer<value_type>(_M_original_len));
+      |                      ^
+/usr/lib/gcc/x86_64-linux-gnu/12/../../../../include/c++/12/bits/stl_algo.h:4996:15: note: in instantiation of member function 'std::_Temporary_buffer<Stockfish::Square *, Stockfish::Square>::_Temporary_buffer' requested here
+ 4996 |       _TmpBuf __buf(__first, (__last - __first + 1) / 2);
+      |               ^
+/usr/lib/gcc/x86_64-linux-gnu/12/../../../../include/c++/12/bits/stl_algo.h:5070:23: note: in instantiation of function template specialization 'std::__stable_sort<Stockfish::Square *, __gnu_cxx::__ops::_Iter_comp_iter<bool (*)(Stockfish::Square, Stockfish::Square)>>' requested here
+ 5070 |       _GLIBCXX_STD_A::__stable_sort(__first, __last,
+      |                       ^
+syzygy/tbprobe.cpp:879:14: note: in instantiation of function template specialization 'std::stable_sort<Stockfish::Square *, bool (*)(Stockfish::Square, Stockfish::Square)>' requested here
+  879 |         std::stable_sort(squares + 1, squares + leadPawnsCnt, pawns_comp);
+      |              ^
+syzygy/tbprobe.cpp:1354:12: note: in instantiation of function template specialization 'Stockfish::(anonymous namespace)::do_probe_table<Stockfish::(anonymous namespace)::TBTable<Stockfish::(anonymous namespace)::WDL>, Stockfish::Tablebases::WDLScore>' requested here
+ 1354 |     return do_probe_table(pos, entry, wdl, result);
+      |            ^
+syzygy/tbprobe.cpp:1417:17: note: in instantiation of function template specialization 'Stockfish::(anonymous namespace)::probe_table<Stockfish::(anonymous namespace)::WDL, Stockfish::Tablebases::WDLScore>' requested here
+ 1417 |         value = probe_table<WDL>(pos, result);
+      |                 ^
+syzygy/tbprobe.cpp:1602:12: note: in instantiation of function template specialization 'Stockfish::(anonymous namespace)::search<false>' requested here
+ 1602 |     return search<false>(pos, result);
+      |            ^
+/usr/lib/gcc/x86_64-linux-gnu/12/../../../../include/c++/12/bits/stl_tempbuf.h:99:5: note: 'get_temporary_buffer<Stockfish::Square>' has been explicitly marked deprecated here
+   99 |     _GLIBCXX17_DEPRECATED
+      |     ^
+/usr/lib/gcc/x86_64-linux-gnu/12/../../../../include/x86_64-linux-gnu/c++/12/bits/c++config.h:119:34: note: expanded from macro '_GLIBCXX17_DEPRECATED'
+  119 | # define _GLIBCXX17_DEPRECATED [[__deprecated__]]
+      |                                  ^
+In file included from syzygy/tbprobe.cpp:19:
+In file included from syzygy/tbprobe.h:22:
+In file included from /usr/lib/gcc/x86_64-linux-gnu/12/../../../../include/c++/12/functional:64:
+In file included from /usr/lib/gcc/x86_64-linux-gnu/12/../../../../include/c++/12/bits/stl_algo.h:61:
+/usr/lib/gcc/x86_64-linux-gnu/12/../../../../include/c++/12/bits/stl_tempbuf.h:263:8: warning: 'get_temporary_buffer<Stockfish::Search::RootMove>' is deprecated [-Wdeprecated-declarations]
+  263 |                 std::get_temporary_buffer<value_type>(_M_original_len));
+      |                      ^
+/usr/lib/gcc/x86_64-linux-gnu/12/../../../../include/c++/12/bits/stl_algo.h:4996:15: note: in instantiation of member function 'std::_Temporary_buffer<__gnu_cxx::__normal_iterator<Stockfish::Search::RootMove *, std::vector<Stockfish::Search::RootMove>>, Stockfish::Search::RootMove>::_Temporary_buffer' requested here
+ 4996 |       _TmpBuf __buf(__first, (__last - __first + 1) / 2);
+      |               ^
+/usr/lib/gcc/x86_64-linux-gnu/12/../../../../include/c++/12/bits/stl_algo.h:5070:23: note: in instantiation of function template specialization 'std::__stable_sort<__gnu_cxx::__normal_iterator<Stockfish::Search::RootMove *, std::vector<Stockfish::Search::RootMove>>, __gnu_cxx::__ops::_Iter_comp_iter<(lambda at syzygy/tbprobe.cpp:1861:11)>>' requested here
+ 5070 |       _GLIBCXX_STD_A::__stable_sort(__first, __last,
+      |                       ^
+syzygy/tbprobe.cpp:1859:14: note: in instantiation of function template specialization 'std::stable_sort<__gnu_cxx::__normal_iterator<Stockfish::Search::RootMove *, std::vector<Stockfish::Search::RootMove>>, (lambda at syzygy/tbprobe.cpp:1861:11)>' requested here
+ 1859 |         std::stable_sort(
+      |              ^
+/usr/lib/gcc/x86_64-linux-gnu/12/../../../../include/c++/12/bits/stl_tempbuf.h:99:5: note: 'get_temporary_buffer<Stockfish::Search::RootMove>' has been explicitly marked deprecated here
+   99 |     _GLIBCXX17_DEPRECATED
+      |     ^
+/usr/lib/gcc/x86_64-linux-gnu/12/../../../../include/x86_64-linux-gnu/c++/12/bits/c++config.h:119:34: note: expanded from macro '_GLIBCXX17_DEPRECATED'
+  119 | # define _GLIBCXX17_DEPRECATED [[__deprecated__]]
+      |                                  ^
+clang++-20 -Wall -Wcast-qual -fno-exceptions -std=c++17 -pedantic -Wextra -Wshadow -Wmissing-prototypes -Wconditional-uninitialized -flax-vector-conversions=none -fconstexpr-steps=500000000 -m64 -DUSE_PTHREADS -DNDEBUG -O3 -funroll-loops -DIS_64BIT -msse -DUSE_SSE2 -msse2 -DARCH=x86-64 -flto=full -Xclang -mllvm -Xclang -inline-threshold=500 -c -o atomic_outcome.o api/atomic_outcome.cpp
+2 warnings generated.
+clang++-20 -Wall -Wcast-qual -fno-exceptions -std=c++17 -pedantic -Wextra -Wshadow -Wmissing-prototypes -Wconditional-uninitialized -flax-vector-conversions=none -fconstexpr-steps=500000000 -m64 -DUSE_PTHREADS -DNDEBUG -O3 -funroll-loops -DIS_64BIT -msse -DUSE_SSE2 -msse2 -DARCH=x86-64 -flto=full -Xclang -mllvm -Xclang -inline-threshold=500 -c -o nnue_accumulator.o nnue/nnue_accumulator.cpp
+clang++-20 -Wall -Wcast-qual -fno-exceptions -std=c++17 -pedantic -Wextra -Wshadow -Wmissing-prototypes -Wconditional-uninitialized -flax-vector-conversions=none -fconstexpr-steps=500000000 -m64 -DUSE_PTHREADS -DNDEBUG -O3 -funroll-loops -DIS_64BIT -msse -DUSE_SSE2 -msse2 -DARCH=x86-64 -flto=full -Xclang -mllvm -Xclang -inline-threshold=500 -c -o nnue_misc.o nnue/nnue_misc.cpp
+clang++-20 -Wall -Wcast-qual -fno-exceptions -std=c++17 -pedantic -Wextra -Wshadow -Wmissing-prototypes -Wconditional-uninitialized -flax-vector-conversions=none -fconstexpr-steps=500000000 -m64 -DUSE_PTHREADS -DNDEBUG -O3 -funroll-loops -DIS_64BIT -msse -DUSE_SSE2 -msse2 -DARCH=x86-64 -flto=full -Xclang -mllvm -Xclang -inline-threshold=500 -c -o network.o nnue/network.cpp
+clang++-20 -Wall -Wcast-qual -fno-exceptions -std=c++17 -pedantic -Wextra -Wshadow -Wmissing-prototypes -Wconditional-uninitialized -flax-vector-conversions=none -fconstexpr-steps=500000000 -m64 -DUSE_PTHREADS -DNDEBUG -O3 -funroll-loops -DIS_64BIT -msse -DUSE_SSE2 -msse2 -DARCH=x86-64 -flto=full -Xclang -mllvm -Xclang -inline-threshold=500 -c -o half_ka_v2_hm.o nnue/features/half_ka_v2_hm.cpp
+clang++-20 -Wall -Wcast-qual -fno-exceptions -std=c++17 -pedantic -Wextra -Wshadow -Wmissing-prototypes -Wconditional-uninitialized -flax-vector-conversions=none -fconstexpr-steps=500000000 -m64 -DUSE_PTHREADS -DNDEBUG -O3 -funroll-loops -DIS_64BIT -msse -DUSE_SSE2 -msse2 -DARCH=x86-64 -flto=full -Xclang -mllvm -Xclang -inline-threshold=500 -c -o half_ka_v2_atomic.o nnue/features/half_ka_v2_atomic.cpp
+clang++-20 -Wall -Wcast-qual -fno-exceptions -std=c++17 -pedantic -Wextra -Wshadow -Wmissing-prototypes -Wconditional-uninitialized -flax-vector-conversions=none -fconstexpr-steps=500000000 -m64 -DUSE_PTHREADS -DNDEBUG -O3 -funroll-loops -DIS_64BIT -msse -DUSE_SSE2 -msse2 -DARCH=x86-64 -flto=full -Xclang -mllvm -Xclang -inline-threshold=500 -c -o full_threats.o nnue/features/full_threats.cpp
+clang++-20 -Wall -Wcast-qual -fno-exceptions -std=c++17 -pedantic -Wextra -Wshadow -Wmissing-prototypes -Wconditional-uninitialized -flax-vector-conversions=none -fconstexpr-steps=500000000 -m64 -DUSE_PTHREADS -DNDEBUG -O3 -funroll-loops -DIS_64BIT -msse -DUSE_SSE2 -msse2 -DARCH=x86-64 -flto=full -Xclang -mllvm -Xclang -inline-threshold=500 -c -o engine.o engine.cpp
+clang++-20 -Wall -Wcast-qual -fno-exceptions -std=c++17 -pedantic -Wextra -Wshadow -Wmissing-prototypes -Wconditional-uninitialized -flax-vector-conversions=none -fconstexpr-steps=500000000 -m64 -DUSE_PTHREADS -DNDEBUG -O3 -funroll-loops -DIS_64BIT -msse -DUSE_SSE2 -msse2 -DARCH=x86-64 -flto=full -Xclang -mllvm -Xclang -inline-threshold=500 -c -o score.o score.cpp
+clang++-20 -Wall -Wcast-qual -fno-exceptions -std=c++17 -pedantic -Wextra -Wshadow -Wmissing-prototypes -Wconditional-uninitialized -flax-vector-conversions=none -fconstexpr-steps=500000000 -m64 -DUSE_PTHREADS -DNDEBUG -O3 -funroll-loops -DIS_64BIT -msse -DUSE_SSE2 -msse2 -DARCH=x86-64 -flto=full -Xclang -mllvm -Xclang -inline-threshold=500 -c -o memory.o memory.cpp
+clang++-20 -o atomic-stockfish attacks.o benchmark.o bitboard.o evaluate.o main.o misc.o movegen.o movepick.o position.o search.o thread.o timeman.o tt.o uci.o uci_move.o ucioption.o xboard.o tune.o tbprobe.o atomic_notation.o atomic_outcome.o nnue_accumulator.o nnue_misc.o network.o half_ka_v2_hm.o half_ka_v2_atomic.o full_threats.o engine.o score.o memory.o   -latomic -m64 -lpthread -lrt -fuse-ld=lld  -Wall -Wcast-qual -fno-exceptions -std=c++17  -pedantic -Wextra -Wshadow -Wmissing-prototypes -Wconditional-uninitialized -flax-vector-conversions=none -fconstexpr-steps=500000000 -m64 -DUSE_PTHREADS -DNDEBUG -O3 -funroll-loops -DIS_64BIT -msse -DUSE_SSE2 -msse2 -DARCH=x86-64 -flto=full -Xclang -mllvm -Xclang -inline-threshold=500
+make[1]: Leaving directory '/work/src'
+make: Leaving directory '/work/src'
+make: Entering directory '/work/src'
+
+clang++-20 -Wall -Wcast-qual -fno-exceptions -std=c++17 -pedantic -Wextra -Wshadow -Wmissing-prototypes -Wconditional-uninitialized -flax-vector-conversions=none -fconstexpr-steps=500000000 -m64 -DUSE_PTHREADS -DNDEBUG -O3 -funroll-loops -DIS_64BIT -msse -DUSE_SSE2 -msse2 -DARCH=x86-64 -flto=full -Xclang -mllvm -Xclang -inline-threshold=500 -I. -c -o atomic_see_tests.o ../tests/atomic_see.cpp
+Config:
+debug: 'no'
+sanitize: 'none'
+optimize: 'yes'
+arch: 'x86_64'
+bits: '64'
+kernel: 'Linux'
+os: 'GNU/Linux'
+prefetch: 'yes'
+popcnt: 'no'
+pext: 'no'
+sse: 'yes'
+mmx: 'no'
+sse2: 'yes'
+ssse3: 'no'
+sse41: 'no'
+avx2: 'no'
+avxvnni: 'no'
+avx512: 'no'
+vnni512: 'no'
+avx512icl: 'no'
+altivec: 'no'
+vsx: 'no'
+neon: 'no'
+dotprod: 'no'
+arm_version: '0'
+lsx: 'no'
+lasx: 'no'
+syzygy: 'yes'
+target_windows: ''
+
+Flags:
+CXX: clang++-20
+CXXFLAGS:  -Wall -Wcast-qual -fno-exceptions -std=c++17  -pedantic -Wextra -Wshadow -Wmissing-prototypes -Wconditional-uninitialized -flax-vector-conversions=none -fconstexpr-steps=500000000 -m64 -DUSE_PTHREADS -DNDEBUG -O3 -funroll-loops -DIS_64BIT -msse -DUSE_SSE2 -msse2 -DARCH=x86-64 -flto=full -Xclang -mllvm -Xclang -inline-threshold=500
+LDFLAGS:   -latomic -m64 -lpthread -lrt -fuse-ld=lld  -Wall -Wcast-qual -fno-exceptions -std=c++17  -pedantic -Wextra -Wshadow -Wmissing-prototypes -Wconditional-uninitialized -flax-vector-conversions=none -fconstexpr-steps=500000000 -m64 -DUSE_PTHREADS -DNDEBUG -O3 -funroll-loops -DIS_64BIT -msse -DUSE_SSE2 -msse2 -DARCH=x86-64 -flto=full -Xclang -mllvm -Xclang -inline-threshold=500
+
+Testing config sanity. If this fails, try 'make help' ...
+
+clang++-20 -o atomic-unit-tests.bin attacks.o benchmark.o bitboard.o evaluate.o misc.o movegen.o movepick.o position.o search.o thread.o timeman.o tt.o uci.o uci_move.o ucioption.o xboard.o tune.o tbprobe.o atomic_notation.o atomic_outcome.o nnue_accumulator.o nnue_misc.o network.o half_ka_v2_hm.o half_ka_v2_atomic.o full_threats.o engine.o score.o memory.o atomic_see_tests.o   -latomic -m64 -lpthread -lrt -fuse-ld=lld  -Wall -Wcast-qual -fno-exceptions -std=c++17  -pedantic -Wextra -Wshadow -Wmissing-prototypes -Wconditional-uninitialized -flax-vector-conversions=none -fconstexpr-steps=500000000 -m64 -DUSE_PTHREADS -DNDEBUG -O3 -funroll-loops -DIS_64BIT -msse -DUSE_SSE2 -msse2 -DARCH=x86-64 -flto=full -Xclang -mllvm -Xclang -inline-threshold=500
+./atomic-unit-tests.bin
+PASS enemy bycatch SEE=1861
+PASS friendly bycatch SEE=-302
+PASS adjacent pawns immune SEE=-402
+PASS attacker inside blast SEE=-783
+PASS opponent declines quiet capture SEE=0
+PASS king excluded as quiet attacker SEE=0
+PASS opponent king explodes SEE=32000
+PASS own king explodes SEE=-32000
+PASS Atomic values change SEE sign SEE=-221
+PASS en passant SEE=0
+PASS promotion SEE=0
+PASS castling SEE=0
+PASS direct king capture atomic_wins=1
+PASS adjacent king bycatch atomic_wins=1
+PASS en-passant king bycatch atomic_wins=1
+PASS capture-promotion king bycatch atomic_wins=1
+PASS remote capture atomic_wins=0
+PASS quiet move beside king atomic_wins=0
+PASS remote en passant atomic_wins=0
+PASS quiet direct check gives_check=1
+PASS quiet discovered check gives_check=1
+PASS capturer explosion removes checker gives_check=0
+PASS capture blast discovers check gives_check=1
+PASS en passant discovers check gives_check=1
+PASS promotion gives check gives_check=1
+PASS castling rook gives check gives_check=1
+PASS adjacent kings suppress discovered check gives_check=0
+PASS analysis check survives unrelated quiet gives_check=1
+PASS analysis rook check survives b1 quiet gives_check=1
+PASS Atomic960 castling with king already on g1 gives_check=1
+PASS Atomic960 castling with rook already on f1 gives_check=1
+PASS Atomic960 castling with king starting on f1 gives_check=1
+PASS Atomic960 castling with rook starting on g1 gives_check=1
+PASS explosive capture state make/undo state
+PASS en passant state make/undo state
+PASS capture promotion state make/undo state
+PASS direct king capture state make/undo state
+PASS blast clears castling state make/undo state
+PASS double push en passant key make/undo state
+PASS orthodox-layout Atomic castling make/undo state
+PASS Atomic960 castling make/undo state
+PASS repetition and threefold state
+PASS fifty-move and reset state
+PASS UCI move notation, case folding and Atomic960 castling
+PASS Atomic move-count threshold improving=0 depth=3 threshold=4
+PASS Atomic move-count threshold improving=0 depth=4 threshold=7
+PASS Atomic move-count threshold improving=0 depth=6 threshold=13
+PASS Atomic move-count threshold improving=1 depth=3 threshold=7
+PASS Atomic move-count threshold improving=1 depth=4 threshold=10
+PASS Atomic move-count threshold improving=1 depth=6 threshold=20
+PASS Atomic capture-futility eligibility normal victim only eligible=1
+PASS Atomic capture-futility eligibility adjacent pawn survives eligible=1
+PASS Atomic capture-futility eligibility non-pawn explosion bycatch eligible=0
+PASS Atomic capture-futility eligibility en passant eligible=0
+PASS Atomic capture-futility eligibility capture promotion eligible=0
+PASS Atomic capture-futility eligibility quiet normal move eligible=0
+Atomic C++ unit tests passed: 56/56
+make: Leaving directory '/work/src'
+make: Entering directory '/work/src'
+
+clang++-20 -Wall -Wcast-qual -fno-exceptions -std=c++17 -pedantic -Wextra -Wshadow -Wmissing-prototypes -Wconditional-uninitialized -flax-vector-conversions=none -fconstexpr-steps=500000000 -m64 -DUSE_PTHREADS -DNDEBUG -O3 -funroll-loops -DIS_64BIT -msse -DUSE_SSE2 -msse2 -DARCH=x86-64 -flto=full -Xclang -mllvm -Xclang -inline-threshold=500 -fexceptions -c -o atomic_board.o api/atomic_board.cpp
+Config:
+debug: 'no'
+sanitize: 'none'
+optimize: 'yes'
+arch: 'x86_64'
+bits: '64'
+kernel: 'Linux'
+os: 'GNU/Linux'
+prefetch: 'yes'
+popcnt: 'no'
+pext: 'no'
+sse: 'yes'
+mmx: 'no'
+sse2: 'yes'
+ssse3: 'no'
+sse41: 'no'
+avx2: 'no'
+avxvnni: 'no'
+avx512: 'no'
+vnni512: 'no'
+avx512icl: 'no'
+altivec: 'no'
+vsx: 'no'
+neon: 'no'
+dotprod: 'no'
+arm_version: '0'
+lsx: 'no'
+lasx: 'no'
+syzygy: 'yes'
+target_windows: ''
+
+Flags:
+CXX: clang++-20
+CXXFLAGS:  -Wall -Wcast-qual -fno-exceptions -std=c++17  -pedantic -Wextra -Wshadow -Wmissing-prototypes -Wconditional-uninitialized -flax-vector-conversions=none -fconstexpr-steps=500000000 -m64 -DUSE_PTHREADS -DNDEBUG -O3 -funroll-loops -DIS_64BIT -msse -DUSE_SSE2 -msse2 -DARCH=x86-64 -flto=full -Xclang -mllvm -Xclang -inline-threshold=500
+LDFLAGS:   -latomic -m64 -lpthread -lrt -fuse-ld=lld  -Wall -Wcast-qual -fno-exceptions -std=c++17  -pedantic -Wextra -Wshadow -Wmissing-prototypes -Wconditional-uninitialized -flax-vector-conversions=none -fconstexpr-steps=500000000 -m64 -DUSE_PTHREADS -DNDEBUG -O3 -funroll-loops -DIS_64BIT -msse -DUSE_SSE2 -msse2 -DARCH=x86-64 -flto=full -Xclang -mllvm -Xclang -inline-threshold=500
+
+Testing config sanity. If this fails, try 'make help' ...
+
+clang++-20 -Wall -Wcast-qual -fno-exceptions -std=c++17 -pedantic -Wextra -Wshadow -Wmissing-prototypes -Wconditional-uninitialized -flax-vector-conversions=none -fconstexpr-steps=500000000 -m64 -DUSE_PTHREADS -DNDEBUG -O3 -funroll-loops -DIS_64BIT -msse -DUSE_SSE2 -msse2 -DARCH=x86-64 -flto=full -Xclang -mllvm -Xclang -inline-threshold=500 -c -o atomic_fen.o api/atomic_fen.cpp
+clang++-20 -Wall -Wcast-qual -fno-exceptions -std=c++17 -pedantic -Wextra -Wshadow -Wmissing-prototypes -Wconditional-uninitialized -flax-vector-conversions=none -fconstexpr-steps=500000000 -m64 -DUSE_PTHREADS -DNDEBUG -O3 -funroll-loops -DIS_64BIT -msse -DUSE_SSE2 -msse2 -DARCH=x86-64 -flto=full -Xclang -mllvm -Xclang -inline-threshold=500 -fexceptions -I. -c -o atomic_api_tests.o ../tests/atomic_api.cpp
+clang++-20 -o atomic-api-tests.bin attacks.o benchmark.o bitboard.o evaluate.o misc.o movegen.o movepick.o position.o search.o thread.o timeman.o tt.o uci.o uci_move.o ucioption.o xboard.o tune.o tbprobe.o atomic_notation.o atomic_outcome.o nnue_accumulator.o nnue_misc.o network.o half_ka_v2_hm.o half_ka_v2_atomic.o full_threats.o engine.o score.o memory.o atomic_board.o atomic_fen.o atomic_api_tests.o   -latomic -m64 -lpthread -lrt -fuse-ld=lld  -Wall -Wcast-qual -fno-exceptions -std=c++17  -pedantic -Wextra -Wshadow -Wmissing-prototypes -Wconditional-uninitialized -flax-vector-conversions=none -fconstexpr-steps=500000000 -m64 -DUSE_PTHREADS -DNDEBUG -O3 -funroll-loops -DIS_64BIT -msse -DUSE_SSE2 -msse2 -DARCH=x86-64 -flto=full -Xclang -mllvm -Xclang -inline-threshold=500
+./atomic-api-tests.bin
+PASS san.atomic960-castle
+PASS san.en-passant
+PASS san.explosion
+PASS san.promotion
+PASS san.quiet
+PASS san.disambiguation-file
+PASS san.disambiguation-rank
+PASS san.disambiguation-square
+PASS san.atomic-check
+PASS san.checkmate
+PASS san.king-explosion-mate
+PASS san.castle-kingside
+PASS result.exploded-king
+PASS result.exploded-king-priority
+PASS result.mate
+PASS result.stalemate
+PASS material.k-v-k
+PASS material.k-v-kp
+PASS material.k-v-kq
+PASS material.start
+PASS checked.atomic-bishop
+PASS checked.adjacent-kings
+PASS outcome.fifty-move-claim
+PASS outcome.threefold-claim
+PASS validation.start
+PASS validation.atomic-plus-marker
+PASS validation.atomic-invalid-castling-rank
+PASS validation.atomic960-castling
+PASS validation.atomic-analysis-reachability
+PASS validation.halfmove-nonnumeric
+PASS validation.fullmove-nonnumeric
+PASS validation.field-error-precedence
+PASS validation.empty
+PASS validation.board-construction-and-set
+Atomic API unit tests passed
+make: Leaving directory '/work/src'
+make: Entering directory '/work/src'
+
+clang++-20 -Wall -Wcast-qual -fno-exceptions -std=c++17 -pedantic -Wextra -Wshadow -Wmissing-prototypes -Wconditional-uninitialized -flax-vector-conversions=none -fconstexpr-steps=500000000 -m64 -DUSE_PTHREADS -DNDEBUG -O3 -funroll-loops -DIS_64BIT -msse -DUSE_SSE2 -msse2 -DARCH=x86-64 -flto=full -Xclang -mllvm -Xclang -inline-threshold=500 -I. -c -o atomic_syzygy_driver.o ../tests/atomic_syzygy_driver.cpp
+Config:
+debug: 'no'
+sanitize: 'none'
+optimize: 'yes'
+arch: 'x86_64'
+bits: '64'
+kernel: 'Linux'
+os: 'GNU/Linux'
+prefetch: 'yes'
+popcnt: 'no'
+pext: 'no'
+sse: 'yes'
+mmx: 'no'
+sse2: 'yes'
+ssse3: 'no'
+sse41: 'no'
+avx2: 'no'
+avxvnni: 'no'
+avx512: 'no'
+vnni512: 'no'
+avx512icl: 'no'
+altivec: 'no'
+vsx: 'no'
+neon: 'no'
+dotprod: 'no'
+arm_version: '0'
+lsx: 'no'
+lasx: 'no'
+syzygy: 'yes'
+target_windows: ''
+
+Flags:
+CXX: clang++-20
+CXXFLAGS:  -Wall -Wcast-qual -fno-exceptions -std=c++17  -pedantic -Wextra -Wshadow -Wmissing-prototypes -Wconditional-uninitialized -flax-vector-conversions=none -fconstexpr-steps=500000000 -m64 -DUSE_PTHREADS -DNDEBUG -O3 -funroll-loops -DIS_64BIT -msse -DUSE_SSE2 -msse2 -DARCH=x86-64 -flto=full -Xclang -mllvm -Xclang -inline-threshold=500
+LDFLAGS:   -latomic -m64 -lpthread -lrt -fuse-ld=lld  -Wall -Wcast-qual -fno-exceptions -std=c++17  -pedantic -Wextra -Wshadow -Wmissing-prototypes -Wconditional-uninitialized -flax-vector-conversions=none -fconstexpr-steps=500000000 -m64 -DUSE_PTHREADS -DNDEBUG -O3 -funroll-loops -DIS_64BIT -msse -DUSE_SSE2 -msse2 -DARCH=x86-64 -flto=full -Xclang -mllvm -Xclang -inline-threshold=500
+
+Testing config sanity. If this fails, try 'make help' ...
+
+clang++-20 -o atomic-syzygy-driver.bin attacks.o bitboard.o misc.o movegen.o position.o tbprobe.o ucioption.o atomic_syzygy_driver.o   -latomic -m64 -lpthread -lrt -fuse-ld=lld  -Wall -Wcast-qual -fno-exceptions -std=c++17  -pedantic -Wextra -Wshadow -Wmissing-prototypes -Wconditional-uninitialized -flax-vector-conversions=none -fconstexpr-steps=500000000 -m64 -DUSE_PTHREADS -DNDEBUG -O3 -funroll-loops -DIS_64BIT -msse -DUSE_SSE2 -msse2 -DARCH=x86-64 -flto=full -Xclang -mllvm -Xclang -inline-threshold=500
+make: Leaving directory '/work/src'
+Atomic UCI protocol contract passed
+PASS perft depth=4 expected=197326 chess960=false
+PASS perft depth=4 expected=1434825 chess960=false
+PASS perft depth=4 expected=714499 chess960=false
+PASS perft depth=2 expected=148 chess960=false
+PASS perft depth=4 expected=61401 chess960=true
+PASS perft depth=4 expected=98729 chess960=true
+PASS perft depth=4 expected=241478 chess960=true
+PASS perft depth=4 expected=17915 chess960=true
+Atomic perft contract passed
+
+Atomic-Stockfish candidate: /work/src/atomic-stockfish
+  PASS [perft] explosion_bycatch_and_pawn_immunity
+  PASS [perft] self_explosion_is_illegal
+  PASS [perft] adjacent_kings_are_legal
+  PASS [perft] atomic_en_passant
+  PASS [perft] explosion_clears_castling_right
+  PASS [perft] capture_promotion_explodes
+  PASS [perft] king_exploded_is_terminal
+  PASS [perft] atomic_checkmate_has_no_moves
+  PASS [perft] atomic_stalemate_has_no_moves
+  PASS [perft] atomic960_castle_is_legal
+  PASS [perft] atomic960_castle_through_atomic_check_is_illegal
+  PASS [transition] explosion_bycatch_and_pawn_immunity_after_qxd4
+  PASS [transition] atomic_en_passant_after_e5d6
+  PASS [transition] castling_right_after_rook_bycatch
+  PASS [transition] capture_promotion_after_g7h8q
+  PASS [transition] king_explosion_after_g1g8
+  PASS [transition] direct_king_capture_after_h7h8
+  PASS [terminal] atomic_checkmate_result
+  PASS [terminal] atomic_stalemate_result
+Atomic-Stockfish candidate: 19/19 checks passed
+
+Atomic rules contract passed.
+Atomic perft and rule-transition suite passed
+PASS quiet atomic check remains forcing in qsearch: mate 1, pv h2b8
+PASS Atomic mate takes priority over the fifty-move draw: mate 1, pv h2b8
+PASS qsearch scores a quiet-move stalemate as draw: cp 0, pv d5c6
+PASS move picker preserves an internal quiet Atomic check: mate -1, pv a8b7 h2b8
+PASS analysis FEN preserves an existing check after a quiet move: cp 1357, pv b1c3 a8b7
+PASS qsearch explores quiet atomic check evasions: cp 600, pv a2h2 h8g7
+PASS third qsearch capture is explosive mate: mate -1, pv c2c3 g8g2
+PASS direct king capture: mate 1, pv h7h8
+PASS adjacent king bycatch: mate 1, pv g1g8
+PASS en-passant king bycatch: mate 1, pv e5d6
+PASS capture-promotion king bycatch: mate 1, pv g7h8q
+PASS main capture futility preserves explosive non-pawn bycatch: cp 1633, pv g1h3 e6d5
+PASS main capture futility preserves explosive en passant bycatch: cp 744, pv d2d4 e4d3
+PASS qsearch capture futility preserves explosive non-pawn bycatch: cp 1633, pv g1h3 e6d5
+PASS qsearch capture futility preserves explosive en passant bycatch: cp 744, pv d2d4 e4d3
+Atomic search regressions passed: 15/15
+PASS quiet atomic check remains forcing in qsearch: mate 1, pv h2b8
+PASS Atomic mate takes priority over the fifty-move draw: mate 1, pv h2b8
+PASS qsearch scores a quiet-move stalemate as draw: cp 0, pv d5c6
+PASS move picker preserves an internal quiet Atomic check: mate -1, pv a8b7 h2b8
+PASS analysis FEN preserves an existing check after a quiet move: cp 426, pv b1c3 a8b7
+PASS qsearch explores quiet atomic check evasions: cp 3, pv a2h2 h8g7
+PASS third qsearch capture is explosive mate: mate -1, pv c2c3 g8g2
+PASS direct king capture: mate 1, pv h7h8
+PASS adjacent king bycatch: mate 1, pv g1g8
+PASS en-passant king bycatch: mate 1, pv e5d6
+PASS capture-promotion king bycatch: mate 1, pv g7h8q
+PASS main capture futility preserves explosive non-pawn bycatch: cp 1141, pv g1h3 e6d5
+PASS main capture futility preserves explosive en passant bycatch: cp 674, pv d2d4 e4d3
+PASS qsearch capture futility preserves explosive non-pawn bycatch: cp 1141, pv g1h3 e6d5
+PASS qsearch capture futility preserves explosive en passant bycatch: cp 674, pv d2d4 e4d3
+Atomic search regressions passed: 15/15
+PASS source contract: Atomic suffixes/magics/max6/terminal/EP/castling/DTZ-mate
+PASS connected kings: exact contiguous 518-index domain (not orthodox 462)
+PASS real table fixtures: 13 headers and SHA-256 hashes
+PASS real probes: interior/root/quiet-mate/connected/terminal/EP/promotion/rule50/castling
+PASS swapped magic: WDL/DTZ markers cannot be interchanged
+Atomic Syzygy tests passed: 5/5
+Atomic Syzygy UCI tests passed: max6, load, root ranking, interior WDL, terminal, castling, Atomic960, recoverable paths, NNUE=false/true
+XBoard Atomic protocol passed
+
+artifact hashes and sizes:
+b0ef0ec12291674ec8f1d40b0522248704e60bf7836037b95d337af410bcd953  src/atomic-stockfish
+1bc59538282f6bd6b1bfdf99e1456a11c690faa163592cb5839c15b85a9783fc  src/atomic-unit-tests.bin
+d81474e67e959213347d8baee4b3d8aee2ff071bbe93df80138f2cf9e8cabb72  src/atomic-api-tests.bin
+b8cf684b6a10059cd9f29e897ced2cbdc1ba1bc1f7325f289927c4ffdaeb3c2e  src/atomic-syzygy-driver.bin
+src/atomic-stockfish|601384
+src/atomic-unit-tests.bin|110288
+src/atomic-api-tests.bin|129696
+src/atomic-syzygy-driver.bin|158208
+
+gate_exit_code=0

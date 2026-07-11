@@ -40,15 +40,13 @@ pre-existing Atomic checks from analysis FENs. Three independent release runs
 reproduced `404217`; the dedicated `gives_check` and search regressions pin the
 corrected behavior.
 
-Hito 6 subsequently changed the current signature to `347633` through the
-independently gated Atomic move-count pruning block. The table above remains
-the historical Hito 4 closeout record; current runners use the Hito 6
-signature documented in `hito6-validation.md`. The second Hito 6 search block,
-which protects explosive captures from orthodox futility pruning, moved the
-live signature again to `379531`; `347633` remains the block-one artifact.
-The preliminary third Hito 6 block extends the same safety rule to qsearch and
-moves the live signature to `380061`. The table above remains the immutable
-historical Hito 4 closeout record.
+Hito 6 subsequently changed the signature to `347633` through the independently
+gated Atomic move-count pruning block. The second Hito 6 search block, which
+protects explosive captures from orthodox futility pruning, moved it again to
+`379531`; both values remain historical block artifacts. The third block extends
+the same safety rule to qsearch and moves the live signature to `380061`.
+Current runners use the signature documented in `hito6-validation.md`; the
+table above remains the immutable historical Hito 4 closeout record.
 
 The historical Syzygy driver below predates commit `92154082` and is retained
 only as provenance for the original 11-fixture closeout. It is not accepted by
@@ -130,9 +128,10 @@ That command returning zero confirms the already-built surfaces only. It can
 never be quoted as a release pass because the runner says so in its terminal
 summary.
 
-## Remaining project evidence
+## Evidence remaining at the Hito 4 closeout
 
-1. Complete the platform build matrix and sanitizer jobs.
-2. Run the separately governed performance and strength gates. Small raw
-   evaluation deltas are diagnostic; unit/perft correctness and the three
-   exact LOS gates remain normative.
+At this historical closeout the platform/sanitizer matrix and the separately
+governed performance and strength gates were still open. Hito 5 subsequently
+closed Legacy NNUE, and `hito6-validation.md` records the cumulative search,
+speed and three-control LOS evidence. Small raw evaluation deltas remain
+diagnostic; unit/perft correctness and the three exact LOS gates are normative.

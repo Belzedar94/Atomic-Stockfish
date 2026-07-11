@@ -199,7 +199,7 @@ identical to its merge parent.
   scheduling; native TSan remains the race detector in Atomic CI because TSan
   cannot disable ASLR inside the local Docker VM.
 
-## Current performance snapshot
+## Historical Hito 5 performance snapshot
 
 The final Hito 5 paired run used the fixed 13-position corpus (SHA-256
 `2738065A8A70D61DA46FA3C75F95D645E50E601B43792DF0E7B3CC97B1D891A1`), one
@@ -207,8 +207,9 @@ thread, 64 MiB hash, CPU 0, one warm-up and five measured repetitions at
 100,000 nodes per position. Atomic-Stockfish's median was `713,466 NPS`; the
 frozen Fairy baseline measured `1,146,133 NPS`, for a ratio of `0.6225`.
 
-The strict project requirement is a ratio greater than `1.0`, so the current
-performance gate remains **failed** despite the incremental-accumulator gain.
+The strict project requirement is a ratio greater than `1.0`, so the
+performance gate remained **failed at the Hito 5 closeout** despite the
+incremental-accumulator gain.
 Specialization is not credited in advance; the final engine must demonstrate
 that it is faster on the shared corpus. Absolute NPS varies across runs, so the
 paired ratio under identical conditions is the governing measurement.

@@ -7,8 +7,10 @@ the frozen rules and playing-strength reference.
 
 > [!WARNING]
 > This repository is under active development and has no strength-qualified
-> release yet. Correctness and interface gates pass through Hito 4, but the
-> current engine has not passed the final speed or three-time-control LOS gates.
+> release yet. Hito 4 interfaces and Hito 5 Legacy NNUE are closed; Hito 6
+> search blocks 1 through 3 each pass correctness, the Fairy speed gate and all
+> three exact LOS controls. Remaining Hito 6 search blocks and the final release
+> matrix are still open.
 
 ## Scope
 
@@ -90,7 +92,9 @@ Syzygy, NNUE modes, perft, reproducibility and the Atomic search signature.
 
 See [`docs/atomic/hito4-validation.md`](docs/atomic/hito4-validation.md) for the
 exact invocation and reproduced artifact hashes. The migration inventory is in
-[`docs/atomic/test-inventory.md`](docs/atomic/test-inventory.md).
+[`docs/atomic/test-inventory.md`](docs/atomic/test-inventory.md), and cumulative
+search evidence is in
+[`docs/atomic/hito6-validation.md`](docs/atomic/hito6-validation.md).
 
 The final project gate is stricter than functional correctness:
 

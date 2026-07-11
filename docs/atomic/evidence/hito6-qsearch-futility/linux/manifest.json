@@ -1,0 +1,244 @@
+{
+    "schema":  "atomic-linux-hito-gate-v1",
+    "generated_at_utc":  "2026-07-11T15:49:03.012Z",
+    "source":  {
+                   "head":  "125d6d446d1fd407c6122f0409e62314206a202e",
+                   "tree":  "a54c9eea85b5e3ecbb49f3b1e47bc771dd90eead",
+                   "source_date_epoch":  1783780430,
+                   "build_sha":  "125d6d44",
+                   "build_date":  "20260711"
+               },
+    "gate":  {
+                 "path":  "docs/atomic/evidence/hito6-qsearch-futility/linux/linux_hito_gate.executed.sh",
+                 "bytes":  2938,
+                 "sha256":  "1DE69881B68C9E9000750ABF01E8B0F2E801DF23F2ED3257D3681D77D8331FC0",
+                 "syntax_check":  "Git Bash bash -n: PASS",
+                 "note":  "exact immutable script used for all four recorded jobs"
+             },
+    "current_reusable_gate":  {
+                                  "path":  "tests/linux_hito_gate.sh",
+                                  "bytes":  3855,
+                                  "sha256":  "B0B63B9D54595F9EFDD5D5B7E108878AB7D80D246A06D387547DECDE4C83964C",
+                                  "syntax_check":  "Git Bash bash -n: PASS",
+                                  "negative_head_prefix_check":  "exit 2: PASS"
+                              },
+    "network":  {
+                    "path":  "atomic_run3b_e202_l05.nnue",
+                    "bytes":  47721376,
+                    "sha256":  "99DC67EABF26A64FAEECA3A88B4C38597A840B8D4A874B9F2CF658C6F92A04A6"
+                },
+    "images":  {
+                   "gcc":  {
+                               "reference":  "gcc@sha256:9ca91b05c7b07d2979f16413e8b2cd6ec8a7c80ffca4121ccab0aeba33f90460",
+                               "id":  "sha256:9ca91b05c7b07d2979f16413e8b2cd6ec8a7c80ffca4121ccab0aeba33f90460"
+                           },
+                   "clang":  {
+                                 "reference":  "silkeh/clang@sha256:e987da8a4ed17dbb42a67319a502bd5fac6759821388949165490dbd20bf7079",
+                                 "id":  "sha256:e987da8a4ed17dbb42a67319a502bd5fac6759821388949165490dbd20bf7079"
+                             }
+               },
+    "syzygy_fixtures":  {
+                            "mounted_table_files":  14,
+                            "validated_by_tests":  13,
+                            "auxiliary_unvalidated_file":  {
+                                                               "name":  "KBBvK.atbw",
+                                                               "bytes":  1936,
+                                                               "sha256":  "D8B19B1A43EE43222FD5FB17AA5064B18B07F0F073E97A4C329F6F9D8B7330F2",
+                                                               "note":  "present in the mounted research corpus but not required by the current 13-file fixture manifest"
+                                                           },
+                            "test_source":  {
+                                                "path":  "tests/atomic_syzygy.py",
+                                                "sha256":  "D8F220AD536B22201A8F4DA40ABDD8DE8C0EFBA349BA3E9799C87762E5211B17"
+                                            }
+                        },
+    "jobs":  [
+                 {
+                     "name":  "gcc15-release",
+                     "mode":  "release",
+                     "compiler":  "g++ 15.2.0",
+                     "image":  "gcc",
+                     "worktree_head":  "125d6d446d1fd407c6122f0409e62314206a202e",
+                     "worktree_tree":  "a54c9eea85b5e3ecbb49f3b1e47bc771dd90eead",
+                     "tracked_clean_before_and_after":  true,
+                     "log":  {
+                                 "path":  "docs/atomic/evidence/hito6-qsearch-futility/linux/gcc15-release.log",
+                                 "bytes":  28871,
+                                 "sha256":  "FA526E78B8C9F21445E6DDF37EF3F93B694E975CC09A9E5B5385059CE3B7B2C3"
+                             },
+                     "checks":  {
+                                    "cpp_56_of_56":  1,
+                                    "api_pass":  1,
+                                    "historical_perft":  1,
+                                    "focused_rules_19_of_19":  1,
+                                    "search_15_of_15":  2,
+                                    "syzygy_5_of_5":  1,
+                                    "syzygy_uci":  1,
+                                    "xboard":  1,
+                                    "exit_zero":  1
+                                },
+                     "artifacts":  [
+                                       {
+                                           "path":  "src/atomic-stockfish",
+                                           "bytes":  731632,
+                                           "sha256":  "9D4ADED74A9A4CE69E486298BED1BE04A76E4B2A3FE7625C0CED9B3DCA47C43E"
+                                       },
+                                       {
+                                           "path":  "src/atomic-unit-tests.bin",
+                                           "bytes":  112120,
+                                           "sha256":  "87A086D72F2484567173344A00DFF913AFA174BFEEC2C2674A963C4FA0B8B3E5"
+                                       },
+                                       {
+                                           "path":  "src/atomic-api-tests.bin",
+                                           "bytes":  136672,
+                                           "sha256":  "14577C6470BCEDE0BA4B626800876577DA062B2D6D49CC514580EA3965F8306A"
+                                       },
+                                       {
+                                           "path":  "src/atomic-syzygy-driver.bin",
+                                           "bytes":  197496,
+                                           "sha256":  "78734817B4F227A4C44AA5611BE54A57FD4022592E497452A152EC1EC33563D2"
+                                       }
+                                   ]
+                 },
+                 {
+                     "name":  "gcc15-debug",
+                     "mode":  "debug",
+                     "compiler":  "g++ 15.2.0",
+                     "image":  "gcc",
+                     "worktree_head":  "125d6d446d1fd407c6122f0409e62314206a202e",
+                     "worktree_tree":  "a54c9eea85b5e3ecbb49f3b1e47bc771dd90eead",
+                     "tracked_clean_before_and_after":  true,
+                     "log":  {
+                                 "path":  "docs/atomic/evidence/hito6-qsearch-futility/linux/gcc15-debug.log",
+                                 "bytes":  25950,
+                                 "sha256":  "8D41108F1CD307F8BD6049A1EAFD5BCD549FF162933C505E851AD85F53E59629"
+                             },
+                     "checks":  {
+                                    "cpp_56_of_56":  1,
+                                    "api_pass":  1,
+                                    "historical_perft":  1,
+                                    "focused_rules_19_of_19":  1,
+                                    "search_15_of_15":  2,
+                                    "syzygy_5_of_5":  1,
+                                    "syzygy_uci":  1,
+                                    "xboard":  1,
+                                    "exit_zero":  1
+                                },
+                     "artifacts":  [
+                                       {
+                                           "path":  "src/atomic-stockfish",
+                                           "bytes":  16496248,
+                                           "sha256":  "8FC0D1BFDEFD5BCBE720DEFC567F29B499CF3307B97A556167129EF4568D8ED1"
+                                       },
+                                       {
+                                           "path":  "src/atomic-unit-tests.bin",
+                                           "bytes":  15712488,
+                                           "sha256":  "CEF529972C52B4651B8050C05A6DC957642E69E10384AAB88F7CDD37B0DD7F6B"
+                                       },
+                                       {
+                                           "path":  "src/atomic-api-tests.bin",
+                                           "bytes":  16171464,
+                                           "sha256":  "9F0A5F5FD91FD934A3D5CDBD668F89457479B8B7900F81B0B1886E59CEE246D5"
+                                       },
+                                       {
+                                           "path":  "src/atomic-syzygy-driver.bin",
+                                           "bytes":  3584272,
+                                           "sha256":  "CDD67650ADAB41D70352AB2E81C4689326B354579F574E7EE459589F7B21703D"
+                                       }
+                                   ]
+                 },
+                 {
+                     "name":  "clang20-release",
+                     "mode":  "release",
+                     "compiler":  "clang++ 20.1.8",
+                     "image":  "clang",
+                     "worktree_head":  "125d6d446d1fd407c6122f0409e62314206a202e",
+                     "worktree_tree":  "a54c9eea85b5e3ecbb49f3b1e47bc771dd90eead",
+                     "tracked_clean_before_and_after":  true,
+                     "log":  {
+                                 "path":  "docs/atomic/evidence/hito6-qsearch-futility/linux/clang20-release.log",
+                                 "bytes":  40916,
+                                 "sha256":  "2FDCDB2B0C4CC44CECBD17ACD1A31DA15B061CFBD56E19F6FC48AE52C8992965"
+                             },
+                     "checks":  {
+                                    "cpp_56_of_56":  1,
+                                    "api_pass":  1,
+                                    "historical_perft":  1,
+                                    "focused_rules_19_of_19":  1,
+                                    "search_15_of_15":  2,
+                                    "syzygy_5_of_5":  1,
+                                    "syzygy_uci":  1,
+                                    "xboard":  1,
+                                    "exit_zero":  1
+                                },
+                     "artifacts":  [
+                                       {
+                                           "path":  "src/atomic-stockfish",
+                                           "bytes":  601384,
+                                           "sha256":  "B0EF0EC12291674EC8F1D40B0522248704E60BF7836037B95D337AF410BCD953"
+                                       },
+                                       {
+                                           "path":  "src/atomic-unit-tests.bin",
+                                           "bytes":  110288,
+                                           "sha256":  "1BC59538282F6BD6B1BFDF99E1456A11C690FAA163592CB5839C15B85A9783FC"
+                                       },
+                                       {
+                                           "path":  "src/atomic-api-tests.bin",
+                                           "bytes":  129696,
+                                           "sha256":  "D81474E67E959213347D8BAEE4B3D8AEE2FF071BBE93DF80138F2CF9E8CABB72"
+                                       },
+                                       {
+                                           "path":  "src/atomic-syzygy-driver.bin",
+                                           "bytes":  158208,
+                                           "sha256":  "B8CF684B6A10059CD9F29E897CED2CBDC1BA1BC1F7325F289927C4FFDAEB3C2E"
+                                       }
+                                   ]
+                 },
+                 {
+                     "name":  "clang20-debug",
+                     "mode":  "debug",
+                     "compiler":  "clang++ 20.1.8",
+                     "image":  "clang",
+                     "worktree_head":  "125d6d446d1fd407c6122f0409e62314206a202e",
+                     "worktree_tree":  "a54c9eea85b5e3ecbb49f3b1e47bc771dd90eead",
+                     "tracked_clean_before_and_after":  true,
+                     "log":  {
+                                 "path":  "docs/atomic/evidence/hito6-qsearch-futility/linux/clang20-debug.log",
+                                 "bytes":  37201,
+                                 "sha256":  "25C5BE348BD0EE3635CAD20A459B21CBAD2A944BAC99BEE27D07D04291E9C81C"
+                             },
+                     "checks":  {
+                                    "cpp_56_of_56":  1,
+                                    "api_pass":  1,
+                                    "historical_perft":  1,
+                                    "focused_rules_19_of_19":  1,
+                                    "search_15_of_15":  2,
+                                    "syzygy_5_of_5":  1,
+                                    "syzygy_uci":  1,
+                                    "xboard":  1,
+                                    "exit_zero":  1
+                                },
+                     "artifacts":  [
+                                       {
+                                           "path":  "src/atomic-stockfish",
+                                           "bytes":  10791168,
+                                           "sha256":  "A84216A3672E9FF032432D595907C5CBB51D960833033B9D34D23EA9642B4AED"
+                                       },
+                                       {
+                                           "path":  "src/atomic-unit-tests.bin",
+                                           "bytes":  10452288,
+                                           "sha256":  "D9D496D569B80636EB851D99C241675734B85EE100E30003DDCDD9093BA18C97"
+                                       },
+                                       {
+                                           "path":  "src/atomic-api-tests.bin",
+                                           "bytes":  10785816,
+                                           "sha256":  "4C5213E82F72EEED7830B3D5AA06F149038097FFDFC1C6456E26B8FE9C4F9371"
+                                       },
+                                       {
+                                           "path":  "src/atomic-syzygy-driver.bin",
+                                           "bytes":  2770656,
+                                           "sha256":  "5BF72AD0E98A14D1B85E4BB3A6A42262432142151CB5BE12A8FD0FBEAA537FA8"
+                                       }
+                                   ]
+                 }
+             ]
+}

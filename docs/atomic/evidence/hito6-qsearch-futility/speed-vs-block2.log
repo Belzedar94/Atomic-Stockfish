@@ -1,0 +1,27 @@
+Diagnostic A/B: block 3 qsearch candidate versus block 2 capture-futility artifact
+Candidate: path=C:\Users\djime\Documents\Chess_variants\Codex\Fairy-Stockfish organization\Atomic Project\reports\hito6-qsearch-futility-e13f11\Atomic-Stockfish-hito6-qsearch-E13F11.exe bytes=4263216 sha256=E13F11F4FBC0459F8349B4F6D0B0BDD03600292B1027BFC311C42D236480976B
+Block2: path=C:\Users\djime\Documents\Chess_variants\Codex\Fairy-Stockfish organization\Atomic Project\reports\hito6-capture-futility-cb35d5\Atomic-Stockfish-hito6-capture-futility-CB35D5.exe bytes=4263813 sha256=CB35D57E3AD107C279781AF3E764EC412D59341C21D5FDC75AFAB08239CFFC14
+Runner: path=C:\Users\djime\Documents\Chess_variants\Codex\Fairy-Stockfish organization\Atomic Project\Atomic-Stockfish\tests\atomic_bench_compare.py bytes=13874 sha256=9F74208809D4CFAFED52F3691EDBB2A970EF89F397260D9CD1360BEC14A151BA
+Network: path=C:\Users\djime\Documents\Chess_variants\Codex\Fairy-Stockfish organization\Atomic Project\atomic_run3b_e202_l05.nnue bytes=47721376 sha256=99DC67EABF26A64FAEECA3A88B4C38597A840B8D4A874B9F2CF658C6F92A04A6
+Expected semantics: this is diagnostic block-local telemetry; a slower candidate returns exit code 1.
+
+Corpus: positions=13 atomic=10 atomic960=3 sha256=2738065a8a70d61da46fa3c75f95d645e50e601b43792df0e7b3cc97b1d891a1
+Configuration: net_sha256=99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f92a04a6 threads=1 hash_mb=64 cpu=0 nodes_per_fen=100000 warmups=1 repetitions=5
+Warm-up candidate: nodes=1300936 time_ms=927 nps=1403383
+Warm-up baseline: nodes=1300804 time_ms=904 nps=1438942
+Run 1/5 candidate: nodes=1300936 time_ms=933 nps=1394358
+Run 1/5 baseline: nodes=1300804 time_ms=911 nps=1427886
+Run 2/5 baseline: nodes=1300804 time_ms=908 nps=1432604
+Run 2/5 candidate: nodes=1300936 time_ms=884 nps=1471647
+Run 3/5 candidate: nodes=1300936 time_ms=900 nps=1445484
+Run 3/5 baseline: nodes=1300804 time_ms=939 nps=1385308
+Run 4/5 baseline: nodes=1300804 time_ms=878 nps=1481554
+Run 4/5 candidate: nodes=1300936 time_ms=938 nps=1386925
+Run 5/5 candidate: nodes=1300936 time_ms=898 nps=1448704
+Run 5/5 baseline: nodes=1300804 time_ms=903 nps=1440536
+Candidate: median_nps=1445484 binary_bytes=4263216
+Baseline: median_nps=1432604 binary_bytes=4263813
+Comparison: nps_ratio=1.0090 speed_delta_pct=0.90 size_ratio=0.9999 size_delta_bytes=-597
+PERFORMANCE GATE: PASS (candidate median NPS is strictly higher)
+
+diagnostic_exit_code=0

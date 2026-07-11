@@ -1,0 +1,323 @@
+{
+    "schema":  "atomic-local-pipeline-snapshot-v1",
+    "captured_at_utc":  "2026-07-11T15:55:30.564Z",
+    "reproducibility":  "local dirty snapshot identity only; base commits plus content hashes identify but do not reconstruct uncommitted files",
+    "tools":  {
+                  "label":  "variant-nnue-tools",
+                  "base_head":  "c8df2c39515a2654d5b52ba55b4ee585b20430a8",
+                  "branch":  "tools",
+                  "dirty":  true,
+                  "tracked_modified_count":  12,
+                  "untracked_count":  4,
+                  "canonical_tracked_patch":  {
+                                                    "bytes":  17359,
+                                                    "sha256":  "0705B2CD5139E4F8904DBCAEA7DB97E6FCBA6BF1768C06ABE2184173B51554A6"
+                                                },
+                  "canonical_untracked_manifest":  {
+                                                         "bytes":  371,
+                                                         "sha256":  "F828CE7746D860AAC8781E399A62170952226FE7A601A863FE1BD1A8C3D7BFCD"
+                                                     },
+                  "aggregate_fingerprint":  "588A7F2FD99462CB3FC622C0A277789497539A267D64CC10A5D994BD7196D4AA",
+                  "canonical_content_sha256":  "E02495240AD1346312DD01BE4E9414992393A0027897B10EEE2FE00BEEF1E6D0",
+                  "files":  [
+                                {
+                                    "kind":  "tracked-modified",
+                                    "path":  ".github/workflows/fairy.yml",
+                                    "bytes":  2587,
+                                    "sha256":  "3D40EB877C82D5A6A771735869539D7693DC784A534F8BEFF0498599DBA574A9",
+                                    "base_blob":  "75c0812cbbc067405ce5714cf4d5a04a48d6d18a"
+                                },
+                                {
+                                    "kind":  "tracked-modified",
+                                    "path":  "src/evaluate.cpp",
+                                    "bytes":  76002,
+                                    "sha256":  "D9F5CEA1B1BA9F863CD2E39FEC651AFC1CE28A19EBEF33CA30E3EFA4DECB8D6B",
+                                    "base_blob":  "20131f453f6b7725fc916189a27718736c00ca4d"
+                                },
+                                {
+                                    "kind":  "tracked-modified",
+                                    "path":  "src/evaluate.h",
+                                    "bytes":  2252,
+                                    "sha256":  "7EAF644186818DF49C03C6DD0E8E58F456A4F14C6AE532E784AB3671E3F3E394",
+                                    "base_blob":  "0ed6fab5825c0048517e32444c7f681745d396de"
+                                },
+                                {
+                                    "kind":  "tracked-modified",
+                                    "path":  "src/tools/convert.cpp",
+                                    "bytes":  29385,
+                                    "sha256":  "F4C629804C0D459FFA7E400A0F65D89D6D69FEBDA3BDEC5B1964ABA92F4B3415",
+                                    "base_blob":  "f84b8005bbd01ebcbb1f6ce8d5efdf7435df26ee"
+                                },
+                                {
+                                    "kind":  "tracked-modified",
+                                    "path":  "src/tools/packed_sfen.h",
+                                    "bytes":  4463,
+                                    "sha256":  "D169BEB1512D8D18D1118D220ED9FAA742484B26A97492930A75982691B76FB6",
+                                    "base_blob":  "417fc495fc6ab583466b69297b0c90805cfc9169"
+                                },
+                                {
+                                    "kind":  "tracked-modified",
+                                    "path":  "src/tools/puzzle_generator.cpp",
+                                    "bytes":  37050,
+                                    "sha256":  "70B4E433ACE5B658A506632CC410FBB1500FE26A66F59910C071B4BB3FFCAC5B",
+                                    "base_blob":  "574dc35d60f662ff36cb1be55269ee06daf7e82b"
+                                },
+                                {
+                                    "kind":  "tracked-modified",
+                                    "path":  "src/tools/sfen_stream.cpp",
+                                    "bytes":  823,
+                                    "sha256":  "323ED7AA3D8030596FB68C1103F3956C0BB7F7ABBA8E8E4CF70361EBF4BB3E66",
+                                    "base_blob":  "5fc3e881fd1b452d849b3bd6643508d4149b5b81"
+                                },
+                                {
+                                    "kind":  "tracked-modified",
+                                    "path":  "src/tools/sfen_stream.h",
+                                    "bytes":  4396,
+                                    "sha256":  "D74224E6622924496E9EC8AFF49ABD233693ED5DCAFB04CF7EF078D37A0B60E6",
+                                    "base_blob":  "53dace3fde9bef2106d876caadf1aff2d1771daa"
+                                },
+                                {
+                                    "kind":  "tracked-modified",
+                                    "path":  "src/tools/stats.cpp",
+                                    "bytes":  40528,
+                                    "sha256":  "CA03C80024C336DF7E813636B52A0ECD82C54BF953958572A0F5F5838DB0ABFB",
+                                    "base_blob":  "6786abd8818cecc79e18cea5c555853058cb8545"
+                                },
+                                {
+                                    "kind":  "tracked-modified",
+                                    "path":  "src/tools/training_data_generator.cpp",
+                                    "bytes":  35736,
+                                    "sha256":  "70F73AABFFB52F2165D9790370E94B67EEF6E90F08EFD5735EED3DCB1126378A",
+                                    "base_blob":  "46ce5363572b63bed0081d18d070f31fae098b7b"
+                                },
+                                {
+                                    "kind":  "tracked-modified",
+                                    "path":  "src/tools/training_data_generator_nonpv.cpp",
+                                    "bytes":  15685,
+                                    "sha256":  "3C026CDE7B6A762991244F4CB9338BDD7A4B045F5C8F67263D94168F001479F1",
+                                    "base_blob":  "795a4e8a5ea61ad9c920325917f06f3a0006c17a"
+                                },
+                                {
+                                    "kind":  "tracked-modified",
+                                    "path":  "src/tools/transform.cpp",
+                                    "bytes":  15880,
+                                    "sha256":  "7C758BE06BABA84167D0DCD3F0BF98B069D55FB7D724ECD52075D3D6B0C82F9C",
+                                    "base_blob":  "ca5973e3b35b5795cad5b7cb23903bb061533aec"
+                                },
+                                {
+                                    "kind":  "untracked",
+                                    "path":  "src/tools/output_file.h",
+                                    "bytes":  2218,
+                                    "sha256":  "B97AC0B86A883287C53C9B4C688383503488DEEE8DAC089D9BC8EA38385B9FB2",
+                                    "base_blob":  null
+                                },
+                                {
+                                    "kind":  "untracked",
+                                    "path":  "tests/tools_integration.py",
+                                    "bytes":  8274,
+                                    "sha256":  "8FC7A8BC9474601185B5272DECD4992BBED04817FD5D383D905F078069154A37",
+                                    "base_blob":  null
+                                },
+                                {
+                                    "kind":  "untracked",
+                                    "path":  "tests/tools_unit.cpp",
+                                    "bytes":  1944,
+                                    "sha256":  "68B5FCF956F7816BAB1E37142B3887832C0734EB432D749B60A8A86A64A08968",
+                                    "base_blob":  null
+                                },
+                                {
+                                    "kind":  "untracked",
+                                    "path":  "tests/tools_unit.sh",
+                                    "bytes":  406,
+                                    "sha256":  "6BC3EC651531D343DE67947C236B1634A39F26770EEB4933386BB28B215BBD67",
+                                    "base_blob":  null
+                                }
+                            ]
+              },
+    "trainer":  {
+                    "label":  "variant-nnue-pytorch",
+                    "base_head":  "b15df38a9aae8ab9b40b2378020b3099c7c5d179",
+                    "branch":  "master",
+                    "dirty":  true,
+                    "tracked_modified_count":  11,
+                    "untracked_count":  9,
+                    "canonical_tracked_patch":  {
+                                                      "bytes":  47320,
+                                                      "sha256":  "D1DC6942E938C6F342E85AD93C82CF97DA576002D612791555B538B2B48426E5"
+                                                  },
+                    "canonical_untracked_manifest":  {
+                                                           "bytes":  882,
+                                                           "sha256":  "47FADB5E4E003874B164429689FB530708F788B355DA688BEDA0F4AE5D8CE4A8"
+                                                       },
+                    "aggregate_fingerprint":  "4ADF140E134A67771A5B057E35F35D955DBEC9F4022A17C99CEBCEA927B4BA28",
+                    "canonical_content_sha256":  "4FF804CBB8EF1E4B902B567DE8F66A31E43F3C98D318D1B000C7E4DBD5821CCC",
+                    "files":  [
+                                  {
+                                      "kind":  "tracked-modified",
+                                      "path":  "CMakeLists.txt",
+                                      "bytes":  1276,
+                                      "sha256":  "57975DD5B6A925EBEB8F8DC39B9DE339C81D436309F5CBCA0BDF7CB505F0E1ED",
+                                      "base_blob":  "7c74a8d0d00a53217d006125ac592f926cc3b506"
+                                  },
+                                  {
+                                      "kind":  "tracked-modified",
+                                      "path":  "feature_set.py",
+                                      "bytes":  4944,
+                                      "sha256":  "70924C8FB70DED121D4202E59A95287AF4AC1FE92A01A8FAD5CCBEFF722BF72B",
+                                      "base_blob":  "3c68ac338faa78e8b85582d533fbe3b0d477a75a"
+                                  },
+                                  {
+                                      "kind":  "tracked-modified",
+                                      "path":  "feature_transformer.py",
+                                      "bytes":  27538,
+                                      "sha256":  "299196D884B66BFF15B561DD352C43BC1D809AE04C65A530EBBD4BB631A11FFB",
+                                      "base_blob":  "7084c1f41f8a76fb2208eeb10d651d8f885eb484"
+                                  },
+                                  {
+                                      "kind":  "tracked-modified",
+                                      "path":  "model.py",
+                                      "bytes":  13169,
+                                      "sha256":  "716874928BA304817A336257ED1961F29FED6485DC5BED2CC9840C134196CBED",
+                                      "base_blob":  "d6c64409709890a54fb8a6f4a05a21d50df43e7f"
+                                  },
+                                  {
+                                      "kind":  "tracked-modified",
+                                      "path":  "nnue_dataset.py",
+                                      "bytes":  8463,
+                                      "sha256":  "0BF2640D1C3092976D8F9F9297D5F6107C67FF115EDBBEEB0F9CBF16F082826C",
+                                      "base_blob":  "62e0543c473ccf29f42d56520d4432c1e7026caf"
+                                  },
+                                  {
+                                      "kind":  "tracked-modified",
+                                      "path":  "README.md",
+                                      "bytes":  2837,
+                                      "sha256":  "C05795A5212330801D7E0BD91FCE8385BB184BCC273D76CC730E1D11422F40FB",
+                                      "base_blob":  "fe44875a3add76273df23f4713b8bba708be7f42"
+                                  },
+                                  {
+                                      "kind":  "tracked-modified",
+                                      "path":  "requirements.txt",
+                                      "bytes":  143,
+                                      "sha256":  "88B4BE1378DE39B40D3B09600F865CF5E4AA199894E491F49FF49E033784E72B",
+                                      "base_blob":  "1b08a952063dc00b7a47da4e09e7fd7333571feb"
+                                  },
+                                  {
+                                      "kind":  "tracked-modified",
+                                      "path":  "requirements-CUDA128.txt",
+                                      "bytes":  143,
+                                      "sha256":  "4F4C9F4A06282F90C88E7962AFB57FC6742D40CD601401AD5415B442CFA98469",
+                                      "base_blob":  "00b7cfa30047b5fce8be74e140b3e43f1df6f341"
+                                  },
+                                  {
+                                      "kind":  "tracked-modified",
+                                      "path":  "scripts/train.sh",
+                                      "bytes":  619,
+                                      "sha256":  "F47006DEC56BD192116DF434E77AE4E4ED6EACECA3149BB050209D1EF98D645C",
+                                      "base_blob":  "5e747239d2a27b3c7fa9d2c25b8dd82de7860122"
+                                  },
+                                  {
+                                      "kind":  "tracked-modified",
+                                      "path":  "train.py",
+                                      "bytes":  7332,
+                                      "sha256":  "494471FCD0FABFA02CA1A5E56544EF3659B453FE737524D2DC1CFD362E3FB205",
+                                      "base_blob":  "7981f6d5468cc73baef8e161e151d78c38e3be0c"
+                                  },
+                                  {
+                                      "kind":  "tracked-modified",
+                                      "path":  "training_data_loader.cpp",
+                                      "bytes":  29932,
+                                      "sha256":  "C9A297E38E1ECDE288B00CC87BC7B30E6EF80701787A1A5196F7CA1CD32CC280",
+                                      "base_blob":  "8b191d4172711013bd9e317743b3ecf18fdc7b3e"
+                                  },
+                                  {
+                                      "kind":  "untracked",
+                                      "path":  ".github/workflows/trainer-tests.yml",
+                                      "bytes":  1137,
+                                      "sha256":  "D24B37D3B2124BB5BDD51B9318D1A0413B9FDB2E9283888490B7490BECF4977F",
+                                      "base_blob":  null
+                                  },
+                                  {
+                                      "kind":  "untracked",
+                                      "path":  "pytest.ini",
+                                      "bytes":  41,
+                                      "sha256":  "6A96BA0E2D5A8296FB90F474DA9D2F0173D3E41EBA18965513F711104155F913",
+                                      "base_blob":  null
+                                  },
+                                  {
+                                      "kind":  "untracked",
+                                      "path":  "tests/conftest.py",
+                                      "bytes":  3713,
+                                      "sha256":  "E60FFA49BA4C7A5F97C4AC2A5B619ECD6E7C4CABDA4248DCA7FAD3C7C676808C",
+                                      "base_blob":  null
+                                  },
+                                  {
+                                      "kind":  "untracked",
+                                      "path":  "tests/native_loader_tests.cpp",
+                                      "bytes":  5313,
+                                      "sha256":  "700E61B38286A84E6BF09A25C471AC175287258D2B54BD53F83C840ACA220F13",
+                                      "base_blob":  null
+                                  },
+                                  {
+                                      "kind":  "untracked",
+                                      "path":  "tests/test_cpu_gpu_forward.py",
+                                      "bytes":  2834,
+                                      "sha256":  "D14FB87AEDAA4E23092C66B6E0FA9974136EA410E234F86D1FCFE158681AE370",
+                                      "base_blob":  null
+                                  },
+                                  {
+                                      "kind":  "untracked",
+                                      "path":  "tests/test_feature_set.py",
+                                      "bytes":  976,
+                                      "sha256":  "39CB452749FC91EE40048D4D48B5460C8648A2F2ACF3D40F1FED551BA8F1FDF3",
+                                      "base_blob":  null
+                                  },
+                                  {
+                                      "kind":  "untracked",
+                                      "path":  "tests/test_native_loader_integration.py",
+                                      "bytes":  3830,
+                                      "sha256":  "DDBA3C5D1FECADC8C64882B9F7699D85422BB00ADE3C5715B299C7B17328591E",
+                                      "base_blob":  null
+                                  },
+                                  {
+                                      "kind":  "untracked",
+                                      "path":  "tests/test_nnue_dataset_seed.py",
+                                      "bytes":  3368,
+                                      "sha256":  "9A7882E611A3A7D29F14CA460C61E6CC6844510A059BD586A11142E536987AF1",
+                                      "base_blob":  null
+                                  },
+                                  {
+                                      "kind":  "untracked",
+                                      "path":  "tests/test_train_reliability.py",
+                                      "bytes":  3937,
+                                      "sha256":  "A3AC760EFA63522AE42DC29166A510674445B810EF7C5570AEE0CE8089511E4E",
+                                      "base_blob":  null
+                                  }
+                              ]
+                },
+    "built_inputs":  {
+                         "tools_engine":  {
+                                              "path":  "variant-nnue-tools/src/stockfish-tools-release.exe",
+                                              "bytes":  5521822,
+                                              "sha256":  "CC17E29E8B4953A2219F3AB63FDF25180DBBF5B3D6AA1CFBCBDE17DC75A024F1"
+                                          },
+                         "trainer_loader":  {
+                                                "path":  "variant-nnue-pytorch/training_data_loader.dll",
+                                                "bytes":  79872,
+                                                "sha256":  "F4349EA5125F13F807087BA5EC15FE4801B6A3567A847B5598CD7741D787DFF7"
+                                            }
+                     },
+    "runtime":  {
+                    "python":  "3.12.0 MSC 19.35",
+                    "torch":  "2.7.1+cu118",
+                    "numpy":  "2.3.5",
+                    "pytorch_lightning":  "1.9.5",
+                    "chess":  "1.11.2",
+                    "pytest":  "9.1.1",
+                    "device":  "cpu",
+                    "trainer_loader_toolchain":  "Visual Studio 2022 MSVC 19.44.35215.0 x64",
+                    "pip_freeze":  {
+                                       "bytes":  1889,
+                                       "sha256":  "99E54F9861C71D8C671CF8711FD40505F636C4DB176999548621D367BC650FC8"
+                                   }
+                }
+}

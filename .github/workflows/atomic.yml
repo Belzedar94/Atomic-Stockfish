@@ -43,6 +43,8 @@ jobs:
         run: python3 tests/atomic_syzygy.py --contract-only
       - name: Atomic and Atomic960 perft
         run: bash tests/perft.sh src/atomic-stockfish
+      - name: Atomic search regressions
+        run: python3 tests/atomic_search.py --candidate src/atomic-stockfish --use-nnue false
       - name: XBoard protocol
         run: python3 tests/xboard_protocol.py --candidate src/atomic-stockfish
 
@@ -62,6 +64,7 @@ jobs:
           make -C src -j2 ARCH=x86-64 debug=yes optimize=no atomic-api-tests
           make -C src -j2 ARCH=x86-64 debug=yes optimize=no atomic-syzygy-driver
           bash tests/perft.sh src/atomic-stockfish
+          python3 tests/atomic_search.py --candidate src/atomic-stockfish --use-nnue false
 
   sanitizers:
     name: ${{ matrix.name }}
