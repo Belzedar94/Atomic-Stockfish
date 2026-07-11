@@ -254,6 +254,12 @@ def main() -> int:
         bash = str(paths["bash"])
 
         base_env = os.environ.copy()
+        # A directly selected MSYS bash does not automatically put dirname,
+        # sed, or a nested `bash` invocation on PATH when launched from a
+        # regular Windows Python process. Keep every shell gate on the same
+        # toolchain as the explicitly validated executable.
+        bash_dir = str(Path(bash).resolve().parent)
+        base_env["PATH"] = bash_dir + os.pathsep + base_env.get("PATH", "")
         python_env = base_env.copy()
         python_env["PYTHONPATH"] = str(paths["pyffish_root"])
         python_env["PYTHONSAFEPATH"] = "1"
@@ -415,6 +421,7 @@ await suite.runSuite(module, 'ES module/WASM');
         run_step(
             "Atomic and Atomic960 perft/rule transitions",
             [bash, str(REPO_ROOT / "tests/perft.sh"), str(native)],
+            env=base_env,
             timeout=args.timeout,
             required_markers=("Atomic perft and rule-transition suite passed",),
         )
