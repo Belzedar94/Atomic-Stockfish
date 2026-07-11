@@ -151,7 +151,7 @@
                                                            "sha256":  "47FADB5E4E003874B164429689FB530708F788B355DA688BEDA0F4AE5D8CE4A8"
                                                        },
                     "aggregate_fingerprint":  "4ADF140E134A67771A5B057E35F35D955DBEC9F4022A17C99CEBCEA927B4BA28",
-                    "canonical_content_sha256":  "57DEC6EA66CA9D58477A72CAC57560D69E972BAAB73E7D3681B9010A38954B35",
+                    "canonical_content_sha256":  "3175E1B1C3C8455E1392D87BDD9521D370C004FE531650EBBF18EBE50C8B0DA6",
                     "files":  [
                                   {
                                       "kind":  "tracked-modified",

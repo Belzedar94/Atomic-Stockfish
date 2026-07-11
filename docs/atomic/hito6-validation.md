@@ -227,7 +227,7 @@ multi-repository release claim. `variant-nnue-tools` is based on
 SHA-256 `EDA1693CBA433B32DE2B9406FBB16394465DDDF087FA9776AD40E81AE1C557C6`;
 `variant-nnue-pytorch` is based on
 `b15df38a9aae8ab9b40b2378020b3099c7c5d179` with canonical changed-content
-SHA-256 `57DEC6EA66CA9D58477A72CAC57560D69E972BAAB73E7D3681B9010A38954B35`.
+SHA-256 `3175E1B1C3C8455E1392D87BDD9521D370C004FE531650EBBF18EBE50C8B0DA6`.
 That canonical hash is the SHA-256 of a UTF-8/LF stream beginning with
 `label=<value>`, `base_head=<value>` and `branch=<value>` lines, followed by
 file entries sorted ordinally by path as
@@ -235,7 +235,7 @@ file entries sorted ordinally by path as
 `base_blob` is empty for untracked files.
 The 20,936-byte content manifest is
 `evidence/hito6-qsearch-futility/pipeline-local-snapshot.json`, SHA-256
-`91863007CA4A6A1BA7F2A03E5A424A40752C357C944C19FE3FB79B62A8267C2B`.
+`489BC321EFCDA352BA5318F9CBC9E00B42A63BC80BED58D9D284863F932BF74C`.
 It records all 16 tools and 20 trainer changed/untracked files plus the exact
 tools executable
 (`CC17E29E8B4953A2219F3AB63FDF25180DBBF5B3D6AA1CFBCBDE17DC75A024F1`)
@@ -245,7 +245,7 @@ These hashes identify the local state but cannot
 reconstruct uncommitted content from the base commits alone.
 
 The normalized rerun log is 2,591 bytes, SHA-256
-`7C84B8C2C21CBE242742B0140C06A0978282273884DC99012633FCA52AFCCCBA`,
+`265A56A42E9D86D991917E42E2483DE248985971C061601C59DA444799666EC3`,
 at `evidence/hito6-qsearch-futility/pipeline-e2e.log`. It records the candidate,
 network, generator, loader, runner and snapshot hashes and ends with
 `pipeline_exit_code=0`. The clean, pinned multi-repository CI job remains a
