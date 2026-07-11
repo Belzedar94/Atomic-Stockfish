@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import math
 import re
 import shutil
 import subprocess
@@ -64,6 +65,13 @@ def sha256(path: Path) -> str:
 def require_file(path: Path, label: str) -> Path:
     resolved = path.expanduser().resolve()
     if not resolved.is_file():
+        raise GateFailure(f"{label} does not exist: {resolved}")
+    return resolved
+
+
+def require_directory(path: Path, label: str) -> Path:
+    resolved = path.expanduser().resolve()
+    if not resolved.is_dir():
         raise GateFailure(f"{label} does not exist: {resolved}")
     return resolved
 
@@ -162,6 +170,22 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--cpp-api", type=Path)
     parser.add_argument("--syzygy-driver", type=Path)
     parser.add_argument("--fairy-repo", type=Path)
+    parser.add_argument(
+        "--pipeline-tools-engine",
+        type=Path,
+        help=(
+            "optional variant-nnue-tools executable; must be supplied together "
+            "with --pipeline-trainer-root to run the cross-repository E2E gate"
+        ),
+    )
+    parser.add_argument(
+        "--pipeline-trainer-root",
+        type=Path,
+        help=(
+            "optional built variant-nnue-pytorch checkout; must be supplied "
+            "together with --pipeline-tools-engine"
+        ),
+    )
     parser.add_argument("--python", default=sys.executable)
     parser.add_argument("--node", default="node")
     parser.add_argument("--bash")
@@ -187,12 +211,18 @@ def parse_args() -> argparse.Namespace:
         default=30.0,
         help="per-response timeout forwarded to the structural differential",
     )
+    parser.add_argument(
+        "--pipeline-timeout",
+        type=float,
+        default=900.0,
+        help="whole-process timeout for the optional cross-repository pipeline gate",
+    )
     return parser.parse_args()
 
 
 def validate_positive(value: float | int, option: str) -> None:
-    if value <= 0:
-        raise GateFailure(f"{option} must be positive")
+    if not math.isfinite(float(value)) or value <= 0:
+        raise GateFailure(f"{option} must be finite and positive")
 
 
 def main() -> int:
@@ -203,6 +233,7 @@ def main() -> int:
             (args.smoke_positions, "--smoke-positions"),
             (args.hito4_timeout, "--hito4-timeout"),
             (args.engine_timeout, "--engine-timeout"),
+            (args.pipeline_timeout, "--pipeline-timeout"),
         ):
             validate_positive(value, option)
         if args.smoke_operations % 8:
@@ -211,6 +242,24 @@ def main() -> int:
             validate_positive(args.incremental_timeout, "--incremental-timeout")
         if args.differential_timeout is not None:
             validate_positive(args.differential_timeout, "--differential-timeout")
+        pipeline_options = (
+            args.pipeline_tools_engine,
+            args.pipeline_trainer_root,
+        )
+        if any(value is not None for value in pipeline_options) and not all(
+            value is not None for value in pipeline_options
+        ):
+            raise GateFailure(
+                "--pipeline-tools-engine and --pipeline-trainer-root must be "
+                "supplied together"
+            )
+        if args.mode == "release" and not all(
+            value is not None for value in pipeline_options
+        ):
+            raise GateFailure(
+                "release mode requires --pipeline-tools-engine and "
+                "--pipeline-trainer-root"
+            )
 
         python = command_path(args.python, "Python")
         native = require_file(args.native, "native engine")
@@ -242,6 +291,43 @@ def main() -> int:
             or native.with_name(f"atomic-nnue-incremental-tests{suffix}"),
             "incremental NNUE test binary",
         )
+
+        if args.pipeline_tools_engine is not None:
+            pipeline_tools_engine = require_file(
+                args.pipeline_tools_engine, "variant-nnue-tools engine"
+            )
+            pipeline_trainer_root = require_directory(
+                args.pipeline_trainer_root, "variant-nnue-pytorch checkout"
+            )
+            run_step(
+                "Legacy Atomic V1 cross-repository data-to-engine pipeline",
+                [
+                    python,
+                    str(REPO_ROOT / "tests" / "legacy_pipeline_e2e.py"),
+                    "--tools-engine",
+                    str(pipeline_tools_engine),
+                    "--trainer-root",
+                    str(pipeline_trainer_root),
+                    "--engine",
+                    str(native),
+                    "--source-net",
+                    str(net),
+                ],
+                timeout=args.pipeline_timeout,
+                required_markers=(
+                    "LEGACY PIPELINE E2E PASSED ",
+                    f"source_sha256={EXPECTED_NET_SHA256}",
+                    "ft_delta=",
+                    "fc_delta=",
+                ),
+            )
+        else:
+            print(
+                "\n=== Legacy Atomic V1 cross-repository data-to-engine pipeline ===\n"
+                "LEGACY PIPELINE E2E NOT REQUESTED (NON-RELEASE): supply both "
+                "--pipeline-tools-engine and --pipeline-trainer-root to run it",
+                flush=True,
+            )
 
         hito4_command = [
             python,
