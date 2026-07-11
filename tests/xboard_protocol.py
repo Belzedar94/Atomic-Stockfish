@@ -277,6 +277,19 @@ def run(engine: Path, timeout: float) -> None:
         xb.send("option EvalFile=missing-xboard-contract-test.nnue")
         xb.send("option Use NNUE=true")
         xb.send("new")
+
+        # Perft uses only rules and move generation. It must therefore remain
+        # available with the default NNUE-enabled mode even when EvalFile did
+        # not load. This also catches holding the synchronized-output lock
+        # around engine.perft(), whose root divide writes synchronized lines.
+        xb.send("perft 1")
+        networkless_perft = xb.read_until(lambda line: line == "Nodes searched: 20")
+        if any(line.startswith("Error") for line in networkless_perft):
+            raise AssertionError(
+                f"networkless XBoard perft produced an error: {networkless_perft}"
+            )
+        xb.barrier()
+
         xb.send("sd 1")
         xb.send("go")
         rejected_go = xb.barrier()

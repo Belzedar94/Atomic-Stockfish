@@ -150,9 +150,6 @@ Engine::Engine(std::optional<std::filesystem::path> path) :
 }
 
 u64 Engine::perft(const std::string& fen, Depth depth, bool isChess960) {
-    if (!verify_network())
-        return 0;
-
     return Benchmark::perft(fen, depth, isChess960);
 }
 

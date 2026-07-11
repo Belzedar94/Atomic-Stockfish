@@ -25,7 +25,7 @@ WORKSPACE_ROOT = REPO_ROOT.parent
 EXPECTED_NET_SHA256 = (
     "99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f92a04a6"
 )
-EXPECTED_SIGNATURE = "347885"
+EXPECTED_SIGNATURE = "356852"
 
 
 class GateFailure(RuntimeError):
@@ -455,7 +455,7 @@ await suite.runSuite(module, 'ES module/WASM');
                 "true",
             ],
             timeout=args.timeout,
-            required_markers=("Atomic search regressions passed: 5/5",),
+            required_markers=("Atomic search regressions passed: 7/7",),
         )
         run_step(
             "XBoard/CECP Atomic, analyze and live ponder",

@@ -788,9 +788,9 @@ void XBoardProtocol::process_command(const std::string& token, std::istringstrea
         else
         {
             stop_search(true);
-            sync_cout << "Nodes searched: "
-                      << engine.perft(engine.fen(), depth, engine.get_options()["UCI_Chess960"])
-                      << sync_endl;
+            const auto nodes =
+              engine.perft(engine.fen(), depth, engine.get_options()["UCI_Chess960"]);
+            sync_cout << "Nodes searched: " << nodes << sync_endl;
         }
     }
     else

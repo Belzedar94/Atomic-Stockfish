@@ -67,6 +67,22 @@ grep -Fq 'Final evaluation: none (Atomic terminal)' <<<"$terminal_eval_output" \
 grep -Fxq 'readyok' <<<"$terminal_eval_output" \
     || fail "engine did not remain responsive after terminal eval"
 
+# Perft is a rules diagnostic and must not depend on evaluation. In particular,
+# the default Use NNUE=true mode and a network that failed to load must neither
+# reject the command nor turn a valid result into zero.
+networkless_perft_output="$({
+    printf 'uci\n'
+    printf 'setoption name EvalFile value missing-uci-perft-contract-test.nnue\n'
+    printf 'position startpos\n'
+    printf 'go perft 1\n'
+    printf 'isready\n'
+    printf 'quit\n'
+} | "$ENGINE")"
+grep -Fxq 'Nodes searched: 20' <<<"$networkless_perft_output" \
+    || fail "UCI perft must work when the requested NNUE is unavailable"
+grep -Fxq 'readyok' <<<"$networkless_perft_output" \
+    || fail "engine did not remain responsive after networkless UCI perft"
+
 echo "Atomic UCI protocol contract passed"
 
 if [[ "$MODE" == "--protocol-only" ]]; then
