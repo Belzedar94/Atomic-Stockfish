@@ -18,6 +18,8 @@
 
 #include "half_ka_v2_atomic.h"
 
+#include <algorithm>
+
 #include "../../bitboard.h"
 #include "../../position.h"
 
@@ -52,6 +54,8 @@ constexpr IndexType PieceSquareIndex[COLOR_NB][PIECE_NB] = {
 }  // namespace
 
 Square HalfKAv2Atomic::orient(Color perspective, Square s) {
+    // Fairy's legacy variants feature maps a missing royal piece to feature
+    // anchor zero for both perspectives.
     if (s == SQ_NONE)
         return SQ_A1;
     return perspective == WHITE ? s : flip_rank(s);
@@ -60,7 +64,6 @@ Square HalfKAv2Atomic::orient(Color perspective, Square s) {
 IndexType HalfKAv2Atomic::make_index(Color perspective, Square s, Piece pc, Square ksq) {
     assert(s != SQ_NONE);
     assert(pc != NO_PIECE);
-    assert(ksq != SQ_NONE);
 
     return IndexType(orient(perspective, s)) + PieceSquareIndex[perspective][pc]
          + IndexType(orient(perspective, ksq)) * PieceSquareDimensions;
@@ -69,7 +72,7 @@ IndexType HalfKAv2Atomic::make_index(Color perspective, Square s, Piece pc, Squa
 void HalfKAv2Atomic::append_active_indices(const Position& pos,
                                            Color           perspective,
                                            IndexList&      active) {
-    const Square ksq = pos.has_king(perspective) ? pos.square<KING>(perspective) : SQ_A1;
+    const Square ksq = pos.has_king(perspective) ? pos.square<KING>(perspective) : SQ_NONE;
 
     Bitboard occupied = pos.pieces();
     while (occupied)
@@ -92,10 +95,21 @@ void HalfKAv2Atomic::append_changed_indices(
 
     if (diff.add_sq != SQ_NONE)
         added.push_back(make_index(perspective, diff.add_sq, diff.add_pc, ksq));
+
+    for (const auto& blasted : diff.atomicBlast)
+        removed.push_back(make_index(perspective, blasted.square, blasted.pc, ksq));
 }
 
 bool HalfKAv2Atomic::requires_refresh(const DiffType& diff, Color perspective) {
-    return diff.requiresRefresh || diff.pc == make_piece(perspective, KING);
+    const Piece perspectiveKing = make_piece(perspective, KING);
+    if (diff.requiresRefresh || diff.pc == perspectiveKing
+        || (diff.remove_sq != SQ_NONE && diff.remove_pc == perspectiveKing))
+        return true;
+
+    return std::any_of(diff.atomicBlast.begin(), diff.atomicBlast.end(),
+                       [perspectiveKing](const DirtyPiece::AtomicBlastPiece& blasted) {
+                           return blasted.pc == perspectiveKing;
+                       });
 }
 
 }  // namespace Stockfish::Eval::NNUE::Features

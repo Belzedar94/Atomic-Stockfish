@@ -300,6 +300,13 @@ enum Rank : u8 {
 
 // Keep track of what a move changes on the board (used by NNUE)
 struct DirtyPiece {
+    static constexpr usize MAX_ATOMIC_BLAST_PIECES = 9;
+
+    struct AtomicBlastPiece {
+        Piece  pc;
+        Square square;
+    };
+
     Piece  pc;        // this is never allowed to be NO_PIECE
     Square from, to;  // to should be SQ_NONE for promotions
     bool   requiresRefresh;
@@ -309,6 +316,11 @@ struct DirtyPiece {
     // castling uses add_sq and remove_sq to remove and add the rook
     Square remove_sq, add_sq;
     Piece  remove_pc, add_pc;
+
+    // Atomic captures can remove the capturing piece plus every adjacent
+    // non-pawn. Keep those removals as a bounded NNUE delta so that HalfKAv2
+    // only needs a full refresh when its perspective king changes.
+    ValueList<AtomicBlastPiece, MAX_ATOMIC_BLAST_PIECES> atomicBlast;
 };
 
 // Keep track of what threats change on the board (used by NNUE)

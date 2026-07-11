@@ -37,6 +37,11 @@ setoption name Use NNUE value true
 setoption name Use NNUE value pure
 ```
 
+`true` is the normal playing mode and the only NNUE mode used for Elo/LOS
+matches. `pure` exposes the unadjusted network result for data generation and
+training-pipeline compatibility; it is tested on every release surface but is
+not a playing-strength mode. `false` disables NNUE.
+
 An incompatible or missing network blocks `go` when NNUE is enabled. The frozen
 development reference is `atomic_run3b_e202_l05.nnue`, identified by SHA-256
 `99DC67EABF26A64FAEECA3A88B4C38597A840B8D4A874B9F2CF658C6F92A04A6`.

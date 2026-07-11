@@ -365,12 +365,6 @@ def build_corpus(
     return corpus, source_counts
 
 
-def cpp_trunc_div(numerator: int, denominator: int) -> int:
-    """C++ integer division for a positive denominator (truncate toward zero)."""
-
-    return numerator // denominator if numerator >= 0 else -((-numerator) // denominator)
-
-
 def corpus_sha256(corpus: Sequence[CorpusPosition]) -> str:
     digest = hashlib.sha256()
     for position in corpus:
@@ -442,17 +436,18 @@ def compare_corpus(
                         f"oracle={oracle_eval.raw_white:+.6f}"
                     )
 
-                expected_pure_display = (
-                    cpp_trunc_div(
-                        side_sign * pure_eval.raw_internal_stm * 100, LEGACY_PAWN_VALUE
-                    )
-                    / 100.0
-                )
-                if abs(pure_eval.final_white - expected_pure_display) > 0.000001:
+                # The trace formats the final value to two decimal places. Do
+                # not reconstruct iostream's floating-point rounding with C++
+                # integer truncation: that produced false failures around the
+                # half-centipawn boundary. The unrounded raw value must instead
+                # agree with the displayed pure result to trace precision.
+                pure_display_error = abs(pure_eval.final_white - candidate_raw_white)
+                if pure_display_error > 0.0051:
                     position_errors.append(
-                        "candidate pure final is not its raw internal result: "
+                        "candidate pure final is inconsistent with its raw internal result: "
                         f"final={pure_eval.final_white:+.6f}, "
-                        f"expected display={expected_pure_display:+.6f}"
+                        f"raw={candidate_raw_white:+.6f}, "
+                        f"display_delta={pure_display_error:.6f}"
                     )
 
             if position_errors:
