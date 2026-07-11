@@ -276,7 +276,7 @@ def main() -> int:
             [str(paths["cpp_api"])],
             timeout=args.timeout,
             required_markers=("Atomic API unit tests passed",),
-            expected_pass_lines=33,
+            expected_pass_lines=34,
         )
         run_step(
             "frozen binding fixture inventory",
@@ -347,7 +347,7 @@ def main() -> int:
             ],
             env=python_env,
             timeout=args.timeout,
-            required_markers=("58 passed",),
+            required_markers=("60 passed",),
         )
 
         cjs_launcher = r"""
@@ -458,7 +458,7 @@ await suite.runSuite(module, 'ES module/WASM');
             ],
             timeout=args.timeout,
             required_markers=(
-                "PASS real table fixtures: 11 headers and SHA-256 hashes",
+                "PASS real table fixtures: 13 headers and SHA-256 hashes",
                 "Atomic Syzygy tests passed: 5/5",
             ),
         )

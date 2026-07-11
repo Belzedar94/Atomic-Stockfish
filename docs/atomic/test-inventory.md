@@ -18,9 +18,9 @@ release pass.
 | Surface | Migrated coverage | Current evidence |
 | --- | --- | --- |
 | C++ Atomic rules/state | Atomic SEE, explosion deltas, terminal captures, en passant, promotions, castling/Atomic960, repetition, rule 50, UCI moves | `44/44` PASS lines and terminal success marker |
-| Shared C++ board API | SAN, outcomes, checked pieces, material, FEN validation and Atomic960 | `33/33` PASS lines and terminal success marker |
+| Shared C++ board API | SAN, outcomes, checked pieces, material, FEN validation and Atomic960 | `34/34` PASS lines and terminal success marker |
 | Historical Python API | Frozen Fairy `test.py` contracts | `22/22`; two removed-variant APIs are classified, not skipped |
-| Extended Python API | Fixtures, perft, errors, transactional calls, wheel layout and concurrent independent calls | `pytest`: `58 passed`; sdist-to-wheel import and PEP 561 discovery passed |
+| Extended Python API | Fixtures, perft, errors, transactional calls, wheel layout and concurrent independent calls | `pytest`: `60 passed`; sdist-to-wheel import and PEP 561 discovery passed |
 | Fixture accounting | Frozen Python, JavaScript and perft source inventory | `58` fixtures, `22` Python source tests, `58` JavaScript source tests, eight perft vectors |
 | CommonJS Board WASM | Full Atomic binding/lifecycle suite | `58` fixtures passed |
 | ES-module Board WASM | Full Atomic binding/lifecycle suite | `58` fixtures passed |

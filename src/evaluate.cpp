@@ -77,7 +77,10 @@ Value fix_frc(const Position& pos) {
 
 Value damp_for_atomic_rule50(Value value, const Position& pos) {
     // Fairy Atomic uses nMoveRule=50, i.e. a draw at 100 reversible plies.
-    const int remaining = 100 - pos.rule50_count();
+    // Imported or composed FENs may legally carry a larger halfmove clock.
+    // Once the draw boundary is reached the evaluation stays neutral; it must
+    // never cross through zero and reverse sign.
+    const int remaining = std::max(0, 100 - pos.rule50_count());
     return Value(int(value) * remaining / 100);
 }
 

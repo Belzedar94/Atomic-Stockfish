@@ -114,6 +114,11 @@ bool        Board::is_chess960() const { return chess960; }
 std::string Board::fen() const { return pos->fen(); }
 
 void Board::set_position_transactional(const std::string& fenValue) {
+    const int validation = Board::validate_fen(fenValue, chess960);
+    if (validation != FEN_OK)
+        throw PositionSetError("Atomic FEN validation failed with code "
+                               + std::to_string(validation));
+
     auto nextStates = std::make_unique<std::deque<StateInfo>>(1);
     auto nextPos    = std::make_unique<Position>();
 

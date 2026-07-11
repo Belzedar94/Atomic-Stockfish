@@ -150,6 +150,40 @@ Snapshot full_refresh_snapshot(const Position& pos, const NNUE::Network& network
     return take_snapshot(pos, network, freshStack, freshCaches);
 }
 
+Value evaluate_fen(std::string_view fen,
+                   const NNUE::Network& network,
+                   Eval::UseNNUEMode mode) {
+    Position  pos;
+    StateInfo state{};
+    if (auto error = pos.set(std::string(fen), false, &state))
+        die("invalid rule50 evaluation fixture: " + std::string(error->what()));
+
+    auto stack  = std::make_unique<NNUE::AccumulatorStack>();
+    auto caches = std::make_unique<NNUE::AccumulatorCaches>(network);
+    stack->reset();
+    return Eval::evaluate(network, pos, *stack, *caches, VALUE_ZERO, mode);
+}
+
+void run_rule50_damping(const NNUE::Network& network) {
+    constexpr std::string_view At99 = "7k/8/8/8/8/8/Q7/K7 w - - 99 1";
+    constexpr std::string_view At100 = "7k/8/8/8/8/8/Q7/K7 w - - 100 1";
+    constexpr std::string_view Beyond = "7k/8/8/8/8/8/Q7/K7 w - - 150 1";
+
+    const Value classical99 = evaluate_fen(At99, network, Eval::UseNNUEMode::False);
+    if (classical99 <= VALUE_ZERO)
+        die("rule50 damping erased or reversed a positive evaluation before the boundary");
+
+    for (const auto mode : {Eval::UseNNUEMode::False, Eval::UseNNUEMode::True})
+    {
+        if (evaluate_fen(At100, network, mode) != VALUE_ZERO)
+            die("rule50 damping did not neutralize evaluation at 100 reversible plies");
+        if (evaluate_fen(Beyond, network, mode) != VALUE_ZERO)
+            die("rule50 damping reversed evaluation beyond 100 reversible plies");
+    }
+
+    std::cout << "PASS rule50 evaluation damping at and beyond draw boundary\n";
+}
+
 struct Fixture {
     std::string_view name;
     std::string_view fen;
@@ -431,6 +465,8 @@ int main(int argc, char* argv[]) {
     network->load({}, options.net, evalFile);
     if (!evalFile.current || network->get_content_hash() == 0)
         die("failed to load a compatible Legacy Atomic V1 network: " + options.net.string());
+
+    run_rule50_damping(*network);
 
     for (const auto& fixture : FixedFixtures)
         run_fixed_fixture(fixture, *network);
