@@ -31,15 +31,14 @@
       "records": 8,
       "seed": "20260711",
       "synthetic_model_seed": 20260711,
-      "source_net_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
-      "data_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "source_net_sha256": "9cf054ca00b82ab53a34473de52d1104aeddaa19b2e7b24091b5e613af485985",
+      "data_sha256": "95565809c53e914a192d095b18c7bab9a0c35af9510347dc2c63baa385d69988",
       "build_recipes": {
         "tools": "synthetic-ci-tools-linux-v1",
         "trainer": "synthetic-ci-trainer-linux-v1",
         "atomic": "synthetic-ci-atomic-linux-v1"
       },
-      "hashes_resolved": false,
-      "placeholder": "REPLACE_WITH_MEASURED_SYNTHETIC_NET_AND_DATA_SHA256"
+      "hashes_resolved": true
     }
   }
 }

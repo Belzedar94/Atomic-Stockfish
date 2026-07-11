@@ -369,9 +369,9 @@ their internal native/CPU suites, builds and tests Atomic-Stockfish, creates an
 ephemeral deterministic zero-weight HalfKAv2 network with the pinned trainer,
 and runs the complete generator-to-engine E2E in `synthetic-ci`. The job is
 present but is intentionally fail-closed during release preparation: the lock
-already pins the final tools and trainer commits but still has explicit
-placeholders for the first measured synthetic source/data hashes. Hito 6 cannot
-close until those values are real and the job is green. Automatic continuation
+pins the tools and trainer commits and now contains the measured synthetic
+source/data hashes. Hito 6 cannot close until the resolved-profile rerun is
+green. Automatic continuation
 from an existing `.nnue`
 and the production general dataset validator remain separate trainer/tools
 release debts; this gate does not claim to implement either feature.

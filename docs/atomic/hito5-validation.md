@@ -6,8 +6,9 @@ normative `release` contract. The native, Python, JavaScript and UCI/NNUE WASM
 release matrix passed on 2026-07-11 with freshly rebuilt artifacts. The first
 cross-repository E2E used a fully fingerprinted but dirty local tools/trainer
 snapshot. The stricter clean, commit-pinned public-CI closeout described below
-is now part of the release contract and remains pending while its explicit lock
-placeholders are finalized.
+is now part of the release contract. Its synthetic hashes are measured and
+locked; the public release rerun and clean local `strong-local` execution remain
+pending before closeout.
 
 `Use NNUE=true` is the playing mode and is mandatory for all Elo/LOS gates.
 `Use NNUE=pure` exists for data generation: it exposes the unadjusted network
@@ -68,15 +69,16 @@ Both profiles hard-pin record count, seed, source-network hash and generated
 72-byte data hash. The synthetic constructor zeroes every trainer parameter
 before serialization, so its bytes do not depend on PyTorch RNG or BLAS
 behavior. It is not a playing network and is never used for Elo/LOS. The lock
-pins the reviewed tools and trainer commits. It temporarily retains explicit
-all-zero staging placeholders only for the not-yet-measured synthetic hashes;
-`Pinned Legacy Atomic V1 pipeline` takes its measurement branch and fails
-closed until both values are copied back and marked resolved. After the two
-repository commits are final, the one-time
+pins the reviewed tools and trainer commits plus the measured synthetic source
+SHA-256 `9CF054CA00B82AB53A34473DE52D1104AEDDAA19B2E7B24091B5E613AF485985`
+and data SHA-256
+`95565809C53E914A192D095B18C7BAB9A0C35AF9510347DC2C63BAA385D69988`.
+The one-time
 `--profile synthetic-ci --measure-synthetic-fixture` E2E invocation prints the
-two observed hashes with an explicit `NON-RELEASE` marker. Those values are
-copied into the lock, the profile is marked resolved, and the command is rerun
-without the measurement flag; only the latter run can pass the release gate.
+two observed hashes with an explicit `NON-RELEASE` marker and deliberately
+returns a failing CI job after all postflights pass. Those values are now in the
+lock and the profile is resolved; only the following run without the
+measurement flag can pass the release gate.
 
 ## Evaluation differences are diagnostic
 
