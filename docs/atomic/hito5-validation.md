@@ -188,3 +188,7 @@ performance gate remains **failed** despite the incremental-accumulator gain.
 Specialization is not credited in advance; the final engine must demonstrate
 that it is faster on the shared corpus. Absolute NPS varies across runs, so the
 paired ratio under identical conditions is the governing measurement.
+
+This is the historical Hito 5 closeout measurement. Hito 6 removed the
+FullThreats overhead, vectorized the legacy accumulator and passed the same
+paired gate; see `hito6-validation.md` for the superseding result.

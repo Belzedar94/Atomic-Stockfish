@@ -1,0 +1,157 @@
+# Hito 6 search integration validation
+
+Hito 6 integrates Atomic search policy in small, attributable blocks. This
+record is cumulative: block 1 is accepted, while the milestone and its PR are
+not complete until the remaining search blocks and the full release matrix are
+closed.
+
+`Use NNUE=true` is the only playing mode used for speed and strength. `pure`
+remains a data-generation mode: its option and network-loading contract is
+tested, but it is not used for play, speed measurements or strength matches.
+
+## Block 1: Atomic move-count pruning
+
+Fairy-Stockfish commit `b0b230f3` changed the quiet move-count threshold to
+account for explosive captures and passed independent Atomic STC, LTC and VLTC
+tests. With `blast_on_capture=1` and `walling=0`, its generic expression reduces
+exactly to:
+
+```text
+(5 + depth * depth) / (3 - improving)
+```
+
+Atomic-Stockfish applies that threshold only to quiet moves. Captures and quiet
+Atomic checks are emitted before the skipped quiet tail. Six direct C++ tests
+pin the integer thresholds for both values of `improving` at depths 3, 4 and 6.
+
+An earlier experiment changed child-node futility from `depth < 17` directly
+to `< 6`. It was rejected: the shared 25,000-node corpus measured `0.9520x`
+against the clean control. Fairy's historical change was relative (`9` to `6`),
+so copying its final absolute value into the modern search disabled eleven
+additional plies of pruning.
+
+## Correctness snapshot
+
+The final clean release build currently reports:
+
+- C++ rules/state `50/50` and shared API `33/33`;
+- search regressions `11/11` with NNUE disabled and with the frozen network;
+- all eight historical Atomic/Atomic960 perft vectors;
+- all `19/19` focused rule transitions and terminal outcomes.
+
+The signature update was propagated through the complete release runner. That
+runner passed native UCI and XBoard, Python, CommonJS, ES module, both WASM
+surfaces, Syzygy, NNUE modes, reproducibility, perft and protocol coverage. The
+full Hito 5 runner additionally passed exactly 1,000,000 incremental NNUE
+operations and the 10,000-position Fairy differential corpus.
+
+The independent build matrix also passed:
+
+- Windows MinGW release and debug/assert builds;
+- a Python `sdist` rebuilt into an ABI3 wheel, isolated import and PEP 561
+  discovery with mypy;
+- Linux GCC 15.2 and Clang 20 portable release builds, including `50/50` C++
+  units, `33/33` API units, both perft suites and `11/11` NNUE search cases;
+- Linux Clang 20 ASan+UBSan over the same rules/API/perft/search surfaces;
+- Linux Clang 20 TSan over the C++ rules, shared API and live XBoard suite.
+
+No sanitizer reported an error. Clang's release build retains five existing
+upstream warnings: one unused lambda capture and four libstdc++ temporary-buffer
+deprecations.
+
+## Generator and trainer compatibility
+
+The current `variant-nnue-tools` integration gate passed its Atomic-only engine
+selection, historical 72-byte records, special moves, deterministic defaults,
+overwrite refusal, conversions and seeded generation smoke. Its C++ unit gate
+also passed in a clean Clang 20 container. The new cross-repository pipeline
+gate uses `Use NNUE=pure` only while generating training records; all
+conversion and final engine-loading commands use their appropriate non-pure
+modes.
+
+The current `variant-nnue-pytorch` native loader passed CTest `1/1`, and its
+Python suite passed `30/30` on CPU and CUDA. That covers the pinned 32-record
+fixture, native decoding, seeded one-versus-four-worker determinism, ownership
+and error cleanup, and a complete HalfKAv2 forward/backward pass. Search block 1
+does not alter positions, the wire format, features, accumulators or network
+serialization, so this audit found no pipeline compatibility regression.
+
+`tests/legacy_pipeline_e2e.py` now closes the executable cross-repository path:
+it generates twice from the frozen network with a fixed seed, requires
+byte-identical 72-byte data, validates and round-trips every record, checks the
+exact HalfKAv2^ sparse batch, executes one real training/backward/Ranger step,
+requires finite gradients and parameters plus non-zero FT/FC updates,
+serializes, reimports byte-exactly and finally loads the newly written network
+in the engine for evaluation and search. The current run passed with:
+
+- source network SHA-256
+  `99DC67EABF26A64FAEECA3A88B4C38597A840B8D4A874B9F2CF658C6F92A04A6`;
+- deterministic data SHA-256
+  `7DE72B1385DBC8E37312A513D1CF4C7D99F889ECB8B747F548ED32E8D7A261A2D`;
+- serialized network SHA-256
+  `A69FB0A7DC211AA4D8BB0974BA881F6CA0F98C5FBC30E0203B9E08B99076E3DC`;
+- loss `0.0347999074`, FT delta `8.66651535e-05`, FC delta
+  `8.454262e-07`, and final engine move `b2b3`.
+
+This is currently a normative manual gate because it needs three sibling
+checkouts and their built native extensions. It must be wired into a pinned
+multi-repository runner or CI job before Hito 6 closes. Automatic continuation
+from an existing `.nnue` and the production general dataset validator remain
+separate trainer/tools release debts; this gate does not claim to implement
+either feature.
+
+## Selectivity and speed
+
+At fixed depth 13, the deterministic Atomic signature changed from `404217` to
+`347633`, a `14.0%` smaller tree. On CPU 0, the clean five-run snapshot was:
+
+| Engine policy | Nodes | Median time | Median NPS |
+| --- | ---: | ---: | ---: |
+| Modern control | 404,217 | 231 ms | 1,746,085 |
+| Atomic move-count | 347,633 | 210 ms | 1,655,395 |
+
+NPS per node is diagnostic for this strength block; the lower node count and
+the three LOS gates decide whether the selectivity is useful.
+
+The strict shared-corpus speed gate used 13 positions, SHA-256
+`2738065A8A70D61DA46FA3C75F95D645E50E601B43792DF0E7B3CC97B1D891A1`,
+one thread, 64 MiB hash, CPU 0, one warm-up and five measured repetitions at
+100,000 nodes per position. The clean final rebuild produced:
+
+| Binary | Median NPS | Bytes |
+| --- | ---: | ---: |
+| Atomic-Stockfish | 1,464,982 | 4,262,793 |
+| Frozen Fairy baseline | 1,109,003 | 4,477,632 |
+
+The NPS ratio is `1.3210`, or `+32.10%`, and the specialized binary is 214,839
+bytes smaller. The performance gate therefore passes.
+
+## Normative strength gates
+
+All matches used the original `variantfishtest_new1.py`, runner SHA-256
+`37D1790096520D9F3A1003746CDFBED59D2CC125A9B3D3192FF3399295EC9D70`,
+the frozen network SHA-256
+`99DC67EABF26A64FAEECA3A88B4C38597A840B8D4A874B9F2CF658C6F92A04A6`,
+`Use NNUE=true`, one thread, 512 MiB hash, four workers, the Atomic book and
+color-swapped pairs. Each stopped only after `Total > 100` and exact displayed
+`LOS: 100.0%`.
+
+| TC | Total | W-L-D | Elo (95%) | Pentanomial | Draws | Time losses | LOS |
+| --- | ---: | ---: | ---: | --- | ---: | ---: | ---: |
+| 2+0.02 | 130 | 56-16-58 | +110.48 +/-45.0 | `[1,4,25,24,11]` | 44.62% | 0 / 0 | 100.0% |
+| 10+0.1 | 102 | 34-6-62 | +97.88 +/-41.2 | `[0,1,23,25,2]` | 60.78% | 0 / 0 | 100.0% |
+| 30+0.3 | 104 | 35-8-61 | +92.31 +/-42.3 | `[0,2,21,29,0]` | 58.65% | 0 / 0 | 100.0% |
+
+The complete logs are versioned beside this record:
+
+| Log | Bytes | SHA-256 |
+| --- | ---: | --- |
+| `evidence/hito6-movecount/tc1-2000-20.log` | 195,278 | `9B397ACDB97296C9887C6E68DD4DF32CE5452AC7F1292A8F74AD6A8D20F1C105` |
+| `evidence/hito6-movecount/tc2-10000-100.log` | 154,806 | `F2F7E7BEA03FE0A85A787853BBE4BA8971C8A1A128AF67D3BD227379AA1D0326` |
+| `evidence/hito6-movecount/tc3-30000-300.log` | 166,774 | `2A85EC6276B6E9AF32F233DC50FDA549B36D7E4C2DEA5837A4A14401060121E8` |
+
+All three matches used the final clean rebuilt binary, size 4,262,793 and
+SHA-256
+`DF7BB853E5DF7FC4F418F49F5AF8135B892D388D44A7E6D5D4CDE44E2883FDAE`.
+The logs therefore exercise the exact artifact identified by this record,
+without transferring results from a semantically equivalent earlier build.
