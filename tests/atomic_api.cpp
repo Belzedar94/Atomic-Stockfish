@@ -230,6 +230,24 @@ void test_fen_validation() {
            "sanitized castling rights must remain a validation error");
     expect(Atomic::validate_fen("7k/8/8/8/8/8/2PP4/1RK4q w Q - 0 1", true) == Atomic::FEN_OK,
            "validation.atomic960-castling", "valid Atomic960 castling FEN must pass");
+    expect(Atomic::validate_fen("4k3/8/8/1B6/8/8/8/4K3 w - - 0 1") == Atomic::FEN_OK
+             && Atomic::validate_fen("7k/7R/8/8/8/8/8/K7 w - - 0 1") == Atomic::FEN_OK,
+           "validation.atomic-analysis-reachability",
+           "structurally valid Atomic analysis FENs must not require legal-game reachability");
+    expect(Atomic::validate_fen("7k/8/8/8/8/8/8/K7 w - - not-a-number 1")
+             == Atomic::FEN_INVALID_HALF_MOVE_COUNTER,
+           "validation.halfmove-nonnumeric",
+           "a non-numeric halfmove field must report the halfmove-specific error");
+    expect(Atomic::validate_fen("7k/8/8/8/8/8/8/K7 w - - 0 not-a-number")
+             == Atomic::FEN_INVALID_MOVE_COUNTER,
+           "validation.fullmove-nonnumeric",
+           "a non-numeric fullmove field must report the fullmove-specific error");
+    expect(Atomic::validate_fen("7x/8/8/8/8/8/8/7K w - - not-a-number 1")
+               == Atomic::FEN_INVALID_CHAR
+             && Atomic::validate_fen("7k/8/8/8/8/8/8/K7 w K - not-a-number 1")
+                  == Atomic::FEN_INVALID_CASTLING_INFO,
+           "validation.field-error-precedence",
+           "an earlier board error must not be hidden by a malformed counter");
     expect(Atomic::validate_fen("") == Atomic::FEN_EMPTY, "validation.empty",
            "empty FEN must retain the legacy result code");
 }

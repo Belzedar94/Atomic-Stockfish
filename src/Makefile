@@ -72,8 +72,9 @@ endif
 PREFIX = /usr/local
 BINDIR = $(PREFIX)/bin
 
-### Built-in benchmark for pgo-builds
-PGOBENCH = $(RUN_PREFIX) ./$(EXE) bench
+### Built-in benchmark for PGO builds. The Atomic NNUE is external, so profile
+### generation explicitly uses the self-contained classical evaluator.
+PGOBENCH = printf 'setoption name Use NNUE value false\nbench\nquit\n' | $(RUN_PREFIX) ./$(EXE)
 
 ### Source and object files
 SRCS = attacks.cpp benchmark.cpp bitboard.cpp evaluate.cpp main.cpp \
@@ -1385,17 +1386,30 @@ clang-profile-use:
 	EXTRALDFLAGS='-fprofile-use ' \
 	all
 
+# GCC stores mangled absolute object paths below profdir. MinGW compares the
+# prefix using native Windows spelling, including backslashes.
+ifneq (,$(filter MSYS% MINGW% CYGWIN%,$(KERNEL)))
+  GCC_PROFILE_PREFIX := $(shell cygpath -w "$(CURDIR)")
+else
+  GCC_PROFILE_PREFIX := $(CURDIR)
+endif
+GCC_PROFILE_PREFIX_FLAG := -fprofile-prefix-path="$(GCC_PROFILE_PREFIX)"
+
 gcc-profile-make:
 	@mkdir -p profdir
 	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) \
-	EXTRACXXFLAGS='-fprofile-generate=profdir' \
+	EXTRACXXFLAGS='-fprofile-generate=profdir $(GCC_PROFILE_PREFIX_FLAG)' \
 	EXTRACXXFLAGS+=$(EXTRAPROFILEFLAGS) \
 	EXTRALDFLAGS='-lgcov' \
 	all
 
 gcc-profile-use:
+	@test -d profdir && test -n "$$(find profdir -type f -name '*.gcda' -print -quit)" || { \
+		echo "ERROR: PGO benchmark generated no GCC profile data." >&2; \
+		exit 1; \
+	}
 	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) \
-	EXTRACXXFLAGS='-fprofile-use=profdir -fno-peel-loops -fno-tracer' \
+	EXTRACXXFLAGS='-fprofile-use=profdir $(GCC_PROFILE_PREFIX_FLAG) -Werror=missing-profile -fno-peel-loops -fno-tracer' \
 	EXTRACXXFLAGS+=$(EXTRAPROFILEFLAGS) \
 	EXTRALDFLAGS='-lgcov' \
 	all
