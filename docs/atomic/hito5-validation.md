@@ -3,7 +3,7 @@
 Hito 5 is the release gate for the legacy Atomic NNUE backend. Its default
 runner is `tests/run_hito5.py`; invoking it without `--mode` selects the
 normative `release` contract. The complete release invocation passed on
-2026-07-10 with freshly rebuilt native, Python, JavaScript and UCI/NNUE WASM
+2026-07-11 with freshly rebuilt native, Python, JavaScript and UCI/NNUE WASM
 artifacts.
 
 `Use NNUE=true` is the playing mode and is mandatory for all Elo/LOS gates.
@@ -127,8 +127,8 @@ above. Its NNUE-specific evidence was:
 
 - exactly `1,000,000` random actions: `500,000` makes and `500,000` undos;
 - `18,761` Atomic captures and `capture-forced-refresh=0`;
-- fixed coverage of the maximum nine-piece blast delta and Fairy-compatible
-  feature anchor zero after the black king explodes;
+- fixed coverage of direct king capture, the maximum nine-piece blast delta
+  and Fairy-compatible feature anchor zero after the black king explodes;
 - `241,087` comparisons against a fresh accumulator;
 - perspective-local refreshes: white `62,282`, black `177,921`;
 - diagnostic differential `10,000/10,000` with corpus SHA-256
@@ -145,19 +145,21 @@ The frozen reader contract observed version `0x7AF32F20`, architecture hash
 
 ### Rebuilt artifact snapshot
 
-The native artifacts in this table were built from commit `6f8c5229`; the
-WASM and binding artifacts contain the same Hito 5 source state.
+The artifacts in this table represent the Hito 5 source state at commit
+`4246f7b3`. The direct-capture fixture in that commit only changes the
+incremental gate executable; the engine, bindings and WASM source inputs are
+identical to its merge parent.
 
 | Artifact | Bytes | SHA-256 |
 | --- | ---: | --- |
-| Native AVX2 engine | 4,260,632 | `8603DDA2E426A2EEEB6D8E10FD022C3A97D4D46D5C527F7397E44901160B3BD4` |
-| Incremental gate | 3,746,514 | `2173B258A6C2965EEC9461334D780687324703CAFFD0E6AE4AF734CA5D97C452` |
-| `pyffish.pyd` | 142,848 | `B59DAC465BAAE040157A344CBE15ED148E66BA000215E33DBBB22FDC699D93F6` |
-| CommonJS `ffish.js` | 67,013 | `433EC818D9A77AD6F97F89D29A008A44D141856C47FE58FBE839C6FC01274D75` |
-| ES module `ffish.mjs` | 66,928 | `878C43E02EBA1AABAF62D3B457E7010853B2BC3D4652FB015BF668FA57C96374` |
-| Shared Board WASM | 266,602 | `97300F9840989F3A164276773ADD2EF06D175B7ED60634288B2F0638E415B4E5` |
-| Full UCI/NNUE WASM | 544,506 | `15FC926FBC4804EA0664FCF9B78E32529A218F36E90BD79DBC8E4EFDAEA3D27A` |
-| Full WASM manifest | 1,930 | `EF471277F40F2A32B70D179E9D65C7005A7303C95E656208378E491A7581EAB9` |
+| Native AVX2 engine | 4,269,041 | `03DD45FBE202C6629C099CD9E5D619992BE0BF400EEACB4553D87DDE47C49A99` |
+| Incremental gate | 3,749,195 | `1526D6B48DD23E0DF49FEBDEE9878DC66889E89905538E528BB5C34A1F7F121A` |
+| `pyffish.pyd` | 147,968 | `CE20CFA0A97B23097789577EA959522AC9162916B56C0074B2C37297CEAE49B4` |
+| CommonJS `ffish.js` | 56,151 | `B5C3D624071A25F297C1993CEF63A6602E5DA0BB4AD38BA5A7CCCF55374178C7` |
+| ES module `ffish.mjs` | 55,929 | `AF17E8BA6FC9BED8C56088446F28D87498A80842FD38D1F3125A83F821F9E122` |
+| Shared Board WASM | 268,671 | `C653CD013E29031868454499296C453F2179BBDE9AD0A8A684FD7E4BF836BBC1` |
+| Full UCI/NNUE WASM | 547,655 | `88B79B0906260B3DC910322E2AD5639D5AC513D7DF84024814DE70F0E24DE247` |
+| Full WASM manifest | 1,930 | `488C44F6A23351EF364681E7BFB1D66DAC7A55CFDE68131016525181AF0B5074` |
 
 ### Platform evidence
 

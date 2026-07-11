@@ -22,6 +22,7 @@ from typing import Callable
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCORE_RE = re.compile(r"\bscore mate (-?\d+)\b")
+CP_RE = re.compile(r"\bscore cp (-?\d+)\b")
 PV_RE = re.compile(r"\bpv(?:\s+(.+))?$")
 
 
@@ -32,6 +33,9 @@ class SearchCase:
     searchmove: str
     expected_mate: int | None
     expected_pv: tuple[str, ...]
+    expected_cp: int | None = None
+    depth: int = 1
+    force_searchmove: bool = True
 
 
 SEARCH_CASES = (
@@ -41,6 +45,38 @@ SEARCH_CASES = (
         searchmove="h2b8",
         expected_mate=1,
         expected_pv=("h2b8",),
+    ),
+    SearchCase(
+        name="Atomic mate takes priority over the fifty-move draw",
+        fen="B7/Rk6/8/8/8/8/7Q/4K3 w - - 99 1",
+        searchmove="h2b8",
+        expected_mate=1,
+        expected_pv=("h2b8",),
+    ),
+    SearchCase(
+        name="qsearch scores a quiet-move stalemate as draw",
+        fen="KQ6/Rk6/8/3B4/8/8/8/8 w - - 0 1",
+        searchmove="d5c6",
+        expected_mate=None,
+        expected_pv=("d5c6",),
+        expected_cp=0,
+    ),
+    SearchCase(
+        name="move picker preserves an internal quiet Atomic check",
+        fen="k7/8/8/8/1N6/8/7Q/4K1B1 b - - 0 1",
+        searchmove="a8b7",
+        expected_mate=-1,
+        expected_pv=("a8b7", "h2b8"),
+        depth=2,
+        force_searchmove=False,
+    ),
+    SearchCase(
+        name="analysis FEN preserves an existing check after a quiet move",
+        fen="k7/8/8/8/8/8/7B/RN5K w - - 0 1",
+        searchmove="b1c3",
+        expected_mate=None,
+        expected_pv=("b1c3", "a8b7"),
+        depth=2,
     ),
     SearchCase(
         name="qsearch explores quiet atomic check evasions",
@@ -162,7 +198,10 @@ class UciProcess:
         self.send("ucinewgame")
         self.ready()
         self.send(f"position fen {test.fen}")
-        self.send(f"go depth 1 searchmoves {test.searchmove}")
+        command = f"go depth {test.depth}"
+        if test.force_searchmove:
+            command += f" searchmoves {test.searchmove}"
+        self.send(command)
         return self.read_until(lambda line: line.startswith("bestmove "))
 
     def close(self) -> None:
@@ -171,9 +210,13 @@ class UciProcess:
         try:
             self.send("quit")
             self.process.wait(timeout=self.timeout)
-        except (BrokenPipeError, subprocess.TimeoutExpired):
+        except subprocess.TimeoutExpired:
             self.process.kill()
             self.process.wait()
+        except (BrokenPipeError, OSError, ValueError):
+            if self.process.poll() is None:
+                self.process.kill()
+                self.process.wait()
 
     def __enter__(self) -> "UciProcess":
         return self
@@ -191,7 +234,15 @@ def check_case(engine: UciProcess, test: SearchCase) -> None:
     final_info = info_lines[-1]
     score_match = SCORE_RE.search(final_info)
     mate = int(score_match.group(1)) if score_match is not None else None
-    if test.expected_mate is None:
+    cp_match = CP_RE.search(final_info)
+    cp = int(cp_match.group(1)) if cp_match is not None else None
+    if test.expected_cp is not None:
+        if mate is not None or cp != test.expected_cp:
+            rendered = f"mate {mate}" if mate is not None else f"cp {cp}"
+            raise AssertionError(
+                f"{test.name}: expected cp {test.expected_cp}, got {rendered}: {final_info}"
+            )
+    elif test.expected_mate is None:
         if mate is not None:
             raise AssertionError(
                 f"{test.name}: expected a searched quiet evasion, got mate {mate}: {final_info}"
@@ -216,7 +267,7 @@ def check_case(engine: UciProcess, test: SearchCase) -> None:
             f"{test.name}: expected bestmove {test.searchmove}, got: {output[-1]}"
         )
 
-    score = f"mate {mate}" if mate is not None else "non-mate"
+    score = f"mate {mate}" if mate is not None else f"cp {cp}"
     print(f"PASS {test.name}: {score}, pv {' '.join(pv)}")
 
 

@@ -176,6 +176,48 @@ def test_fen_validation(fixture):
     )
 
 
+@pytest.mark.parametrize(
+    ("fen", "expected"),
+    [
+        (
+            "7k/8/8/8/8/8/8/K7 w - - not-a-number 1",
+            pyffish.FEN_INVALID_HALF_MOVE_COUNTER,
+        ),
+        (
+            "7k/8/8/8/8/8/8/K7 w - - 0 not-a-number",
+            pyffish.FEN_INVALID_MOVE_COUNTER,
+        ),
+    ],
+)
+def test_fen_validation_rejects_nonnumeric_move_counters(fen, expected):
+    assert pyffish.validate_fen(fen, "atomic") == expected
+
+
+def test_fen_validation_reports_the_earliest_invalid_field():
+    assert (
+        pyffish.validate_fen(
+            "7x/8/8/8/8/8/8/7K w - - not-a-number 1", "atomic"
+        )
+        == pyffish.FEN_INVALID_CHAR
+    )
+    assert (
+        pyffish.validate_fen(
+            "7k/8/8/8/8/8/8/K7 w K - not-a-number 1", "atomic"
+        )
+        == pyffish.FEN_INVALID_CASTLING_INFO
+    )
+
+
+def test_fen_validation_preserves_atomic_analysis_positions():
+    assert pyffish.validate_fen(
+        "4k3/8/8/1B6/8/8/8/4K3 w - - 0 1", "atomic"
+    ) == pyffish.FEN_OK
+    assert (
+        pyffish.validate_fen("7k/7R/8/8/8/8/8/K7 w - - 0 1", "atomic")
+        == pyffish.FEN_OK
+    )
+
+
 @pytest.mark.parametrize("fixture", fixture_rows("perft"))
 def test_perft(fixture):
     fen = fixture["position"]

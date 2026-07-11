@@ -44,6 +44,17 @@ int active_castling_rights(const Position& pos) {
     return count;
 }
 
+bool is_unsigned_decimal(std::string_view field) {
+    if (field.empty())
+        return false;
+
+    for (const char character : field)
+        if (character < '0' || character > '9')
+            return false;
+
+    return true;
+}
+
 }  // namespace
 
 int validate_fen(std::string_view fen, bool chess960) {
@@ -71,6 +82,13 @@ int validate_fen(std::string_view fen, bool chess960) {
             || active_castling_rights(position) != static_cast<int>(castling.size()))
             return FEN_INVALID_CASTLING_INFO;
     }
+
+    // Preserve field-order precedence: a malformed board, castling right, or
+    // other earlier FEN field must not be hidden by a later invalid counter.
+    if (!is_unsigned_decimal(fields[4]))
+        return FEN_INVALID_HALF_MOVE_COUNTER;
+    if (!is_unsigned_decimal(fields[5]))
+        return FEN_INVALID_MOVE_COUNTER;
 
     return FEN_OK;
 }

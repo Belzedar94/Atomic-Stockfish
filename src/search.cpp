@@ -189,8 +189,8 @@ void Search::Worker::start_searching() {
 
     accumulatorStack.reset();
     useNnueMode = options["Use NNUE"] == "pure" ? Eval::UseNNUEMode::Pure
-                  : options["Use NNUE"] == "true" ? Eval::UseNNUEMode::True
-                                                    : Eval::UseNNUEMode::False;
+                : options["Use NNUE"] == "true" ? Eval::UseNNUEMode::True
+                                                : Eval::UseNNUEMode::False;
 
     // Non-main threads go directly to iterative_deepening()
     if (!is_mainthread())
@@ -650,6 +650,16 @@ void Search::Worker::do_move(
 
     auto [dirtyPiece, dirtyThreats] = accumulatorStack.push();
     pos.do_move(move, st, givesCheck, dirtyPiece, dirtyThreats, &tt, &sharedHistory);
+
+#ifndef NDEBUG
+    const bool actualAtomicCheck = pos.atomic_in_check(pos.side_to_move());
+    if (givesCheck != actualAtomicCheck)
+        std::cerr << "Atomic gives_check mismatch after " << UCI::move(move, pos.is_chess960())
+                  << ": predicted=" << givesCheck << " actual=" << actualAtomicCheck
+                  << " cached_parent_attack=" << st.previous->atomicOpponentInCheck
+                  << " child_fen=" << pos.fen() << '\n';
+    assert(givesCheck == actualAtomicCheck);
+#endif
 
     if (ss != nullptr)
     {
@@ -1669,10 +1679,16 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
     pvHit        = ttHit && ttData.is_pv;
 
     // At non-PV nodes we check for an early TT cutoff
+    const bool legalTtMove = ttData.move && pos.pseudo_legal(ttData.move) && pos.legal(ttData.move);
+
     if (!PvNode && ttData.depth >= DEPTH_QS
         && is_valid(ttData.value)  // Can happen when !ttHit or when access race in probe()
         && (ttData.bound & (ttData.value >= beta ? BOUND_LOWER : BOUND_UPPER)))
-        return ttData.value;
+    {
+        if (ss->inCheck || legalTtMove || pos.has_legal_move())
+            return ttData.value;
+        return VALUE_DRAW;
+    }
 
     // Step 4. Static evaluation of the position
     Value unadjustedStaticEval = VALUE_NONE;
@@ -1708,6 +1724,11 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
         // Stand pat. Return immediately if static value is at least beta
         if (bestValue >= beta)
         {
+            // Stand-pat must not hide Atomic stalemate. A legal TT move is the
+            // common zero-cost proof that the position is not terminal.
+            if (!legalTtMove && !pos.has_legal_move())
+                return VALUE_DRAW;
+
             if (!is_decisive(bestValue))
                 bestValue = (467 * bestValue + 557 * beta) / 1024;
 
@@ -1736,8 +1757,8 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
     // empty for move generation, but search every capture and quiet whenever
     // the separate Atomic check predicate forbids stand-pat.
     const Depth movePickerDepth = ss->inCheck ? 1 : DEPTH_QS;
-    MovePicker  mp(pos, ttData.move, movePickerDepth, &mainHistory, &lowPlyHistory,
-                   &captureHistory, contHist, &sharedHistory, ss->ply);
+    MovePicker  mp(pos, ttData.move, movePickerDepth, &mainHistory, &lowPlyHistory, &captureHistory,
+                   contHist, &sharedHistory, ss->ply);
 
     // Step 5. Loop through all pseudo-legal moves until no moves remain or a beta
     // cutoff occurs.
@@ -1831,11 +1852,7 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
             return mated_in(ss->ply);  // Plies to mate from the root
         }
 
-        // Only check for stalemate under specific conditions
-        Color us = pos.side_to_move();
-        if (!(pawn_single_push_bb(us, pos.pieces(us, PAWN)) & ~pos.pieces())
-            && !pos.non_pawn_material(us) && type_of(pos.captured_piece()) >= KNIGHT
-            && !MoveList<LEGAL>(pos).size())
+        if (!pos.has_legal_quiet())
             bestValue = VALUE_DRAW;
     }
 

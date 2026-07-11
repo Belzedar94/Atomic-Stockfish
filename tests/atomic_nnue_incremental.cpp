@@ -195,6 +195,7 @@ constexpr std::array FixedFixtures = {
   Fixture{"quiet", StartFEN, "e2e4", false, false, false, 0},
   Fixture{"capture-king-explosion", "7k/6p1/8/8/8/8/8/K5R1 w - - 0 1", "g1g7", false, false, true,
           2},
+  Fixture{"direct-king-capture", "7k/7R/8/8/8/8/8/K7 w - - 0 1", "h7h8", false, false, true, 1},
   Fixture{"explosion-with-bycatch", "7k/8/8/2pBn3/3r4/2PQN3/8/K7 w - - 0 1", "d3d4", false, false,
           false, 4},
   Fixture{"maximum-nine-piece-blast", "7k/8/8/2nnn3/2nrn3/2nnnN2/8/K7 w - - 0 1", "f3d4", false,
