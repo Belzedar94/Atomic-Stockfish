@@ -35,6 +35,7 @@
 #include "history.h"
 #include "misc.h"
 #include "movegen.h"
+#include "nnue/nnue_architecture.h"
 #include "syzygy/tbprobe.h"
 #include "tt.h"
 #include "uci_move.h"
@@ -44,6 +45,10 @@ using std::string;
 namespace Stockfish {
 
 using namespace Attacks;
+
+static_assert(!Eval::NNUE::FeatureSet::UsesThreatDeltas,
+              "Position::do_move skips DirtyThreats; implement threat deltas before enabling a "
+              "feature set that consumes them");
 
 namespace Zobrist {
 

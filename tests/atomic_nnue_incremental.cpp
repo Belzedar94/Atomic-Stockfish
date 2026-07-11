@@ -73,6 +73,39 @@ struct Snapshot {
     Key                    key;
 };
 
+constexpr u64 SignatureOffset = 14695981039346656037ULL;
+constexpr u64 SignaturePrime  = 1099511628211ULL;
+
+void append_signature_bytes(u64& signature, u64 value, int bytes) {
+    for (int i = 0; i < bytes; ++i)
+    {
+        signature ^= value & 0xFF;
+        signature *= SignaturePrime;
+        value >>= 8;
+    }
+}
+
+void append_snapshot_signature(u64& signature, const Snapshot& snapshot) {
+    const auto [psqt, positional] = snapshot.raw;
+    append_signature_bytes(signature, u32(psqt), 4);
+    append_signature_bytes(signature, u32(positional), 4);
+    append_signature_bytes(signature, u32(snapshot.trueValue), 4);
+    append_signature_bytes(signature, u32(snapshot.pureValue), 4);
+    append_signature_bytes(signature, snapshot.key, 8);
+    append_signature_bytes(signature, snapshot.fen.size(), 8);
+    for (const unsigned char c : snapshot.fen)
+        append_signature_bytes(signature, c, 1);
+
+    for (Color perspective : {WHITE, BLACK})
+    {
+        append_signature_bytes(signature, snapshot.accumulator.computed[perspective], 1);
+        for (const i16 value : snapshot.accumulator.accumulation[perspective])
+            append_signature_bytes(signature, u16(value), 2);
+        for (const i32 value : snapshot.accumulator.psqtAccumulation[perspective])
+            append_signature_bytes(signature, u32(value), 4);
+    }
+}
+
 Snapshot take_snapshot(const Position&          pos,
                        const NNUE::Network&     network,
                        NNUE::AccumulatorStack&  stack,
@@ -173,7 +206,7 @@ constexpr std::array FixedFixtures = {
   Fixture{"atomic960-castling", "7k/8/8/8/8/8/8/1RK5 w Q - 0 1", "c1b1", true, true, false, 0},
 };
 
-void run_fixed_fixture(const Fixture& fixture, const NNUE::Network& network) {
+u64 run_fixed_fixture(const Fixture& fixture, const NNUE::Network& network) {
     Position  pos;
     StateInfo rootState{};
     StateInfo childState{};
@@ -193,6 +226,8 @@ void run_fixed_fixture(const Fixture& fixture, const NNUE::Network& network) {
 
     const Snapshot before = take_snapshot(pos, network, *incremental, *caches);
     compare_snapshots(full_refresh_snapshot(pos, network), before, context);
+    u64 signature = SignatureOffset;
+    append_snapshot_signature(signature, before);
 
     auto [dirtyPiece, dirtyThreats] = incremental->push();
     pos.do_move(move, childState, pos.gives_check(move), dirtyPiece, dirtyThreats, nullptr,
@@ -229,6 +264,7 @@ void run_fixed_fixture(const Fixture& fixture, const NNUE::Network& network) {
     context.phase        = std::string(fixture.name) + ":after-move";
     const Snapshot after = take_snapshot(pos, network, *incremental, *caches);
     compare_snapshots(full_refresh_snapshot(pos, network), after, context);
+    append_snapshot_signature(signature, after);
 
     pos.undo_move(move);
     incremental->pop();
@@ -237,8 +273,10 @@ void run_fixed_fixture(const Fixture& fixture, const NNUE::Network& network) {
     const Snapshot undone = take_snapshot(pos, network, *incremental, *caches);
     compare_snapshots(before, undone, context);
     compare_snapshots(full_refresh_snapshot(pos, network), undone, context);
+    append_snapshot_signature(signature, undone);
 
     std::cout << "PASS fixed " << fixture.name << '\n';
+    return signature;
 }
 
 struct RandomSequence {
@@ -263,6 +301,7 @@ struct RandomStats {
     u64 captures{};
     u64 captureForcedRefresh{};
     u64 perspectiveRefresh[COLOR_NB]{};
+    u64 stateSignature = SignatureOffset;
 };
 
 RandomStats run_random_sequence(const RandomSequence& sequence,
@@ -287,6 +326,7 @@ RandomStats run_random_sequence(const RandomSequence& sequence,
     frames.push_back(take_snapshot(pos, network, *incremental, *caches));
     Context context{sequence.seed, pos.fen(), "", "random-root"};
     compare_snapshots(full_refresh_snapshot(pos, network), frames.back(), context);
+    append_snapshot_signature(stats.stateSignature, frames.back());
     ++stats.fullRefreshComparisons;
 
     for (u64 operation = 0; operation < operations; ++operation)
@@ -318,6 +358,7 @@ RandomStats run_random_sequence(const RandomSequence& sequence,
             if (fullRefreshInterval && operation % fullRefreshInterval == 0)
             {
                 compare_snapshots(full_refresh_snapshot(pos, network), undone, context);
+                append_snapshot_signature(stats.stateSignature, undone);
                 ++stats.fullRefreshComparisons;
             }
 
@@ -359,6 +400,7 @@ RandomStats run_random_sequence(const RandomSequence& sequence,
             if (compareFull)
             {
                 compare_snapshots(full_refresh_snapshot(pos, network), after, context);
+                append_snapshot_signature(stats.stateSignature, after);
                 ++stats.fullRefreshComparisons;
             }
 
@@ -380,6 +422,7 @@ RandomStats run_random_sequence(const RandomSequence& sequence,
 
     context = {sequence.seed, pos.fen(), "", "random-final-root"};
     compare_snapshots(full_refresh_snapshot(pos, network), frames.front(), context);
+    append_snapshot_signature(stats.stateSignature, frames.front());
     ++stats.fullRefreshComparisons;
 
     return stats;
@@ -472,10 +515,10 @@ int main(int argc, char* argv[]) {
     if (!evalFile.current || network->get_content_hash() == 0)
         die("failed to load a compatible Legacy Atomic V1 network: " + options.net.string());
 
-    for (const auto& fixture : FixedFixtures)
-        run_fixed_fixture(fixture, *network);
-
     RandomStats totals;
+    for (const auto& fixture : FixedFixtures)
+        append_signature_bytes(totals.stateSignature, run_fixed_fixture(fixture, *network), 8);
+
     for (usize index = 0; index < RandomSequences.size(); ++index)
     {
         const u64  base  = options.operations / RandomSequences.size();
@@ -488,6 +531,7 @@ int main(int argc, char* argv[]) {
         totals.fullRefreshComparisons += stats.fullRefreshComparisons;
         totals.captures += stats.captures;
         totals.captureForcedRefresh += stats.captureForcedRefresh;
+        append_signature_bytes(totals.stateSignature, stats.stateSignature, 8);
         for (Color perspective : {WHITE, BLACK})
             totals.perspectiveRefresh[perspective] += stats.perspectiveRefresh[perspective];
 
@@ -497,7 +541,8 @@ int main(int argc, char* argv[]) {
                   << " undos=" << stats.undos << " captures=" << stats.captures
                   << " perspective-refresh-white=" << stats.perspectiveRefresh[WHITE]
                   << " perspective-refresh-black=" << stats.perspectiveRefresh[BLACK]
-                  << " full-refresh=" << stats.fullRefreshComparisons << '\n';
+                  << " full-refresh=" << stats.fullRefreshComparisons << " state-signature=0x"
+                  << std::hex << std::uppercase << stats.stateSignature << std::dec << '\n';
     }
 
     std::cout << "LegacyAtomicV1 incremental gate passed: mode=" << options.mode
@@ -507,6 +552,8 @@ int main(int argc, char* argv[]) {
               << " capture-forced-refresh=" << totals.captureForcedRefresh
               << " perspective-refresh-white=" << totals.perspectiveRefresh[WHITE]
               << " perspective-refresh-black=" << totals.perspectiveRefresh[BLACK]
-              << " full-refresh-comparisons=" << totals.fullRefreshComparisons << '\n';
+              << " full-refresh-comparisons=" << totals.fullRefreshComparisons
+              << " state-signature=0x" << std::hex << std::uppercase << totals.stateSignature
+              << std::dec << '\n';
     return 0;
 }

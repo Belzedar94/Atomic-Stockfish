@@ -29,6 +29,16 @@ namespace Stockfish::Eval::NNUE {
 
 using namespace SIMD;
 
+#ifdef VECTOR
+using LegacyAtomicAccumulatorTiling =
+  SIMDTiling<TransformedFeatureDimensions, TransformedFeatureDimensions, PSQTBuckets>;
+
+static_assert(CacheLineSize % alignof(vec_t) == 0);
+static_assert(CacheLineSize % alignof(psqt_vec_t) == 0);
+static_assert((TransformedFeatureDimensions * sizeof(i16)) % alignof(vec_t) == 0);
+static_assert((PSQTBuckets * sizeof(i32)) % alignof(psqt_vec_t) == 0);
+#endif
+
 const AccumulatorState& AccumulatorStack::latest() const noexcept { return accumulators[size - 1]; }
 
 AccumulatorState& AccumulatorStack::mut_latest() noexcept { return accumulators[size - 1]; }
@@ -103,8 +113,7 @@ void AccumulatorStack::refresh(Color                     perspective,
     FeatureSet::append_active_indices(pos, perspective, active);
 
 #ifdef VECTOR
-    using Tiling =
-      SIMDTiling<TransformedFeatureDimensions, TransformedFeatureDimensions, PSQTBuckets>;
+    using Tiling = LegacyAtomicAccumulatorTiling;
 
     vec_t      acc[Tiling::NumRegs];
     psqt_vec_t psqt[Tiling::NumPsqtRegs];
@@ -181,8 +190,7 @@ void AccumulatorStack::update(Color                     perspective,
     FeatureSet::append_changed_indices(perspective, ksq, target.dirtyPiece, removed, added);
 
 #ifdef VECTOR
-    using Tiling =
-      SIMDTiling<TransformedFeatureDimensions, TransformedFeatureDimensions, PSQTBuckets>;
+    using Tiling = LegacyAtomicAccumulatorTiling;
 
     vec_t      acc[Tiling::NumRegs];
     psqt_vec_t psqt[Tiling::NumPsqtRegs];

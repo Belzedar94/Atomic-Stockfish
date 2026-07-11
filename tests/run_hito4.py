@@ -350,6 +350,23 @@ def main() -> int:
             required_markers=("54 passed",),
         )
 
+        run_step(
+            "cooperative LOS gate units",
+            [
+                python,
+                "-P",
+                "-c",
+                pytest_launcher,
+                str(paths["pyffish_root"]),
+                "-q",
+                "--maxfail=1",
+                str(REPO_ROOT / "tests/python/test_atomic_los_gate.py"),
+            ],
+            env=python_env,
+            timeout=args.timeout,
+            required_markers=("16 passed",),
+        )
+
         cjs_launcher = r"""
 const path = require('node:path');
 const createModule = require(path.resolve(process.argv[1]));

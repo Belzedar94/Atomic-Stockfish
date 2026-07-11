@@ -37,6 +37,12 @@ class HalfKAv2Atomic {
    public:
     static constexpr u32 HashValue = 0x5F234CB8u;
 
+    // Position::do_move intentionally skips the expensive orthodox threat
+    // delta bookkeeping for LegacyAtomicV1. Any future feature set that needs
+    // threat deltas must opt in and will trip the compile-time guard in
+    // position.cpp until its move-update path is implemented explicitly.
+    static constexpr bool UsesThreatDeltas = false;
+
     static constexpr IndexType PieceSquareDimensions = 11 * SQUARE_NB;
     static constexpr IndexType Dimensions            = SQUARE_NB * PieceSquareDimensions;
 
