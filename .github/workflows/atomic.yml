@@ -198,7 +198,7 @@ jobs:
         run: |
           echo "1298F53B58B86B543F79AF4BB262838FE03B82F70D7892C7A5DDADBC0B008224  tests/pip-bootstrap-requirements.txt" | sha256sum --check --strict
           python -m pip install --disable-pip-version-check --require-hashes -r tests/pip-bootstrap-requirements.txt
-          echo "A1F248AA65457DE3ECF3B5137CC5EA5DD98D36E8DC59593957BA93EE8B549F15  tests/legacy_pipeline-ci-requirements.txt" | sha256sum --check --strict
+          echo "20E818B72736FC95CEDF82FDE26413B8ABCC036809BAD72E25AAD93D327FCDA7  tests/legacy_pipeline-ci-requirements.txt" | sha256sum --check --strict
           python -m pip install --disable-pip-version-check --require-hashes -r tests/legacy_pipeline-ci-requirements.txt
       - name: Record pipeline toolchain provenance
         run: |

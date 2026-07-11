@@ -7,3 +7,4 @@ pytest==8.3.5
 tensorboard==2.20.0
 pytorch-lightning==1.9.5
 torchmetrics==0.11.4
+setuptools==80.9.0
