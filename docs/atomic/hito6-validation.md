@@ -65,7 +65,10 @@ The signature update was propagated through the complete release runner. That
 runner passed native UCI and XBoard, Python, CommonJS, ES module, both WASM
 surfaces, Syzygy, NNUE modes, reproducibility, perft and protocol coverage. The
 full Hito 5 runner additionally passed exactly 1,000,000 incremental NNUE
-operations and the 10,000-position Fairy differential corpus.
+operations and the 10,000-position Fairy differential corpus. That corpus now
+contains a hard rule-50 split: `866` post-boundary positions require a neutral
+candidate trace and the C++ gate proves an exact internal zero, while Fairy's
+historical post-boundary final value is retained only as diagnostic telemetry.
 
 The independent build matrix also passed:
 
@@ -147,6 +150,21 @@ one thread, 64 MiB hash, CPU 0, one warm-up and five measured repetitions at
 
 The NPS ratio is `1.3210`, or `+32.10%`, and the specialized binary is 214,839
 bytes smaller. The performance gate therefore passes.
+
+### Block 2 clean performance snapshot
+
+After integrating the reviewed Hito 4 and Hito 5 fixes, the clean AVX2 build
+used the same pinned corpus, CPU, network and five-run procedure. The capture
+futility block produced:
+
+| Binary | Median NPS | Bytes | SHA-256 |
+| --- | ---: | ---: | --- |
+| Atomic-Stockfish | 1,483,243 | 4,263,813 | `CB35D57E3AD107C279781AF3E764EC412D59341C21D5FDC75AFAB08239CFFC14` |
+| Frozen Fairy baseline | 1,104,296 | 4,477,632 | `1AE6D680F03128C8404F31A3F264F28B132B557ED3A91A6445EC563A7A33F623` |
+
+The clean ratio is `1.3432`, or `+34.32%`; the candidate is 213,819 bytes
+smaller. This passes the speed gate. It does not replace the three strength
+gates below, which remain mandatory for block 2.
 
 ## Normative strength gates
 

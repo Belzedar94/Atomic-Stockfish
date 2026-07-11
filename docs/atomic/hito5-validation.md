@@ -50,7 +50,11 @@ that does not indicate a rules or strength regression. Maximum true and
 pure-trace deltas are printed as telemetry. A deliberately loose finite bound
 of `0.10` pawn units only rejects gross regressions such as a broken king plane,
 orientation, bucket, or scaling; it is not used to reject a few centipawns of
-ordinary disagreement.
+ordinary disagreement. At or beyond Atomic's 100-ply draw boundary, the
+candidate must report a neutral normal trace, while the paired C++ gate proves
+that its internal `Value` is exactly zero. Fairy's historical post-boundary
+final value is diagnostic only because it can cross through zero and reverse
+sign; raw Legacy V1 parity remains checked on those positions.
 
 The structural parts remain hard failures: network loading, required UCI
 options, true/pure trace availability, identical candidate raw values between
@@ -133,7 +137,12 @@ above. Its NNUE-specific evidence was:
 - perspective-local refreshes: white `62,282`, black `177,921`;
 - diagnostic differential `10,000/10,000` with corpus SHA-256
   `46C96F405BC15D468D94BC1E2186B577CE55128832E1108066581D35037FA2DE`;
-- informational maximum deltas: final `0.000000`, raw Fairy trace `0.005000`;
+- rule-50 differential units `3/3`; the fixed corpus exercised `866`
+  positions at or beyond 100 reversible plies, with the candidate's displayed
+  normal evaluation neutral in every case and exact internal zero proved by
+  the C++ gate;
+- informational maximum deltas: comparable final `0.000000`, historical
+  Fairy post-boundary final `0.740000`, raw Fairy trace `0.005000`;
 - directed rejection of mutated version, architecture hash, transformer hash,
   layer-stack hash, trailing bytes, generic garbage and truncation, with
   valid-network recovery after every failure;

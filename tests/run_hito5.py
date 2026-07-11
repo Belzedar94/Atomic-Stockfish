@@ -42,6 +42,7 @@ DIAGNOSTIC_SANITY_TOLERANCE = 0.10
 CAPTURE_REFRESH_RE = re.compile(r"\bcapture-forced-refresh=(\d+)\b")
 CAPTURE_COUNT_RE = re.compile(r"\bcaptures=(\d+)\b")
 CORPUS_SHA_RE = re.compile(r"^Corpus SHA-256: ([0-9A-Fa-f]{64})$", re.MULTILINE)
+RULE50_DAMPED_RE = re.compile(r"\brule50-damped=(\d+)\b")
 LEGACY_CAPTURE_REFRESH_RE = re.compile(
     r"capture[^\r\n]*requires\s*refresh\s*=\s*(?:true|[1-9]\d*)",
     re.IGNORECASE,
@@ -314,6 +315,7 @@ def main() -> int:
             ],
             timeout=incremental_timeout,
             required_markers=(
+                "PASS rule50 evaluation damping at and beyond draw boundary",
                 f"LegacyAtomicV1 incremental gate passed: mode={args.mode} "
                 f"requested-random-operations={operations}",
                 "capture-forced-refresh=0",
@@ -331,6 +333,19 @@ def main() -> int:
             raise GateFailure("incremental gate exercised no Atomic captures")
         if LEGACY_CAPTURE_REFRESH_RE.search(incremental_output):
             raise GateFailure("incremental gate reported requiresRefresh for a capture")
+
+        run_step(
+            "rule-50-aware NNUE differential units",
+            [
+                python,
+                "-m",
+                "pytest",
+                "-q",
+                str(REPO_ROOT / "tests" / "python" / "test_atomic_nnue_differential.py"),
+            ],
+            timeout=300.0,
+            required_markers=("3 passed",),
+        )
 
         positions = (
             RELEASE_DIFFERENTIAL_POSITIONS
@@ -377,6 +392,15 @@ def main() -> int:
             raise GateFailure(
                 f"release corpus SHA-256 is {corpus_hashes[0]}; "
                 f"expected {RELEASE_CORPUS_SHA256}"
+            )
+        rule50_counts = [int(value) for value in RULE50_DAMPED_RE.findall(differential_output)]
+        if len(rule50_counts) != 1:
+            raise GateFailure(
+                "diagnostic differential did not emit exactly one rule50-damped count"
+            )
+        if args.mode == "release" and rule50_counts[0] <= 0:
+            raise GateFailure(
+                "release differential exercised no positions at the Atomic rule-50 boundary"
             )
 
         if args.mode == "release":
