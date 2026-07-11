@@ -108,7 +108,7 @@ endif
 ATOMIC_UNIT_TEST_EXE  = atomic-unit-tests$(ATOMIC_TEST_EXE_SUFFIX)
 ATOMIC_UNIT_TEST_OBJS = $(filter-out main.o,$(OBJS)) atomic_see_tests.o
 ATOMIC_API_TEST_EXE   = atomic-api-tests$(ATOMIC_TEST_EXE_SUFFIX)
-ATOMIC_API_TEST_OBJS  = $(filter-out main.o,$(OBJS)) atomic_fen.o atomic_api_tests.o
+ATOMIC_API_TEST_OBJS  = $(filter-out main.o,$(OBJS)) atomic_board.o atomic_fen.o atomic_api_tests.o
 ATOMIC_NNUE_INCREMENTAL_TEST_EXE  = atomic-nnue-incremental-tests$(ATOMIC_TEST_EXE_SUFFIX)
 ATOMIC_NNUE_INCREMENTAL_TEST_OBJS = $(filter-out main.o,$(OBJS)) atomic_nnue_incremental_tests.o
 
@@ -1362,7 +1362,10 @@ atomic_see_tests.o: ../tests/atomic_see.cpp
 	$(strip $(CXX) $(CPPFLAGS) $(CXXFLAGS)) -I. -c -o $@ $<
 
 atomic_api_tests.o: ../tests/atomic_api.cpp
-	$(strip $(CXX) $(CPPFLAGS) $(CXXFLAGS)) -I. -c -o $@ $<
+	$(strip $(CXX) $(CPPFLAGS) $(CXXFLAGS) -fexceptions) -I. -c -o $@ $<
+
+atomic_board.o: api/atomic_board.cpp
+	$(strip $(CXX) $(CPPFLAGS) $(CXXFLAGS) -fexceptions) -c -o $@ $<
 
 atomic_nnue_incremental_tests.o: ../tests/atomic_nnue_incremental.cpp
 	$(strip $(CXX) $(CPPFLAGS) $(CXXFLAGS)) -I. -c -o $@ $<

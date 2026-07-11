@@ -12,10 +12,10 @@ On 2026-07-11 the fail-fast release run completed every built surface:
 | Gate | Result |
 | --- | --- |
 | C++ rules/state | `44/44` |
-| C++ shared API | `33/33` |
+| C++ shared API | `34/34` |
 | Frozen fixture inventory | 58 fixtures; 22 Python; 58 JavaScript; eight perft |
 | Historical `test.py` | 22 passed |
-| Extended `pytest` | 58 passed |
+| Extended `pytest` | 60 passed |
 | CommonJS Board WASM | 58 fixtures passed |
 | ES-module Board WASM | 58 fixtures passed |
 | Exact cross-surface parity | Python/CommonJS/ESM `40/40`; native UCI `25/25` |

@@ -44,6 +44,8 @@ FIXTURE_SHA256 = {
     "KPvKP.atbz": "c49e253040c7ec8f21db57a1d63754158d47ce659ff80480b90e1045643f96f5",
     "KBBBvK.atbw": "114f101f74ab1469d749777b5b7e8b2ada5f47d31627ff60031f4832e6bf76a8",
     "KBBBvK.atbz": "f731d407f3ad8a0368d7f29762d0a70e407ee791dc0f5dcb88fc94eba987e31f",
+    "KNNNvK.atbw": "13d66c799908fa22e213ef9fcb50257293dc698ac7c8d06655aa4007e478f6ee",
+    "KNNNvK.atbz": "f4e012f6dcbbb7d85ec8d836294bf6a1df28ca47532a78d897eb8b90d8f17e4a",
     "KNNvK.atbw": "e4dc9886b296a1e2bf20670bec9f200be439221c686afd2a85097f8065b3bb24",
     "KQvK.atbw": "fdb2fb361b377aff5ce2f2610f244c006a8a12a28d805f6032e36fb28f18537d",
     "KRvK.atbw": "a17ff195ef2738f00f180e3dd8eb8bcd1d21e57642e78ff8f7b7ebffd233cceb",
@@ -133,7 +135,24 @@ def test_source_contract() -> None:
         "rank_root_moves must reject positions carrying castling rights",
     )
 
-    print("PASS source contract: Atomic suffixes/magics/max6/terminal/EP/castling")
+    dtz_mate_paths = source[
+        source.index("int Tablebases::probe_dtz") : source.index(
+            "bool Tablebases::root_probe_wdl"
+        )
+    ]
+    require(
+        "pos.checkers()" not in dtz_mate_paths,
+        "DTZ mate detection must not consult the intentionally empty orthodox checker bitboard",
+    )
+    require(
+        dtz_mate_paths.count("pos.atomic_in_check(pos.side_to_move())") == 2,
+        "probe_dtz and root_probe must both classify quiet mates with Atomic check state",
+    )
+
+    print(
+        "PASS source contract: Atomic suffixes/magics/max6/terminal/EP/"
+        "castling/DTZ-mate"
+    )
 
 
 def _file(square: int) -> int:
@@ -302,6 +321,22 @@ def test_real_probes(driver: Path, tables: Path) -> None:
     require(kbbb.roots_ok["root_wdl"], "WDL root probe failed for KBBBvK")
     require(kbbb.root_in_tb, "rank_root_moves did not accept KBBBvK")
 
+    # This is a quiet Atomic mate: g4-f2 leaves Black's king on h1, gives
+    # check, and permits no legal reply. KNNNvK stores DTZ for the opposite
+    # side to move here, so probe_dtz() must discover the mate in its one-ply
+    # CHANGE_STM search. Root probing independently corrects the child DTZ
+    # from two plies to one before assigning the rank.
+    quiet_mate = run_driver(driver, tables, "8/8/7K/8/6N1/5N2/8/4N2k w - - 0 1")
+    assert_probe(quiet_mate, wdl=2, dtz=1)
+    require(
+        quiet_mate.roots["root_no_rule50"]["g4f2"].rank == (1 << 18) - 1,
+        "quiet Atomic mate was not ranked as DTZ=1",
+    )
+    require(
+        quiet_mate.roots["root_rule50"]["g4f2"].rank == (1 << 18) - 1,
+        "rule50-aware root probe did not preserve quiet mate DTZ=1",
+    )
+
     # Adjacent kings force the 518-state pivot. The authoritative result is draw.
     connected = run_driver(driver, tables, "8/8/8/8/8/8/NkN5/1K6 w - - 0 1")
     assert_probe(connected, wdl=0, dtz=0)
@@ -347,7 +382,10 @@ def test_real_probes(driver: Path, tables: Path) -> None:
     castling = run_driver(driver, tables, "4k2r/8/8/8/8/8/8/R3K3 w Qk - 0 1")
     require(not castling.root_in_tb, "position with castling rights entered the tablebase")
 
-    print("PASS real probes: interior/root/connected/terminal/EP/promotion/rule50/castling")
+    print(
+        "PASS real probes: interior/root/quiet-mate/connected/terminal/"
+        "EP/promotion/rule50/castling"
+    )
 
 
 def test_swapped_magics(driver: Path, tables: Path) -> None:
