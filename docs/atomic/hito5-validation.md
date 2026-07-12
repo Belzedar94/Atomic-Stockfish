@@ -141,12 +141,12 @@ python tests/legacy_pipeline_build_manifest.py `
   --output ../pipeline-manifests/trainer-build.json
 
 python tests/legacy_pipeline_build_manifest.py `
-  --recipe strong-local-atomic-windows-v1 `
+  --recipe strong-local-atomic-windows-v2 `
   --repository-root . `
   --output ../pipeline-manifests/atomic-build.json
 
 python tests/legacy_pipeline_build_manifest.py `
-  --recipe strong-local-atomic-data-generator-windows-v1 `
+  --recipe strong-local-atomic-data-generator-windows-v2 `
   --repository-root . `
   --output ../pipeline-manifests/atomic-data-generator-build.json
 ```
@@ -162,7 +162,7 @@ repository dirty and invalidate the release gate.
 make -C src -j2 ARCH=x86-64-avx2 COMP=mingw atomic-syzygy-driver
 
 python tests/run_hito5.py `
-  --native src/atomic-stockfish.exe `
+  --native src/atomic-stockfish-pipeline.exe `
   --net ../atomic_run3b_e202_l05.nnue `
   --pyffish pyffish.pyd `
   --cjs tests/js/dist/cjs/ffish.js `
@@ -174,9 +174,15 @@ python tests/run_hito5.py `
   --pipeline-tools-build-manifest ../pipeline-manifests/tools-build.json `
   --pipeline-trainer-build-manifest ../pipeline-manifests/trainer-build.json `
   --pipeline-atomic-build-manifest ../pipeline-manifests/atomic-build.json `
-  --pipeline-atomic-data-generator src/atomic-stockfish-data-generator.exe `
+  --pipeline-atomic-data-generator src/atomic-stockfish-data-generator-pipeline.exe `
   --pipeline-atomic-data-generator-build-manifest ../pipeline-manifests/atomic-data-generator-build.json
 ```
+
+The role-specific `*-pipeline` copies remain byte-identical to the artifacts
+recorded by their manifests even though the generator recipe restores the
+public `atomic-stockfish` executable for the remaining native tests. This is
+required because separate MinGW LTO links are not guaranteed to be
+byte-reproducible.
 
 The three checkout/artifact paths and all four clean-build manifests form one
 all-or-none set of seven `--pipeline-*` inputs and are mandatory in release

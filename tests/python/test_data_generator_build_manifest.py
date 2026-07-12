@@ -19,14 +19,14 @@ import run_hito5
     ("atomic_recipe", "generator_recipe", "platform", "target"),
     (
         (
-            "strong-local-atomic-windows-v1",
-            "strong-local-atomic-data-generator-windows-v1",
+            "strong-local-atomic-windows-v2",
+            "strong-local-atomic-data-generator-windows-v2",
             "win32",
             build_manifest.X86_64_BMI2_RELEASE_TARGET,
         ),
         (
-            "synthetic-ci-atomic-linux-v1",
-            "synthetic-ci-atomic-data-generator-linux-v1",
+            "synthetic-ci-atomic-linux-v2",
+            "synthetic-ci-atomic-data-generator-linux-v2",
             "linux",
             build_manifest.X86_64_RELEASE_TARGET,
         ),
@@ -48,6 +48,7 @@ def test_atomic_data_generator_has_a_distinct_authenticated_recipe(
     assert generator.expected_engine_target == target
     assert generator.artifact_relative != atomic.artifact_relative
     assert "data-generator" in generator.artifact_relative
+    assert "pipeline" in generator.artifact_relative
 
 
 def test_unknown_atomic_recipe_has_no_implicit_generator_recipe() -> None:
@@ -59,11 +60,11 @@ def test_unknown_atomic_recipe_has_no_implicit_generator_recipe() -> None:
     ("recipe_name", "root"),
     (
         (
-            "strong-local-atomic-data-generator-windows-v1",
+            "strong-local-atomic-data-generator-windows-v2",
             Path("C:/atomic-stockfish"),
         ),
         (
-            "synthetic-ci-atomic-data-generator-linux-v1",
+            "synthetic-ci-atomic-data-generator-linux-v2",
             Path("/atomic-stockfish"),
         ),
     ),
@@ -71,12 +72,35 @@ def test_unknown_atomic_recipe_has_no_implicit_generator_recipe() -> None:
 def test_generator_recipe_restores_the_normal_engine(
     recipe_name: str, root: Path
 ) -> None:
-    commands = build_manifest.RECIPES[recipe_name].commands(root)
-    generator_command = " ".join(commands[-2])
+    recipe = build_manifest.RECIPES[recipe_name]
+    commands = recipe.commands(root)
+    generator_command = " ".join(commands[-3])
+    copy_command = " ".join(commands[-2])
     normal_command = " ".join(commands[-1])
     assert "data-generator" in generator_command
+    assert "data-generator" in copy_command
+    assert recipe.artifact_relative in copy_command
     assert "build" in normal_command
     assert "data-generator" not in normal_command
+
+
+@pytest.mark.parametrize(
+    ("recipe_name", "root"),
+    (
+        ("strong-local-atomic-windows-v2", Path("C:/atomic-stockfish")),
+        ("synthetic-ci-atomic-linux-v2", Path("/atomic-stockfish")),
+    ),
+)
+def test_normal_recipe_preserves_an_authenticated_pipeline_copy(
+    recipe_name: str, root: Path
+) -> None:
+    recipe = build_manifest.RECIPES[recipe_name]
+    commands = recipe.commands(root)
+    copy_command = " ".join(commands[-1])
+    assert recipe.artifact_relative.endswith(
+        ("atomic-stockfish-pipeline", "atomic-stockfish-pipeline.exe")
+    )
+    assert recipe.artifact_relative in copy_command
 
 
 def _e2e_arguments() -> list[str]:

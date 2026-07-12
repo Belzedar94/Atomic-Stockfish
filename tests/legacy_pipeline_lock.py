@@ -39,12 +39,12 @@ EXPECTED_BUILD_RECIPES = {
     "strong-local": {
         "tools": "strong-local-tools-windows-v1",
         "trainer": "strong-local-trainer-windows-v1",
-        "atomic": "strong-local-atomic-windows-v1",
+        "atomic": "strong-local-atomic-windows-v2",
     },
     "synthetic-ci": {
         "tools": "synthetic-ci-tools-linux-v1",
         "trainer": "synthetic-ci-trainer-linux-v1",
-        "atomic": "synthetic-ci-atomic-linux-v1",
+        "atomic": "synthetic-ci-atomic-linux-v2",
     },
 }
 EXPECTED_TRAINING_DATA_SCHEMA_PATH = "schemas/atomic-schema.json"

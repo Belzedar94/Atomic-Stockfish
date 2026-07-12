@@ -311,11 +311,11 @@ jobs:
       - name: Clean-build and test Atomic-Stockfish
         run: |
           python tests/legacy_pipeline_build_manifest.py \
-            --recipe synthetic-ci-atomic-linux-v1 \
+            --recipe synthetic-ci-atomic-linux-v2 \
             --repository-root . \
             --output "$RUNNER_TEMP/atomic-build.json"
           python tests/legacy_pipeline_build_manifest.py \
-            --recipe synthetic-ci-atomic-data-generator-linux-v1 \
+            --recipe synthetic-ci-atomic-data-generator-linux-v2 \
             --repository-root . \
             --output "$RUNNER_TEMP/atomic-data-generator-build.json"
           make -C src -j2 ARCH=x86-64 atomic-unit-tests
@@ -342,8 +342,8 @@ jobs:
             --profile synthetic-ci \
             --tools-engine .pipeline/tools/src/stockfish \
             --trainer-root .pipeline/trainer \
-            --engine src/atomic-stockfish \
-            --atomic-data-generator src/atomic-stockfish-data-generator \
+            --engine src/atomic-stockfish-pipeline \
+            --atomic-data-generator src/atomic-stockfish-data-generator-pipeline \
             --tools-build-manifest "$RUNNER_TEMP/tools-build.json" \
             --trainer-build-manifest "$RUNNER_TEMP/trainer-build.json" \
             --atomic-build-manifest "$RUNNER_TEMP/atomic-build.json" \
@@ -362,8 +362,8 @@ jobs:
           --profile synthetic-ci
           --tools-engine .pipeline/tools/src/stockfish
           --trainer-root .pipeline/trainer
-          --engine src/atomic-stockfish
-          --atomic-data-generator src/atomic-stockfish-data-generator
+          --engine src/atomic-stockfish-pipeline
+          --atomic-data-generator src/atomic-stockfish-data-generator-pipeline
           --tools-build-manifest "$RUNNER_TEMP/tools-build.json"
           --trainer-build-manifest "$RUNNER_TEMP/trainer-build.json"
           --atomic-build-manifest "$RUNNER_TEMP/atomic-build.json"

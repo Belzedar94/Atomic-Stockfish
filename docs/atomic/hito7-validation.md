@@ -105,8 +105,10 @@ block. It requires a valid compatible network and `Use NNUE=pure`, rejects
 Atomic960 and invalid configuration before creating output, uses exclusive
 creation, removes only files owned by a failed run, and clears search/TT state
 between commands. A separate clean-build manifest authenticates its commit,
-compiler target and artifact SHA rather than treating it as an unauthenticated
-side product of the playing binary.
+compiler target and immutable role-specific `*-pipeline` artifact SHA rather
+than treating it as an unauthenticated side product of the playing binary.
+The normal and generator copies survive the later restoration build, avoiding
+any assumption that independent MinGW LTO links are byte-reproducible.
 
 The deterministic synthetic network and generated fixtures are frozen as:
 
@@ -134,7 +136,7 @@ Local validation for this block passed:
 - GCC 15, Clang 20 and MinGW BMI2 release builds; MinGW debug/assert build.
 - The complete 504-byte Fairy codec fixture and sink cleanup/destructor tests.
 - ASan+UBSan and TSan functional self-play, including Threads=2.
-- Pipeline/lock/build-manifest/E2E Python units: `126/126`.
+- Pipeline/lock/build-manifest/E2E Python units: `128/128`.
 - Full cross-repository validation of all seven generated datasets in tools and
   the trainer native loader.
 - Mutation checks rejected Apery overwrite (`FB6B314B...B87C2E8`), omitted
