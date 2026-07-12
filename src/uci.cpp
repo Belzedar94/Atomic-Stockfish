@@ -150,6 +150,8 @@ void UCIEngine::loop() {
 #ifdef ATOMIC_DATA_GENERATOR
         else if (token == "atomic_data_schema")
             sync_cout << Data::atomic_data_schema_json() << sync_endl;
+        else if (token == "atomic_data_schemas")
+            sync_cout << Data::atomic_data_schemas_json() << sync_endl;
         else if (token == "generate_training_data")
         {
             if (!Data::generate_training_data(engine, is))

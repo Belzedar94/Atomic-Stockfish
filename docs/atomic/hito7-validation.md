@@ -197,13 +197,52 @@ The cross-repository E2E is now unidirectional:
 No search, evaluation or move-generation source changes in H7.2-B/C, so this
 pipeline consolidation does not trigger the three-TC strength gate.
 
+## H7.3-A - Frozen Atomic BIN V2 codec contract
+
+The additive V2 contract is frozen in `schemas/atomic-bin-v2.json` (SHA-256
+`0352b036f2a140c609e3eb9c9d635dc553e8d77253d8faa92437390f5cf93cb6`).
+It defines a 96-byte `ATBINV2\0` little-endian header, 48-byte canonical
+position and 64-byte record. All serialization is byte-wise: no C++ struct,
+piece enum or native 16-bit move is copied to wire.
+
+The position stores A1-to-H8 piece nibbles, explicit side-to-move mapping,
+castling-right bits and all four rook origins, canonical en-passant state,
+rule50 and fullmove clocks. The record adds an int32 score (excluding the
+INT32_MIN sentinel), independent 32-bit move, uint32 ply, side-to-move result
+and an Atomic960 flag. The move contract explicitly forbids wire zero and equal
+origin/destination squares, and requires a nonzero promotion code if and only
+if the move type is promotion. Exactly one king per color is required by this
+dataset format even though the playing engine can represent a terminal
+exploded king.
+
+`atomic-bin-v2-tests` covers exact header/record goldens, normal, en-passant,
+all promotions, orthodox castling, the Atomic960 `c1b1` wire, Atomic960 with
+no rights, clock/count/file-size boundaries and corrupt reserved, enum, king,
+rook-origin, EP and move combinations. Adapter decoding reconstructs a strict
+canonical FEN and requires the move in `MoveList<LEGAL>`. Python separately
+validates the exact UTF-8/LF schema bytes and rejects structural drift.
+
+The low-level `*_record_structural` helpers are deliberately internal wire
+building blocks: they validate representation and local field relationships,
+but do not claim that a plausible move is legal in Atomic. The public
+`encode_atomic_bin_v2` and `decode_atomic_bin_v2` adapter is the semantic
+boundary used by sinks and readers; it parses the canonical position and
+requires the move in `MoveList<LEGAL>`. A dedicated test feeds the same
+structurally valid but illegal move through both layers and locks this split.
+
+The V2 objects are linked only into the isolated data-generator/test build;
+the playing engine source/object set is unchanged. The plural
+`atomic_data_schemas` capability is additive and reports V2 as codec-only
+(`read:false,write:false`) until the H7.3-B sink. The historical singular
+Legacy V1 handshake and all 72-byte output remain byte-exact. Consequently
+this contract-only block does not trigger LOS matches.
+
 ## Remaining Hito 7 work
 
-H7.1 and H7.2 are compatibility boundaries, not completion of Hito 7. The next
-blocks implement the versioned `atomic-bin-v2` header/manifest and 32-bit move
-wire, add Atomic960-capable canonical positions, and validate every V2 record
-in tools and trainer. Legacy V1 remains a supported fallback throughout the
-1.x line.
+H7.1, H7.2 and H7.3-A are compatibility boundaries, not completion of Hito 7.
+The next blocks add the V2 sink/manifest and then validate every V2 record in
+tools and trainer. Legacy V1 remains a supported fallback throughout the 1.x
+line.
 
 This project remains isolated in the sibling repositories: every tools or
 trainer implementation branch starts from its dedicated `atomic` branch and

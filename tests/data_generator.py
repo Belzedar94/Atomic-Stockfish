@@ -18,6 +18,21 @@ CAPABILITY_JSON = (
     '{"schema_sha256":"' + SCHEMA_SHA256 + '",'
     '"formats":{"legacy-atomic-v1":{"read":false,"write":true,"record_size":72}}}'
 )
+V2_SCHEMA_FILE = Path(__file__).resolve().parents[1] / "schemas" / "atomic-bin-v2.json"
+FROZEN_V2_SCHEMA_SHA256 = "0352b036f2a140c609e3eb9c9d635dc553e8d77253d8faa92437390f5cf93cb6"
+V2_SCHEMA_SHA256 = hashlib.sha256(V2_SCHEMA_FILE.read_bytes()).hexdigest()
+if V2_SCHEMA_SHA256 != FROZEN_V2_SCHEMA_SHA256:
+    raise AssertionError(
+        "Atomic BIN V2 schema hash drift: "
+        f"expected {FROZEN_V2_SCHEMA_SHA256}, got {V2_SCHEMA_SHA256}"
+    )
+PLURAL_CAPABILITY_JSON = (
+    '{"capability_version":2,"formats":{'
+    '"legacy-atomic-v1":{"schema_sha256":"' + SCHEMA_SHA256 + '",'
+    '"read":false,"write":true,"header_size":0,"record_size":72},'
+    '"atomic-bin-v2":{"schema_sha256":"' + V2_SCHEMA_SHA256 + '",'
+    '"read":false,"write":false,"header_size":96,"record_size":64}}}'
+)
 RECORD_SIZE = 72
 REPLAY_SEED = "tools-wire-test"
 RESOLVED_SEED = 4843478989694531390
@@ -356,6 +371,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             (
                 *setup_commands(net),
                 "atomic_data_schema",
+                "atomic_data_schemas",
                 generation_command(first),
                 generation_command(second),
                 "quit",
@@ -365,6 +381,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         output_lines = output.splitlines()
         if output_lines.count(CAPABILITY_JSON) != 1:
             raise AssertionError(f"schema capability handshake mismatch:\n{output}")
+        if output_lines.count(PLURAL_CAPABILITY_JSON) != 1:
+            raise AssertionError(f"plural schema capability handshake mismatch:\n{output}")
         if output_lines.count("INFO: generate_training_data finished.") != 2:
             raise AssertionError(f"generator completion markers are incomplete:\n{output}")
         if output_lines.count(f"PRNG::initial_seed = {RESOLVED_SEED}") != 2:
@@ -658,6 +676,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 (
                     *setup_commands(net),
                     "atomic_data_schema",
+                    "atomic_data_schemas",
                     generation_command(isolated),
                     "quit",
                 ),
@@ -670,6 +689,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 )
             if (
                 SCHEMA_SHA256 in normal_output
+                or V2_SCHEMA_SHA256 in normal_output
                 or "INFO: generate_training_data finished." in normal_lines
                 or any(line.startswith("PRNG::initial_seed = ") for line in normal_lines)
                 or isolated.exists()
