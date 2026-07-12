@@ -38,7 +38,7 @@ Pinned implementation commits used by the local release run are:
 | --- | --- |
 | Atomic-Stockfish schema/code/test commit | `518175e20f127bf47b57ba1faad580b975e45929` |
 | Atomic-Stockfish clean validation snapshot | `d4b4b6768f80e2ef8db142d16f2b485f8e3df78b` |
-| variant-nnue-tools | `864bf29c337d21cf9d0d79a40667f86e566be737` |
+| variant-nnue-tools | `17bfb6eb1bd02f86a63cfbc10aaf1bdf6f0a74c6` |
 | variant-nnue-pytorch | `350a28f2cee225c546333aded75b9db64caa526d` |
 
 The follow-up commits only update the reviewed dependency pin and validation
@@ -67,7 +67,7 @@ The following gates passed:
 - Strong-local generator → decode → train → serialize → re-import → engine
   E2E: PASS with eight records, the frozen playing-network hash and unchanged
   data hash `7de72b13...7a261a2d`. The exact clean commits were tools
-  `864bf29c337d21cf9d0d79a40667f86e566be737`, trainer
+  `17bfb6eb1bd02f86a63cfbc10aaf1bdf6f0a74c6`, trainer
   `350a28f2cee225c546333aded75b9db64caa526d` and Atomic
   `d4b4b6768f80e2ef8db142d16f2b485f8e3df78b`.
 - Hito 4 release surface: C++ `63/63`, API `34/34`, historical `test.py`
