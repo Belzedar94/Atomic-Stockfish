@@ -38,6 +38,7 @@ from atomic_compiler_preflight import (
     fingerprint_files,
     verify_file_fingerprints,
 )
+from atomic_training_data_schema import load_training_data_schema
 from legacy_pipeline_build_manifest import verify_build_manifest
 from legacy_pipeline_lock import (
     CheckoutState,
@@ -50,11 +51,12 @@ from legacy_pipeline_lock import (
 )
 
 
-RECORD_SIZE = 72
-MOVE_OFFSET = 66
-PLY_OFFSET = 68
-RESULT_OFFSET = 70
-PADDING_OFFSET = 71
+TRAINING_DATA_SCHEMA = load_training_data_schema()
+RECORD_SIZE = TRAINING_DATA_SCHEMA.record_size
+MOVE_OFFSET = TRAINING_DATA_SCHEMA.field("move").offset
+PLY_OFFSET = TRAINING_DATA_SCHEMA.field("ply").offset
+RESULT_OFFSET = TRAINING_DATA_SCHEMA.field("result").offset
+PADDING_OFFSET = TRAINING_DATA_SCHEMA.field("padding").offset
 LEGACY_NNUE_VERSION = 0x7AF32F20
 LEGACY_NNUE_ARCHITECTURE = 0x3C103E72
 TOOLS_PURE_OPTION = "option name Use NNUE type combo default true var true var false var pure"
@@ -657,6 +659,122 @@ def run_tools_command(engine: Path, command: str) -> str:
     if "readyok" not in output:
         raise AssertionError(f"tools engine did not acknowledge isready:\n{output}")
     return output
+
+
+class _DuplicateCapabilityKeyError(ValueError):
+    pass
+
+
+def _strict_capability_object(
+    pairs: list[tuple[str, object]],
+) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise _DuplicateCapabilityKeyError(f"duplicate JSON key {key!r}")
+        result[key] = value
+    return result
+
+
+def parse_training_data_capability_json(
+    payload: str, label: str
+) -> Mapping[str, object]:
+    try:
+        value = json.loads(payload, object_pairs_hook=_strict_capability_object)
+    except (json.JSONDecodeError, _DuplicateCapabilityKeyError) as error:
+        raise AssertionError(f"{label} returned invalid schema JSON: {error}") from error
+    if not isinstance(value, dict):
+        raise AssertionError(f"{label} schema response must be a JSON object")
+    return value
+
+
+def query_tools_training_data_schema(tools_engine: Path) -> Mapping[str, object]:
+    output = run_tools_command(tools_engine, "atomic_data_schema")
+    candidates = tuple(
+        line.strip()
+        for line in output.splitlines()
+        if line.strip().startswith("{")
+        and '"schema_sha256"' in line
+    )
+    if len(candidates) != 1:
+        raise AssertionError(
+            "tools engine must emit exactly one training-data schema JSON line; "
+            f"found {len(candidates)}:\n{output}"
+        )
+    return parse_training_data_capability_json(candidates[0], "tools engine")
+
+
+def query_trainer_training_data_schema(
+    nnue_dataset: ModuleType,
+) -> Mapping[str, object]:
+    query = getattr(nnue_dataset, "atomic_training_data_schema", None)
+    if not callable(query):
+        raise AssertionError(
+            "trainer nnue_dataset has no atomic_training_data_schema() capability"
+        )
+    value = query()
+    if not isinstance(value, dict):
+        raise AssertionError(
+            "trainer atomic_training_data_schema() must return a dict"
+        )
+    return value
+
+
+def require_training_data_capability(
+    capability: Mapping[str, object],
+    lock: PipelineLock,
+    *,
+    label: str,
+    write: bool,
+) -> None:
+    if set(capability) != {"schema_sha256", "formats"}:
+        raise AssertionError(
+            f"{label} schema keys must be exactly schema_sha256 and formats"
+        )
+    expected = lock.training_data_schema
+    if capability.get("schema_sha256") != expected.sha256:
+        raise AssertionError(
+            f"{label} schema SHA-256 mismatch: expected {expected.sha256}, "
+            f"got {capability.get('schema_sha256')!r}"
+        )
+    formats = capability.get("formats")
+    if not isinstance(formats, dict) or set(formats) != {expected.schema_id}:
+        raise AssertionError(
+            f"{label} formats must contain only {expected.schema_id!r}"
+        )
+    entry = formats[expected.schema_id]
+    if not isinstance(entry, dict) or set(entry) != {"read", "write", "record_size"}:
+        raise AssertionError(
+            f"{label} {expected.schema_id} capability has invalid keys"
+        )
+    if entry.get("read") is not True or entry.get("write") is not write:
+        raise AssertionError(
+            f"{label} {expected.schema_id} must report read=true, write={str(write).lower()}"
+        )
+    record_size = entry.get("record_size")
+    if type(record_size) is not int or record_size != expected.record_size:
+        raise AssertionError(
+            f"{label} record size mismatch: expected {expected.record_size}, "
+            f"got {record_size!r}"
+        )
+
+
+def verify_training_data_schema_handshake(
+    lock: PipelineLock,
+    *,
+    tools_engine: Path,
+    nnue_dataset: ModuleType,
+) -> None:
+    tools = query_tools_training_data_schema(tools_engine)
+    trainer = query_trainer_training_data_schema(nnue_dataset)
+    require_training_data_capability(tools, lock, label="tools", write=True)
+    require_training_data_capability(trainer, lock, label="trainer", write=False)
+    schema = lock.training_data_schema
+    print(
+        "LEGACY PIPELINE SCHEMA VERIFIED "
+        f"id={schema.schema_id} sha256={schema.sha256} "
+        f"record_size={schema.record_size} tools=read/write trainer=read"
+    )
 
 
 def run_generation_command(
@@ -1711,6 +1829,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         modules = import_trainer_modules(trainer_root)
         nnue_dataset, features, model_module, ranger_module, serialize, torch = modules
+        verify_training_data_schema_handshake(
+            lock,
+            tools_engine=tools_engine,
+            nnue_dataset=nnue_dataset,
+        )
         python_environment = capture_python_environment_provenance()
         emit_python_environment_provenance(python_environment)
         if profile.source_kind == "external":

@@ -1,0 +1,141 @@
+{
+  "schema_version": 1,
+  "schema_id": "legacy-atomic-v1",
+  "status": "frozen",
+  "variant": "atomic",
+  "format": {
+    "byte_order": "little-endian",
+    "host_byte_order_required": "little-endian",
+    "header_size": 0,
+    "record_size": 72,
+    "framing": "headerless-fixed-records",
+    "record_count": "file-size-divided-by-record-size",
+    "atomic960": false,
+    "fields": [
+      {
+        "name": "packed_position",
+        "offset": 0,
+        "size": 64,
+        "storage": "bytes",
+        "encoding": "fairy-packed-sfen-512-atomic"
+      },
+      {
+        "name": "score",
+        "offset": 64,
+        "size": 2,
+        "storage": "int16"
+      },
+      {
+        "name": "move",
+        "offset": 66,
+        "size": 2,
+        "storage": "uint16",
+        "encoding": "legacy-stockfish-16"
+      },
+      {
+        "name": "ply",
+        "offset": 68,
+        "size": 2,
+        "storage": "uint16"
+      },
+      {
+        "name": "result",
+        "offset": 70,
+        "size": 1,
+        "storage": "int8"
+      },
+      {
+        "name": "padding",
+        "offset": 71,
+        "size": 1,
+        "storage": "uint8"
+      }
+    ]
+  },
+  "packed_position": {
+    "encoding": "fairy-packed-sfen-512-atomic",
+    "size": 64,
+    "bit_order": "least-significant-bit-first",
+    "canonical": false,
+    "writer_zero_fills_storage": true,
+    "side_to_move_bits": 1,
+    "king_square_bits": 7,
+    "king_square_domain": [0, 63],
+    "missing_king_supported": false,
+    "king_wire_mapping": "fairy-commoner-as-atomic-king",
+    "board_scan_order": "rank-8-to-1-file-a-to-h",
+    "board_piece_encoding": "fairy-huffman-v1",
+    "hand_count_fields": {
+      "count": 12,
+      "bits_per_field": 5,
+      "order": [
+        "white-pawn",
+        "white-knight",
+        "white-bishop",
+        "white-rook",
+        "white-queen",
+        "white-atomic-king",
+        "black-pawn",
+        "black-knight",
+        "black-bishop",
+        "black-rook",
+        "black-queen",
+        "black-atomic-king"
+      ],
+      "required_value": 0,
+      "pocket_semantics": false
+    },
+    "castling_rights_bits": 4,
+    "castling_rook_origins": false,
+    "en_passant_presence_bits": 1,
+    "en_passant_square_bits": 7,
+    "rule50_bits": 7,
+    "fullmove_bits": 16,
+    "clock_tail_order": [
+      "rule50-low-6",
+      "fullmove-low-8",
+      "fullmove-high-8",
+      "rule50-high-1"
+    ]
+  },
+  "move_wire": {
+    "encoding": "legacy-stockfish-16",
+    "size": 2,
+    "none_allowed": false,
+    "forbidden_value": 0,
+    "to": {
+      "lsb": 0,
+      "width": 6,
+      "domain": [0, 63]
+    },
+    "from": {
+      "lsb": 6,
+      "width": 6,
+      "domain": [0, 63]
+    },
+    "promotion": {
+      "lsb": 12,
+      "width": 2,
+      "mapping": ["knight", "bishop", "rook", "queen"],
+      "active_when_type": 1
+    },
+    "type": {
+      "lsb": 14,
+      "width": 2,
+      "mapping": ["normal", "promotion", "en-passant", "castling"]
+    },
+    "castling_to_semantics": "rook-origin-square"
+  },
+  "semantics": {
+    "score_perspective": "side-to-move",
+    "result_perspective": "side-to-move",
+    "result_domain": [-1, 0, 1],
+    "padding_value": 0
+  },
+  "file_policy": {
+    "empty": "invalid",
+    "append": "forbidden",
+    "overwrite": "forbidden",
+    "new_fields": "require-new-versioned-format"
+  }
+}

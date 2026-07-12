@@ -10,10 +10,10 @@ counts.
 
 ## Current executable coverage
 
-The following evidence was reproduced locally on 2026-07-11 by
-`tests/run_hito4.py` in release mode, including the full Node UCI/NNUE WASM
-launcher. The development-only `--allow-missing-wasm` switch cannot produce a
-release pass.
+The following evidence was reproduced locally on 2026-07-12 by
+`tests/run_hito5.py` in release mode, including the cross-repository training
+pipeline and full Node UCI/NNUE WASM launcher. The development-only
+`--allow-missing-wasm` switch cannot produce a release pass.
 
 | Surface | Migrated coverage | Current evidence |
 | --- | --- | --- |
@@ -31,7 +31,7 @@ release pass.
 | XBoard/CECP | Atomic-only negotiation, clocks, state edits, analyze, playother, hard/easy and live ponder cancellation/promotion | complete protocol suite passed |
 | Search repeatability | Two-position Atomic NNUE corpus over increasing node budgets | `12/12`; signature `338376` |
 | Legacy Atomic NNUE | `false`, `true`, `pure`, invalid/truncated recovery, transactional load and byte-exact export | mode contract passed; network SHA-256 pinned |
-| Pipeline reproducibility | Machine-readable sibling commits, tracked clean-build recipes, strict build manifests, exact HEAD/clean-tree/artifact pre/postflight, pinned Python runtime/dependency provenance, locked strong-local fixture and trainer-generated synthetic CI fixture | lock/build/profile units `76/76`; clean pinned `strong-local` E2E passed at `e0b58ebd`; resolved `synthetic-ci` run `29177376824` passed on PR merge `7968672f` |
+| Pipeline reproducibility | Normative `atomic-schema.json`, exact tools/trainer capability handshake, machine-readable sibling commits, tracked clean-build recipes, strict build manifests, exact HEAD/clean-tree/artifact pre/postflight, pinned Python runtime/dependency provenance, locked strong-local fixture and trainer-generated synthetic CI fixture | lock/build/profile units `87/87`; schema SHA-256 `acca0f55...d5abe1`; clean pinned `strong-local` E2E passed at `518175e2`; resolved `synthetic-ci` run `29177376824` remains the pre-handshake baseline and the updated Linux gate runs in H7.1 CI |
 | Atomic Syzygy | Atomic magics/suffixes, connected-kings domain 518, real WDL/DTZ, root/interior, Atomic960 eligibility and recoverable paths | same-checkout Makefile driver; 13 fixture headers/hashes, driver `5/5`, production UCI suite with NNUE false/true |
 | Full engine UCI/NNUE WASM | Interactive Node launcher, external NNUE, true/pure, perft, terminal positions and pthread operation | integration passed; all four artifact hashes match the reproducible manifest |
 
@@ -59,6 +59,7 @@ required Elo/LOS matches.
 | Python packaging | Import the exact requested `pyffish` artifact, run historical and extended tests, and exercise concurrent calls. |
 | Board WASM lifecycle | Repeated construction/destruction, push/pop/reset, perft, Atomic terminals and error rollback share the 58-fixture suite. |
 | UCI/NNUE WASM | Run the actual interactive search engine and load the external SHA-pinned network; this is distinct from the lightweight Board WASM library. |
+| Atomic data schema | Validate the exact UTF-8/LF bytes, hash, 72-byte layout, legacy move wire, hand-count fields, clock order, little-endian host requirement and intentionally unsupported v1 states; require matching tools/trainer capabilities before generation. |
 | NNUE pipeline | The Legacy Atomic V1 generator/decode/train/serialize/re-import E2E is mandatory from Hito 5 onward and must run from clean, SHA-pinned sibling repositories. `strong-local` uses the external frozen playing net; `synthetic-ci` creates a deterministic ephemeral trainer net so public CI redistributes no strong weights. Hito 7 adds `atomic-bin-v2` and generator consolidation without weakening either profile. |
 
 ## Mandatory execution matrix

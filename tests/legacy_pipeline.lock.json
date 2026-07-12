@@ -1,14 +1,20 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
+  "training_data_schema": {
+    "path": "schemas/atomic-schema.json",
+    "schema_id": "legacy-atomic-v1",
+    "sha256": "acca0f551f1c012c31a6c727dedccaebb7b5ebbc46810edb87e31bb208d5abe1",
+    "record_size": 72
+  },
   "repositories": {
     "tools": {
       "repository": "Belzedar94/variant-nnue-tools",
-      "commit": "22c271c30641134109252e0665a98837d4f74ba8",
+      "commit": "17bfb6eb1bd02f86a63cfbc10aaf1bdf6f0a74c6",
       "resolved": true
     },
     "trainer": {
       "repository": "Belzedar94/variant-nnue-pytorch",
-      "commit": "dafec1daa594ff7eff3dca79064ed10660702a36",
+      "commit": "350a28f2cee225c546333aded75b9db64caa526d",
       "resolved": true
     }
   },
