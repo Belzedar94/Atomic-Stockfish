@@ -35,6 +35,7 @@
 #include "history.h"
 #include "misc.h"
 #include "movegen.h"
+#include "nnue/nnue_architecture.h"
 #include "syzygy/tbprobe.h"
 #include "tt.h"
 #include "uci_move.h"
@@ -44,6 +45,10 @@ using std::string;
 namespace Stockfish {
 
 using namespace Attacks;
+
+static_assert(!Eval::NNUE::FeatureSet::UsesThreatDeltas,
+              "Position::do_move skips DirtyThreats; implement threat deltas before enabling a "
+              "feature set that consumes them");
 
 namespace Zobrist {
 
@@ -927,7 +932,7 @@ void Position::do_move(Move                      m,
                        StateInfo&                newSt,
                        [[maybe_unused]] bool     givesCheck,
                        DirtyPiece&               dp,
-                       DirtyThreats&             dts,
+                       DirtyThreats& /*dts*/,
                        const TranspositionTable* tt      = nullptr,
                        const SharedHistories*    history = nullptr) {
 
@@ -974,7 +979,10 @@ void Position::do_move(Move                      m,
         assert(captured == make_piece(us, ROOK));
 
         Square rfrom, rto;
-        do_castling<true>(us, from, to, rfrom, rto, &dts, &dp);
+        // LegacyAtomicV1 consumes HalfKAv2Atomic only. The modern FullThreats
+        // delta is not part of this network, so avoid its substantial orthodox
+        // attack bookkeeping on every move.
+        do_castling<true>(us, from, to, rfrom, rto, nullptr, &dp);
 
         k ^= Zobrist::psq[captured][rfrom] ^ Zobrist::psq[captured][rto];
         st->nonPawnKey[us] ^= Zobrist::psq[captured][rfrom] ^ Zobrist::psq[captured][rto];
@@ -999,7 +1007,7 @@ void Position::do_move(Move                      m,
                 assert(piece_on(capsq) == make_piece(them, PAWN));
 
                 // Update board and piece lists in ep case, normal captures are updated later
-                remove_piece(capsq, &dts);
+                remove_piece(capsq);
             }
 
             st->pawnKey ^= Zobrist::psq[captured][capsq];
@@ -1111,15 +1119,15 @@ void Position::do_move(Move                      m,
 
         if (captured && m.type_of() != EN_PASSANT)
         {
-            remove_piece(from, &dts);
-            swap_piece(to, toPc, &dts);
+            remove_piece(from);
+            swap_piece(to, toPc);
         }
         else if (pc == toPc)
-            move_piece(from, to, &dts);
+            move_piece(from, to);
         else
         {
-            remove_piece(from, &dts);
-            put_piece(toPc, to, &dts);
+            remove_piece(from);
+            put_piece(toPc, to);
         }
     }
 

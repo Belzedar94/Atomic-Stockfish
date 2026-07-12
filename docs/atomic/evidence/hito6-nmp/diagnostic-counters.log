@@ -1,0 +1,122 @@
+Atomic-Stockfish Hito 6: null-move-pruning diagnostic counters
+================================================================
+
+Status
+------
+run_date_utc=2026-07-11
+purpose=diagnostic coverage comparison only; this is not a speed or strength gate
+instrumented_source_base=219d0cf16c41f93b605dc23a64d98fbbbefe1ebb
+comparison=block3 reduction base 7 versus candidate reduction base 6
+instrumentation_scope=identical temporary counters in both binaries; one worker only
+committed_artifacts=this log only; the driver, instrumented source, and binaries are not included
+
+Artifacts
+---------
+block3-r7-instrumented.exe|bytes=4269420|sha256=3AACBECEACCA3B2C036E68C2E82D767EA325135FCC296302B8AC70E358553E40
+nmp-r6-instrumented.exe|bytes=4269420|sha256=01E00C339BCB4A10025C87B6CC98ECA68DB314F28A5C7749FF28224EEDE85FB5
+nmp_compare.py|bytes=4826|sha256=B8D14294F239E20F395B31D5A807752FB64CF711FF69FF6BBABA8E6918DF1F83
+atomic_run3b_e202_l05.nnue|bytes=47721376|sha256=99DC67EABF26A64FAEECA3A88B4C38597A840B8D4A874B9F2CF658C6F92A04A6
+
+Runtime and exact command
+-------------------------
+os=Microsoft Windows NT 10.0.19045.0
+python=3.12.0
+working_directory=reports/nmp-instrumentation-219d
+command=python .\nmp_compare.py --baseline .\block3-r7-instrumented.exe --candidate .\nmp-r6-instrumented.exe --net ..\..\atomic_run3b_e202_l05.nnue --positions atomic-start atomic-mid-1 atomic-mid-3 atomic-mid-7 --depths 18 20 --timeout 300
+
+Search configuration
+--------------------
+protocol=UCI
+Threads=1
+Hash=64
+Use NNUE=true
+EvalFile=atomic_run3b_e202_l05.nnue
+depths=18,20
+timeout_seconds_per_search=300
+process_isolation=fresh engine process and transposition table for every position/depth/side
+initialization=uci; set options; isready; ucinewgame; isready; position fen; go depth
+variant=Atomic-only engine default; no UCI_Variant override was sent
+ordering=for each position, depth 18 then depth 20; baseline R7 then candidate R6
+nps_and_time=not retained because they are wall-clock dependent
+
+Positions
+---------
+atomic-start|rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1
+atomic-mid-1|rnbqkbn1/2pppp2/7r/6pp/pPP3PP/P4P2/3PP3/RNB1KBNR w KQq - 1 10
+atomic-mid-3|r4b1r/2kb1N2/p2Bpnp1/8/2Pp3p/1P1PPP2/P5PP/R3K2R b KQ - 0 1
+atomic-mid-7|r4rk1/1b2ppbp/pq4pn/2pp1PB1/1p2P3/1P1P1NN1/1PP3PP/R2Q1RK1 w - - 0 13
+
+Counter definitions
+-------------------
+attempts=entered the null-move search
+qualified_fail_highs=nullValue >= beta and the value is not a known win
+direct_cutoffs=qualified fail-high returned without a verification search
+verifications=high-depth verification searches started
+verified_cutoffs=verification search remained at or above beta
+verification_rejects=verification search fell below beta and prevented the cutoff
+total_cutoffs=direct_cutoffs + verified_cutoffs
+
+Raw results
+-----------
+position|depth|side|reduction_base|bestmove|nodes|attempts|qualified_fail_highs|direct_cutoffs|verifications|verified_cutoffs|verification_rejects|total_cutoffs
+atomic-start|18|baseline-R7|7|g1f3|334367|11476|1631|1334|297|297|0|1631
+atomic-start|18|candidate-R6|6|g1f3|494614|16349|3189|2313|876|876|0|3189
+atomic-start|20|baseline-R7|7|g1f3|696148|24253|4302|3274|1028|1028|0|4302
+atomic-start|20|candidate-R6|6|g1f3|941955|32780|8903|6022|2881|2881|0|8903
+atomic-mid-1|18|baseline-R7|7|h4g5|1024533|26317|5570|5343|227|227|0|5570
+atomic-mid-1|18|candidate-R6|6|h4g5|818443|22545|5334|5039|295|295|0|5334
+atomic-mid-1|20|baseline-R7|7|h4g5|2283278|61684|13866|12600|1266|1266|0|13866
+atomic-mid-1|20|candidate-R6|6|h4g5|3190644|89460|23362|20404|2958|2958|0|23362
+atomic-mid-3|18|baseline-R7|7|c7c8|716060|19035|5190|4896|294|294|0|5190
+atomic-mid-3|18|candidate-R6|6|c7c8|532016|10720|3408|3294|114|114|0|3408
+atomic-mid-3|20|baseline-R7|7|c7b7|1485925|40993|11624|10743|881|881|0|11624
+atomic-mid-3|20|candidate-R6|6|c7c8|1472015|34572|9842|9089|753|753|0|9842
+atomic-mid-7|18|baseline-R7|7|g5h6|922417|20019|9677|9276|401|400|1|9676
+atomic-mid-7|18|candidate-R6|6|g5h6|577703|9101|3947|3826|121|121|0|3947
+atomic-mid-7|20|baseline-R7|7|g5h6|1493967|32623|16160|15295|865|864|1|16159
+atomic-mid-7|20|candidate-R6|6|g5h6|2444178|43656|20358|19269|1089|1089|0|20358
+
+Totals
+------
+scope|side|nodes|attempts|qualified_fail_highs|direct_cutoffs|verifications|verified_cutoffs|verification_rejects|total_cutoffs
+depth-18|baseline-R7|2997377|76847|22068|20849|1219|1218|1|22067
+depth-18|candidate-R6|2422776|58715|15878|14472|1406|1406|0|15878
+depth-20|baseline-R7|5959318|159553|45952|41912|4040|4039|1|45951
+depth-20|candidate-R6|8048792|200468|62465|54784|7681|7681|0|62465
+all-searches|baseline-R7|8956695|236400|68020|62761|5259|5257|2|68018
+all-searches|candidate-R6|10471568|259183|78343|69256|9087|9087|0|78343
+
+Ratios
+------
+cutoff_rate=100 * total_cutoffs / attempts
+verification_rate=100 * verifications / qualified_fail_highs
+rejection_rate=100 * verification_rejects / verifications
+direct_cutoff_share=100 * direct_cutoffs / total_cutoffs
+candidate_node_delta=100 * (candidate_nodes / baseline_nodes - 1)
+
+scope|side|cutoff_rate_pct|verification_rate_pct|rejection_rate_pct|direct_cutoff_share_pct
+depth-18|baseline-R7|28.7155|5.5238|0.0820|94.4804
+depth-18|candidate-R6|27.0425|8.8550|0.0000|91.1450
+depth-20|baseline-R7|28.7998|8.7918|0.0248|91.2102
+depth-20|candidate-R6|31.1596|12.2965|0.0000|87.7035
+all-searches|baseline-R7|28.7724|7.7315|0.0380|92.2712
+all-searches|candidate-R6|30.2269|11.5990|0.0000|88.4010
+
+scope|candidate_node_delta_pct|bestmove_agreement
+depth-18|-19.1701|4/4
+depth-20|35.0623|3/4
+all-searches|16.9133|7/8
+
+position|depth|candidate_node_delta_pct|bestmove_equal
+atomic-start|18|47.9255|true
+atomic-start|20|35.3096|true
+atomic-mid-1|18|-20.1155|true
+atomic-mid-1|20|39.7396|true
+atomic-mid-3|18|-25.7023|true
+atomic-mid-3|20|-0.9361|false
+atomic-mid-7|18|-37.3707|true
+atomic-mid-7|20|63.6032|true
+
+Interpretation boundary
+-----------------------
+The verification search rejected only 2 of 5,259 baseline verifications and 0 of 9,087 candidate verifications. R6 increased the aggregate verification rate, but the node delta changed sign between depths and varied strongly by position. These counters establish code-path coverage only. Suite, multiposition speed testing, and the three LOS gates remain authoritative for acceptance.

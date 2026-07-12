@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import math
 import re
 import shutil
 import subprocess
@@ -42,6 +43,7 @@ DIAGNOSTIC_SANITY_TOLERANCE = 0.10
 CAPTURE_REFRESH_RE = re.compile(r"\bcapture-forced-refresh=(\d+)\b")
 CAPTURE_COUNT_RE = re.compile(r"\bcaptures=(\d+)\b")
 CORPUS_SHA_RE = re.compile(r"^Corpus SHA-256: ([0-9A-Fa-f]{64})$", re.MULTILINE)
+RULE50_DAMPED_RE = re.compile(r"\brule50-damped=(\d+)\b")
 LEGACY_CAPTURE_REFRESH_RE = re.compile(
     r"capture[^\r\n]*requires\s*refresh\s*=\s*(?:true|[1-9]\d*)",
     re.IGNORECASE,
@@ -63,6 +65,13 @@ def sha256(path: Path) -> str:
 def require_file(path: Path, label: str) -> Path:
     resolved = path.expanduser().resolve()
     if not resolved.is_file():
+        raise GateFailure(f"{label} does not exist: {resolved}")
+    return resolved
+
+
+def require_directory(path: Path, label: str) -> Path:
+    resolved = path.expanduser().resolve()
+    if not resolved.is_dir():
         raise GateFailure(f"{label} does not exist: {resolved}")
     return resolved
 
@@ -161,6 +170,46 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--cpp-api", type=Path)
     parser.add_argument("--syzygy-driver", type=Path)
     parser.add_argument("--fairy-repo", type=Path)
+    parser.add_argument(
+        "--pipeline-tools-engine",
+        type=Path,
+        help=(
+            "optional variant-nnue-tools executable; all five --pipeline-* "
+            "inputs must be supplied together to run the cross-repository E2E gate"
+        ),
+    )
+    parser.add_argument(
+        "--pipeline-trainer-root",
+        type=Path,
+        help=(
+            "optional built variant-nnue-pytorch checkout; all five "
+            "--pipeline-* inputs must be supplied together"
+        ),
+    )
+    parser.add_argument(
+        "--pipeline-tools-build-manifest",
+        type=Path,
+        help=(
+            "clean-build manifest for --pipeline-tools-engine; all five "
+            "--pipeline-* inputs are required together"
+        ),
+    )
+    parser.add_argument(
+        "--pipeline-trainer-build-manifest",
+        type=Path,
+        help=(
+            "clean-build manifest for the trainer native loader; all five "
+            "--pipeline-* inputs are required together"
+        ),
+    )
+    parser.add_argument(
+        "--pipeline-atomic-build-manifest",
+        type=Path,
+        help=(
+            "clean-build manifest for --native; all five --pipeline-* inputs "
+            "are required together"
+        ),
+    )
     parser.add_argument("--python", default=sys.executable)
     parser.add_argument("--node", default="node")
     parser.add_argument("--bash")
@@ -186,12 +235,18 @@ def parse_args() -> argparse.Namespace:
         default=30.0,
         help="per-response timeout forwarded to the structural differential",
     )
+    parser.add_argument(
+        "--pipeline-timeout",
+        type=float,
+        default=900.0,
+        help="whole-process timeout for the optional cross-repository pipeline gate",
+    )
     return parser.parse_args()
 
 
 def validate_positive(value: float | int, option: str) -> None:
-    if value <= 0:
-        raise GateFailure(f"{option} must be positive")
+    if not math.isfinite(float(value)) or value <= 0:
+        raise GateFailure(f"{option} must be finite and positive")
 
 
 def main() -> int:
@@ -202,6 +257,7 @@ def main() -> int:
             (args.smoke_positions, "--smoke-positions"),
             (args.hito4_timeout, "--hito4-timeout"),
             (args.engine_timeout, "--engine-timeout"),
+            (args.pipeline_timeout, "--pipeline-timeout"),
         ):
             validate_positive(value, option)
         if args.smoke_operations % 8:
@@ -210,6 +266,27 @@ def main() -> int:
             validate_positive(args.incremental_timeout, "--incremental-timeout")
         if args.differential_timeout is not None:
             validate_positive(args.differential_timeout, "--differential-timeout")
+        pipeline_options = (
+            args.pipeline_tools_engine,
+            args.pipeline_trainer_root,
+            args.pipeline_tools_build_manifest,
+            args.pipeline_trainer_build_manifest,
+            args.pipeline_atomic_build_manifest,
+        )
+        if any(value is not None for value in pipeline_options) and not all(
+            value is not None for value in pipeline_options
+        ):
+            raise GateFailure(
+                "pipeline tools/trainer paths and all three clean-build "
+                "manifests must be supplied together"
+            )
+        if args.mode == "release" and not all(
+            value is not None for value in pipeline_options
+        ):
+            raise GateFailure(
+                "release mode requires pipeline tools/trainer paths and "
+                "all three clean-build manifests"
+            )
 
         python = command_path(args.python, "Python")
         native = require_file(args.native, "native engine")
@@ -241,6 +318,84 @@ def main() -> int:
             or native.with_name(f"atomic-nnue-incremental-tests{suffix}"),
             "incremental NNUE test binary",
         )
+
+        pipeline_unit_launcher = (
+            "import pytest,sys; code=pytest.main(sys.argv[1:]); "
+            "print('Legacy pipeline lock/profile unit suite passed') "
+            "if code == 0 else None; raise SystemExit(code)"
+        )
+        run_step(
+            "Legacy Atomic V1 pipeline lock/profile units",
+            [
+                python,
+                "-c",
+                pipeline_unit_launcher,
+                "-q",
+                "--maxfail=1",
+                str(
+                    REPO_ROOT
+                    / "tests/python/test_legacy_pipeline_lock.py"
+                ),
+                str(
+                    REPO_ROOT
+                    / "tests/python/test_legacy_pipeline_build_manifest.py"
+                ),
+                str(
+                    REPO_ROOT
+                    / "tests/python/test_legacy_pipeline_e2e.py"
+                ),
+            ],
+            timeout=300.0,
+            required_markers=(
+                "Legacy pipeline lock/profile unit suite passed",
+            ),
+        )
+
+        if args.pipeline_tools_engine is not None:
+            pipeline_tools_engine = require_file(
+                args.pipeline_tools_engine, "variant-nnue-tools engine"
+            )
+            pipeline_trainer_root = require_directory(
+                args.pipeline_trainer_root, "variant-nnue-pytorch checkout"
+            )
+            run_step(
+                "Legacy Atomic V1 cross-repository data-to-engine pipeline",
+                [
+                    python,
+                    str(REPO_ROOT / "tests" / "legacy_pipeline_e2e.py"),
+                    "--profile",
+                    "strong-local",
+                    "--tools-engine",
+                    str(pipeline_tools_engine),
+                    "--trainer-root",
+                    str(pipeline_trainer_root),
+                    "--engine",
+                    str(native),
+                    "--tools-build-manifest",
+                    str(args.pipeline_tools_build_manifest),
+                    "--trainer-build-manifest",
+                    str(args.pipeline_trainer_build_manifest),
+                    "--atomic-build-manifest",
+                    str(args.pipeline_atomic_build_manifest),
+                    "--source-net",
+                    str(net),
+                ],
+                timeout=args.pipeline_timeout,
+                required_markers=(
+                    "LEGACY PIPELINE E2E PASSED ",
+                    "profile=strong-local",
+                    f"source_sha256={EXPECTED_NET_SHA256}",
+                    "ft_delta=",
+                    "fc_delta=",
+                ),
+            )
+        else:
+            print(
+                "\n=== Legacy Atomic V1 cross-repository data-to-engine pipeline ===\n"
+                "LEGACY PIPELINE E2E NOT REQUESTED (NON-RELEASE): supply the "
+                "tools/trainer paths and all three clean-build manifests",
+                flush=True,
+            )
 
         hito4_command = [
             python,
@@ -314,6 +469,7 @@ def main() -> int:
             ],
             timeout=incremental_timeout,
             required_markers=(
+                "PASS rule50 evaluation damping at and beyond draw boundary",
                 f"LegacyAtomicV1 incremental gate passed: mode={args.mode} "
                 f"requested-random-operations={operations}",
                 "capture-forced-refresh=0",
@@ -331,6 +487,19 @@ def main() -> int:
             raise GateFailure("incremental gate exercised no Atomic captures")
         if LEGACY_CAPTURE_REFRESH_RE.search(incremental_output):
             raise GateFailure("incremental gate reported requiresRefresh for a capture")
+
+        run_step(
+            "rule-50-aware NNUE differential units",
+            [
+                python,
+                "-m",
+                "pytest",
+                "-q",
+                str(REPO_ROOT / "tests" / "python" / "test_atomic_nnue_differential.py"),
+            ],
+            timeout=300.0,
+            required_markers=("3 passed",),
+        )
 
         positions = (
             RELEASE_DIFFERENTIAL_POSITIONS
@@ -377,6 +546,15 @@ def main() -> int:
             raise GateFailure(
                 f"release corpus SHA-256 is {corpus_hashes[0]}; "
                 f"expected {RELEASE_CORPUS_SHA256}"
+            )
+        rule50_counts = [int(value) for value in RULE50_DAMPED_RE.findall(differential_output)]
+        if len(rule50_counts) != 1:
+            raise GateFailure(
+                "diagnostic differential did not emit exactly one rule50-damped count"
+            )
+        if args.mode == "release" and rule50_counts[0] <= 0:
+            raise GateFailure(
+                "release differential exercised no positions at the Atomic rule-50 boundary"
             )
 
         if args.mode == "release":

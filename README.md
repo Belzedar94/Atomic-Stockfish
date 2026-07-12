@@ -7,8 +7,13 @@ the frozen rules and playing-strength reference.
 
 > [!WARNING]
 > This repository is under active development and has no strength-qualified
-> release yet. Correctness and interface gates pass through Hito 4, but the
-> current engine has not passed the final speed or three-time-control LOS gates.
+> release yet. The Hito 4 interface matrix and Hito 5 engine/backend matrix have
+> passed. The clean, commit-pinned cross-repository pipeline also passed both
+> `strong-local` and public `synthetic-ci`. Hito 6 search blocks 1 through 4 are
+> implemented, and the hardened `ebfe9342` BMI2 artifact passed the reproducible
+> speed gate plus all three exact LOS gates. This is still a pre-release: the
+> Hito 6 record is accepted only when PR #3 also has a clean exact-head CI
+> matrix and Codex review.
 
 ## Scope
 
@@ -50,11 +55,12 @@ The file is not distributed here.
 ## Native build
 
 From `src`, inspect the available architectures with `make help`, then build an
-appropriate target. For a typical modern x86-64 machine:
+appropriate target. On a machine with BMI2/PEXT support, the optimized target
+used by the normative Hito 6 comparison is:
 
 ```sh
 cd src
-make -j build ARCH=x86-64-avx2
+make -j build ARCH=x86-64-bmi2
 ```
 
 The resulting executable is `atomic-stockfish` (or
@@ -90,7 +96,9 @@ Syzygy, NNUE modes, perft, reproducibility and the Atomic search signature.
 
 See [`docs/atomic/hito4-validation.md`](docs/atomic/hito4-validation.md) for the
 exact invocation and reproduced artifact hashes. The migration inventory is in
-[`docs/atomic/test-inventory.md`](docs/atomic/test-inventory.md).
+[`docs/atomic/test-inventory.md`](docs/atomic/test-inventory.md), and cumulative
+search evidence is in
+[`docs/atomic/hito6-validation.md`](docs/atomic/hito6-validation.md).
 
 The final project gate is stricter than functional correctness:
 

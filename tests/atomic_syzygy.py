@@ -12,7 +12,7 @@ still testing genuine ``.atbw/.atbz`` files.
 Examples::
 
     python tests/atomic_syzygy.py --contract-only
-    python tests/atomic_syzygy.py --driver ../research/atomic-syzygy-driver.exe \
+    python tests/atomic_syzygy.py --driver src/atomic-syzygy-driver.exe \
         --tables ../research/shakmaty/shakmaty-syzygy/tables/atomic
 """
 
@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import os
 import re
 import shutil
 import subprocess
@@ -427,7 +428,12 @@ def main() -> int:
     parser.add_argument(
         "--driver",
         type=Path,
-        default=WORKSPACE_ROOT / "research" / "atomic-syzygy-driver.exe",
+        default=(
+            REPO_ROOT
+            / "src"
+            / ("atomic-syzygy-driver.exe" if os.name == "nt" else "atomic-syzygy-driver.bin")
+        ),
+        help="same-checkout driver built by make atomic-syzygy-driver",
     )
     parser.add_argument(
         "--tables",

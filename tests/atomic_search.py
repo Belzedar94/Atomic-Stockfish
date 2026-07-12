@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
-"""Deterministic black-box regressions for Atomic terminal captures in search.
+"""Deterministic black-box regressions for Atomic terminal and tactical search.
 
-The first fixture protects against move-count, futility, and SEE pruning hiding
-an explosive mate when it is the third capture considered in qsearch. The
-remaining fixtures cover every terminal-capture encoding accepted by
-``Position::atomic_wins``: direct king capture, adjacent by-catch, en passant,
-and capture-promotion.
+The suite protects quiet Atomic checks/evasions, every terminal-capture
+encoding accepted by ``Position::atomic_wins``, and explosive captures whose
+material cannot be bounded by orthodox main-search or qsearch futility.
 """
 
 from __future__ import annotations
@@ -36,6 +34,8 @@ class SearchCase:
     expected_cp: int | None = None
     depth: int = 1
     force_searchmove: bool = True
+    nnue_true_bestmove: str | None = None
+    nnue_true_pv: tuple[str, ...] | None = None
 
 
 SEARCH_CASES = (
@@ -120,6 +120,49 @@ SEARCH_CASES = (
         expected_mate=1,
         expected_pv=("g7h8q",),
     ),
+    SearchCase(
+        name="main capture futility preserves explosive non-pawn bycatch",
+        fen="2n5/7k/1p2p2p/Q2PQ1R1/2B1R3/8/8/K5N1 w - - 0 1",
+        searchmove="g1h3",
+        expected_mate=None,
+        expected_pv=("g1h3", "e6d5"),
+        depth=2,
+    ),
+    SearchCase(
+        name="main capture futility preserves explosive en passant bycatch",
+        fen="2n5/7k/1p6/Q7/4p3/2Q5/2RP4/K7 w - - 0 1",
+        searchmove="d2d4",
+        expected_mate=None,
+        expected_pv=("d2d4", "e4d3"),
+        depth=2,
+    ),
+    SearchCase(
+        name="qsearch capture futility preserves explosive non-pawn bycatch",
+        fen="2n5/7k/1p2p2p/Q2PQ1R1/2B1R3/8/8/K5N1 w - - 0 1",
+        searchmove="g1h3",
+        expected_mate=None,
+        expected_pv=("g1h3", "e6d5"),
+        depth=1,
+    ),
+    SearchCase(
+        name="qsearch capture futility preserves explosive en passant bycatch",
+        fen="2n5/7k/1p6/Q7/4p3/2Q5/2RP4/K7 w - - 0 1",
+        searchmove="d2d4",
+        expected_mate=None,
+        expected_pv=("d2d4", "e4d3"),
+        depth=1,
+    ),
+    SearchCase(
+        name="Atomic null-move reduction searches the tactical defense",
+        fen="rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2",
+        searchmove="g7g5",
+        expected_mate=None,
+        expected_pv=("g7g5", "d2d4"),
+        depth=14,
+        force_searchmove=False,
+        nnue_true_bestmove="f8b4",
+        nnue_true_pv=("f8b4", "c2c3"),
+    ),
 )
 
 
@@ -129,10 +172,11 @@ class UciProcess:
         executable: Path,
         timeout: float,
         eval_file: Path | None = None,
-        use_nnue: str | None = None,
+        use_nnue: str = "false",
     ) -> None:
         self.executable = executable
         self.timeout = timeout
+        self.use_nnue = use_nnue
         self.process = subprocess.Popen(
             [str(executable)],
             stdin=subprocess.PIPE,
@@ -155,8 +199,7 @@ class UciProcess:
         self.send("setoption name Hash value 16")
         if eval_file is not None:
             self.send(f"setoption name EvalFile value {eval_file}")
-        if use_nnue is not None:
-            self.send(f"setoption name Use NNUE value {use_nnue}")
+        self.send(f"setoption name Use NNUE value {use_nnue}")
         self.ready()
 
     def _read_output(self) -> None:
@@ -253,18 +296,29 @@ def check_case(engine: UciProcess, test: SearchCase) -> None:
             f"{test.name}: expected mate {test.expected_mate}, got {rendered}: {final_info}"
         )
 
+    expected_pv = (
+        test.nnue_true_pv
+        if engine.use_nnue == "true" and test.nnue_true_pv is not None
+        else test.expected_pv
+    )
+    expected_bestmove = (
+        test.nnue_true_bestmove
+        if engine.use_nnue == "true" and test.nnue_true_bestmove is not None
+        else test.searchmove
+    )
+
     pv_match = PV_RE.search(final_info)
     pv = tuple(pv_match.group(1).split()) if pv_match and pv_match.group(1) else ()
-    if pv[: len(test.expected_pv)] != test.expected_pv:
+    if pv[: len(expected_pv)] != expected_pv:
         raise AssertionError(
-            f"{test.name}: expected PV prefix {' '.join(test.expected_pv)}, "
+            f"{test.name}: expected PV prefix {' '.join(expected_pv)}, "
             f"got {' '.join(pv)}: {final_info}"
         )
 
     bestmove = output[-1].split()
-    if len(bestmove) < 2 or bestmove[1] != test.searchmove:
+    if len(bestmove) < 2 or bestmove[1] != expected_bestmove:
         raise AssertionError(
-            f"{test.name}: expected bestmove {test.searchmove}, got: {output[-1]}"
+            f"{test.name}: expected bestmove {expected_bestmove}, got: {output[-1]}"
         )
 
     score = f"mate {mate}" if mate is not None else f"cp {cp}"
@@ -286,7 +340,8 @@ def main() -> int:
     )
     parser.add_argument(
         "--use-nnue",
-        choices=("false", "true", "pure"),
+        choices=("false", "true"),
+        required=True,
         help="set the Atomic Use NNUE mode before search",
     )
     args = parser.parse_args()
@@ -298,6 +353,8 @@ def main() -> int:
     eval_file = args.eval_file.resolve() if args.eval_file is not None else None
     if eval_file is not None and not eval_file.is_file():
         parser.error(f"eval file does not exist: {eval_file}")
+    if args.use_nnue == "true" and eval_file is None:
+        parser.error("--eval-file is required when --use-nnue true")
 
     with UciProcess(candidate, args.timeout, eval_file, args.use_nnue) as engine:
         for test in SEARCH_CASES:

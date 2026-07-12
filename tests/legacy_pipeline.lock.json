@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "repositories": {
+    "tools": {
+      "repository": "Belzedar94/variant-nnue-tools",
+      "commit": "22c271c30641134109252e0665a98837d4f74ba8",
+      "resolved": true
+    },
+    "trainer": {
+      "repository": "Belzedar94/variant-nnue-pytorch",
+      "commit": "dafec1daa594ff7eff3dca79064ed10660702a36",
+      "resolved": true
+    }
+  },
+  "profiles": {
+    "strong-local": {
+      "source_kind": "external",
+      "records": 8,
+      "seed": "20260711",
+      "source_net_sha256": "99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f92a04a6",
+      "data_sha256": "7de72b1385dbc8e37312a513d1cf4c7d99f889ec8b747f548ed32e8d7a261a2d",
+      "build_recipes": {
+        "tools": "strong-local-tools-windows-v1",
+        "trainer": "strong-local-trainer-windows-v1",
+        "atomic": "strong-local-atomic-windows-v1"
+      },
+      "hashes_resolved": true
+    },
+    "synthetic-ci": {
+      "source_kind": "trainer-generated-zero",
+      "records": 8,
+      "seed": "20260711",
+      "synthetic_model_seed": 20260711,
+      "source_net_sha256": "9cf054ca00b82ab53a34473de52d1104aeddaa19b2e7b24091b5e613af485985",
+      "data_sha256": "95565809c53e914a192d095b18c7bab9a0c35af9510347dc2c63baa385d69988",
+      "build_recipes": {
+        "tools": "synthetic-ci-tools-linux-v1",
+        "trainer": "synthetic-ci-trainer-linux-v1",
+        "atomic": "synthetic-ci-atomic-linux-v1"
+      },
+      "hashes_resolved": true
+    }
+  }
+}

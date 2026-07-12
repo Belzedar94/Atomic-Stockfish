@@ -1,0 +1,32 @@
+{
+  "artifact": {
+    "bytes": 4264325,
+    "path": "C:\\Users\\djime\\Documents\\Chess_variants\\Codex\\Fairy-Stockfish organization\\Atomic Project\\Atomic-Stockfish\\src\\atomic-stockfish.exe",
+    "sha256": "255FD3C24B71FAC8B2193C48AC855729FEE5EBFF1C41E00A5C4F1A45EEFF98DF"
+  },
+  "build": {
+    "commands": [
+      [
+        "C:\\msys64\\usr\\bin\\bash.exe",
+        "-lc",
+        "export PATH=/mingw64/bin:$PATH; cd '/c/Users/djime/Documents/Chess_variants/Codex/Fairy-Stockfish organization/Atomic Project/Atomic-Stockfish' && make -C src ARCH=x86-64-bmi2 COMP=mingw clean"
+      ],
+      [
+        "C:\\msys64\\usr\\bin\\bash.exe",
+        "-lc",
+        "export PATH=/mingw64/bin:$PATH; cd '/c/Users/djime/Documents/Chess_variants/Codex/Fairy-Stockfish organization/Atomic Project/Atomic-Stockfish' && make -C src -j2 ARCH=x86-64-bmi2 COMP=mingw build"
+      ]
+    ],
+    "log_sha256": "B634352381EB7C190F3588D164345419D8F097D6E72E0F0E0E3E9751EA1E002A",
+    "recorded_utc": "2026-07-12T02:50:18.444493+00:00",
+    "toolchain": "Atomic-Stockfish dev-20260712-nogit by the Stockfish developers (see AUTHORS file)\n\nCompiled by                : g++ (GNUC) 15.2.0 on MinGW64\nCompilation architecture   : x86-64-bmi2\nCompilation settings       : 64bit BMI2 AVX2 SSE41 SSSE3 SSE2 POPCNT\nCompiler __VERSION__ macro : 15.2.0"
+  },
+  "recipe": "strong-local-atomic-windows-v1",
+  "repository": {
+    "clean": true,
+    "commit": "e0b58ebd9c171eb8555dbb2827ccdf90c7f5a924",
+    "root": "C:\\Users\\djime\\Documents\\Chess_variants\\Codex\\Fairy-Stockfish organization\\Atomic Project\\Atomic-Stockfish"
+  },
+  "role": "atomic",
+  "schema": "legacy-atomic-v1-clean-build-v1"
+}

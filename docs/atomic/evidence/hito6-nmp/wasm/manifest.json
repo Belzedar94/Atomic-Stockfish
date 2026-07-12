@@ -1,0 +1,42 @@
+{
+    "schemaVersion":  1,
+    "target":  "node-uci-nnue",
+    "debug":  false,
+    "compiler":  "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 3.1.46 (19607820c447a13fd8d0b7680c56148427d6e1b8)",
+    "initialMemoryBytes":  536870912,
+    "memoryGrowth":  false,
+    "pthreadPoolSize":  4,
+    "supportedEntrypoint":  "atomic-stockfish-nnue-node.mjs",
+    "generatedRuntimeGlue":  "atomic-stockfish-nnue.js",
+    "directRuntimeGlueSupported":  false,
+    "stdinPump":  {
+                      "command":  "isready",
+                      "response":  "readyok",
+                      "intervalMilliseconds":  25,
+                      "maxOutstandingPrivatePumps":  1,
+                      "preservesUserReadyok":  true
+                  },
+    "externalNetwork":  true,
+    "artifacts":  [
+                      {
+                          "name":  "atomic-stockfish-nnue.js",
+                          "bytes":  103600,
+                          "sha256":  "d0bd0c360bb8adc636952f6833f0dd280ec732d00d379d63f0fe99f8857df0e5"
+                      },
+                      {
+                          "name":  "atomic-stockfish-nnue.wasm",
+                          "bytes":  545027,
+                          "sha256":  "dc2fdb8ddbb56c82ba20aa8c184fec5c35de5a0d8bac1c4699b412aea8ee1d8b"
+                      },
+                      {
+                          "name":  "atomic-stockfish-nnue.worker.js",
+                          "bytes":  2828,
+                          "sha256":  "c18c2918c9f8fedf3009f4a260a1185e919b0c6d421ff5403cb918b61c358a24"
+                      },
+                      {
+                          "name":  "atomic-stockfish-nnue-node.mjs",
+                          "bytes":  3342,
+                          "sha256":  "885e7a161ef8d447d41f54bd8abe413da3113b14e8b421c4848798c1b02d6deb"
+                      }
+                  ]
+}

@@ -1,0 +1,17 @@
+Hito 6 NMP Windows MSVC Python debug-code gate: PASS
+HEAD: 0c45a9bf711814621607f3d0bed546a026cdf4d1
+tree: f92e23c5104bf30d7e909be558ef23934c401d14
+toolchain: MSVC 14.44, Python 3.12 release ABI
+compile overrides: /Od /Ob0 /Zi
+link override: /DEBUG:FULL
+note: setup.py --debug was rejected because the standard Python installation has no python312_d.lib
+accepted build: release Python ABI with unoptimized debuggable C++ and full PDB
+pyffish.pyd bytes: 548352
+pyffish.pyd SHA-256: FEF9D0590F7E1ABDC1013704EEBB5036D529FF2FEEFE5AEC4439DD2D16831F6D
+pyffish.pdb bytes: 5435392
+pyffish.pdb SHA-256: BBA4583439999BE3312128DCEC988DEC709CA711FE22BE6539E21E3427681888
+exact artifact import: PASS
+historical test.py: 22/22 PASS
+extended tests/python: 79/79 PASS
+debug engine signature: 338376 PASS
+debug engine reprosearch: 12/12 PASS

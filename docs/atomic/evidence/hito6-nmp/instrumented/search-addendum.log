@@ -1,0 +1,12 @@
+Hito 6 NMP ASan+UBSan search addendum: PASS
+HEAD: 0c45a9bf711814621607f3d0bed546a026cdf4d1
+tree: f92e23c5104bf30d7e909be558ef23934c401d14
+container: gcc:15-bookworm@sha256:9ca91b05c7b07d2979f16413e8b2cd6ec8a7c80ffca4121ccab0aeba33f90460
+binary bytes: 53122544
+binary SHA-256: 00858C4A24643D7E3D164F9367CBDD3937D76F19F02DE1CAE74FF2787D122E83
+ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+Use NNUE=false: 16/16 PASS, exit 0
+Use NNUE=true: 16/16 PASS, exit 0
+network SHA-256: 99DC67EABF26A64FAEECA3A88B4C38597A840B8D4A874B9F2CF658C6F92A04A6
+sanitizer diagnostics: none

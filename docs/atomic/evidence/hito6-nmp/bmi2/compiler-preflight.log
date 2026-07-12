@@ -1,0 +1,19 @@
+Hito 6 BMI2 compiler and artifact preflight
+candidate: Atomic-Stockfish dev-20260711-0c45a9bf
+candidate compiler: g++ (GNUC) 15.2.0 on MinGW64
+candidate architecture: x86-64-bmi2
+candidate settings: 64bit BMI2 AVX2 SSE41 SSSE3 SSE2 POPCNT
+candidate bytes: 4263216
+candidate SHA-256: 289267DEEC8A082D375EC25CC6385475487CF6BD7BF907AA1B0D5730F1FC2901
+baseline: Fairy-Stockfish 010726
+baseline compiler: g++ (GNUC) 15.2.0 on MinGW64
+baseline settings: 64bit BMI2 AVX2 SSE41 SSSE3 SSE2 POPCNT
+baseline bytes: 4281871
+baseline SHA-256: 4EACAAB40DCA84F5A255EA57231F2795D43B5DDA85CE50EBBA1A1B2937B46331
+Compiler preflight: PASS signature=64bit BMI2 AVX2 SSE41 SSSE3 SSE2 POPCNT
+old Fairy baseline settings: 64bit SSE41 SSSE3 SSE2 POPCNT
+old Fairy baseline SHA-256: 1AE6D680F03128C8404F31A3F264F28B132B557ED3A91A6445EC563A7A33F623
+old-baseline comparison: REJECTED (candidate-only ISA=AVX2,BMI2)
+AVX2/BMI2 Legacy Atomic V1 equivalence operations: 100000
+AVX2/BMI2 state signature: 0xBEB8E7FA00E623DB
+AVX2/BMI2 equivalence result: PASS

@@ -6,11 +6,16 @@ moves reported by the Fairy oracle. Games rotate through Atomic startpos and
 focused Atomic/Atomic960 fixtures, and the seeded random choice is made from a
 sorted legal-move list so the corpus is reproducible across machines.
 
-Two contracts are checked for every position:
+Three contracts are checked for every position:
 
 * ``Use NNUE=true``: candidate final evaluation versus Fairy final evaluation.
 * ``Use NNUE=pure``: candidate raw Legacy Atomic V1 result versus Fairy's
   unadjusted ``NNUE evaluation`` trace line.
+* At or beyond Atomic's 100-ply rule-50 boundary, the candidate's normal
+  playing trace must be neutral. The companion C++ gate proves the internal
+  ``Value`` is exactly zero. Fairy's historical evaluator can reverse sign
+  beyond that boundary, so its final value is diagnostic there; the raw-network
+  comparison remains active.
 
 The frozen Fairy oracle exposes ``Use NNUE`` only as a boolean. It does not
 offer a reliable ``pure`` protocol mode or exact internal raw integers. Its
@@ -375,6 +380,23 @@ def corpus_sha256(corpus: Sequence[CorpusPosition]) -> str:
     return digest.hexdigest()
 
 
+def halfmove_clock(position: CorpusPosition) -> int:
+    fields = position.fen.split()
+    if len(fields) != 6:
+        raise EngineFailure(
+            f"corpus position has {len(fields)} FEN fields instead of 6: {position.fen}"
+        )
+    try:
+        value = int(fields[4])
+    except ValueError as exc:
+        raise EngineFailure(
+            f"corpus position has a non-numeric halfmove clock: {position.fen}"
+        ) from exc
+    if value < 0:
+        raise EngineFailure(f"corpus position has a negative halfmove clock: {position.fen}")
+    return value
+
+
 def compare_corpus(
     corpus: Sequence[CorpusPosition],
     *,
@@ -385,10 +407,12 @@ def compare_corpus(
     pure_tolerance: float,
     max_errors: int,
     progress: int,
-) -> tuple[float, float]:
+) -> tuple[float, float, float, int]:
     errors: list[str] = []
     max_true_error = 0.0
+    max_rule50_oracle_delta = 0.0
     max_pure_error = 0.0
+    rule50_damped = 0
 
     with ThreadPoolExecutor(max_workers=3, thread_name_prefix="atomic-nnue-diff") as executor:
         for index, position in enumerate(corpus, start=1):
@@ -414,13 +438,26 @@ def compare_corpus(
                     f"true={true_eval.raw_internal_stm}, pure={pure_eval.raw_internal_stm}"
                 )
 
+            clock = halfmove_clock(position)
+            at_rule50_boundary = clock >= 100
             true_error = abs(true_eval.final_white - oracle_eval.final_white)
-            max_true_error = max(max_true_error, true_error)
-            if true_error > true_tolerance:
-                position_errors.append(
-                    f"true final differs by {true_error:.6f}: "
-                    f"candidate={true_eval.final_white:+.6f}, oracle={oracle_eval.final_white:+.6f}"
-                )
+            if at_rule50_boundary:
+                rule50_damped += 1
+                max_rule50_oracle_delta = max(max_rule50_oracle_delta, true_error)
+                if true_eval.final_white != 0.0:
+                    position_errors.append(
+                        "candidate true trace is not neutral at the Atomic rule-50 boundary: "
+                        f"candidate={true_eval.final_white:+.6f}, "
+                        f"halfmove={clock}"
+                    )
+            else:
+                max_true_error = max(max_true_error, true_error)
+                if true_error > true_tolerance:
+                    position_errors.append(
+                        f"true final differs by {true_error:.6f}: "
+                        f"candidate={true_eval.final_white:+.6f}, "
+                        f"oracle={oracle_eval.final_white:+.6f}"
+                    )
 
             if pure_eval.raw_internal_stm is not None and oracle_eval.raw_white is not None:
                 side_sign = 1 if position.fen.split()[1] == "w" else -1
@@ -471,7 +508,7 @@ def compare_corpus(
             f"Legacy Atomic V1 differential failed ({len(errors)} shown, "
             f"limit {max_errors}):\n\n" + "\n\n".join(errors)
         )
-    return max_true_error, max_pure_error
+    return max_true_error, max_rule50_oracle_delta, max_pure_error, rule50_damped
 
 
 def existing_file(parser: argparse.ArgumentParser, value: Path, label: str) -> Path:
@@ -572,7 +609,12 @@ def main() -> int:
             )
             print(f"Corpus SHA-256: {corpus_sha256(corpus).upper()}")
 
-            max_true_error, max_pure_error = compare_corpus(
+            (
+                max_true_error,
+                max_rule50_oracle_delta,
+                max_pure_error,
+                rule50_damped,
+            ) = compare_corpus(
                 corpus,
                 candidate_true=candidate_true,
                 candidate_pure=candidate_pure,
@@ -589,7 +631,9 @@ def main() -> int:
     print(
         f"Legacy Atomic V1 differential passed: {len(corpus)}/{len(corpus)} positions; "
         f"max true delta={max_true_error:.6f}; "
-        f"max pure-trace delta={max_pure_error:.6f}"
+        f"max rule50 oracle delta={max_rule50_oracle_delta:.6f}; "
+        f"max pure-trace delta={max_pure_error:.6f}; "
+        f"rule50-damped={rule50_damped}"
     )
     print(
         "Pure limitation: frozen Fairy exposes only a two-decimal unadjusted NNUE trace; "

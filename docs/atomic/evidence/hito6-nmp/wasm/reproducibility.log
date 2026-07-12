@@ -1,0 +1,18 @@
+schema=atomic-wasm-reproducibility-v1
+source_head=0c45a9bf711814621607f3d0bed546a026cdf4d1
+source_tree=f92e23c5104bf30d7e909be558ef23934c401d14
+source_worktree_tracked_clean=true
+source_date_epoch=0
+build_identity=dev-19700101-nogit
+provenance_note=the exact source HEAD and tree are bound externally because the reproducible manifest does not embed Git metadata
+comparison=current_vs_repro-a_vs_repro-b
+atomic-stockfish-nnue.js|bytes=103600|sha256=D0BD0C360BB8ADC636952F6833F0DD280EC732D00D379D63F0FE99F8857DF0E5|byte_identical=true
+atomic-stockfish-nnue.wasm|bytes=545027|sha256=DC2FDB8DDBB56C82BA20AA8C184FEC5C35DE5A0D8BAC1C4699B412AEA8EE1D8B|byte_identical=true
+atomic-stockfish-nnue.worker.js|bytes=2828|sha256=C18C2918C9F8FEDF3009F4A260A1185E919B0C6D421FF5403CB918B61C358A24|byte_identical=true
+atomic-stockfish-nnue-node.mjs|bytes=3342|sha256=885E7A161EF8D447D41F54BD8ABE413DA3113B14E8B421C4848798C1B02D6DEB|byte_identical=true
+manifest.json|bytes=1930|sha256=A1E8C478B9AC48827EE4CB4B780A71ABD9C04D76736CB94E3DB4B44087108A3B|byte_identical=true
+repro-a_node_integration=PASS
+repro-b_node_integration=PASS
+network_sha256=99DC67EABF26A64FAEECA3A88B4C38597A840B8D4A874B9F2CF658C6F92A04A6
+coverage=UCI-only,false,true,pure,Atomic-perft-197326,Atomic960-perft-61401,terminal-bestmove-none,XBoard-rejection
+result=PASS

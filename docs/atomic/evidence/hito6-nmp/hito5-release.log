@@ -1,0 +1,520 @@
+
+=== Legacy Atomic V1 cross-repository data-to-engine pipeline ===
+C:\Users\djime\AppData\Local\Programs\Python\Python312\Lib\site-packages\cupy\_environment.py:215: UserWarning: CUDA path could not be detected. Set CUDA_PATH environment variable if CuPy fails to load.
+  warnings.warn(
+C:\Users\djime\AppData\Local\Programs\Python\Python312\Lib\site-packages\pytorch_lightning\core\module.py:428: UserWarning: You are trying to `self.log()` but the `self.trainer` reference is not registered on the model yet. This is most likely because the model hasn't been passed to the `Trainer`
+  rank_zero_warn(
+Ranger optimizer loaded.
+Gradient Centralization usage = False
+LEGACY PIPELINE E2E PASSED records=8 source_sha256=99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f92a04a6 data_sha256=7de72b1385dbc8e37312a513d1cf4c7d99f889ec8b747f548ed32e8d7a261a2d nnue_sha256=a69fb0a7dc211aa4d8bb0974ba881f6ca0f98c5fbc30e0203b9e08b99076e3dc loss=0.0347999074 ft_delta=8.66651535e-05 fc_delta=8.454262e-07 bestmove=b2b3
+
+=== complete Hito 4 release gate (includes modes/export and UCI/NNUE WASM) ===
+
+=== C++ Atomic rule/state units ===
+PASS enemy bycatch SEE=1861
+PASS friendly bycatch SEE=-302
+PASS adjacent pawns immune SEE=-402
+PASS attacker inside blast SEE=-783
+PASS opponent declines quiet capture SEE=0
+PASS king excluded as quiet attacker SEE=0
+PASS opponent king explodes SEE=32000
+PASS own king explodes SEE=-32000
+PASS Atomic values change SEE sign SEE=-221
+PASS en passant SEE=0
+PASS promotion SEE=0
+PASS castling SEE=0
+PASS direct king capture atomic_wins=1
+PASS adjacent king bycatch atomic_wins=1
+PASS en-passant king bycatch atomic_wins=1
+PASS capture-promotion king bycatch atomic_wins=1
+PASS remote capture atomic_wins=0
+PASS quiet move beside king atomic_wins=0
+PASS remote en passant atomic_wins=0
+PASS quiet direct check gives_check=1
+PASS quiet discovered check gives_check=1
+PASS capturer explosion removes checker gives_check=0
+PASS capture blast discovers check gives_check=1
+PASS en passant discovers check gives_check=1
+PASS promotion gives check gives_check=1
+PASS castling rook gives check gives_check=1
+PASS adjacent kings suppress discovered check gives_check=0
+PASS analysis check survives unrelated quiet gives_check=1
+PASS analysis rook check survives b1 quiet gives_check=1
+PASS Atomic960 castling with king already on g1 gives_check=1
+PASS Atomic960 castling with rook already on f1 gives_check=1
+PASS Atomic960 castling with king starting on f1 gives_check=1
+PASS Atomic960 castling with rook starting on g1 gives_check=1
+PASS explosive capture state make/undo state
+PASS en passant state make/undo state
+PASS capture promotion state make/undo state
+PASS direct king capture state make/undo state
+PASS blast clears castling state make/undo state
+PASS double push en passant key make/undo state
+PASS orthodox-layout Atomic castling make/undo state
+PASS Atomic960 castling make/undo state
+PASS repetition and threefold state
+PASS fifty-move and reset state
+PASS UCI move notation, case folding and Atomic960 castling
+PASS Atomic move-count threshold improving=0 depth=3 threshold=4
+PASS Atomic move-count threshold improving=0 depth=4 threshold=7
+PASS Atomic move-count threshold improving=0 depth=6 threshold=13
+PASS Atomic move-count threshold improving=1 depth=3 threshold=7
+PASS Atomic move-count threshold improving=1 depth=4 threshold=10
+PASS Atomic move-count threshold improving=1 depth=6 threshold=20
+PASS Atomic null-move reduction depth=1 reduction=6
+PASS Atomic null-move reduction depth=3 reduction=7
+PASS Atomic null-move reduction depth=6 reduction=8
+PASS Atomic null-move reduction depth=9 reduction=9
+PASS Atomic null-move reduction depth=15 reduction=11
+PASS Atomic null-move reduction depth=16 reduction=11
+PASS Atomic null-move reduction depth=18 reduction=12
+PASS Atomic capture-futility eligibility normal victim only eligible=1
+PASS Atomic capture-futility eligibility adjacent pawn survives eligible=1
+PASS Atomic capture-futility eligibility non-pawn explosion bycatch eligible=0
+PASS Atomic capture-futility eligibility en passant eligible=0
+PASS Atomic capture-futility eligibility capture promotion eligible=0
+PASS Atomic capture-futility eligibility quiet normal move eligible=0
+Atomic C++ unit tests passed: 63/63
+
+=== C++ shared Atomic API units ===
+PASS san.atomic960-castle
+PASS san.en-passant
+PASS san.explosion
+PASS san.promotion
+PASS san.quiet
+PASS san.disambiguation-file
+PASS san.disambiguation-rank
+PASS san.disambiguation-square
+PASS san.atomic-check
+PASS san.checkmate
+PASS san.king-explosion-mate
+PASS san.castle-kingside
+PASS result.exploded-king
+PASS result.exploded-king-priority
+PASS result.mate
+PASS result.stalemate
+PASS material.k-v-k
+PASS material.k-v-kp
+PASS material.k-v-kq
+PASS material.start
+PASS checked.atomic-bishop
+PASS checked.adjacent-kings
+PASS outcome.fifty-move-claim
+PASS outcome.threefold-claim
+PASS validation.start
+PASS validation.atomic-plus-marker
+PASS validation.atomic-invalid-castling-rank
+PASS validation.atomic960-castling
+PASS validation.atomic-analysis-reachability
+PASS validation.halfmove-nonnumeric
+PASS validation.fullmove-nonnumeric
+PASS validation.field-error-precedence
+PASS validation.empty
+PASS validation.board-construction-and-set
+Atomic API unit tests passed
+
+=== frozen binding fixture inventory ===
+binding fixture validation passed: 58 fixtures, 22 Python tests, 58 JavaScript tests, 8 perft vectors
+
+=== explicit pyffish artifact resolution ===
+pyffish artifact: C:\Users\djime\Documents\Chess_variants\Codex\Fairy-Stockfish organization\Atomic Project\reports\hito6-nmp-0c45a9bf\windows-release\pyffish.pyd
+
+=== historical test.py compatibility suite ===
+test_captures_to_hand (__main__.TestPyffish.test_captures_to_hand) ... ok
+test_castling (__main__.TestPyffish.test_castling) ... ok
+test_errors_are_explicit (__main__.TestPyffish.test_errors_are_explicit) ... ok
+test_game_result (__main__.TestPyffish.test_game_result) ... ok
+test_get_fen (__main__.TestPyffish.test_get_fen) ... ok
+test_get_san (__main__.TestPyffish.test_get_san) ... ok
+test_get_san_moves (__main__.TestPyffish.test_get_san_moves) ... ok
+test_gives_check (__main__.TestPyffish.test_gives_check) ... ok
+test_has_insufficient_material (__main__.TestPyffish.test_has_insufficient_material) ... ok
+test_info (__main__.TestPyffish.test_info) ... ok
+test_is_capture (__main__.TestPyffish.test_is_capture) ... ok
+test_is_immediate_game_end (__main__.TestPyffish.test_is_immediate_game_end) ... ok
+test_is_optional_game_end (__main__.TestPyffish.test_is_optional_game_end) ... ok
+test_legal_moves (__main__.TestPyffish.test_legal_moves) ... ok
+test_perft (__main__.TestPyffish.test_perft) ... ok
+test_set_option (__main__.TestPyffish.test_set_option) ... ok
+test_start_fen (__main__.TestPyffish.test_start_fen) ... ok
+test_two_boards (__main__.TestPyffish.test_two_boards) ... ok
+test_validate_fen (__main__.TestPyffish.test_validate_fen) ... ok
+test_validate_fen_promoted_pieces (__main__.TestPyffish.test_validate_fen_promoted_pieces) ... ok
+test_variants_loaded (__main__.TestPyffish.test_variants_loaded) ... ok
+test_version (__main__.TestPyffish.test_version) ... ok
+
+----------------------------------------------------------------------
+Ran 22 tests in 0.044s
+
+OK
+
+=== pytest binding and concurrent lifecycle suite ===
+............................................................             [100%]
+60 passed in 0.16s
+
+=== cooperative LOS gate units ===
+................                                                         [100%]
+16 passed in 0.06s
+
+=== CommonJS Board WASM suite ===
+CommonJS/WASM: 58 fixtures and binding lifecycle checks passed
+
+=== ES module Board WASM suite ===
+ES module/WASM: 58 fixtures and binding lifecycle checks passed
+
+=== exact native/Python/CommonJS/ESM parity ===
+PASS Python 40/40
+PASS CommonJS/WASM 40/40
+PASS ES module/WASM 40/40
+PASS Native UCI 25/25 (supported operations)
+PASS Exact cross-surface parity 40 binding fixtures, 25 native intersections
+
+=== Atomic and Atomic960 perft/rule transitions ===
+Atomic UCI protocol contract passed
+PASS perft depth=4 expected=197326 chess960=false
+PASS perft depth=4 expected=1434825 chess960=false
+PASS perft depth=4 expected=714499 chess960=false
+PASS perft depth=2 expected=148 chess960=false
+PASS perft depth=4 expected=61401 chess960=true
+PASS perft depth=4 expected=98729 chess960=true
+PASS perft depth=4 expected=241478 chess960=true
+PASS perft depth=4 expected=17915 chess960=true
+Atomic perft contract passed
+
+Atomic-Stockfish candidate: C:\Users\djime\Documents\Chess_variants\Codex\Fairy-Stockfish organization\Atomic Project\reports\hito6-nmp-0c45a9bf\windows-release\src\atomic-stockfish.exe
+  PASS [perft] explosion_bycatch_and_pawn_immunity
+  PASS [perft] self_explosion_is_illegal
+  PASS [perft] adjacent_kings_are_legal
+  PASS [perft] atomic_en_passant
+  PASS [perft] explosion_clears_castling_right
+  PASS [perft] capture_promotion_explodes
+  PASS [perft] king_exploded_is_terminal
+  PASS [perft] atomic_checkmate_has_no_moves
+  PASS [perft] atomic_stalemate_has_no_moves
+  PASS [perft] atomic960_castle_is_legal
+  PASS [perft] atomic960_castle_through_atomic_check_is_illegal
+  PASS [transition] explosion_bycatch_and_pawn_immunity_after_qxd4
+  PASS [transition] atomic_en_passant_after_e5d6
+  PASS [transition] castling_right_after_rook_bycatch
+  PASS [transition] capture_promotion_after_g7h8q
+  PASS [transition] king_explosion_after_g1g8
+  PASS [transition] direct_king_capture_after_h7h8
+  PASS [terminal] atomic_checkmate_result
+  PASS [terminal] atomic_stalemate_result
+Atomic-Stockfish candidate: 19/19 checks passed
+
+Atomic rules contract passed.
+Atomic perft and rule-transition suite passed
+
+=== Atomic terminal-search regressions without NNUE ===
+PASS quiet atomic check remains forcing in qsearch: mate 1, pv h2b8
+PASS Atomic mate takes priority over the fifty-move draw: mate 1, pv h2b8
+PASS qsearch scores a quiet-move stalemate as draw: cp 0, pv d5c6
+PASS move picker preserves an internal quiet Atomic check: mate -1, pv a8b7 h2b8
+PASS analysis FEN preserves an existing check after a quiet move: cp 1357, pv b1c3 a8b7
+PASS qsearch explores quiet atomic check evasions: cp 600, pv a2h2 h8g7
+PASS third qsearch capture is explosive mate: mate -1, pv c2c3 g8g2
+PASS direct king capture: mate 1, pv h7h8
+PASS adjacent king bycatch: mate 1, pv g1g8
+PASS en-passant king bycatch: mate 1, pv e5d6
+PASS capture-promotion king bycatch: mate 1, pv g7h8q
+PASS main capture futility preserves explosive non-pawn bycatch: cp 1633, pv g1h3 e6d5
+PASS main capture futility preserves explosive en passant bycatch: cp 744, pv d2d4 e4d3
+PASS qsearch capture futility preserves explosive non-pawn bycatch: cp 1633, pv g1h3 e6d5
+PASS qsearch capture futility preserves explosive en passant bycatch: cp 744, pv d2d4 e4d3
+PASS Atomic null-move reduction searches the tactical defense: cp -11, pv g7g5 d2d4 d8e7 c2c3 f8g7 f1c4
+Atomic search regressions passed: 16/16
+
+=== Atomic terminal-search regressions with NNUE ===
+PASS quiet atomic check remains forcing in qsearch: mate 1, pv h2b8
+PASS Atomic mate takes priority over the fifty-move draw: mate 1, pv h2b8
+PASS qsearch scores a quiet-move stalemate as draw: cp 0, pv d5c6
+PASS move picker preserves an internal quiet Atomic check: mate -1, pv a8b7 h2b8
+PASS analysis FEN preserves an existing check after a quiet move: cp 426, pv b1c3 a8b7
+PASS qsearch explores quiet atomic check evasions: cp 3, pv a2h2 h8g7
+PASS third qsearch capture is explosive mate: mate -1, pv c2c3 g8g2
+PASS direct king capture: mate 1, pv h7h8
+PASS adjacent king bycatch: mate 1, pv g1g8
+PASS en-passant king bycatch: mate 1, pv e5d6
+PASS capture-promotion king bycatch: mate 1, pv g7h8q
+PASS main capture futility preserves explosive non-pawn bycatch: cp 1141, pv g1h3 e6d5
+PASS main capture futility preserves explosive en passant bycatch: cp 674, pv d2d4 e4d3
+PASS qsearch capture futility preserves explosive non-pawn bycatch: cp 1141, pv g1h3 e6d5
+PASS qsearch capture futility preserves explosive en passant bycatch: cp 674, pv d2d4 e4d3
+PASS Atomic null-move reduction searches the tactical defense: cp -374, pv f8b4 c2c3 g8h6 f3g5 f7f5 g5f7 e8g8 f7d8 f5e4 f2f3 d7d5 c3b4 e5e4 f3f4 b8c6 f1b5 c6b4 e1g1
+Atomic search regressions passed: 16/16
+
+=== XBoard/CECP Atomic, analyze and live ponder ===
+XBoard Atomic protocol passed
+
+=== Atomic Syzygy format/domain/real-table probes ===
+PASS source contract: Atomic suffixes/magics/max6/terminal/EP/castling/DTZ-mate
+PASS connected kings: exact contiguous 518-index domain (not orthodox 462)
+PASS real table fixtures: 13 headers and SHA-256 hashes
+PASS real probes: interior/root/quiet-mate/connected/terminal/EP/promotion/rule50/castling
+PASS swapped magic: WDL/DTZ markers cannot be interchanged
+Atomic Syzygy tests passed: 5/5
+
+=== Atomic Syzygy production UCI wiring ===
+Atomic Syzygy UCI tests passed: max6, load, root ranking, interior WDL, terminal, castling, Atomic960, recoverable paths, NNUE=false/true
+
+=== Legacy Atomic V1 NNUE modes and byte-exact export ===
+NNUE mode contract passed: false, true, pure, and nonfatal invalid-net rejection
+
+=== deterministic Atomic reprosearch ===
+PASS reproducible Atomic search: nodes=150
+PASS reproducible Atomic search: nodes=225
+PASS reproducible Atomic search: nodes=337
+PASS reproducible Atomic search: nodes=506
+PASS reproducible Atomic search: nodes=759
+PASS reproducible Atomic search: nodes=1139
+PASS reproducible Atomic search: nodes=1708
+PASS reproducible Atomic search: nodes=2562
+PASS reproducible Atomic search: nodes=3844
+PASS reproducible Atomic search: nodes=5766
+PASS reproducible Atomic search: nodes=8649
+PASS reproducible Atomic search: nodes=12974
+Atomic reprosearch passed: 12/12
+
+=== Atomic NNUE search signature ===
+signature OK: 338376
+
+=== native UCI/XBoard runtime smoke ===
+Atomic instrumented runtime passed: threads=1, prefix=[]
+
+=== Node UCI/NNUE WASM integration ===
+Atomic-Stockfish dev-19700101-nogit by the Stockfish developers (see AUTHORS file)
+id name Atomic-Stockfish dev-19700101-nogit
+id author the Stockfish developers (see AUTHORS file)
+
+option name Debug Log File type string default <empty>
+option name NumaPolicy type string default auto
+option name Threads type spin default 1 min 1 max 1024
+option name Hash type spin default 16 min 1 max 2048
+option name Clear Hash type button
+option name Ponder type check default false
+option name MultiPV type spin default 1 min 1 max 256
+option name Skill Level type spin default 20 min 0 max 20
+option name Move Overhead type spin default 10 min 0 max 5000
+option name nodestime type spin default 0 min 0 max 10000
+option name UCI_Chess960 type check default false
+option name UCI_Variant type combo default atomic var atomic
+option name VariantPath type string default <empty>
+option name SyzygyPath type string default <empty>
+option name SyzygyProbeDepth type spin default 1 min 1 max 100
+option name Syzygy50MoveRule type check default true
+option name SyzygyProbeLimit type spin default 6 min 0 max 6
+option name Use NNUE type combo default true var false var true var pure
+option name EvalFile type string default atomic_run3b_e202_l05.nnue
+uciok
+readyok
+info string Available processors: 0-24
+info string Using 1 thread
+info string Classical Atomic evaluation enabled (Use NNUE=false).
+info depth 1 seldepth 2 multipv 1 score cp 0 nodes 20 nps 5000 hashfull 0 tbhits 0 time 4 pv a2a3
+info depth 2 seldepth 3 multipv 1 score cp 0 nodes 69 nps 2156 hashfull 0 tbhits 0 time 32 pv b1a3
+info depth 3 seldepth 5 multipv 1 score cp 0 nodes 102 nps 2372 hashfull 0 tbhits 0 time 43 pv b1a3 f7f6
+info depth 4 seldepth 5 multipv 1 score cp 0 nodes 130 nps 2063 hashfull 0 tbhits 0 time 63 pv b1a3 f7f6
+bestmove b1a3 ponder f7f6
+info string Available processors: 0-24
+info string Using 1 thread
+info string Classical Atomic evaluation enabled (Use NNUE=false).
+info depth 1 seldepth 2 multipv 1 score cp 0 nodes 20 nps 333 hashfull 0 tbhits 0 time 60 pv b1a3
+info depth 2 seldepth 3 multipv 1 score cp 9 nodes 46 nps 730 hashfull 0 tbhits 0 time 63 pv b1a3
+info depth 3 seldepth 3 multipv 1 score cp 36 nodes 117 nps 1772 hashfull 0 tbhits 0 time 66 pv b1a3
+info depth 4 seldepth 6 multipv 1 score cp 23 nodes 1242 nps 17742 hashfull 1 tbhits 0 time 70 pv c2c3 e7e6 b1a3 f8b4
+info depth 5 seldepth 6 multipv 1 score cp 29 nodes 1464 nps 20054 hashfull 1 tbhits 0 time 73 pv c2c3 e7e6 b1a3
+readyok
+info depth 6 seldepth 9 multipv 1 score cp 335 nodes 3577 nps 45278 hashfull 2 tbhits 0 time 79 pv g1h3
+info depth 7 seldepth 9 multipv 1 score cp 32 nodes 6818 nps 78367 hashfull 3 tbhits 0 time 87 pv b1a3
+info depth 8 seldepth 10 multipv 1 score cp 26 nodes 22207 nps 198276 hashfull 7 tbhits 0 time 112 pv g1f3 f7f6 e2e3 a7a6 c2c3
+info depth 9 seldepth 14 multipv 1 score cp 119 nodes 40255 nps 287535 hashfull 12 tbhits 0 time 140 pv e2e4 e7e6
+info depth 10 seldepth 14 multipv 1 score cp 119 nodes 40276 nps 281650 hashfull 12 tbhits 0 time 143 pv e2e4 e7e6
+bestmove e2e4 ponder e7e6
+info string Available processors: 0-24
+info string Using 1 thread
+info string NNUE evaluation using C:/Users/djime/Documents/Chess_variants/Codex/Fairy-Stockfish organization/Atomic Project/atomic_run3b_e202_l05.nnue (45MiB, (45056, 1024, 16, 32, 1))
+info string Network replica 1: Local memory. Shared memory not supported by the OS. Local allocation fallback.
+info depth 1 seldepth 2 multipv 1 score cp 119 nodes 20 nps 155 hashfull 0 tbhits 0 time 129 pv e2e4
+info depth 2 seldepth 2 multipv 1 score cp 119 nodes 21 nps 156 hashfull 0 tbhits 0 time 134 pv e2e4 e7e6
+bestmove e2e4 ponder e7e6
+info string Available processors: 0-24
+info string Using 1 thread
+a2a3: 8457
+b2b3: 9345
+c2c3: 9272
+d2d3: 11963
+e2e3: 13145
+f2f3: 8457
+g2g3: 9345
+h2h3: 8457
+a2a4: 9329
+b2b4: 9335
+c2c4: 9747
+d2d4: 12439
+e2e4: 13174
+f2f4: 8929
+g2g4: 9331
+h2h4: 9329
+b1a3: 8885
+b1c3: 9758
+g1f3: 9748
+g1h3: 8881
+
+Nodes searched: 197326
+
+info string Available processors: 0-24
+info string Using 1 thread
+b1a1: 571
+b1c1: 798
+b1d1: 3484
+b1e1: 4646
+b1f1: 4373
+g1b1: 4016
+g1h1: 3340
+g1h2: 3104
+g1g2: 4598
+g1f2: 4799
+g1f1: 3154
+h1h8: 4200
+h1h2: 528
+h1h3: 3175
+h1h4: 4089
+h1h5: 4167
+h1h6: 4174
+h1h7: 4185
+
+Nodes searched: 61401
+
+info string Available processors: 0-24
+info string Using 1 thread
+info string NNUE evaluation using C:/Users/djime/Documents/Chess_variants/Codex/Fairy-Stockfish organization/Atomic Project/atomic_run3b_e202_l05.nnue (45MiB, (45056, 1024, 16, 32, 1))
+info string Network replica 1: Local memory. Shared memory not supported by the OS. Local allocation fallback.
+info depth 1 seldepth 2 multipv 1 score cp 119 nodes 20 nps 151 hashfull 0 tbhits 0 time 132 pv e2e4
+info depth 2 seldepth 3 multipv 1 score cp 7 upperbound nodes 128 nps 549 hashfull 0 tbhits 0 time 233 pv e2e4 e7e6
+bestmove e2e4 ponder e7e6
+info string Available processors: 0-24
+info string Using 1 thread
+info string NNUE evaluation using C:/Users/djime/Documents/Chess_variants/Codex/Fairy-Stockfish organization/Atomic Project/atomic_run3b_e202_l05.nnue (45MiB, (45056, 1024, 16, 32, 1))
+info string Network replica 1: Local memory. Shared memory not supported by the OS. Local allocation fallback.
+info depth 1 seldepth 3 multipv 1 score cp 5 nodes 24 nps 102 hashfull 0 tbhits 0 time 234 pv g8h6
+info depth 2 seldepth 5 multipv 1 score cp -15 nodes 355 nps 1497 hashfull 0 tbhits 0 time 237 pv e7e6 c1g5 f7f6 g5h4
+info depth 3 seldepth 6 multipv 1 score cp -17 nodes 664 nps 2755 hashfull 0 tbhits 0 time 241 pv g8h6 g1h3
+info depth 4 seldepth 5 multipv 1 score cp 14 nodes 755 nps 3094 hashfull 0 tbhits 0 time 244 pv g8h6
+readyok
+info depth 5 seldepth 8 multipv 1 score cp -27 nodes 1306 nps 5266 hashfull 0 tbhits 0 time 248 pv g8h6 c1h6 e7e6 g2g3 d8g5
+info depth 6 seldepth 8 multipv 1 score cp -11 nodes 2275 nps 9027 hashfull 1 tbhits 0 time 252 pv e7e6 e2e4 f8b4 b1c3
+info depth 7 seldepth 9 multipv 1 score cp -126 nodes 4195 nps 16196 hashfull 1 tbhits 0 time 259 pv g8h6 f2f3 b8c6 c2c3 e7e5 g1h3
+info depth 8 seldepth 11 multipv 1 score cp -99 nodes 5486 nps 20780 hashfull 1 tbhits 0 time 264 pv g8h6 f2f3 b8a6 b1c3 e7e5
+bestmove g8h6 ponder f2f3
+info string Available processors: 0-24
+info string Using 1 thread
+info string NNUE evaluation using C:/Users/djime/Documents/Chess_variants/Codex/Fairy-Stockfish organization/Atomic Project/atomic_run3b_e202_l05.nnue (45MiB, (45056, 1024, 16, 32, 1))
+info string Network replica 1: Local memory. Shared memory not supported by the OS. Local allocation fallback.
+info depth 1 seldepth 3 multipv 1 score cp 164 nodes 31 nps 122 hashfull 0 tbhits 0 time 254 pv g1h3
+info depth 2 seldepth 3 multipv 1 score cp 234 nodes 100 nps 389 hashfull 0 tbhits 0 time 257 pv d1g4
+info depth 3 seldepth 4 multipv 1 score cp 511 nodes 160 nps 615 hashfull 0 tbhits 0 time 260 pv d1g4
+info depth 4 seldepth 4 multipv 1 score cp 511 nodes 176 nps 664 hashfull 0 tbhits 0 time 265 pv d1g4
+bestmove d1g4
+info string Available processors: 0-24
+info string Using 1 thread
+info string NNUE evaluation using C:/Users/djime/Documents/Chess_variants/Codex/Fairy-Stockfish organization/Atomic Project/atomic_run3b_e202_l05.nnue (45MiB, (45056, 1024, 16, 32, 1))
+info string Network replica 1: Local memory. Shared memory not supported by the OS. Local allocation fallback.
+info depth 1 seldepth 2 multipv 1 score cp 511 nodes 29 nps 110 hashfull 0 tbhits 0 time 262 pv d1g4
+info depth 2 seldepth 4 multipv 1 score cp 1485 nodes 75 nps 283 hashfull 0 tbhits 0 time 265 pv d1g4
+info depth 3 seldepth 5 multipv 1 score cp 198 nodes 254 nps 947 hashfull 0 tbhits 0 time 268 pv g1h3
+info depth 4 seldepth 6 multipv 1 score cp 533 nodes 530 nps 1955 hashfull 0 tbhits 0 time 271 pv f1c4
+info depth 5 seldepth 4 multipv 1 score cp 783 nodes 629 nps 2295 hashfull 0 tbhits 0 time 274 pv f1c4 f7f6
+readyok
+info depth 6 seldepth 8 multipv 1 score cp 921 nodes 750 nps 2707 hashfull 0 tbhits 0 time 277 pv f1c4 f7f5 c4f7 e8e7 g1h3
+info depth 7 seldepth 9 multipv 1 score cp 913 nodes 828 nps 2946 hashfull 0 tbhits 0 time 281 pv f1c4 f7f5 c4f7 e8e7 d2d4
+info depth 8 seldepth 13 multipv 1 score cp 264 nodes 2555 nps 8933 hashfull 1 tbhits 0 time 286 pv g1f3 d7d5 f3g5 f7f6 f1b5 c7c6
+info depth 9 seldepth 11 multipv 1 score cp 669 nodes 5255 nps 17874 hashfull 2 tbhits 0 time 294 pv d1h5 g7g6 h5h3 f7f5 e4f5 e8f7
+info depth 10 seldepth 11 multipv 1 score cp 669 nodes 5280 nps 17777 hashfull 2 tbhits 0 time 297 pv d1h5 g7g6 h5h3 f7f5 e4f5 e8f7
+bestmove d1h5 ponder g7g6
+info string Available processors: 0-24
+info string Using 1 thread
+info string NNUE evaluation using C:/Users/djime/Documents/Chess_variants/Codex/Fairy-Stockfish organization/Atomic Project/atomic_run3b_e202_l05.nnue (45MiB, (45056, 1024, 16, 32, 1))
+info string Network replica 1: Local memory. Shared memory not supported by the OS. Local allocation fallback.
+info depth 0 score mate 0
+bestmove (none)
+Error (unsupported protocol): this WebAssembly artifact is UCI-only
+WASM engine integration: PASS (net sha256=99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f92a04a6)
+
+Hito 4 validation passed
+
+=== LegacyAtomicV1 incremental/full-refresh equivalence ===
+LegacyAtomicV1 frozen network verified: SHA-256=99DC67EABF26A64FAEECA3A88B4C38597A840B8D4A874B9F2CF658C6F92A04A6 mode=release
+PASS rule50 evaluation damping at and beyond draw boundary
+PASS fixed quiet
+PASS fixed capture-king-explosion
+PASS fixed direct-king-capture
+PASS fixed explosion-with-bycatch
+PASS fixed maximum-nine-piece-blast
+PASS fixed en-passant
+PASS fixed promotion
+PASS fixed capture-promotion
+PASS fixed castling
+PASS fixed atomic960-castling
+PASS random seed=0x243F6A8885A308D3 requested=250000 operations=250000 makes=125000 undos=125000 captures=9673 perspective-refresh-white=13238 perspective-refresh-black=12530 full-refresh=25995 state-signature=0xD7C954A03511A672
+PASS random seed=0x13198A2E03707344 requested=250000 operations=250000 makes=125000 undos=125000 captures=959 perspective-refresh-white=10538 perspective-refresh-black=77057 full-refresh=87821 state-signature=0x70C72163BFF7343C
+PASS random seed=0xA4093822299F31D0 requested=250000 operations=250000 makes=125000 undos=125000 captures=2563 perspective-refresh-white=25542 perspective-refresh-black=64101 full-refresh=89848 state-signature=0x58EEA03D3873687E
+PASS random seed=0x82EFA98EC4E6C89 requested=250000 operations=250000 makes=125000 undos=125000 captures=5566 perspective-refresh-white=12964 perspective-refresh-black=24233 full-refresh=37423 state-signature=0x1B8F8E6B9488888B
+LegacyAtomicV1 incremental gate passed: mode=release requested-random-operations=1000000 actual-random-operations=1000000 makes=500000 undos=500000 captures=18761 capture-forced-refresh=0 perspective-refresh-white=62282 perspective-refresh-black=177921 full-refresh-comparisons=241087 state-signature=0x8742E39B793C46AB
+
+=== rule-50-aware NNUE differential units ===
+...                                                                      [100%]
+3 passed in 0.04s
+
+=== Legacy Atomic V1 diagnostic differential (structural checks are hard) ===
+Candidate: C:\Users\djime\Documents\Chess_variants\Codex\Fairy-Stockfish organization\Atomic Project\reports\hito6-nmp-0c45a9bf\windows-release\src\atomic-stockfish.exe
+Fairy oracle: C:\Users\djime\Documents\Chess_variants\Codex\Fairy-Stockfish organization\Atomic Project\baseline-artifacts\FSF_Atomic_baseline.exe
+Legacy net: C:\Users\djime\Documents\Chess_variants\Codex\Fairy-Stockfish organization\Atomic Project\atomic_run3b_e202_l05.nnue
+Legacy net SHA-256: 99DC67EABF26A64FAEECA3A88B4C38597A840B8D4A874B9F2CF658C6F92A04A6
+Corpus: positions=10000, seed=20260710, max_plies=120
+Corpus sources: adjacent_kings=1657, atomic960_castling=1672, atomic960_castling_constraint=1525, atomic_en_passant=1372, atomic_startpos=919, capture_promotion=1627, explosion_bycatch=1228
+Corpus SHA-256: 46C96F405BC15D468D94BC1E2186B577CE55128832E1108066581D35037FA2DE
+Checked 250/10000 positions; max true delta=0.000000, max pure-trace delta=0.005000
+Checked 500/10000 positions; max true delta=0.000000, max pure-trace delta=0.005000
+Checked 750/10000 positions; max true delta=0.000000, max pure-trace delta=0.005000
+Checked 1000/10000 positions; max true delta=0.000000, max pure-trace delta=0.005000
+Checked 1250/10000 positions; max true delta=0.000000, max pure-trace delta=0.005000
+Checked 1500/10000 positions; max true delta=0.000000, max pure-trace delta=0.005000
+Checked 1750/10000 positions; max true delta=0.000000, max pure-trace delta=0.005000
+Checked 2000/10000 positions; max true delta=0.000000, max pure-trace delta=0.005000
+Checked 2250/10000 positions; max true delta=0.000000, max pure-trace delta=0.005000
+Checked 2500/10000 positions; max true delta=0.000000, max pure-trace delta=0.005000
+Checked 2750/10000 positions; max true delta=0.000000, max pure-trace delta=0.005000
+Checked 3000/10000 positions; max true delta=0.000000, max pure-trace delta=0.005000
+Checked 3250/10000 positions; max true delta=0.000000, max pure-trace delta=0.005000
+Checked 3500/10000 positions; max true delta=0.000000, max pure-trace delta=0.005000
+Checked 3750/10000 positions; max true delta=0.000000, max pure-trace delta=0.005000
+Checked 4000/10000 positions; max true delta=0.000000, max pure-trace delta=0.005000
+Checked 4250/10000 positions; max true delta=0.000000, max pure-trace delta=0.005000
+Checked 4500/10000 positions; max true delta=0.000000, max pure-trace delta=0.005000
+Checked 4750/10000 positions; max true delta=0.000000, max pure-trace delta=0.005000
+Checked 5000/10000 positions; max true delta=0.000000, max pure-trace delta=0.005000
+Checked 5250/10000 positions; max true delta=0.000000, max pure-trace delta=0.005000
+Checked 5500/10000 positions; max true delta=0.000000, max pure-trace delta=0.005000
+Checked 5750/10000 positions; max true delta=0.000000, max pure-trace delta=0.005000
+Checked 6000/10000 positions; max true delta=0.000000, max pure-trace delta=0.005000
+Checked 6250/10000 positions; max true delta=0.000000, max pure-trace delta=0.005000
+Checked 6500/10000 positions; max true delta=0.000000, max pure-trace delta=0.005000
+Checked 6750/10000 positions; max true delta=0.000000, max pure-trace delta=0.005000
+Checked 7000/10000 positions; max true delta=0.000000, max pure-trace delta=0.005000
+Checked 7250/10000 positions; max true delta=0.000000, max pure-trace delta=0.005000
+Checked 7500/10000 positions; max true delta=0.000000, max pure-trace delta=0.005000
+Checked 7750/10000 positions; max true delta=0.000000, max pure-trace delta=0.005000
+Checked 8000/10000 positions; max true delta=0.000000, max pure-trace delta=0.005000
+Checked 8250/10000 positions; max true delta=0.000000, max pure-trace delta=0.005000
+Checked 8500/10000 positions; max true delta=0.000000, max pure-trace delta=0.005000
+Checked 8750/10000 positions; max true delta=0.000000, max pure-trace delta=0.005000
+Checked 9000/10000 positions; max true delta=0.000000, max pure-trace delta=0.005000
+Checked 9250/10000 positions; max true delta=0.000000, max pure-trace delta=0.005000
+Checked 9500/10000 positions; max true delta=0.000000, max pure-trace delta=0.005000
+Checked 9750/10000 positions; max true delta=0.000000, max pure-trace delta=0.005000
+Checked 10000/10000 positions; max true delta=0.000000, max pure-trace delta=0.005000
+Legacy Atomic V1 differential passed: 10000/10000 positions; max true delta=0.000000; max rule50 oracle delta=0.740000; max pure-trace delta=0.005000; rule50-damped=866
+Pure limitation: frozen Fairy exposes only a two-decimal unadjusted NNUE trace; pure equivalence is trace-precision plus candidate internal-consistency, not a bit-exact raw-oracle comparison.
+
+Hito 5 release validation passed: incremental-operations=1000000 structural-positions=10000 capture-forced-refresh=0

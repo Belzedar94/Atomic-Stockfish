@@ -109,6 +109,8 @@ ATOMIC_UNIT_TEST_EXE  = atomic-unit-tests$(ATOMIC_TEST_EXE_SUFFIX)
 ATOMIC_UNIT_TEST_OBJS = $(filter-out main.o,$(OBJS)) atomic_see_tests.o
 ATOMIC_API_TEST_EXE   = atomic-api-tests$(ATOMIC_TEST_EXE_SUFFIX)
 ATOMIC_API_TEST_OBJS  = $(filter-out main.o,$(OBJS)) atomic_board.o atomic_fen.o atomic_api_tests.o
+ATOMIC_SYZYGY_DRIVER_EXE  = atomic-syzygy-driver$(ATOMIC_TEST_EXE_SUFFIX)
+ATOMIC_SYZYGY_DRIVER_OBJS = attacks.o bitboard.o misc.o movegen.o position.o tbprobe.o ucioption.o atomic_syzygy_driver.o
 ATOMIC_NNUE_INCREMENTAL_TEST_EXE  = atomic-nnue-incremental-tests$(ATOMIC_TEST_EXE_SUFFIX)
 ATOMIC_NNUE_INCREMENTAL_TEST_OBJS = $(filter-out main.o,$(OBJS)) atomic_nnue_incremental_tests.o
 
@@ -1041,6 +1043,7 @@ help:
 	echo "build                   > skip profile-guided optimization" && \
 	echo "atomic-unit-tests       > build and run Atomic C++ unit tests" && \
 	echo "atomic-api-tests        > build and run Atomic shared-API unit tests" && \
+	echo "atomic-syzygy-driver    > build the standalone Atomic Syzygy probe driver" && \
 	echo "atomic-nnue-incremental-tests > verify LegacyAtomicV1 incremental updates" && \
 	echo "macos-lipo              > macOS x86-64 + Apple silicon universal binary" && \
 	echo "net                     > Download the default nnue nets" && \
@@ -1113,7 +1116,7 @@ ifneq ($(SUPPORTED_ARCH), true)
 endif
 
 
-.PHONY: help analyze build profile-build atomic-unit-tests atomic-api-tests atomic-nnue-incremental-tests macos-lipo strip install clean net \
+.PHONY: help analyze build profile-build atomic-unit-tests atomic-api-tests atomic-syzygy-driver atomic-nnue-incremental-tests macos-lipo strip install clean net \
 	objclean profileclean config-sanity \
 	icx-profile-use icx-profile-make \
 	gcc-profile-use gcc-profile-make \
@@ -1235,7 +1238,7 @@ clean: objclean profileclean universalclean
 
 # clean binaries and objects
 objclean:
-	@rm -f stockfish stockfish.exe atomic-stockfish atomic-stockfish.exe atomic-stockfish.js atomic-unit-tests atomic-unit-tests.exe atomic-unit-tests.bin atomic-api-tests atomic-api-tests.exe atomic-api-tests.bin atomic-nnue-incremental-tests atomic-nnue-incremental-tests.exe atomic-nnue-incremental-tests.bin *.o ./api/*.o ./syzygy/*.o ./nnue/*.o ./nnue/features/*.o $(BUILD_SHA_FILE) $(BUILD_DATE_FILE)
+	@rm -f stockfish stockfish.exe atomic-stockfish atomic-stockfish.exe atomic-stockfish.js atomic-unit-tests atomic-unit-tests.exe atomic-unit-tests.bin atomic-api-tests atomic-api-tests.exe atomic-api-tests.bin atomic-syzygy-driver* atomic-nnue-incremental-tests atomic-nnue-incremental-tests.exe atomic-nnue-incremental-tests.bin *.o ./api/*.o ./syzygy/*.o ./nnue/*.o ./nnue/features/*.o $(BUILD_SHA_FILE) $(BUILD_DATE_FILE)
 
 # clean auxiliary profiling files
 profileclean:
@@ -1271,6 +1274,8 @@ atomic-unit-tests: config-sanity $(ATOMIC_UNIT_TEST_EXE)
 
 atomic-api-tests: config-sanity $(ATOMIC_API_TEST_EXE)
 	./$(ATOMIC_API_TEST_EXE)
+
+atomic-syzygy-driver: config-sanity .depend $(ATOMIC_SYZYGY_DRIVER_EXE)
 
 atomic-nnue-incremental-tests: config-sanity $(ATOMIC_NNUE_INCREMENTAL_TEST_EXE)
 	$(PYTHON) ../tests/atomic_nnue_incremental.py --binary ./$(ATOMIC_NNUE_INCREMENTAL_TEST_EXE) --net "$(ATOMIC_NNUE_TEST_NET)" --mode "$(ATOMIC_NNUE_TEST_MODE)"
@@ -1355,6 +1360,9 @@ $(ATOMIC_UNIT_TEST_EXE): $(ATOMIC_UNIT_TEST_OBJS)
 $(ATOMIC_API_TEST_EXE): $(ATOMIC_API_TEST_OBJS)
 	+$(CXX) -o $@ $(ATOMIC_API_TEST_OBJS) $(LDFLAGS)
 
+$(ATOMIC_SYZYGY_DRIVER_EXE): $(ATOMIC_SYZYGY_DRIVER_OBJS)
+	+$(CXX) -o $@ $(ATOMIC_SYZYGY_DRIVER_OBJS) $(LDFLAGS)
+
 $(ATOMIC_NNUE_INCREMENTAL_TEST_EXE): $(ATOMIC_NNUE_INCREMENTAL_TEST_OBJS)
 	+$(CXX) -o $@ $(ATOMIC_NNUE_INCREMENTAL_TEST_OBJS) $(LDFLAGS)
 
@@ -1363,6 +1371,9 @@ atomic_see_tests.o: ../tests/atomic_see.cpp
 
 atomic_api_tests.o: ../tests/atomic_api.cpp
 	$(strip $(CXX) $(CPPFLAGS) $(CXXFLAGS) -fexceptions) -I. -c -o $@ $<
+
+atomic_syzygy_driver.o: ../tests/atomic_syzygy_driver.cpp $(HEADERS)
+	$(strip $(CXX) $(CPPFLAGS) $(CXXFLAGS)) -I. -c -o $@ $<
 
 atomic_board.o: api/atomic_board.cpp
 	$(strip $(CXX) $(CPPFLAGS) $(CXXFLAGS) -fexceptions) -c -o $@ $<

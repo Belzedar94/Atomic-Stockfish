@@ -14,6 +14,7 @@
 #include "bitboard.h"
 #include "movegen.h"
 #include "position.h"
+#include "search.h"
 #include "types.h"
 #include "uci_move.h"
 
@@ -443,6 +444,117 @@ bool expect_uci_move_notation() {
     return true;
 }
 
+bool expect_atomic_move_count_thresholds() {
+    struct ThresholdCase {
+        bool improving;
+        int  depth;
+        int  expected;
+    };
+
+    constexpr std::array<ThresholdCase, 6> tests = {
+      {{false, 3, 4}, {false, 4, 7}, {false, 6, 13}, {true, 3, 7}, {true, 4, 10}, {true, 6, 20}}};
+
+    bool ok = true;
+    for (const auto& test : tests)
+    {
+        const int actual = Search::atomic_move_count_pruning_threshold(test.improving, test.depth);
+        if (actual != test.expected)
+        {
+            std::cerr << "FAIL Atomic move-count threshold: improving=" << test.improving
+                      << " depth=" << test.depth << " expected=" << test.expected
+                      << " actual=" << actual << '\n';
+            ok = false;
+        }
+        else
+            std::cout << "PASS Atomic move-count threshold improving=" << test.improving
+                      << " depth=" << test.depth << " threshold=" << actual << '\n';
+    }
+
+    return ok;
+}
+
+bool expect_atomic_null_move_reductions() {
+    struct ReductionCase {
+        int depth;
+        int expected;
+    };
+
+    constexpr std::array<ReductionCase, 7> tests = {
+      {{1, 6}, {3, 7}, {6, 8}, {9, 9}, {15, 11}, {16, 11}, {18, 12}}};
+
+    bool ok = true;
+    for (const auto& test : tests)
+    {
+        const int actual = Search::atomic_null_move_reduction(test.depth);
+        if (actual != test.expected)
+        {
+            std::cerr << "FAIL Atomic null-move reduction: depth=" << test.depth
+                      << " expected=" << test.expected << " actual=" << actual << '\n';
+            ok = false;
+        }
+        else
+            std::cout << "PASS Atomic null-move reduction depth=" << test.depth
+                      << " reduction=" << actual << '\n';
+    }
+
+    return ok;
+}
+
+bool expect_atomic_capture_futility_eligibility() {
+    struct EligibilityCase {
+        std::string_view name;
+        std::string_view fen;
+        std::string_view move;
+        bool             expected;
+    };
+
+    constexpr std::array<EligibilityCase, 6> tests = {{
+      {"normal victim only", "7k/8/8/8/3p4/2B5/8/K7 w - - 0 1", "c3d4", true},
+      {"adjacent pawn survives", "7k/8/8/8/3pP3/2B5/8/K7 w - - 0 1", "c3d4", true},
+      {"non-pawn explosion bycatch", "7k/8/8/8/3pR3/2B5/8/K7 w - - 0 1", "c3d4", false},
+      {"en passant", "7k/8/8/3pP3/8/8/8/K7 w - d6 0 1", "e5d6", false},
+      {"capture promotion", "k5br/6P1/8/8/8/8/8/K7 w - - 0 1", "g7h8q", false},
+      {"quiet normal move",
+       "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", "e2e4", false},
+    }};
+
+    bool ok = true;
+    for (const auto& test : tests)
+    {
+        Position  pos;
+        StateInfo state{};
+        if (pos.set(std::string(test.fen), false, &state))
+        {
+            std::cerr << "FAIL Atomic capture-futility eligibility " << test.name
+                      << ": invalid fixture\n";
+            ok = false;
+            continue;
+        }
+
+        const Move move = UCI::to_move(pos, std::string(test.move));
+        if (!move)
+        {
+            std::cerr << "FAIL Atomic capture-futility eligibility " << test.name
+                      << ": move is not legal\n";
+            ok = false;
+            continue;
+        }
+
+        const bool actual = Search::atomic_capture_futility_eligible(pos, move);
+        if (actual != test.expected)
+        {
+            std::cerr << "FAIL Atomic capture-futility eligibility " << test.name
+                      << ": expected=" << test.expected << " actual=" << actual << '\n';
+            ok = false;
+        }
+        else
+            std::cout << "PASS Atomic capture-futility eligibility " << test.name
+                      << " eligible=" << actual << '\n';
+    }
+
+    return ok;
+}
+
 }  // namespace
 
 int main() {
@@ -461,11 +573,14 @@ int main() {
     ok &= expect_repetition_state();
     ok &= expect_rule50_state();
     ok &= expect_uci_move_notation();
+    ok &= expect_atomic_move_count_thresholds();
+    ok &= expect_atomic_null_move_reductions();
+    ok &= expect_atomic_capture_futility_eligibility();
 
     if (!ok)
         return 1;
 
-    constexpr usize TestCount = SeeCases.size() + 3 + 7 + 8 + 14 + 3;
+    constexpr usize TestCount = SeeCases.size() + 3 + 7 + 8 + 14 + 3 + 6 + 7 + 6;
     std::cout << "Atomic C++ unit tests passed: " << TestCount << "/" << TestCount << '\n';
     return 0;
 }

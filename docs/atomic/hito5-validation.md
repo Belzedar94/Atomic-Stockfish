@@ -2,9 +2,17 @@
 
 Hito 5 is the release gate for the legacy Atomic NNUE backend. Its default
 runner is `tests/run_hito5.py`; invoking it without `--mode` selects the
-normative `release` contract. The complete release invocation passed on
-2026-07-11 with freshly rebuilt native, Python, JavaScript and UCI/NNUE WASM
-artifacts.
+normative `release` contract. The native, Python, JavaScript and UCI/NNUE WASM
+release matrix passed on 2026-07-11 with freshly rebuilt artifacts. The first
+cross-repository E2E used a fully fingerprinted but dirty local tools/trainer
+snapshot. The stricter clean, commit-pinned public-CI closeout described below
+is now part of the release contract. Both profiles passed for the pinned
+candidate: `strong-local` on exact clean Atomic head
+`e0b58ebd9c171eb8555dbb2827ccdf90c7f5a924`, and `synthetic-ci` in GitHub
+Actions run `29177376824`, job `86608800030`. The pull-request run is associated
+with head `e0b58ebd`, but checked out and tested synthetic merge commit
+`7968672f37f537aed6eeff169e5524f91a88f853` against base
+`753060ade187cf6b74428dd4f929b7380d6073a0`.
 
 `Use NNUE=true` is the playing mode and is mandatory for all Elo/LOS gates.
 `Use NNUE=pure` exists for data generation: it exposes the unadjusted network
@@ -20,6 +28,7 @@ mode.
 | NNUE modes | `false`, `true` and `pure`; invalid networks reject `go` without killing UCI |
 | NNUE export | Export/import is byte-exact for the frozen Legacy Atomic V1 network |
 | UCI/NNUE WASM | Supported Node launcher, external SHA-pinned network, true/pure and reproducible manifest |
+| Cross-repository pipeline | Required in release: clean SHA-pinned tools, trainer and Atomic checkouts; generate twice with `pure`, validate/decode, train one Ranger step, serialize/reimport and load the resulting network in the native engine |
 | Incremental accumulator | Exactly 1,000,000 deterministic make/undo operations plus fixed special-move fixtures |
 | Atomic captures | At least one capture exercised and exact marker `capture-forced-refresh=0` |
 | Full refresh | Incremental raw output, scaled true/pure values and accumulator lanes equal a fresh accumulator |
@@ -42,6 +51,39 @@ In release mode the deterministic 10,000-position corpus must be exactly
 smoke mode prints its smaller corpus hash but does not compare it with the
 release constant.
 
+### Reproducible multi-repository profiles
+
+`tests/legacy_pipeline.lock.json` is the single machine-readable lock for the
+two sibling repositories and both data-generation profiles. Repository entries
+name `Belzedar94/variant-nnue-tools` and
+`Belzedar94/variant-nnue-pytorch` and accept only full 40-character commits.
+The release reader rejects the all-zero placeholder, an unresolved status,
+the wrong HEAD, a dirty checkout, or an engine artifact outside its asserted
+checkout. Atomic-Stockfish itself must also be clean; CI supplies its exact
+checked-out HEAD because a repository cannot pin its own future merge commit.
+
+The profiles deliberately serve different purposes:
+
+| Profile | Source network | Use |
+| --- | --- | --- |
+| `strong-local` | External `atomic_run3b_e202_l05.nnue`, SHA-256 `99DC67EABF26A64FAEECA3A88B4C38597A840B8D4A874B9F2CF658C6F92A04A6` | Normative local release and real dataset-pipeline compatibility |
+| `synthetic-ci` | Ephemeral zero-weight HalfKAv2 network created by the pinned trainer's model and Legacy V1 serializer | Public CI without downloading or redistributing the strong network |
+
+Both profiles hard-pin record count, seed, source-network hash and generated
+72-byte data hash. The synthetic constructor zeroes every trainer parameter
+before serialization, so its bytes do not depend on PyTorch RNG or BLAS
+behavior. It is not a playing network and is never used for Elo/LOS. The lock
+pins the reviewed tools and trainer commits plus the measured synthetic source
+SHA-256 `9CF054CA00B82AB53A34473DE52D1104AEDDAA19B2E7B24091B5E613AF485985`
+and data SHA-256
+`95565809C53E914A192D095B18C7BAB9A0C35AF9510347DC2C63BAA385D69988`.
+The one-time
+`--profile synthetic-ci --measure-synthetic-fixture` E2E invocation prints the
+two observed hashes with an explicit `NON-RELEASE` marker and deliberately
+returns a failing CI job after all postflights pass. Those values are now in the
+lock and the profile is resolved; only the following run without the
+measurement flag can pass the release gate.
+
 ## Evaluation differences are diagnostic
 
 Small Fairy-versus-candidate evaluation differences are not a parity criterion
@@ -50,7 +92,11 @@ that does not indicate a rules or strength regression. Maximum true and
 pure-trace deltas are printed as telemetry. A deliberately loose finite bound
 of `0.10` pawn units only rejects gross regressions such as a broken king plane,
 orientation, bucket, or scaling; it is not used to reject a few centipawns of
-ordinary disagreement.
+ordinary disagreement. At or beyond Atomic's 100-ply draw boundary, the
+candidate must report a neutral normal trace, while the paired C++ gate proves
+that its internal `Value` is exactly zero. Fairy's historical post-boundary
+final value is diagnostic only because it can cross through zero and reverse
+sign; raw Legacy V1 parity remains checked on those positions.
 
 The structural parts remain hard failures: network loading, required UCI
 options, true/pure trace availability, identical candidate raw values between
@@ -62,7 +108,42 @@ replace those matches.
 
 ## Release invocation
 
+The three participating repositories must first be at the exact clean commits
+recorded in `tests/legacy_pipeline.lock.json`. From the Atomic-Stockfish root,
+create each artifact with its tracked recipe and write the manifests outside
+all three checkouts. The manifest generator removes the exact previous
+artifact (and the trainer's fixed build directory), builds from scratch,
+records the compiler/toolchain and refuses to overwrite an existing manifest:
+
 ```powershell
+New-Item -ItemType Directory -Force ../pipeline-manifests
+
+python tests/legacy_pipeline_build_manifest.py `
+  --recipe strong-local-tools-windows-v1 `
+  --repository-root ../variant-nnue-tools `
+  --output ../pipeline-manifests/tools-build.json
+
+python tests/legacy_pipeline_build_manifest.py `
+  --recipe strong-local-trainer-windows-v1 `
+  --repository-root ../variant-nnue-pytorch `
+  --output ../pipeline-manifests/trainer-build.json
+
+python tests/legacy_pipeline_build_manifest.py `
+  --recipe strong-local-atomic-windows-v1 `
+  --repository-root . `
+  --output ../pipeline-manifests/atomic-build.json
+```
+
+Run the global workload preflight before each of those build/test workloads.
+On Windows the tracked recipes require
+`C:\msys64\usr\bin\bash.exe` with MinGW64 for both engines and Visual Studio
+2022 x64 plus CMake for the trainer. The output paths above are deliberately
+outside every checkout: putting a manifest inside a repository would make that
+repository dirty and invalidate the release gate.
+
+```powershell
+make -C src -j2 ARCH=x86-64-avx2 COMP=mingw atomic-syzygy-driver
+
 python tests/run_hito5.py `
   --native src/atomic-stockfish.exe `
   --net ../atomic_run3b_e202_l05.nnue `
@@ -70,8 +151,43 @@ python tests/run_hito5.py `
   --cjs tests/js/dist/cjs/ffish.js `
   --esm tests/js/dist/esm/ffish.mjs `
   --tables ../research/shakmaty/shakmaty-syzygy/tables/atomic `
-  --wasm-wrapper build/wasm-engine/atomic-stockfish-nnue-node.mjs
+  --wasm-wrapper build/wasm-engine/atomic-stockfish-nnue-node.mjs `
+  --pipeline-tools-engine ../variant-nnue-tools/src/stockfish.exe `
+  --pipeline-trainer-root ../variant-nnue-pytorch `
+  --pipeline-tools-build-manifest ../pipeline-manifests/tools-build.json `
+  --pipeline-trainer-build-manifest ../pipeline-manifests/trainer-build.json `
+  --pipeline-atomic-build-manifest ../pipeline-manifests/atomic-build.json
 ```
+
+The two checkout/artifact paths and all three clean-build manifests form one
+all-or-none set of five `--pipeline-*` inputs and are mandatory in release
+mode. The runner invokes the `strong-local` profile of
+`tests/legacy_pipeline_e2e.py` under a whole-process timeout and reuses the
+SHA-pinned `--net` as its `pure` source network. The E2E independently enforces
+the lock, exact HEADs, clean worktrees, artifact containment and a strict
+manifest-to-artifact match. It also records the exact CPython identity and the
+installed torch, NumPy, PyTorch Lightning and torchmetrics versions and
+origins. Every runtime/imported artifact used at preflight contributes to a
+per-dependency and whole-environment SHA-256 manifest and is rehashed after the
+training step; lazily imported additions are accepted only after ownership and
+same-distribution origin validation. Smoke mode may omit the complete
+five-input set;
+it then emits the exact
+`LEGACY PIPELINE E2E NOT REQUESTED (NON-RELEASE)` marker. Supplying only one
+or any incomplete subset, omitting the set in release, a missing tools binary,
+an unbuilt trainer checkout or a stale manifest is a hard configuration error.
+
+Public CI uses the separate `synthetic-ci` profile. Its dedicated job checks
+out both sibling repositories at the lock SHAs, clean-builds and runs the tools
+and trainer internal suites, clean-builds Atomic-Stockfish, re-verifies all
+three checkouts, and finally executes the same decode/train/serialize/load E2E.
+Its Python 3.10 dependency closure is generated from
+`tests/legacy_pipeline-ci-requirements.in`, contains hashes for every direct
+and transitive distribution, is itself SHA-pinned by the workflow, and is
+installed with `pip --require-hashes`. The pinned pip bootstrap is a separate
+hash-locked requirements file whose own SHA-256 is checked first; no installer
+or package byte is accepted by version alone. No CI secret or strong-network
+download is required.
 
 Release mode cannot reduce the fixed one-million operations or 10,000
 positions. Its final success marker is:
@@ -120,10 +236,10 @@ reported:
 The runner emitted `Hito 5 smoke validation passed (NON-RELEASE)` before the
 normative release run.
 
-## Verified release snapshot
+## Verified engine/backend release snapshot
 
-The complete runner subsequently emitted the exact release marker documented
-above. Its NNUE-specific evidence was:
+The complete engine/backend runner subsequently emitted the exact release
+marker documented above. Its NNUE-specific evidence was:
 
 - exactly `1,000,000` random actions: `500,000` makes and `500,000` undos;
 - `18,761` Atomic captures and `capture-forced-refresh=0`;
@@ -133,7 +249,12 @@ above. Its NNUE-specific evidence was:
 - perspective-local refreshes: white `62,282`, black `177,921`;
 - diagnostic differential `10,000/10,000` with corpus SHA-256
   `46C96F405BC15D468D94BC1E2186B577CE55128832E1108066581D35037FA2DE`;
-- informational maximum deltas: final `0.000000`, raw Fairy trace `0.005000`;
+- rule-50 differential units `3/3`; the fixed corpus exercised `866`
+  positions at or beyond 100 reversible plies, with the candidate's displayed
+  normal evaluation neutral in every case and exact internal zero proved by
+  the C++ gate;
+- informational maximum deltas: comparable final `0.000000`, historical
+  Fairy post-boundary final `0.740000`, raw Fairy trace `0.005000`;
 - directed rejection of mutated version, architecture hash, transformer hash,
   layer-stack hash, trailing bytes, generic garbage and truncation, with
   valid-network recovery after every failure;
@@ -175,7 +296,7 @@ identical to its merge parent.
   scheduling; native TSan remains the race detector in Atomic CI because TSan
   cannot disable ASLR inside the local Docker VM.
 
-## Current performance snapshot
+## Historical Hito 5 performance snapshot
 
 The final Hito 5 paired run used the fixed 13-position corpus (SHA-256
 `2738065A8A70D61DA46FA3C75F95D645E50E601B43792DF0E7B3CC97B1D891A1`), one
@@ -183,8 +304,13 @@ thread, 64 MiB hash, CPU 0, one warm-up and five measured repetitions at
 100,000 nodes per position. Atomic-Stockfish's median was `713,466 NPS`; the
 frozen Fairy baseline measured `1,146,133 NPS`, for a ratio of `0.6225`.
 
-The strict project requirement is a ratio greater than `1.0`, so the current
-performance gate remains **failed** despite the incremental-accumulator gain.
+The strict project requirement is a ratio greater than `1.0`, so the
+performance gate remained **failed at the Hito 5 closeout** despite the
+incremental-accumulator gain.
 Specialization is not credited in advance; the final engine must demonstrate
 that it is faster on the shared corpus. Absolute NPS varies across runs, so the
 paired ratio under identical conditions is the governing measurement.
+
+This is the historical Hito 5 closeout measurement. Hito 6 removed the
+FullThreats overhead, vectorized the legacy accumulator and passed the same
+paired gate; see `hito6-validation.md` for the superseding result.

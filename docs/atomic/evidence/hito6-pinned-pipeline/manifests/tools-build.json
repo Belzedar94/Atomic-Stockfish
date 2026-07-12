@@ -1,0 +1,32 @@
+{
+  "artifact": {
+    "bytes": 5545770,
+    "path": "C:\\Users\\djime\\Documents\\Chess_variants\\Codex\\Fairy-Stockfish organization\\Atomic Project\\variant-nnue-tools\\src\\stockfish.exe",
+    "sha256": "3646D5B86A0596E085A01556B24907BF281D5FACAA254174DE7B031EA3A5CE73"
+  },
+  "build": {
+    "commands": [
+      [
+        "C:\\msys64\\usr\\bin\\bash.exe",
+        "-lc",
+        "export PATH=/mingw64/bin:$PATH; cd '/c/Users/djime/Documents/Chess_variants/Codex/Fairy-Stockfish organization/Atomic Project/variant-nnue-tools' && make -C src ARCH=x86-64 COMP=mingw all=no largeboards=no nnue=no clean"
+      ],
+      [
+        "C:\\msys64\\usr\\bin\\bash.exe",
+        "-lc",
+        "export PATH=/mingw64/bin:$PATH; cd '/c/Users/djime/Documents/Chess_variants/Codex/Fairy-Stockfish organization/Atomic Project/variant-nnue-tools' && make -C src -j2 ARCH=x86-64 COMP=mingw all=no largeboards=no nnue=no build"
+      ]
+    ],
+    "log_sha256": "79B24B3353829946C9F310F3B931207101151F4F1CF45784023D759466898288",
+    "recorded_utc": "2026-07-12T02:46:50.233073+00:00",
+    "toolchain": "Fairy-Stockfish 120726 by Fabian Fichter\n\nCompiled by g++ (GNUC) 15.2.0 on MinGW64\nCompilation settings include:  64bit SSE2\n__VERSION__ macro expands to: 15.2.0"
+  },
+  "recipe": "strong-local-tools-windows-v1",
+  "repository": {
+    "clean": true,
+    "commit": "22c271c30641134109252e0665a98837d4f74ba8",
+    "root": "C:\\Users\\djime\\Documents\\Chess_variants\\Codex\\Fairy-Stockfish organization\\Atomic Project\\variant-nnue-tools"
+  },
+  "role": "tools",
+  "schema": "legacy-atomic-v1-clean-build-v1"
+}

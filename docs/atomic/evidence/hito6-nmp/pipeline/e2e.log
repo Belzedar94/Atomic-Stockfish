@@ -1,0 +1,20 @@
+timestamp_utc=2026-07-11T16:41:23.9479939Z
+attempt=2
+engine_commit=0c45a9bf711814621607f3d0bed546a026cdf4d1
+engine_tree=f92e23c5104bf30d7e909be558ef23934c401d14
+engine_sha256=FBF26ABDA7AF8701B2E6B4F0F8D8A18EB385C871ECC66E0E0580DA8BA1E42DB2
+tools_commit=c8df2c39515a2654d5b52ba55b4ee585b20430a8
+tools_sha256=CC17E29E8B4953A2219F3AB63FDF25180DBBF5B3D6AA1CFBCBDE17DC75A024F1
+trainer_commit=b15df38a9aae8ab9b40b2378020b3099c7c5d179
+trainer_loader_sha256=F4349EA5125F13F807087BA5EC15FE4801B6A3567A847B5598CD7741D787DFF7
+source_net_sha256=99DC67EABF26A64FAEECA3A88B4C38597A840B8D4A874B9F2CF658C6F92A04A6
+records=8
+seed=20260711
+C:\Users\djime\AppData\Local\Programs\Python\Python312\Lib\site-packages\cupy\_environment.py:215: UserWarning: CUDA path could not be detected. Set CUDA_PATH environment variable if CuPy fails to load.
+  warnings.warn(
+C:\Users\djime\AppData\Local\Programs\Python\Python312\Lib\site-packages\pytorch_lightning\core\module.py:428: UserWarning: You are trying to `self.log()` but the `self.trainer` reference is not registered on the model yet. This is most likely because the model hasn't been passed to the `Trainer`
+  rank_zero_warn(
+Ranger optimizer loaded.
+Gradient Centralization usage = False
+LEGACY PIPELINE E2E PASSED records=8 source_sha256=99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f92a04a6 data_sha256=7de72b1385dbc8e37312a513d1cf4c7d99f889ec8b747f548ed32e8d7a261a2d nnue_sha256=a69fb0a7dc211aa4d8bb0974ba881f6ca0f98c5fbc30e0203b9e08b99076e3dc loss=0.0347999074 ft_delta=8.66651535e-05 fc_delta=8.454262e-07 bestmove=b2b3
+exit_code=0

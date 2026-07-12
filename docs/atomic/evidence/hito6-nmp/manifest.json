@@ -1,0 +1,551 @@
+{
+  "schema": "atomic-stockfish-hito6-nmp-evidence-v2",
+  "result": "PASS",
+  "normative": true,
+  "milestone_change": {
+    "description": "shallower Atomic null-move reduction",
+    "commit": "0c45a9bf711814621607f3d0bed546a026cdf4d1",
+    "tree": "f92e23c5104bf30d7e909be558ef23934c401d14"
+  },
+  "source": {
+    "repository": "Belzedar94/Atomic-Stockfish",
+    "head": "ebfe93420c9998e4ea7dcbf4c6ba20516f1dee63",
+    "tree": "a390c1e4156fad9bff57e7d66494d01821b9aa02"
+  },
+  "external_artifacts": {
+    "candidate": {
+      "path": "reports/hito6-bmi2-ebfe9342/artifacts/Atomic-Stockfish-ebfe9342-bmi2.exe",
+      "bytes": 4264325,
+      "sha256": "47B7873E40887C213C623E45ADBADD307DA77E5EA02953BE2F1E33363F0390A0",
+      "compiler": "g++ (GNUC) 15.2.0",
+      "compiler_settings": "64bit BMI2 AVX2 SSE41 SSSE3 SSE2 POPCNT",
+      "build_manifest": {
+        "external_path": "pipeline-manifests/hito6-ebfe9342/atomic-build.json",
+        "versioned_path": "bmi2/final-ebfe9342/atomic-build.json",
+        "bytes": 1680,
+        "sha256": "169D4C1A9D93F95555FDD74B5149C7B26894CC1A1C153C35B5073C2969C9DBBC",
+        "build_log_sha256": "B634352381EB7C190F3588D164345419D8F097D6E72E0F0E0E3E9751EA1E002A"
+      }
+    },
+    "baseline": {
+      "path": "reports/fsf-baseline-fb78cb56-bmi2/artifacts/FSF-fb78cb56-bmi2-all-no-largeboards-no.exe",
+      "bytes": 4281871,
+      "sha256": "4EACAAB40DCA84F5A255EA57231F2795D43B5DDA85CE50EBBA1A1B2937B46331",
+      "repository": "fairy-stockfish/Fairy-Stockfish",
+      "commit": "fb78cb561aa01708338e35b3dc3b65a42149a3c4",
+      "tree": "dfe4b96037c10ab60e22613bf634452612fc2b04",
+      "configuration": "ARCH=x86-64-bmi2 COMP=mingw all=no largeboards=no nnue=no optimize=yes debug=no pgo=no",
+      "compiler": "g++ (GNUC) 15.2.0",
+      "compiler_settings": "64bit BMI2 AVX2 SSE41 SSSE3 SSE2 POPCNT"
+    },
+    "network": {
+      "path": "atomic_run3b_e202_l05.nnue",
+      "bytes": 47721376,
+      "sha256": "99DC67EABF26A64FAEECA3A88B4C38597A840B8D4A874B9F2CF658C6F92A04A6"
+    }
+  },
+  "test_inputs": {
+    "benchmark_corpus_runner": {
+      "path": "tests/atomic_bench.py",
+      "bytes": 4046,
+      "sha256": "78E686853FD7CF72338850D7882961A1007FA58B7C5A6C7D3E3BAB2D5430CDC5",
+      "corpus_positions": 13,
+      "corpus_sha256": "2738065A8A70D61DA46FA3C75F95D645E50E601B43792DF0E7B3CC97B1D891A1"
+    },
+    "benchmark_gate": {
+      "path": "tests/atomic_bench_compare.py",
+      "bytes": 18447,
+      "sha256": "329772E10B577BE02429BDAB25849E3A3EE0968C8703887230257A2F3C90E238"
+    },
+    "compiler_preflight": {
+      "path": "tests/atomic_compiler_preflight.py",
+      "bytes": 12639,
+      "sha256": "DF875998CABC3C34B40FEBF5C94C4576E59F84889A24CD9E71CEDCD5CC6097B0"
+    },
+    "los_gate": {
+      "path": "tests/atomic_los_gate.py",
+      "bytes": 42306,
+      "sha256": "0B84CCB5AFB652948D5DD47616A5138E7EC68F4F73E04F5B3F8E8D3B82EB241C"
+    },
+    "match_runner": {
+      "path": "C:/Users/djime/Documents/Chess_variants/Match script/variantfishtest_new1.py",
+      "bytes": 22676,
+      "sha256": "37D1790096520D9F3A1003746CDFBED59D2CC125A9B3D3192FF3399295EC9D70"
+    },
+    "stat_util": {
+      "path": "C:/Users/djime/Documents/Chess_variants/Match script/stat_util.py",
+      "bytes": 4476,
+      "sha256": "06AF2F59CC22EB17213F67D243BAFC0FB2E4BB6627026787EDE9D4CF337387EA"
+    },
+    "config": {
+      "path": "C:/Users/djime/Documents/Chess_variants/Match script/variants.ini",
+      "bytes": 74756,
+      "sha256": "30A4779FDE75B5259F732A148872AA81DCA96DA7C766238D0153A591D6624E37"
+    },
+    "book": {
+      "path": "C:/Users/djime/Documents/Chess_variants/Match script/books/atomic.epd",
+      "bytes": 394785,
+      "sha256": "28ED51C2F42E723D5E127D2D3F21C0BFA4A9B318615AFDB299B93EA62DEA2B1E"
+    },
+    "normative_runtime": {
+      "python": {
+        "implementation": "CPython",
+        "version": "3.12.0",
+        "executable_sha256": "42AC541168E97DEDB9AABD8BE335539FC41C682E414B9E8D137B164FB68683B0",
+        "runtime_sha256": "E7890E38256F04EE0B55AC5276BBF3AC61392C3A3CE150BB5497B709803E17CE"
+      },
+      "chess": {
+        "version": "0.8.0",
+        "init_sha256": "28BB8423AE3D64752713CB7430821D5B0E7CE3DC9872CA329EC3EC39FAD8EE5E",
+        "uci_sha256": "B9E5AAD44EB2047698866AB3E141B22B6744DA6A504D96268F3A330654278991"
+      },
+      "psutil": {
+        "version": "7.2.2",
+        "module_sha256": {
+          "psutil": "7B6A0675824EB1FA2FF0CB1EB36E358DC454703E51DFA4E9A0E6CCD26A159F0C",
+          "psutil._common": "6FC6BF5F86491BA962521374472570238929003CEBEA8E9B6C55224084B52BB0",
+          "psutil._ntuples": "96F42BC24549636B5707A949B7CC92E89C87F7CEA7D343A6D17821AC670DFCD2",
+          "psutil._psutil_windows": "0035450801BD7D938E9E146C5EC28E619CB5A5F4A18CDC53AC7E9734C7F94F78",
+          "psutil._pswindows": "0BBD52DCB214735BE4168D11A2AE192D5BC7265C8CF72C611179476479687F54"
+        }
+      }
+    }
+  },
+  "capture_provenance": {
+    "benchmark": {
+      "external_path": "reports/hito6-bmi2-ebfe9342/bench-reproducible-vs-fairy.log",
+      "raw": {
+        "encoding": "UTF-16LE-BOM",
+        "bytes": 3282,
+        "sha256": "A550D729053960CEC8F4D2D418B636DC5B3D948CD8A5184DE9439F5237094A7D"
+      },
+      "versioned": {
+        "path": "bmi2/final-ebfe9342/bench-reproducible-vs-fairy.log",
+        "encoding": "UTF-8",
+        "line_endings": "LF",
+        "bytes": 1619,
+        "sha256": "1AAE639BB6908137D40245472AC64738375AA37A2EE8FE7D75A66153BBABF734"
+      }
+    },
+    "tc1": {
+      "external_path": "reports/hito6-bmi2-ebfe9342/matches-reproducible/tc1-2000-20.log",
+      "raw": {
+        "encoding": "UTF-16LE-BOM",
+        "bytes": 155254,
+        "sha256": "B1ABACCE45DE5F3BB81C2424A96BB0C59086C213AB879487CCF8AE3C0F3FF556"
+      },
+      "versioned": {
+        "path": "bmi2/final-ebfe9342/tc1-2000-20.log",
+        "encoding": "UTF-8",
+        "line_endings": "LF",
+        "trailing_whitespace_stripped": true,
+        "bytes": 76622,
+        "sha256": "EBAA87422053A9E5DD28E1CFD2A595262B15DF4A7EEC27F7612F5F22285AF359"
+      }
+    },
+    "tc2": {
+      "external_path": "reports/hito6-bmi2-ebfe9342/matches-reproducible/tc2-10000-100.log",
+      "raw": {
+        "encoding": "UTF-16LE-BOM",
+        "bytes": 268176,
+        "sha256": "0E37B18EDBC861B048A32EC2EFB95B14072451EE68351FE9A9CAC71FBB8CE9B4"
+      },
+      "versioned": {
+        "path": "bmi2/final-ebfe9342/tc2-10000-100.log",
+        "encoding": "UTF-8",
+        "line_endings": "LF",
+        "trailing_whitespace_stripped": true,
+        "bytes": 132455,
+        "sha256": "B02F8065FADF2E48D4399A4EC322DF7191DA12A9F92A03978887C26C5B41733D"
+      }
+    },
+    "tc3": {
+      "external_path": "reports/hito6-bmi2-ebfe9342/matches-reproducible/tc3-30000-300.log",
+      "raw": {
+        "encoding": "UTF-16LE-BOM",
+        "bytes": 223288,
+        "sha256": "A01504138F6308DA227E5E2B5EA4730A985B75F6230E8B5EC35AD64824DA3884"
+      },
+      "versioned": {
+        "path": "bmi2/final-ebfe9342/tc3-30000-300.log",
+        "encoding": "UTF-8",
+        "line_endings": "LF",
+        "trailing_whitespace_stripped": true,
+        "bytes": 110419,
+        "sha256": "D3896FADAC0F5564373300910C20A5E0E969536D2F67A188F9FBBC8A1951EFD5"
+      }
+    }
+  },
+  "acceptance": {
+    "pipeline": {
+      "tools_commit": "22c271c30641134109252e0665a98837d4f74ba8",
+      "trainer_commit": "dafec1daa594ff7eff3dca79064ed10660702a36",
+      "engine_commit": "ebfe93420c9998e4ea7dcbf4c6ba20516f1dee63",
+      "strong_local": {
+        "evidence": "bmi2/final-ebfe9342/pipeline-strong-local-summary.log",
+        "evidence_bytes": 1563,
+        "evidence_sha256": "526B47B30FF98726802AFEE5644F4E36A3E050ECE67DD9A48D154372D3839B4C",
+        "records": 8,
+        "source_sha256": "99DC67EABF26A64FAEECA3A88B4C38597A840B8D4A874B9F2CF658C6F92A04A6",
+        "data_sha256": "7DE72B1385DBC8E37312A513D1CF4C7D99F889EC8B747F548ED32E8D7A261A2D",
+        "nnue_sha256": "A69FB0A7DC211AA4D8BB0974BA881F6CA0F98C5FBC30E0203B9E08B99076E3DC",
+        "loss": 0.0347999074,
+        "ft_delta": 0.0000866651535,
+        "fc_delta": 8.454262e-7,
+        "bestmove": "b2b3",
+        "postflights": "PASS",
+        "result": "PASS"
+      },
+      "public_synthetic_ci": {
+        "evidence": "bmi2/final-ebfe9342/pipeline-strong-local-summary.log",
+        "run_id": 29178527310,
+        "job_id": 86612025190,
+        "job_name": "Pinned Legacy Atomic V1 pipeline",
+        "result": "PASS"
+      },
+      "result": "PASS"
+    },
+    "benchmark": {
+      "evidence": "bmi2/final-ebfe9342/bench-reproducible-vs-fairy.log",
+      "positions": 13,
+      "threads": 1,
+      "hash_mb": 64,
+      "cpu_affinity": 0,
+      "nodes_per_position": 100000,
+      "warmups": 1,
+      "repetitions": 5,
+      "candidate_median_nps": 1338320,
+      "baseline_median_nps": 1165646,
+      "ratio": 1.1481,
+      "speed_delta_percent": 14.81,
+      "binary_size_delta_bytes": -17546,
+      "artifact_postflight_files": 8,
+      "result": "PASS"
+    },
+    "strength": [
+      {
+        "evidence": "bmi2/final-ebfe9342/tc1-2000-20.log",
+        "time_ms": 2000,
+        "increment_ms": 20,
+        "total": 110,
+        "wins": 50,
+        "losses": 22,
+        "draws": 38,
+        "elo": 90.43,
+        "elo_95": 53.7,
+        "normalized_elo": 111.77,
+        "pentanomial": [
+          2,
+          7,
+          17,
+          19,
+          10
+        ],
+        "draw_rate_percent": 34.55,
+        "los_display_percent": "100.0",
+        "time_losses_candidate": 0,
+        "time_losses_baseline": 0,
+        "engine_process_postflight": "PASS",
+        "artifact_postflight_files": 17,
+        "complete_pairs": true,
+        "result": "PASS"
+      },
+      {
+        "evidence": "bmi2/final-ebfe9342/tc2-10000-100.log",
+        "time_ms": 10000,
+        "increment_ms": 100,
+        "total": 184,
+        "wins": 66,
+        "losses": 33,
+        "draws": 85,
+        "elo": 62.99,
+        "elo_95": 37,
+        "normalized_elo": 85.88,
+        "pentanomial": [
+          1,
+          7,
+          47,
+          32,
+          5
+        ],
+        "draw_rate_percent": 46.2,
+        "los_display_percent": "100.0",
+        "time_losses_candidate": 0,
+        "time_losses_baseline": 0,
+        "engine_process_postflight": "PASS",
+        "artifact_postflight_files": 17,
+        "complete_pairs": true,
+        "result": "PASS"
+      },
+      {
+        "evidence": "bmi2/final-ebfe9342/tc3-30000-300.log",
+        "time_ms": 30000,
+        "increment_ms": 300,
+        "total": 136,
+        "wins": 46,
+        "losses": 19,
+        "draws": 71,
+        "elo": 69.9,
+        "elo_95": 40.4,
+        "normalized_elo": 101.12,
+        "pentanomial": [
+          0,
+          3,
+          37,
+          26,
+          2
+        ],
+        "draw_rate_percent": 52.21,
+        "los_display_percent": "100.0",
+        "time_losses_candidate": 0,
+        "time_losses_baseline": 0,
+        "engine_process_postflight": "PASS",
+        "artifact_postflight_files": 17,
+        "complete_pairs": true,
+        "result": "PASS"
+      }
+    ]
+  },
+  "package": {
+    "root": "docs/atomic/evidence/hito6-nmp",
+    "manifest_self_included": false,
+    "file_count": 47,
+    "files": [
+      {
+        "path": "bindings/manifest.json",
+        "bytes": 11596,
+        "sha256": "B9551E5C7BB2113C4952E9441122040AF637B050CFFFEC27787E87E1CC8A1705"
+      },
+      {
+        "path": "bmi2/bench-reproducible-vs-fairy.log",
+        "bytes": 3262,
+        "sha256": "DDA7C37F70C22CE34522C86DE22186B482CBFA56C16D6929ACE4E483C511E8A2"
+      },
+      {
+        "path": "bmi2/bench-vs-block3.log",
+        "bytes": 2458,
+        "sha256": "2C583BFC6805D232F03DA8F867FB9BBA5E250BDEDACC6838FAD05BE5D7C7042B"
+      },
+      {
+        "path": "bmi2/bench-vs-fairy.log",
+        "bytes": 2480,
+        "sha256": "7B1A1E7A20F0C097F9715B1C233348CA5F555F5943C65A85256DC1D91AFEA6C4"
+      },
+      {
+        "path": "bmi2/candidate-build-pass1.log",
+        "bytes": 30718,
+        "sha256": "D8D2B99B878861028A64DCCC5530E6D3C65D063F1323471842105FF265DB0DC8"
+      },
+      {
+        "path": "bmi2/candidate-build-pass2.log",
+        "bytes": 30718,
+        "sha256": "D8D2B99B878861028A64DCCC5530E6D3C65D063F1323471842105FF265DB0DC8"
+      },
+      {
+        "path": "bmi2/classical-tc2-curiosity.log",
+        "bytes": 125074,
+        "sha256": "BDCB2E1D1EBB0B3CCF5F21197CE47DC3722A30E6D7E5CB119CB9CD86B83FB1EE"
+      },
+      {
+        "path": "bmi2/compiler-preflight.log",
+        "bytes": 1026,
+        "sha256": "2E52B376B4AA922721DAB5A048B379F8A497550F198D4823BBA82D1137265336"
+      },
+      {
+        "path": "bmi2/fairy-baseline-manifest.json",
+        "bytes": 4466,
+        "sha256": "B28C204785D95AE1E5B19DEF7630230825F74A60B7A2354BC15292AA26508646"
+      },
+      {
+        "path": "bmi2/final-ebfe9342/atomic-build.json",
+        "bytes": 1680,
+        "sha256": "169D4C1A9D93F95555FDD74B5149C7B26894CC1A1C153C35B5073C2969C9DBBC"
+      },
+      {
+        "path": "bmi2/final-ebfe9342/bench-reproducible-vs-fairy.log",
+        "bytes": 1619,
+        "sha256": "1AAE639BB6908137D40245472AC64738375AA37A2EE8FE7D75A66153BBABF734"
+      },
+      {
+        "path": "bmi2/final-ebfe9342/pipeline-strong-local-summary.log",
+        "bytes": 1563,
+        "sha256": "526B47B30FF98726802AFEE5644F4E36A3E050ECE67DD9A48D154372D3839B4C"
+      },
+      {
+        "path": "bmi2/final-ebfe9342/tc1-2000-20.log",
+        "bytes": 76622,
+        "sha256": "EBAA87422053A9E5DD28E1CFD2A595262B15DF4A7EEC27F7612F5F22285AF359"
+      },
+      {
+        "path": "bmi2/final-ebfe9342/tc2-10000-100.log",
+        "bytes": 132455,
+        "sha256": "B02F8065FADF2E48D4399A4EC322DF7191DA12A9F92A03978887C26C5B41733D"
+      },
+      {
+        "path": "bmi2/final-ebfe9342/tc3-30000-300.log",
+        "bytes": 110419,
+        "sha256": "D3896FADAC0F5564373300910C20A5E0E969536D2F67A188F9FBBC8A1951EFD5"
+      },
+      {
+        "path": "bmi2/native-final-smoke.log",
+        "bytes": 365,
+        "sha256": "DA15BE184AB12F31F53F7E1E62176A58B4EDD4702E2CE538456D37144B5A3BB2"
+      },
+      {
+        "path": "bmi2/posthoc-normative-preflight.log",
+        "bytes": 6244,
+        "sha256": "6A545AF088D5629F5BBA87100A30C9E8B18594295E92B4861BB4052B0EE72AF7"
+      },
+      {
+        "path": "bmi2/reproducibility.log",
+        "bytes": 1161,
+        "sha256": "BC02C52A649FBA1DAC09C2C472ADEFB85A6D0F45C6CC3280BB54804E6F7CEE75"
+      },
+      {
+        "path": "bmi2/tc1-2000-20.log",
+        "bytes": 151716,
+        "sha256": "D4A8CA60855D0E6E9F897494F9560BF1192F285B9BAF4E54AF9337B1592B4C90"
+      },
+      {
+        "path": "bmi2/tc2-10000-100.log",
+        "bytes": 172196,
+        "sha256": "5FBAC4B0987796244F2FF5886A1E7D674EC01390DC309844DE896EE4D3E16D51"
+      },
+      {
+        "path": "bmi2/tc3-30000-300.log",
+        "bytes": 205258,
+        "sha256": "5059A326F6A3164CA5048F4E33CDFCFFCEC3283F2FCCE5A63FBE6C75B4CFCD68"
+      },
+      {
+        "path": "diagnostic-counters.log",
+        "bytes": 6274,
+        "sha256": "1D40421F700F32B0F6C183821734B725F6388B5E9F2DEFBD86CCAFE74C870BB6"
+      },
+      {
+        "path": "historical-avx2-vs-sse/README.md",
+        "bytes": 381,
+        "sha256": "F9F94DC589856845B0223CF9746BDCE0F0E77ECB58BE790534DB942EA638BACF"
+      },
+      {
+        "path": "historical-avx2-vs-sse/speed-vs-block3.log",
+        "bytes": 1210,
+        "sha256": "33608CA2CEB8A89A6DB6E39A65CBB6CB70570FABE665C47AF4B4FEFDBD70466E"
+      },
+      {
+        "path": "historical-avx2-vs-sse/speed-vs-fairy.log",
+        "bytes": 1222,
+        "sha256": "489CEA9762BFFA2A1E8E44BB34735F5EAD5E54E2DA29B0479025B6E047A5E811"
+      },
+      {
+        "path": "historical-avx2-vs-sse/tc1-2000-20.log",
+        "bytes": 80331,
+        "sha256": "C4CA59ABA602B93E83C784105831362D322AD69B76C6EAE9F5089CC49D4770D4"
+      },
+      {
+        "path": "historical-avx2-vs-sse/tc2-10000-100.log",
+        "bytes": 83489,
+        "sha256": "F20062B94202BBAF4C76E4B370FA6BEAD48847B7A7D5B57A9B18D6269A0A482E"
+      },
+      {
+        "path": "historical-avx2-vs-sse/tc3-30000-300.log",
+        "bytes": 87932,
+        "sha256": "BFC7EFD95DC2D54DED73F2D55732DA84953A90DD4426AB33F517C8E63A171A03"
+      },
+      {
+        "path": "hito5-release.log",
+        "bytes": 29768,
+        "sha256": "206E5D336093C64E6BA328BFBA33F562743A8DCF7047925BB5C21779717142C3"
+      },
+      {
+        "path": "instrumented/manifest.json",
+        "bytes": 3823,
+        "sha256": "D88FCBC3F9AD8B3FF6389468C991A1A7143F5F6D13479384D9508165237EA4C5"
+      },
+      {
+        "path": "instrumented/results-summary.log",
+        "bytes": 647,
+        "sha256": "AA716BDEC2D1FA630FC89AF404C7D24A7F1E99EC9CC5ADFF8C641B5144A563D2"
+      },
+      {
+        "path": "instrumented/search-addendum.log",
+        "bytes": 615,
+        "sha256": "0785A4CADFBC8DDD9DF9BA3A1E17B4E4B3241BF0DEEA55101C0E861288981B8D"
+      },
+      {
+        "path": "linux/clang20-debug.log",
+        "bytes": 37708,
+        "sha256": "C297FCCEF7C79957391771D926BF098CDC25F8467F87E53AD7353E9A8794BA80"
+      },
+      {
+        "path": "linux/clang20-release.log",
+        "bytes": 41423,
+        "sha256": "78A49138F63E290AEBE9BADB27AA71A7BA94B8BE0579979A13BD5BA12810C62A"
+      },
+      {
+        "path": "linux/gcc15-debug.log",
+        "bytes": 26589,
+        "sha256": "74EBFCF4072268A91404973046F99F06F55A232329988F9BBF452A64C5581E8A"
+      },
+      {
+        "path": "linux/gcc15-release.log",
+        "bytes": 29510,
+        "sha256": "2A67FD814763376AEEF292B304C4BBEB46A3A36AB25BAE750868A8E80044F182"
+      },
+      {
+        "path": "linux/linux_hito_gate.executed.sh",
+        "bytes": 3855,
+        "sha256": "B0B63B9D54595F9EFDD5D5B7E108878AB7D80D246A06D387547DECDE4C83964C"
+      },
+      {
+        "path": "linux/manifest.json",
+        "bytes": 12955,
+        "sha256": "FED93A3DE6404C2C2C9B7D1ADA6C4F12F428D1B4A8F91989DDFF5E2B2EF652AF"
+      },
+      {
+        "path": "pipeline/e2e.log",
+        "bytes": 1581,
+        "sha256": "0EECCDD519AE2FA508EF0F24F6F1E0D15834CCD6ED7DD5EC22D98F015E7F01FF"
+      },
+      {
+        "path": "pipeline/gate-summary.log",
+        "bytes": 2463,
+        "sha256": "CBA10FD9BF70489D1B77BCEB3D923303011A9B8FB32D4B37679DBB122E5166BC"
+      },
+      {
+        "path": "pipeline/snapshot-audit.log",
+        "bytes": 8684,
+        "sha256": "8441446B0B5D73ABFAFC4AE082CD957110792987F63F482936736F2A74BFCCC2"
+      },
+      {
+        "path": "README.md",
+        "bytes": 2272,
+        "sha256": "1956C5C7295433E977D9BDB315A996589447AD77CD4CCA200A3EEADC535378B6"
+      },
+      {
+        "path": "wasm/manifest.json",
+        "bytes": 1888,
+        "sha256": "3699D4AAC0B69C867CA79A7D660DD78DBC007679D06C011963156E5899BF1D12"
+      },
+      {
+        "path": "wasm/reproducibility.log",
+        "bytes": 1320,
+        "sha256": "9DEF932CE9818CEB1A14C01C57D86A3C582BBABB1DD14AB08B1470945FA16B1D"
+      },
+      {
+        "path": "windows-debug/manifest.json",
+        "bytes": 5447,
+        "sha256": "5F19D12829E0FB47D7EDFDE3B26E922C6FDFFF01EF8684E17CF50767DE21507A"
+      },
+      {
+        "path": "windows-debug/python-debug-addendum.log",
+        "bytes": 824,
+        "sha256": "896ECECA08E679BA4DD335872C2DF1A3E8BA35407C338906D02963CCE2711EA4"
+      },
+      {
+        "path": "windows-debug/results-summary.log",
+        "bytes": 482,
+        "sha256": "1B15C2EAD05E96B8D4A47FEF02D4940354BC7E01D9A898D2ECF8E29AD5F834B4"
+      }
+    ]
+  }
+}

@@ -1,0 +1,59 @@
+{
+  "artifact": {
+    "bytes": 91136,
+    "path": "C:\\Users\\djime\\Documents\\Chess_variants\\Codex\\Fairy-Stockfish organization\\Atomic Project\\variant-nnue-pytorch\\training_data_loader.dll",
+    "sha256": "B3E2E2E9E800BC6413F7DBB2EAAC6ABAC10DF71597A35DE174C35D032A2D4C36"
+  },
+  "build": {
+    "commands": [
+      [
+        "cmake",
+        "-S",
+        "C:\\Users\\djime\\Documents\\Chess_variants\\Codex\\Fairy-Stockfish organization\\Atomic Project\\variant-nnue-pytorch",
+        "-B",
+        "C:\\Users\\djime\\Documents\\Chess_variants\\Codex\\Fairy-Stockfish organization\\Atomic Project\\variant-nnue-pytorch\\build\\pipeline-manifest-release",
+        "-G",
+        "Visual Studio 17 2022",
+        "-A",
+        "x64",
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DCMAKE_INSTALL_PREFIX=C:\\Users\\djime\\Documents\\Chess_variants\\Codex\\Fairy-Stockfish organization\\Atomic Project\\variant-nnue-pytorch",
+        "-DBUILD_TESTING=ON"
+      ],
+      [
+        "cmake",
+        "--build",
+        "C:\\Users\\djime\\Documents\\Chess_variants\\Codex\\Fairy-Stockfish organization\\Atomic Project\\variant-nnue-pytorch\\build\\pipeline-manifest-release",
+        "--config",
+        "Release",
+        "--target",
+        "install",
+        "--parallel",
+        "2"
+      ]
+    ],
+    "log_sha256": "307D723EB9EE04A2F6A0E45019CBB8B76713366933F424F30924CB22E71A4D27",
+    "recorded_utc": "2026-07-12T02:47:12.431399+00:00",
+    "toolchain": "cmake version 3.31.8\n\nCMake suite maintained and supported by Kitware (kitware.com/cmake).\nCMAKE_CXX_COMPILER=C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe\nCMAKE_CXX_COMPILER_ID=MSVC\nCMAKE_CXX_COMPILER_VERSION=19.44.35215.0\nCMAKE_CXX_COMPILER_BYTES=677464\nCMAKE_CXX_COMPILER_SHA256=A9A3A13E4D019CFC0A9D823B3EE0CC383C6F3F86B00F861AC066032D869997E5\nCMAKE_LINKER=C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\link.exe\nCMAKE_LINKER_BYTES=3256432\nCMAKE_LINKER_SHA256=F5950D9BD30D14A003747DD5359FC53B5C852A2271C5EA5855E4AE44BA5B86C1\nCMAKE_GENERATOR=Visual Studio 17 2022\nCMAKE_CXX_COMPILER_TARGET=<empty>\nCMAKE_CXX_COMPILER_ARCHITECTURE_ID=x64\nCMAKE_CXX_LIBRARY_ARCHITECTURE=<empty>\nCMAKE_GENERATOR_PLATFORM=x64\nCMAKE_CXX_COMPILER_PROBE:\nMicrosoft (R) C/C++ Optimizing Compiler Version 19.44.35215 for x64\nCopyright (C) Microsoft Corporation.  All rights reserved.\n\nCompiler Passes:\n C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe:        Version 19.44.35215.0\n C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\c1.dll:        Version 19.44.35215.0\n C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\c1xx.dll:      Version 19.44.35215.0\n C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\c2.dll:        Version 19.44.35215.0\n C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\c1xx.dll:      Version 19.44.35215.0\n C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\link.exe:      Version 14.44.35215.0\n C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\mspdb140.dll:  Version 14.44.35215.0\n C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\1033\\clui.dll: Version 19.44.35215.0\n\ncl : Command line error D8003 : missing source filename\nCMAKE_CXX_TARGET_PROBE:\nx64",
+    "toolchain_artifacts": {
+      "compiler": {
+        "bytes": 677464,
+        "path": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+        "sha256": "A9A3A13E4D019CFC0A9D823B3EE0CC383C6F3F86B00F861AC066032D869997E5"
+      },
+      "linker": {
+        "bytes": 3256432,
+        "path": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\link.exe",
+        "sha256": "F5950D9BD30D14A003747DD5359FC53B5C852A2271C5EA5855E4AE44BA5B86C1"
+      }
+    }
+  },
+  "recipe": "strong-local-trainer-windows-v1",
+  "repository": {
+    "clean": true,
+    "commit": "dafec1daa594ff7eff3dca79064ed10660702a36",
+    "root": "C:\\Users\\djime\\Documents\\Chess_variants\\Codex\\Fairy-Stockfish organization\\Atomic Project\\variant-nnue-pytorch"
+  },
+  "role": "trainer",
+  "schema": "legacy-atomic-v1-clean-build-v1"
+}

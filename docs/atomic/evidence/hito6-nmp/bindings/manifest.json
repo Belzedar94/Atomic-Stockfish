@@ -1,0 +1,203 @@
+{
+    "schema":  "atomic-bindings-audit-v1",
+    "status":  "PASS",
+    "source":  {
+                   "head":  "0c45a9bf711814621607f3d0bed546a026cdf4d1",
+                   "tree":  "f92e23c5104bf30d7e909be558ef23934c401d14",
+                   "tracked_diff":  false,
+                   "status_note":  "only pre-existing untracked src/build/ remains"
+               },
+    "toolchains":  {
+                       "python":  "3.12.0;MSC v.1935 64 bit (AMD64)",
+                       "node":  "v24.15.0",
+                       "emscripten":  "4.0.10 b7dc6e5747465580df5984e723b9d1f10d8e804b",
+                       "emscripten_image":  "emscripten/emsdk:4.0.10@sha256:90b757eb11fa9a0e3ce4d2d9f76d932a56018e4accc37b5a28b2783751e60eb7"
+                   },
+    "gates":  {
+                  "historical_python":  "22/22 PASS",
+                  "extended_python":  "60/60 PASS",
+                  "native_api":  "34/34 PASS",
+                  "sdist_inputs":  "PASS",
+                  "wheel_build":  "cp39-abi3-win_amd64 PASS",
+                  "wheel_layout_import_pep561_mypy":  "PASS",
+                  "wheel_full_historical":  "22/22 PASS",
+                  "wheel_full_extended":  "60/60 PASS",
+                  "commonjs":  "58/58 PASS",
+                  "esm":  "58/58 PASS",
+                  "cross_surface_python":  "40/40 PASS",
+                  "cross_surface_commonjs":  "40/40 PASS",
+                  "cross_surface_esm":  "40/40 PASS",
+                  "cross_surface_native":  "25/25 PASS",
+                  "lightweight_wasm_repro":  "4/4 byte-identical across current/build-a/build-b",
+                  "npm_pack":  "7 expected entries PASS"
+              },
+    "artifacts":  [
+                      {
+                          "path":  "C:\\Users\\djime\\Documents\\Chess_variants\\Codex\\Fairy-Stockfish organization\\Atomic Project\\reports\\hito6-nmp-0c45a9bf\\windows-release\\pyffish.pyd",
+                          "bytes":  143872,
+                          "sha256":  "ABD6A5F86C53E4594C03C8B581890FC957F137BD6F6413760DF9569CFE49DC53"
+                      },
+                      {
+                          "path":  "C:\\Users\\djime\\Documents\\Chess_variants\\Codex\\Fairy-Stockfish organization\\Atomic Project\\reports\\hito6-nmp-0c45a9bf\\windows-release\\src\\atomic-api-tests.exe",
+                          "bytes":  3720055,
+                          "sha256":  "515504EB8FB3A8C587C11AC95B9AF088484D206FE5A02B0E3B4A7D8A396037FC"
+                      },
+                      {
+                          "path":  "C:\\Users\\djime\\Documents\\Chess_variants\\Codex\\Fairy-Stockfish organization\\Atomic Project\\reports\\hito6-nmp-0c45a9bf\\windows-release\\src\\atomic-stockfish.exe",
+                          "bytes":  4263216,
+                          "sha256":  "FBF26ABDA7AF8701B2E6B4F0F8D8A18EB385C871ECC66E0E0580DA8BA1E42DB2"
+                      },
+                      {
+                          "path":  "C:\\Users\\djime\\Documents\\Chess_variants\\Codex\\Fairy-Stockfish organization\\Atomic Project\\reports\\hito6-nmp-0c45a9bf\\windows-release\\tests\\js\\dist\\cjs\\ffish.js",
+                          "bytes":  56151,
+                          "sha256":  "C5640D5526E711E07BADAAB928F79A40049A55DB2E53EE998D804CCB6AFBA4FF"
+                      },
+                      {
+                          "path":  "C:\\Users\\djime\\Documents\\Chess_variants\\Codex\\Fairy-Stockfish organization\\Atomic Project\\reports\\hito6-nmp-0c45a9bf\\windows-release\\tests\\js\\dist\\cjs\\ffish.wasm",
+                          "bytes":  265989,
+                          "sha256":  "204EFBB9D9B8BE16B77A6305F5E78037DCB0F104E646E150F9576ED2FEF98973"
+                      },
+                      {
+                          "path":  "C:\\Users\\djime\\Documents\\Chess_variants\\Codex\\Fairy-Stockfish organization\\Atomic Project\\reports\\hito6-nmp-0c45a9bf\\windows-release\\tests\\js\\dist\\esm\\ffish.mjs",
+                          "bytes":  55929,
+                          "sha256":  "6A904D01BFC6ACE454930FDAC1D840D1F83E62F21760658FCD4E5BC8AEE3C1BA"
+                      },
+                      {
+                          "path":  "C:\\Users\\djime\\Documents\\Chess_variants\\Codex\\Fairy-Stockfish organization\\Atomic Project\\reports\\hito6-nmp-0c45a9bf\\windows-release\\tests\\js\\dist\\esm\\ffish.wasm",
+                          "bytes":  265989,
+                          "sha256":  "204EFBB9D9B8BE16B77A6305F5E78037DCB0F104E646E150F9576ED2FEF98973"
+                      },
+                      {
+                          "path":  "C:\\Users\\djime\\Documents\\Chess_variants\\Codex\\Fairy-Stockfish organization\\Atomic Project\\reports\\hito6-nmp-0c45a9bf\\bindings-audit\\package-20260711-183743\\sdist\\atomic_pyffish-0.1.0.tar.gz",
+                          "bytes":  174603,
+                          "sha256":  "FD08E61CC633354C3AB3BBE1CB1D59D7D6127E5AC18F07E48E80D13DE4D35F0D"
+                      },
+                      {
+                          "path":  "C:\\Users\\djime\\Documents\\Chess_variants\\Codex\\Fairy-Stockfish organization\\Atomic Project\\reports\\hito6-nmp-0c45a9bf\\bindings-audit\\package-20260711-183743\\wheel\\atomic_pyffish-0.1.0-cp39-abi3-win_amd64.whl",
+                          "bytes":  85000,
+                          "sha256":  "DF2BAD5E85B362B72EB29857E07764D1595FE9E31ACB2FED782E81CF1F31AD3D"
+                      },
+                      {
+                          "path":  "C:\\Users\\djime\\Documents\\Chess_variants\\Codex\\Fairy-Stockfish organization\\Atomic Project\\reports\\hito6-nmp-0c45a9bf\\bindings-audit\\package-20260711-183743\\isolated-site\\pyffish.pyd",
+                          "bytes":  143872,
+                          "sha256":  "4F86405E859637C10641357D0D84B4C6EECABA6BF6ABFAA2B29C2CD046B030E3"
+                      }
+                  ],
+    "diagnostics":  [
+                        "pyffish.info() reports dev-20260711-nogit; provenance is bound externally by exact detached HEAD, path and SHA-256.",
+                        "The root in-place .pyd and the independently rebuilt wheel .pyd are behaviorally identical under the full suites but not byte-identical; Python package reproducibility was not an acceptance requirement for this audit.",
+                        "The pinned Emscripten artifacts are the normative lightweight WASM snapshot; earlier transient local-toolchain sizes are not applicable."
+                    ],
+    "logs":  [
+                 {
+                     "name":  "cross-surface.log",
+                     "bytes":  420,
+                     "sha256":  "0825AC4656BD9F1E1AC49BEBD59B031BB867C21913C0E079921AE2AB72B5A6E3"
+                 },
+                 {
+                     "name":  "js-artifact-hashes.json",
+                     "bytes":  2357,
+                     "sha256":  "3B57A536EF1650C29D8178709AF66D308FBA8E50B719474F029F2D3E291977CB"
+                 },
+                 {
+                     "name":  "js-cjs-esm.log",
+                     "bytes":  464,
+                     "sha256":  "3AD46CAA2C1EF359A823C75FD5A4D34F559E15F69C524403688E4B2D0C264BE4"
+                 },
+                 {
+                     "name":  "js-repro-build-a.log",
+                     "bytes":  3262,
+                     "sha256":  "253F8C8F37E582B32897D9F5FD9D00BADB7ED532A742D4B736D67BF94CB6043A"
+                 },
+                 {
+                     "name":  "js-repro-build-b.log",
+                     "bytes":  3262,
+                     "sha256":  "2176D0F8ABA5E645D1BD913095D460362E1251A33799650A6CFD94DCC38E7247"
+                 },
+                 {
+                     "name":  "js-repro-compare.log",
+                     "bytes":  104,
+                     "sha256":  "A93D249D2E6FF6F777C1B2D7A061803396B1E5177D235833042E621ADD323600"
+                 },
+                 {
+                     "name":  "js-toolchain-image.log",
+                     "bytes":  196,
+                     "sha256":  "819C3526D234799BE6C6617BC5CF7E7481CC7A49D53E6AF52B384B5548799429"
+                 },
+                 {
+                     "name":  "js-toolchain-version.log",
+                     "bytes":  674,
+                     "sha256":  "BE12CBBD12EDB9DD456FA2F506811792F38695B4BCE49CD7969DB52661936CDB"
+                 },
+                 {
+                     "name":  "native-api.log",
+                     "bytes":  2030,
+                     "sha256":  "530B4A945B09665634E82541B38BC3B439C0CE1F7DFE86299D878FE17F51022E"
+                 },
+                 {
+                     "name":  "npm-pack-dry-run.json",
+                     "bytes":  2334,
+                     "sha256":  "F1F716E1C05EC416F00281F4C31BBFBD7DA78885AF28A8AD2D71CFB3A1DEA85E"
+                 },
+                 {
+                     "name":  "python-artifact-hashes.json",
+                     "bytes":  2023,
+                     "sha256":  "ED7B749622A70016E2167B9F8BCA163006299E6BEBF0DF135D94CB69F8E1A5A5"
+                 },
+                 {
+                     "name":  "python-pytest.log",
+                     "bytes":  230,
+                     "sha256":  "A67C491182EBB16A446E1C06712359600BF7559F51A0881DC80F87FD54CF74B9"
+                 },
+                 {
+                     "name":  "python-sdist.log",
+                     "bytes":  14672,
+                     "sha256":  "5B58E9F855FD7F9A4C6717561A3D434E3AB3FB9D3E105ED27C01D03C22DD43BA"
+                 },
+                 {
+                     "name":  "python-test-py-clean.log",
+                     "bytes":  1621,
+                     "sha256":  "CCDC394F80DFA75A3149E79E805E04D082DF287E99129426C48D3CF5F10C08CB"
+                 },
+                 {
+                     "name":  "python-test-py.log",
+                     "bytes":  3932,
+                     "sha256":  "B9427075CD0B4BDB14D2004294319F5EA22F2897B0063B93E70CA59B907E6153"
+                 },
+                 {
+                     "name":  "python-wheel-build.log",
+                     "bytes":  2356,
+                     "sha256":  "9783DC8B5337FC6CF3B083B833CDE1E49E94791092D5AEB416B63A5B17276BA8"
+                 },
+                 {
+                     "name":  "python-wheel-full-probe.log",
+                     "bytes":  368,
+                     "sha256":  "9B56143BFD8359D3D89E337DB21E691851A9925A002D3E3A5721FEA677068B37"
+                 },
+                 {
+                     "name":  "python-wheel-install-full.log",
+                     "bytes":  624,
+                     "sha256":  "1B66C0F3D577C685D35BF11E5516CE776AD3BF0B47377CA6F8213C9D1EA23C0B"
+                 },
+                 {
+                     "name":  "python-wheel-layout.log",
+                     "bytes":  1404,
+                     "sha256":  "DE46974E6495F28632B99F22CF9803411FF6C6136BC7AA1A567E4E9CDBD55878"
+                 },
+                 {
+                     "name":  "python-wheel-pytest.log",
+                     "bytes":  230,
+                     "sha256":  "D145840239142CBE75B5F38DB61EFFBBD771BE6334493FD1E4916C418CCE9CAC"
+                 },
+                 {
+                     "name":  "python-wheel-test-py-clean.log",
+                     "bytes":  1621,
+                     "sha256":  "211100DEF3D9D1F32C9DB7EF3BF0399949C6FD906BDAAC4BB66C622827BCBB80"
+                 },
+                 {
+                     "name":  "python-wheel-test-py.log",
+                     "bytes":  3932,
+                     "sha256":  "BFC611C12408DAD15BF27434FB1BFF5A619155A9E8EA592300FC5D6260F21B26"
+                 }
+             ]
+}

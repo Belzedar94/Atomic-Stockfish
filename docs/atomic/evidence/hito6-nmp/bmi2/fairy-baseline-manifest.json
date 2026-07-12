@@ -1,0 +1,102 @@
+{
+  "schema": "fairy-stockfish-bmi2-baseline-v1",
+  "result": "PASS",
+  "normative": true,
+  "source": {
+    "repository": "fairy-stockfish/Fairy-Stockfish",
+    "commit": "fb78cb561aa01708338e35b3dc3b65a42149a3c4",
+    "tree": "dfe4b96037c10ab60e22613bf634452612fc2b04",
+    "commit_epoch": 1782898285,
+    "commit_date": "2026-07-01T11:31:25+02:00",
+    "worktree": "reports/fsf-baseline-fb78cb56-bmi2/worktree",
+    "detached": true,
+    "tracked_clean": true,
+    "unignored_untracked_count": 0
+  },
+  "configuration": {
+    "arch": "x86-64-bmi2",
+    "comp": "mingw",
+    "all": "no",
+    "largeboards": "no",
+    "largedata": "not-defined-or-applicable",
+    "largedata_tracked_match_count": 0,
+    "nnue": "no",
+    "nnue_meaning": "external loader retained; only embedding disabled",
+    "debug": "no",
+    "optimize": "yes",
+    "pgo": "no",
+    "lto": "yes-explicit",
+    "instruction_sets": [
+      "BMI2",
+      "PEXT",
+      "AVX2",
+      "SSE41",
+      "SSSE3",
+      "SSE2",
+      "POPCNT"
+    ]
+  },
+  "environment": {
+    "SOURCE_DATE_EPOCH": "1782898285",
+    "ZERO_AR_DATE": "1",
+    "LC_ALL": "C",
+    "TZ": "UTC"
+  },
+  "command": "make -C src -j2 build ARCH=x86-64-bmi2 COMP=mingw all=no largeboards=no nnue=no optimize=yes debug=no EXTRACXXFLAGS='-flto -flto-partition=one -DGIT_SHA=fb78cb56 -DGIT_DATE=20260701' EXTRALDFLAGS='-flto -flto-partition=one -save-temps -Wl,--no-insert-timestamp'",
+  "effective_cxxflags": "-Wall -Wcast-qual -fno-exceptions -std=c++17 -flto -flto-partition=one -DGIT_SHA=fb78cb56 -DGIT_DATE=20260701 -Wno-profile-instr-out-of-date -DNNUE_EMBEDDING_OFF -Wextra -Wshadow -DNDEBUG -O3 -fno-strict-aliasing -DIS_64BIT -msse -msse3 -mpopcnt -DUSE_POPCNT -DUSE_AVX2 -mavx2 -mbmi -DUSE_SSE41 -msse4.1 -DUSE_SSSE3 -mssse3 -DUSE_SSE2 -msse2 -DUSE_PEXT -mbmi2",
+  "effective_ldflags": "-flto -flto-partition=one -save-temps -Wl,--no-insert-timestamp -static",
+  "toolchain": {
+    "compiler": "g++.exe (Rev8, Built by MSYS2 project) 15.2.0",
+    "compiler_path": "C:/msys64/mingw64/bin/g++.exe",
+    "compiler_bytes": 3102123,
+    "compiler_sha256": "51911FB398529FA19769DA935279C1A8A56F1C3508B2DF295624AAA3DAE34AA5",
+    "linker": "GNU ld 2.45",
+    "linker_sha256": "8F68B5189A1A66058BE0FB0C773E0B33BCC0CC7C9F02607C5FE817879212848A",
+    "make": "GNU Make 4.4.1",
+    "make_sha256": "2D3B9FCA575BE8E93C10AB74348055FA127A65CF628D52E9218AC76065CC6D22",
+    "git": "git version 2.49.0.windows.1",
+    "makefile_bytes": 27802,
+    "makefile_sha256": "4F07ACB13764BDEAAEECBECB4B447320AA753D450ABDAD767F25D09AD5AAC885"
+  },
+  "artifact": {
+    "path": "artifacts/FSF-fb78cb56-bmi2-all-no-largeboards-no.exe",
+    "bytes": 4281871,
+    "sha256": "4EACAAB40DCA84F5A255EA57231F2795D43B5DDA85CE50EBBA1A1B2937B46331",
+    "engine_identity": "Fairy-Stockfish 010726",
+    "compiler_identity": "Compiled by g++ (GNUC) 15.2.0 on MinGW64",
+    "compiler_settings": "64bit BMI2 AVX2 SSE41 SSSE3 SSE2 POPCNT"
+  },
+  "reproducibility": {
+    "clean_build_count": 2,
+    "byte_identical": true,
+    "pass2": {
+      "binary": "artifacts/FSF-fb78cb56-bmi2-pass2.exe",
+      "bytes": 4281871,
+      "sha256": "4EACAAB40DCA84F5A255EA57231F2795D43B5DDA85CE50EBBA1A1B2937B46331",
+      "log": "artifacts/build-pass2.log",
+      "log_sha256": "0E264513EEC6E3A538826C6D066B298E4B03D0C70DCBA8C2E6F6515ED775C5FD"
+    },
+    "pass3": {
+      "binary": "artifacts/FSF-fb78cb56-bmi2-pass3.exe",
+      "bytes": 4281871,
+      "sha256": "4EACAAB40DCA84F5A255EA57231F2795D43B5DDA85CE50EBBA1A1B2937B46331",
+      "log": "artifacts/build-pass3.log",
+      "log_sha256": "FFF90BA699F887AFD08B957CCB11D5506D89A705A4D793065CDB8FADB7347211"
+    }
+  },
+  "network_smoke": {
+    "network": "atomic_run3b_e202_l05.nnue",
+    "network_bytes": 47721376,
+    "network_sha256": "99DC67EABF26A64FAEECA3A88B4C38597A840B8D4A874B9F2CF658C6F92A04A6",
+    "result": "PASS",
+    "marker": "NNUE evaluation using ...atomic_run3b_e202_l05.nnue enabled",
+    "log": "artifacts/nnue-load-smoke.log",
+    "log_sha256": "DDA27FB5A4983E47F07F9C6C50BDBDA78EEFFC40FAE527045A32E206568CE9CF"
+  },
+  "compiler_log": {
+    "path": "artifacts/engine-compiler.log",
+    "sha256": "13C60D24F8222A29444C4081CDF1CFEF6ABE659209031A3762293E9C5F2C909B"
+  },
+  "identity_limitation": "This Fairy revision does not reference GIT_SHA or GIT_DATE in engine_info; exact source identity is carried by the detached worktree, filename and manifest without patching upstream source.",
+  "matches_run": 0
+}

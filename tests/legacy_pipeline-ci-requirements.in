@@ -1,0 +1,10 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+torch==2.1.2+cpu
+numpy==1.26.4
+chess==1.11.2
+pytest==8.3.5
+tensorboard==2.20.0
+pytorch-lightning==1.9.5
+torchmetrics==0.11.4
+setuptools==80.9.0

@@ -1,0 +1,70 @@
+{
+    "schema":  "atomic-stockfish-hito6-instrumented-matrix-v1",
+    "result":  "PASS",
+    "head":  "0c45a9bf711814621607f3d0bed546a026cdf4d1",
+    "tree":  "f92e23c5104bf30d7e909be558ef23934c401d14",
+    "platform":  {
+                     "docker_image":  "gcc:15-bookworm@sha256:9ca91b05c7b07d2979f16413e8b2cd6ec8a7c80ffca4121ccab0aeba33f90460",
+                     "docker_server":  "28.4.0",
+                     "kernel":  "6.18.33.2-microsoft-standard-WSL2",
+                     "os":  "Debian GNU/Linux 12 (bookworm)",
+                     "compiler":  "GCC 15.2.0",
+                     "valgrind":  "3.19.0",
+                     "mmap_rnd_bits":  28
+                 },
+    "network":  {
+                    "sha256":  "99DC67EABF26A64FAEECA3A88B4C38597A840B8D4A874B9F2CF658C6F92A04A6",
+                    "bytes":  47721376
+                },
+    "jobs":  [
+                 {
+                     "job":  "asan-ubsan",
+                     "result":  "PASS",
+                     "threads":  1,
+                     "binary_sha256":  "00858C4A24643D7E3D164F9367CBDD3937D76F19F02DE1CAE74FF2787D122E83",
+                     "manifest_sha256":  "3D7D0B3B48A5E300C9C1233A052EAD32B07F92097C192DA3C437E4EE195ACB40",
+                     "manifest_bytes":  3107
+                 },
+                 {
+                     "job":  "tsan",
+                     "result":  "PASS",
+                     "threads":  2,
+                     "binary_sha256":  "7F4399631CA5EBE44CDCD92A5E5876D9D73E2C8A358D37C15F893EBC6D83BC77",
+                     "manifest_sha256":  "9AB3514981D7B81722250BAD111A0CECD4B3BA30321CFA13D6EFD383954A5416",
+                     "manifest_bytes":  2215
+                 },
+                 {
+                     "job":  "valgrind",
+                     "result":  "PASS",
+                     "threads":  1,
+                     "binary_sha256":  "9CE6F1F46B3B670BE8CA6856E2D8C6042E4AFA542BBABAF8EA2EE40873B213B0",
+                     "manifest_sha256":  "EA4C5140E44338D1DEB997A738FE04EBF823FA32A7EE27DCC9F1476B5DFD61B0",
+                     "manifest_bytes":  2388
+                 },
+                 {
+                     "job":  "valgrind-thread",
+                     "result":  "PASS",
+                     "threads":  2,
+                     "binary_sha256":  "61C8AC5A62FB042649B2DF7A22BEF49876C694E5D3505BBCDE2126B32F0A82A5",
+                     "manifest_sha256":  "21B527CC06FDFB47570CED2F6605807EFFDA927571F87AAE2C20125604F04688",
+                     "manifest_bytes":  2448
+                 }
+             ],
+    "evidence":  {
+                     "toolchain_sha256":  "79E61FC62D82982756E33E7E58CC893691AE1B2791093986A7B2AF7E16C54721",
+                     "provenance_sha256":  "C336C5AB3D1D78250EC7B192D34FAD2EC73E272B53BB5E4CC2E976C5643C117F",
+                     "valgrind_runner_sha256":  "79C5B76470DFD48E611BE85402D5C7C342F67EED1B15DA13811CB8F8A3133E9B",
+                     "summary_raw_crlf_sha256":  "0ADA17264C7DD7585771839B47EFC5563C2CBECCD1448121D4EA6197DA15E196",
+                     "summary_versioned_path":  "results-summary.log",
+                     "summary_versioned_bytes":  647,
+                     "summary_versioned_sha256":  "AA716BDEC2D1FA630FC89AF404C7D24A7F1E99EC9CC5ADFF8C641B5144A563D2",
+                     "cleanup_sha256":  "DE8C0EBF5F6027A99E06AD82F18201725E75BC825CDD5CC5AD8CB29E853110DC"
+                 },
+    "limitations":  [
+                        "instrumented.py selects Threads=1 for memory/Valgrind modes and Threads=2 for TSan/Valgrind-thread by repository design",
+                        "Docker runs on WSL2 kernel; vm.mmap_rnd_bits=28 matches the repository TSan workaround"
+                    ],
+    "diagnostic_scan":  "clean",
+    "tracked_worktrees_clean":  true,
+    "service_container_removed":  true
+}

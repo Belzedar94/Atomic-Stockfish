@@ -1,0 +1,7 @@
+docs/atomic/evidence/**/*.log text eol=lf
+docs/atomic/evidence/**/*.json text eol=lf
+docs/atomic/evidence/**/*.sh text eol=lf
+tests/legacy_pipeline-ci-requirements.in text eol=lf
+tests/legacy_pipeline-ci-requirements.txt text eol=lf
+tests/pip-bootstrap-requirements.txt text eol=lf
+tests/python-ci-requirements.txt text eol=lf

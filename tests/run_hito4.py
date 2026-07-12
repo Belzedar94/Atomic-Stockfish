@@ -25,7 +25,7 @@ WORKSPACE_ROOT = REPO_ROOT.parent
 EXPECTED_NET_SHA256 = (
     "99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f92a04a6"
 )
-EXPECTED_SIGNATURE = "404217"
+EXPECTED_SIGNATURE = "338376"
 
 
 class GateFailure(RuntimeError):
@@ -178,7 +178,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--syzygy-driver",
         type=Path,
-        default=WORKSPACE_ROOT / "research" / "atomic-syzygy-driver.exe",
+        help="standalone driver built by make atomic-syzygy-driver",
     )
     parser.add_argument("--fairy-repo", type=Path, default=WORKSPACE_ROOT / "Fairy-Stockfish")
     parser.add_argument("--python", default=sys.executable)
@@ -205,6 +205,10 @@ def validate_inputs(args: argparse.Namespace) -> dict[str, object]:
     cpp_api = require_path(
         args.cpp_api or native.with_name(f"atomic-api-tests{suffix}"), "C++ API unit test"
     )
+    syzygy_driver = require_path(
+        args.syzygy_driver or native.with_name(f"atomic-syzygy-driver{suffix}"),
+        "Atomic Syzygy driver",
+    )
     net = require_path(args.net, "Legacy Atomic V1 network")
     actual_net_sha = sha256(net)
     if actual_net_sha != EXPECTED_NET_SHA256:
@@ -226,7 +230,7 @@ def validate_inputs(args: argparse.Namespace) -> dict[str, object]:
         "tables": require_path(args.tables, "Atomic Syzygy tables", directory=True),
         "cpp_unit": cpp_unit,
         "cpp_api": cpp_api,
-        "syzygy_driver": require_path(args.syzygy_driver, "Atomic Syzygy driver"),
+        "syzygy_driver": syzygy_driver,
         "fairy_repo": require_path(args.fairy_repo, "frozen Fairy repository", directory=True),
         "python": command_path(args.python, "Python"),
         "node": command_path(args.node, "Node"),
@@ -268,8 +272,8 @@ def main() -> int:
             "C++ Atomic rule/state units",
             [str(paths["cpp_unit"])],
             timeout=args.timeout,
-            required_markers=("Atomic C++ unit tests passed: 44/44",),
-            expected_pass_lines=44,
+            required_markers=("Atomic C++ unit tests passed: 63/63",),
+            expected_pass_lines=63,
         )
         run_step(
             "C++ shared Atomic API units",
@@ -329,9 +333,10 @@ def main() -> int:
             required_markers=("Ran 22 tests", "OK"),
         )
 
-        pytest_launcher = (
+        pytest_marker_launcher = (
             "import pytest,sys; sys.path.insert(0,sys.argv[1]); "
-            "raise SystemExit(pytest.main(sys.argv[2:]))"
+            "code=pytest.main(sys.argv[3:]); "
+            "print(sys.argv[2]) if code == 0 else None; raise SystemExit(code)"
         )
         run_step(
             "pytest binding and concurrent lifecycle suite",
@@ -339,15 +344,55 @@ def main() -> int:
                 python,
                 "-P",
                 "-c",
-                pytest_launcher,
+                pytest_marker_launcher,
                 str(paths["pyffish_root"]),
+                "pyffish pytest lifecycle suite passed",
                 "-q",
                 "--maxfail=1",
                 str(REPO_ROOT / "tests/python/test_pyffish.py"),
             ],
             env=python_env,
             timeout=args.timeout,
-            required_markers=("60 passed",),
+            required_markers=("pyffish pytest lifecycle suite passed",),
+        )
+
+        run_step(
+            "cooperative LOS gate units",
+            [
+                python,
+                "-P",
+                "-c",
+                pytest_marker_launcher,
+                str(paths["pyffish_root"]),
+                "Atomic LOS gate unit suite passed",
+                "-q",
+                "--maxfail=1",
+                str(REPO_ROOT / "tests/python/test_atomic_los_gate.py"),
+            ],
+            env=python_env,
+            timeout=args.timeout,
+            required_markers=("Atomic LOS gate unit suite passed",),
+        )
+
+        run_step(
+            "compiler target preflight units",
+            [
+                python,
+                "-P",
+                "-c",
+                pytest_marker_launcher,
+                str(paths["pyffish_root"]),
+                "Atomic compiler preflight unit suite passed",
+                "-q",
+                "--maxfail=1",
+                str(
+                    REPO_ROOT
+                    / "tests/python/test_atomic_compiler_preflight.py"
+                ),
+            ],
+            env=python_env,
+            timeout=args.timeout,
+            required_markers=("Atomic compiler preflight unit suite passed",),
         )
 
         cjs_launcher = r"""
@@ -426,6 +471,19 @@ await suite.runSuite(module, 'ES module/WASM');
             required_markers=("Atomic perft and rule-transition suite passed",),
         )
         run_step(
+            "Atomic terminal-search regressions without NNUE",
+            [
+                python,
+                str(REPO_ROOT / "tests/atomic_search.py"),
+                "--candidate",
+                str(native),
+                "--use-nnue",
+                "false",
+            ],
+            timeout=args.timeout,
+            required_markers=("Atomic search regressions passed: 16/16",),
+        )
+        run_step(
             "Atomic terminal-search regressions with NNUE",
             [
                 python,
@@ -438,7 +496,7 @@ await suite.runSuite(module, 'ES module/WASM');
                 "true",
             ],
             timeout=args.timeout,
-            required_markers=("Atomic search regressions passed: 11/11",),
+            required_markers=("Atomic search regressions passed: 16/16",),
         )
         run_step(
             "XBoard/CECP Atomic, analyze and live ponder",
