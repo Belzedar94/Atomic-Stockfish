@@ -24,8 +24,9 @@ that the common tools/trainer contract cannot preserve:
 - `MOVE_NONE` is forbidden.
 - Atomic960 rook origins are not representable.
 
-`variant-nnue-tools` exposes `atomic_data_schema` and advertises read/write
-support. `variant-nnue-pytorch` exports
+`variant-nnue-tools` exposes `atomic_data_schema`; standard `DATA_SIZE=512`
+builds advertise read/write support, while incompatible `largedata=yes` builds
+return an empty `formats` object. `variant-nnue-pytorch` exports
 `get_atomic_training_data_schema_json()` and the Python
 `atomic_training_data_schema()` wrapper, advertising read-only support. The
 release E2E fails before generation unless both report the exact schema hash,
@@ -35,7 +36,8 @@ Pinned implementation commits used by the local release run are:
 
 | Repository | Commit |
 | --- | --- |
-| Atomic-Stockfish code/test commit | `518175e20f127bf47b57ba1faad580b975e45929` |
+| Atomic-Stockfish schema/code/test commit | `518175e20f127bf47b57ba1faad580b975e45929` |
+| Atomic-Stockfish clean validation snapshot | `d4b4b6768f80e2ef8db142d16f2b485f8e3df78b` |
 | variant-nnue-tools | `864bf29c337d21cf9d0d79a40667f86e566be737` |
 | variant-nnue-pytorch | `350a28f2cee225c546333aded75b9db64caa526d` |
 
@@ -49,8 +51,8 @@ release gate used clean, commit-bound Windows builds:
 
 | Artifact | Target | SHA-256 |
 | --- | --- | --- |
-| Atomic-Stockfish | MinGW BMI2 | `557E39B6...F7FC0B44` |
-| data tools | MinGW x86-64 SSE2 | `8F54AE22...A2164396` |
+| Atomic-Stockfish | MinGW BMI2 | `848DF11F...19D29C22` |
+| data tools | MinGW x86-64 SSE2 | `A20A7518...E19B9204` |
 | trainer loader | MSVC x64 Release | `8E322B1A...968923A0` |
 
 The following gates passed:
@@ -64,7 +66,10 @@ The following gates passed:
 - Pipeline lock/build/profile suite: `87/87`.
 - Strong-local generator → decode → train → serialize → re-import → engine
   E2E: PASS with eight records, the frozen playing-network hash and unchanged
-  data hash `7de72b13...7a261a2d`.
+  data hash `7de72b13...7a261a2d`. The exact clean commits were tools
+  `864bf29c337d21cf9d0d79a40667f86e566be737`, trainer
+  `350a28f2cee225c546333aded75b9db64caa526d` and Atomic
+  `d4b4b6768f80e2ef8db142d16f2b485f8e3df78b`.
 - Hito 4 release surface: C++ `63/63`, API `34/34`, historical `test.py`
   `22/22`, Python `60/60`, CommonJS, ES module, Board WASM, native parity,
   eight exact perfts, focused rules `19/19`, UCI, XBoard, Syzygy, NNUE modes,
