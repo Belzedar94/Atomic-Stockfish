@@ -5,6 +5,7 @@ src/.depend
 src/temp_builds
 src/universal/network_dump.inc
 .build_sha.txt
+.build_full_sha.txt
 .build_date.txt
 
 # Built binary
@@ -16,6 +17,8 @@ src/atomic-syzygy-driver*
 src/atomic-nnue-incremental-tests*
 src/legacy-atomic-v1-tests*
 src/atomic-bin-v2-tests*
+src/atomic-bin-v2-sink-tests*
+src/atomic-bin-v2-manifest-tests*
 src/-lstdc++.res
 
 # Neural network for the NNUE evaluation

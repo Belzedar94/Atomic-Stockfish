@@ -43,7 +43,7 @@ constexpr std::string_view SchemaJson =
   R"({"schema_sha256":"acca0f551f1c012c31a6c727dedccaebb7b5ebbc46810edb87e31bb208d5abe1","formats":{"legacy-atomic-v1":{"read":false,"write":true,"record_size":72}}})";
 
 constexpr std::string_view SchemasJson =
-  R"({"capability_version":2,"formats":{"legacy-atomic-v1":{"schema_sha256":"acca0f551f1c012c31a6c727dedccaebb7b5ebbc46810edb87e31bb208d5abe1","read":false,"write":true,"header_size":0,"record_size":72},"atomic-bin-v2":{"schema_sha256":"0352b036f2a140c609e3eb9c9d635dc553e8d77253d8faa92437390f5cf93cb6","read":false,"write":false,"header_size":96,"record_size":64}}})";
+  R"({"capability_version":2,"formats":{"legacy-atomic-v1":{"schema_sha256":"acca0f551f1c012c31a6c727dedccaebb7b5ebbc46810edb87e31bb208d5abe1","read":false,"write":true,"header_size":0,"record_size":72},"atomic-bin-v2":{"schema_sha256":"0352b036f2a140c609e3eb9c9d635dc553e8d77253d8faa92437390f5cf93cb6","read":false,"write":true,"header_size":96,"record_size":64}}})";
 
 class BitWriter {
    public:

@@ -121,9 +121,20 @@ ATOMIC_BIN_V2_TEST_EXE  = atomic-bin-v2-tests$(ATOMIC_TEST_EXE_SUFFIX)
 ATOMIC_BIN_V2_TEST_OBJS = attacks.o bitboard.o misc.o movegen.o position.o tbprobe.o \
 	uci_move.o ucioption.o atomic_bin_v2_wire_codec.o atomic_bin_v2_adapter_codec.o \
 	atomic_bin_v2_tests.o
+ATOMIC_BIN_V2_SINK_TEST_EXE  = atomic-bin-v2-sink-tests$(ATOMIC_TEST_EXE_SUFFIX)
+ATOMIC_BIN_V2_SINK_TEST_OBJS = attacks.o bitboard.o misc.o movegen.o position.o tbprobe.o \
+	uci_move.o ucioption.o atomic_bin_v2_wire_codec.o atomic_bin_v2_adapter_codec.o \
+	atomic_bin_v2_sha256_codec.o atomic_bin_v2_sink_codec.o atomic_bin_v2_sink_tests.o
+ATOMIC_BIN_V2_MANIFEST_TEST_EXE  = atomic-bin-v2-manifest-tests$(ATOMIC_TEST_EXE_SUFFIX)
+ATOMIC_BIN_V2_MANIFEST_TEST_OBJS = attacks.o bitboard.o misc.o movegen.o position.o tbprobe.o \
+	uci_move.o ucioption.o atomic_bin_v2_wire_codec.o atomic_bin_v2_adapter_codec.o \
+	atomic_bin_v2_sha256_codec.o atomic_bin_v2_sink_codec.o atomic_bin_v2_manifest_codec.o \
+	atomic_bin_v2_manifest_tests.o
 
-ATOMIC_BIN_V2_SRCS = data/atomic_bin_v2_wire.cpp data/atomic_bin_v2.cpp
-ATOMIC_BIN_V2_HEADERS = data/atomic_bin_v2_wire.h data/atomic_bin_v2.h
+ATOMIC_BIN_V2_SRCS = data/atomic_bin_v2_wire.cpp data/atomic_bin_v2.cpp data/sha256.cpp \
+	data/atomic_bin_v2_sink.cpp data/atomic_bin_v2_manifest.cpp
+ATOMIC_BIN_V2_HEADERS = data/atomic_bin_v2_wire.h data/atomic_bin_v2.h data/sha256.h \
+	data/atomic_bin_v2_sink.h data/atomic_bin_v2_manifest.h
 
 ifeq ($(target_windows),yes)
 	ATOMIC_DATA_GENERATOR_EXE = atomic-stockfish-data-generator.exe
@@ -970,8 +981,12 @@ endif
 
 ### 3.8.1 Try to include git info for versioning and avoid recompiles if nothing changes
 BUILD_SHA_FILE  := .build_sha.txt
+BUILD_FULL_SHA_FILE := .build_full_sha.txt
 BUILD_DATE_FILE := .build_date.txt
 GIT_SHA         := $(shell git rev-parse HEAD 2>/dev/null | cut -c 1-8 || true)
+GIT_SHA_FULL    := $(shell if git rev-parse --is-inside-work-tree >/dev/null 2>&1 \
+	&& [ -z "$$(git status --porcelain --untracked-files=normal 2>/dev/null)" ]; then \
+	git rev-parse HEAD 2>/dev/null; fi)
 GIT_DATE        := $(shell git show -s --date=format:%Y%m%d --format=%cd HEAD 2>/dev/null || true)
 COMPILER_DATE   := $(shell date +%Y%m%d 2>/dev/null)
 
@@ -986,6 +1001,7 @@ endef
 
 ifneq ($(filter $(MAKECMDGOALS),help strip install clean net objclean profileclean format config-sanity),$(MAKECMDGOALS))
 _ := $(call cache_file_contents,$(BUILD_SHA_FILE),$(GIT_SHA))
+_ := $(call cache_file_contents,$(BUILD_FULL_SHA_FILE),$(GIT_SHA_FULL))
 _ := $(call cache_file_contents,$(BUILD_DATE_FILE),$(BUILD_DATE))
 endif
 
@@ -1080,6 +1096,8 @@ help:
 	echo "atomic-nnue-incremental-tests > verify LegacyAtomicV1 incremental updates" && \
 	echo "legacy-atomic-v1-tests  > build and run the frozen 72-byte data codec tests" && \
 	echo "atomic-bin-v2-tests     > build and run the isolated 96/64-byte V2 codec tests" && \
+	echo "atomic-bin-v2-sink-tests > build and run the V2 sink/hash lifecycle tests" && \
+	echo "atomic-bin-v2-manifest-tests > build and run the canonical V2 manifest tests" && \
 	echo "macos-lipo              > macOS x86-64 + Apple silicon universal binary" && \
 	echo "net                     > Download the default nnue nets" && \
 	echo "strip                   > Strip executable" && \
@@ -1151,7 +1169,7 @@ ifneq ($(SUPPORTED_ARCH), true)
 endif
 
 
-.PHONY: help analyze build profile-build data-generator data-generator-tests atomic-unit-tests atomic-api-tests atomic-syzygy-driver atomic-nnue-incremental-tests legacy-atomic-v1-tests atomic-bin-v2-tests macos-lipo strip install clean net \
+.PHONY: help analyze build profile-build data-generator data-generator-tests atomic-unit-tests atomic-api-tests atomic-syzygy-driver atomic-nnue-incremental-tests legacy-atomic-v1-tests atomic-bin-v2-tests atomic-bin-v2-sink-tests atomic-bin-v2-manifest-tests macos-lipo strip install clean net \
 	objclean profileclean config-sanity \
 	icx-profile-use icx-profile-make \
 	gcc-profile-use gcc-profile-make \
@@ -1273,7 +1291,7 @@ clean: objclean profileclean universalclean
 
 # clean binaries and objects
 objclean:
-	@rm -f stockfish stockfish.exe atomic-stockfish atomic-stockfish.exe atomic-stockfish.js atomic-stockfish-data-generator atomic-stockfish-data-generator.exe atomic-unit-tests atomic-unit-tests.exe atomic-unit-tests.bin atomic-api-tests atomic-api-tests.exe atomic-api-tests.bin atomic-syzygy-driver* atomic-nnue-incremental-tests atomic-nnue-incremental-tests.exe atomic-nnue-incremental-tests.bin legacy-atomic-v1-tests legacy-atomic-v1-tests.exe legacy-atomic-v1-tests.bin atomic-bin-v2-tests atomic-bin-v2-tests.exe atomic-bin-v2-tests.bin atomic-bin-v2-tests.* *.o ./api/*.o ./syzygy/*.o ./nnue/*.o ./nnue/features/*.o $(BUILD_SHA_FILE) $(BUILD_DATE_FILE)
+	@rm -f stockfish stockfish.exe atomic-stockfish atomic-stockfish.exe atomic-stockfish.js atomic-stockfish-data-generator atomic-stockfish-data-generator.exe atomic-unit-tests atomic-unit-tests.exe atomic-unit-tests.bin atomic-api-tests atomic-api-tests.exe atomic-api-tests.bin atomic-syzygy-driver* atomic-nnue-incremental-tests atomic-nnue-incremental-tests.exe atomic-nnue-incremental-tests.bin legacy-atomic-v1-tests legacy-atomic-v1-tests.exe legacy-atomic-v1-tests.bin atomic-bin-v2-tests atomic-bin-v2-tests.exe atomic-bin-v2-tests.bin atomic-bin-v2-tests.* atomic-bin-v2-sink-tests atomic-bin-v2-sink-tests.exe atomic-bin-v2-sink-tests.bin atomic-bin-v2-sink-tests.* atomic-bin-v2-manifest-tests atomic-bin-v2-manifest-tests.exe atomic-bin-v2-manifest-tests.bin atomic-bin-v2-manifest-tests.* *.o ./api/*.o ./syzygy/*.o ./nnue/*.o ./nnue/features/*.o $(BUILD_SHA_FILE) $(BUILD_FULL_SHA_FILE) $(BUILD_DATE_FILE)
 
 # clean auxiliary profiling files
 profileclean:
@@ -1306,9 +1324,11 @@ all: $(EXE) .depend
 
 data-generator: config-sanity $(ATOMIC_DATA_GENERATOR_EXE)
 
-data-generator-tests: config-sanity $(ATOMIC_DATA_GENERATOR_EXE) $(EXE) $(ATOMIC_LEGACY_V1_TEST_EXE) $(ATOMIC_BIN_V2_TEST_EXE)
+data-generator-tests: config-sanity $(ATOMIC_DATA_GENERATOR_EXE) $(EXE) $(ATOMIC_LEGACY_V1_TEST_EXE) $(ATOMIC_BIN_V2_TEST_EXE) $(ATOMIC_BIN_V2_SINK_TEST_EXE) $(ATOMIC_BIN_V2_MANIFEST_TEST_EXE)
 	./$(ATOMIC_LEGACY_V1_TEST_EXE)
 	./$(ATOMIC_BIN_V2_TEST_EXE)
+	./$(ATOMIC_BIN_V2_SINK_TEST_EXE)
+	./$(ATOMIC_BIN_V2_MANIFEST_TEST_EXE)
 	$(PYTHON) ../tests/data_generator.py --generator ./$(ATOMIC_DATA_GENERATOR_EXE) --normal-engine ./$(EXE) --net "$(ATOMIC_NNUE_TEST_NET)"
 
 atomic-unit-tests: config-sanity $(ATOMIC_UNIT_TEST_EXE)
@@ -1327,6 +1347,12 @@ legacy-atomic-v1-tests: config-sanity $(ATOMIC_LEGACY_V1_TEST_EXE)
 
 atomic-bin-v2-tests: config-sanity $(ATOMIC_BIN_V2_TEST_EXE)
 	./$(ATOMIC_BIN_V2_TEST_EXE)
+
+atomic-bin-v2-sink-tests: config-sanity $(ATOMIC_BIN_V2_SINK_TEST_EXE)
+	./$(ATOMIC_BIN_V2_SINK_TEST_EXE)
+
+atomic-bin-v2-manifest-tests: config-sanity $(ATOMIC_BIN_V2_MANIFEST_TEST_EXE)
+	./$(ATOMIC_BIN_V2_MANIFEST_TEST_EXE)
 
 config-sanity:
 	@echo ""
@@ -1423,6 +1449,12 @@ $(ATOMIC_LEGACY_V1_TEST_EXE): $(ATOMIC_LEGACY_V1_TEST_OBJS)
 $(ATOMIC_BIN_V2_TEST_EXE): $(ATOMIC_BIN_V2_TEST_OBJS)
 	+$(CXX) -o $@ $(ATOMIC_BIN_V2_TEST_OBJS) $(LDFLAGS)
 
+$(ATOMIC_BIN_V2_SINK_TEST_EXE): $(ATOMIC_BIN_V2_SINK_TEST_OBJS)
+	+$(CXX) -o $@ $(ATOMIC_BIN_V2_SINK_TEST_OBJS) $(LDFLAGS)
+
+$(ATOMIC_BIN_V2_MANIFEST_TEST_EXE): $(ATOMIC_BIN_V2_MANIFEST_TEST_OBJS)
+	+$(CXX) -o $@ $(ATOMIC_BIN_V2_MANIFEST_TEST_OBJS) $(LDFLAGS)
+
 atomic_see_tests.o: ../tests/atomic_see.cpp
 	$(strip $(CXX) $(CPPFLAGS) $(CXXFLAGS)) -I. -c -o $@ $<
 
@@ -1450,11 +1482,29 @@ atomic_bin_v2_wire_codec.o: data/atomic_bin_v2_wire.cpp $(HEADERS) $(ATOMIC_BIN_
 atomic_bin_v2_adapter_codec.o: data/atomic_bin_v2.cpp $(HEADERS) $(ATOMIC_BIN_V2_HEADERS)
 	$(strip $(CXX) $(CPPFLAGS) $(CXXFLAGS)) -I. -c -o $@ $<
 
+atomic_bin_v2_sha256_codec.o: data/sha256.cpp $(HEADERS) $(ATOMIC_BIN_V2_HEADERS)
+	$(strip $(CXX) $(CPPFLAGS) $(CXXFLAGS)) -I. -c -o $@ $<
+
+atomic_bin_v2_sink_codec.o: data/atomic_bin_v2_sink.cpp $(HEADERS) $(ATOMIC_BIN_V2_HEADERS)
+	$(strip $(CXX) $(CPPFLAGS) $(CXXFLAGS)) -I. -c -o $@ $<
+
+atomic_bin_v2_sink_tests.o: ../tests/atomic_bin_v2_sink.cpp $(HEADERS) $(ATOMIC_BIN_V2_HEADERS)
+	$(strip $(CXX) $(CPPFLAGS) $(CXXFLAGS)) -I. -c -o $@ $<
+
+atomic_bin_v2_manifest_codec.o: data/atomic_bin_v2_manifest.cpp $(HEADERS) $(ATOMIC_BIN_V2_HEADERS)
+	$(strip $(CXX) $(CPPFLAGS) $(CXXFLAGS)) -I. -c -o $@ $<
+
+atomic_bin_v2_manifest_tests.o: ../tests/atomic_bin_v2_manifest.cpp $(HEADERS) $(ATOMIC_BIN_V2_HEADERS)
+	$(strip $(CXX) $(CPPFLAGS) $(CXXFLAGS)) -I. -c -o $@ $<
+
 atomic_data_generator_uci.o: uci.cpp $(HEADERS) $(ATOMIC_DATA_GENERATOR_HEADERS)
 	$(strip $(CXX) $(CPPFLAGS) $(CXXFLAGS) -DATOMIC_DATA_GENERATOR) -I. -c -o $@ $<
 
 atomic_data_generator_search.o: search.cpp $(HEADERS) $(ATOMIC_DATA_GENERATOR_HEADERS)
 	$(strip $(CXX) $(CPPFLAGS) $(CXXFLAGS) -DATOMIC_DATA_GENERATOR) -I. -c -o $@ $<
+
+atomic_data_generator_training_data_generator.o: data/training_data_generator.cpp $(HEADERS) $(ATOMIC_DATA_GENERATOR_HEADERS) $(BUILD_FULL_SHA_FILE)
+	$(strip $(CXX) $(CPPFLAGS) $(CXXFLAGS) -DATOMIC_DATA_GENERATOR $(if $(GIT_SHA_FULL),-DATOMIC_DATA_GENERATOR_GIT_SHA=$(GIT_SHA_FULL))) -I. -c -o $@ $<
 
 atomic_data_generator_%.o: data/%.cpp $(HEADERS) $(ATOMIC_DATA_GENERATOR_HEADERS)
 	$(strip $(CXX) $(CPPFLAGS) $(CXXFLAGS) -DATOMIC_DATA_GENERATOR) -I. -c -o $@ $<

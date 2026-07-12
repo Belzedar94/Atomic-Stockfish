@@ -1,0 +1,364 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:atomic-stockfish:schema:atomic-bin-v2-manifest:1",
+  "title": "Atomic BIN V2 manifest",
+  "schema_version": 1,
+  "status": "frozen",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "manifest_version",
+    "manifest_schema_sha256",
+    "data_schema_sha256",
+    "format",
+    "engine",
+    "network",
+    "book",
+    "generation",
+    "statistics",
+    "shards"
+  ],
+  "properties": {
+    "manifest_version": {
+      "const": 1
+    },
+    "manifest_schema_sha256": {
+      "$ref": "#/$defs/lower-hex-sha256",
+      "x-value": "sha256-of-exact-manifest-schema-file"
+    },
+    "data_schema_sha256": {
+      "const": "0352b036f2a140c609e3eb9c9d635dc553e8d77253d8faa92437390f5cf93cb6"
+    },
+    "format": {
+      "const": "atomic-bin-v2"
+    },
+    "engine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "commit",
+        "version"
+      ],
+      "properties": {
+        "commit": {
+          "oneOf": [
+            {
+              "pattern": "^[0-9a-f]{40}$",
+              "type": "string"
+            },
+            {
+              "const": "unknown"
+            }
+          ]
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "network": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "file",
+        "sha256"
+      ],
+      "properties": {
+        "file": {
+          "$ref": "#/$defs/portable-basename"
+        },
+        "sha256": {
+          "$ref": "#/$defs/lower-hex-sha256"
+        }
+      }
+    },
+    "book": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "file",
+            "sha256"
+          ],
+          "properties": {
+            "kind": {
+              "const": "builtin-startpos"
+            },
+            "file": {
+              "type": "null"
+            },
+            "sha256": {
+              "type": "null"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "file",
+            "sha256"
+          ],
+          "properties": {
+            "kind": {
+              "const": "file"
+            },
+            "file": {
+              "$ref": "#/$defs/portable-basename"
+            },
+            "sha256": {
+              "$ref": "#/$defs/lower-hex-sha256"
+            }
+          }
+        }
+      ]
+    },
+    "generation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "resolved_seed",
+        "atomic960",
+        "threads",
+        "hash_mb",
+        "use_nnue",
+        "options"
+      ],
+      "properties": {
+        "resolved_seed": {
+          "$ref": "#/$defs/uint64-decimal-string"
+        },
+        "atomic960": {
+          "type": "boolean"
+        },
+        "threads": {
+          "$ref": "#/$defs/positive-uint32"
+        },
+        "hash_mb": {
+          "$ref": "#/$defs/uint64-decimal-string"
+        },
+        "use_nnue": {
+          "const": "pure"
+        },
+        "options": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "search_depth_min",
+            "search_depth_max",
+            "nodes",
+            "requested_records",
+            "records_per_shard",
+            "eval_limit",
+            "eval_diff_limit",
+            "random_move_min_ply",
+            "random_move_max_ply",
+            "random_move_count",
+            "random_move_like_apery",
+            "random_multi_pv",
+            "random_multi_pv_diff",
+            "random_multi_pv_depth",
+            "write_min_ply",
+            "write_max_ply",
+            "keep_draws",
+            "adjudicate_draws_by_score",
+            "adjudicate_insufficient",
+            "filter_captures",
+            "filter_checks",
+            "filter_promotions",
+            "random_file_name",
+            "set_recommended_uci_options_seen"
+          ],
+          "properties": {
+            "search_depth_min": {
+              "$ref": "#/$defs/int32"
+            },
+            "search_depth_max": {
+              "$ref": "#/$defs/int32"
+            },
+            "nodes": {
+              "$ref": "#/$defs/uint64-decimal-string"
+            },
+            "requested_records": {
+              "$ref": "#/$defs/uint64-decimal-string"
+            },
+            "records_per_shard": {
+              "$ref": "#/$defs/uint64-decimal-string"
+            },
+            "eval_limit": {
+              "$ref": "#/$defs/int32"
+            },
+            "eval_diff_limit": {
+              "$ref": "#/$defs/int32"
+            },
+            "random_move_min_ply": {
+              "$ref": "#/$defs/int32"
+            },
+            "random_move_max_ply": {
+              "$ref": "#/$defs/int32"
+            },
+            "random_move_count": {
+              "$ref": "#/$defs/int32"
+            },
+            "random_move_like_apery": {
+              "$ref": "#/$defs/int32"
+            },
+            "random_multi_pv": {
+              "$ref": "#/$defs/int32"
+            },
+            "random_multi_pv_diff": {
+              "$ref": "#/$defs/int32"
+            },
+            "random_multi_pv_depth": {
+              "$ref": "#/$defs/int32"
+            },
+            "write_min_ply": {
+              "$ref": "#/$defs/int32"
+            },
+            "write_max_ply": {
+              "$ref": "#/$defs/int32"
+            },
+            "keep_draws": {
+              "$ref": "#/$defs/canonical-decimal-string"
+            },
+            "adjudicate_draws_by_score": {
+              "type": "boolean"
+            },
+            "adjudicate_insufficient": {
+              "type": "boolean"
+            },
+            "filter_captures": {
+              "type": "boolean"
+            },
+            "filter_checks": {
+              "type": "boolean"
+            },
+            "filter_promotions": {
+              "type": "boolean"
+            },
+            "random_file_name": {
+              "type": "boolean"
+            },
+            "set_recommended_uci_options_seen": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "statistics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "records",
+        "draws"
+      ],
+      "properties": {
+        "records": {
+          "$ref": "#/$defs/uint64-decimal-string"
+        },
+        "draws": {
+          "$ref": "#/$defs/uint64-decimal-string"
+        }
+      }
+    },
+    "shards": {
+      "type": "array",
+      "minItems": 1,
+      "x-index-policy": "zero-based-contiguous-in-array-order",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "index",
+          "file",
+          "records",
+          "bytes",
+          "sha256"
+        ],
+        "properties": {
+          "index": {
+            "$ref": "#/$defs/uint32"
+          },
+          "file": {
+            "$ref": "#/$defs/atbin-basename"
+          },
+          "records": {
+            "$ref": "#/$defs/uint64-decimal-string"
+          },
+          "bytes": {
+            "$ref": "#/$defs/uint64-decimal-string"
+          },
+          "sha256": {
+            "$ref": "#/$defs/lower-hex-sha256"
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "lower-hex-sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "uint64-decimal-string": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]{0,19})$",
+      "x-decimal-maximum": "18446744073709551615"
+    },
+    "canonical-decimal-string": {
+      "type": "string",
+      "pattern": "^(0|1|0\\.[0-9]*[1-9])$",
+      "x-decimal-minimum": "0",
+      "x-decimal-maximum": "1"
+    },
+    "int32": {
+      "type": "integer",
+      "minimum": -2147483648,
+      "maximum": 2147483647
+    },
+    "uint32": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4294967295
+    },
+    "positive-uint32": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 4294967295
+    },
+    "portable-basename": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!\\.{1,2}$)[^/\\\\:\\u0000<>\\\"|?*]+$"
+    },
+    "atbin-basename": {
+      "type": "string",
+      "pattern": "^(?!\\.{1,2}$)[^/\\\\:\\u0000<>\\\"|?*]+\\.atbin$"
+    }
+  },
+  "x-file-policy": {
+    "encoding": "utf-8",
+    "bom": "forbidden",
+    "canonical_json": {
+      "key_order": "schema-declaration-order",
+      "separators": [
+        ",",
+        ":"
+      ],
+      "ensure_ascii": false,
+      "allow_nan": false,
+      "insignificant_whitespace": "forbidden"
+    },
+    "trailing_lf_count": 1,
+    "absolute_paths": "forbidden",
+    "timestamps": "forbidden",
+    "sidecar_suffix": ".manifest.json",
+    "append": "forbidden",
+    "overwrite": "forbidden"
+  }
+}

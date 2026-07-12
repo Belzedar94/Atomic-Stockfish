@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
-"""Integration gate for Atomic-Stockfish's isolated Legacy Atomic V1 generator."""
+"""Integration gate for Atomic-Stockfish's isolated Atomic data generator."""
 
 from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 from pathlib import Path
 import re
 import subprocess
 import sys
 import tempfile
 from typing import Sequence
+
+from atomic_bin_v2_manifest_schema import load_atomic_bin_v2_manifest
 
 
 SCHEMA_SHA256 = "acca0f551f1c012c31a6c727dedccaebb7b5ebbc46810edb87e31bb208d5abe1"
@@ -26,14 +29,31 @@ if V2_SCHEMA_SHA256 != FROZEN_V2_SCHEMA_SHA256:
         "Atomic BIN V2 schema hash drift: "
         f"expected {FROZEN_V2_SCHEMA_SHA256}, got {V2_SCHEMA_SHA256}"
     )
+V2_MANIFEST_SCHEMA_FILE = (
+    Path(__file__).resolve().parents[1] / "schemas" / "atomic-bin-v2-manifest.json"
+)
+FROZEN_V2_MANIFEST_SCHEMA_SHA256 = (
+    "83d63922df3ac4a0c81a21ec9d9fd9e180efe50f26efee62fe01710e09da5b42"
+)
+V2_MANIFEST_SCHEMA_SHA256 = hashlib.sha256(
+    V2_MANIFEST_SCHEMA_FILE.read_bytes()
+).hexdigest()
+if V2_MANIFEST_SCHEMA_SHA256 != FROZEN_V2_MANIFEST_SCHEMA_SHA256:
+    raise AssertionError(
+        "Atomic BIN V2 manifest schema hash drift: "
+        f"expected {FROZEN_V2_MANIFEST_SCHEMA_SHA256}, "
+        f"got {V2_MANIFEST_SCHEMA_SHA256}"
+    )
 PLURAL_CAPABILITY_JSON = (
     '{"capability_version":2,"formats":{'
     '"legacy-atomic-v1":{"schema_sha256":"' + SCHEMA_SHA256 + '",'
     '"read":false,"write":true,"header_size":0,"record_size":72},'
     '"atomic-bin-v2":{"schema_sha256":"' + V2_SCHEMA_SHA256 + '",'
-    '"read":false,"write":false,"header_size":96,"record_size":64}}}'
+    '"read":false,"write":true,"header_size":96,"record_size":64}}}'
 )
 RECORD_SIZE = 72
+V2_HEADER_SIZE = 96
+V2_RECORD_SIZE = 64
 REPLAY_SEED = "tools-wire-test"
 RESOLVED_SEED = 4843478989694531390
 SYNTHETIC_NET_SHA256 = "9CF054CA00B82AB53A34473DE52D1104AEDDAA19B2E7B24091B5E613AF485985"
@@ -159,6 +179,378 @@ def assert_dataset(path: Path, records: int) -> bytes:
     if any(data[offset + 71] != 0 for offset in range(0, len(data), RECORD_SIZE)):
         raise AssertionError("Legacy Atomic V1 padding byte is not deterministically zero")
     return data
+
+
+def assert_atomic_bin_v2_dataset(
+    path: Path, records: int, *, atomic960: bool
+) -> bytes:
+    if path.suffix != ".atbin":
+        raise AssertionError(f"Atomic BIN V2 output does not use .atbin: {path}")
+    if not path.is_file():
+        raise AssertionError(f"generator did not create {path}")
+
+    data = path.read_bytes()
+    expected_size = V2_HEADER_SIZE + records * V2_RECORD_SIZE
+    if len(data) != expected_size:
+        raise AssertionError(
+            "Atomic BIN V2 framing mismatch: "
+            f"expected {expected_size} bytes, got {len(data)}"
+        )
+
+    if data[:8] != b"ATBINV2\0":
+        raise AssertionError("Atomic BIN V2 magic is invalid")
+    header_fields = (
+        ("version", 8, 10, 2),
+        ("header size", 10, 12, V2_HEADER_SIZE),
+        ("endian marker", 12, 16, 0x01020304),
+        ("record size", 16, 20, V2_RECORD_SIZE),
+        ("header flags", 20, 24, 0),
+        ("record count", 56, 64, records),
+    )
+    for label, start, end, expected in header_fields:
+        actual = int.from_bytes(data[start:end], "little")
+        if actual != expected:
+            raise AssertionError(
+                f"Atomic BIN V2 {label} mismatch: expected {expected}, got {actual}"
+            )
+    if data[24:56] != bytes.fromhex(V2_SCHEMA_SHA256):
+        raise AssertionError("Atomic BIN V2 header contains the wrong schema SHA-256")
+    if data[64:V2_HEADER_SIZE] != bytes(V2_HEADER_SIZE - 64):
+        raise AssertionError("Atomic BIN V2 header reserved bytes are nonzero")
+
+    expected_flags = 1 if atomic960 else 0
+    for record_index in range(records):
+        offset = V2_HEADER_SIZE + record_index * V2_RECORD_SIZE
+        if data[offset + 61] != expected_flags:
+            raise AssertionError(
+                "Atomic BIN V2 record flags mismatch at record "
+                f"{record_index}: expected {expected_flags}, got {data[offset + 61]}"
+            )
+        if data[offset + 62 : offset + 64] != b"\0\0":
+            raise AssertionError(
+                f"Atomic BIN V2 record {record_index} reserved bytes are nonzero"
+            )
+    return data
+
+
+def current_repository_commit() -> str | None:
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(REPO_ROOT), "rev-parse", "HEAD"],
+            text=True,
+            encoding="utf-8",
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            timeout=10.0,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    commit = result.stdout.strip().lower()
+    if result.returncode != 0 or re.fullmatch(r"[0-9a-f]{40}", commit) is None:
+        return None
+    try:
+        status = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(REPO_ROOT),
+                "status",
+                "--porcelain",
+                "--untracked-files=normal",
+            ],
+            text=True,
+            encoding="utf-8",
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            timeout=10.0,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if status.returncode != 0:
+        return None
+    if status.stdout:
+        return "unknown"
+    return commit
+
+
+def assert_json_keys(value: object, expected: Sequence[str], label: str) -> dict[str, object]:
+    if not isinstance(value, dict):
+        raise AssertionError(f"Atomic BIN V2 manifest {label} is not an object")
+    if list(value) != list(expected):
+        raise AssertionError(
+            f"Atomic BIN V2 manifest {label} key order mismatch: "
+            f"expected {list(expected)}, got {list(value)}"
+        )
+    return value
+
+
+def assert_manifest_has_no_absolute_paths_or_timestamps(value: object) -> None:
+    timestamp_keys = {
+        "created_at",
+        "date",
+        "datetime",
+        "generated_at",
+        "timestamp",
+        "updated_at",
+    }
+
+    def visit(item: object) -> None:
+        if isinstance(item, dict):
+            for key, child in item.items():
+                if key.lower() in timestamp_keys:
+                    raise AssertionError(
+                        f"Atomic BIN V2 manifest contains timestamp key {key!r}"
+                    )
+                visit(child)
+        elif isinstance(item, list):
+            for child in item:
+                visit(child)
+        elif isinstance(item, str):
+            windows_absolute = re.match(r"^[A-Za-z]:[\\/]", item) is not None
+            if Path(item).is_absolute() or windows_absolute or item.startswith("\\\\"):
+                raise AssertionError(
+                    f"Atomic BIN V2 manifest leaks absolute path {item!r}"
+                )
+
+    visit(value)
+
+
+def assert_atomic_bin_v2_manifest(
+    manifest_path: Path,
+    shard_fixtures: Sequence[tuple[Path, bytes, int]],
+    *,
+    records_per_shard: int | None = None,
+    atomic960: bool,
+    net: Path,
+    net_sha256: str,
+    root: Path,
+    book_path: Path | None = None,
+) -> dict[str, object]:
+    if not shard_fixtures:
+        raise AssertionError("Atomic BIN V2 test manifest needs at least one shard fixture")
+    first_shard_path = shard_fixtures[0][0]
+    records = sum(shard_records for _, _, shard_records in shard_fixtures)
+    if records_per_shard is None:
+        records_per_shard = shard_fixtures[0][2]
+    expected_path = Path(str(first_shard_path) + ".manifest.json")
+    if manifest_path != expected_path:
+        raise AssertionError(
+            f"Atomic BIN V2 sidecar path mismatch: expected {expected_path}, got {manifest_path}"
+        )
+    if not manifest_path.is_file():
+        raise AssertionError(f"generator did not create {manifest_path}")
+
+    raw = manifest_path.read_bytes()
+    if raw.startswith(b"\xef\xbb\xbf"):
+        raise AssertionError("Atomic BIN V2 manifest contains a UTF-8 BOM")
+    if not raw.endswith(b"\n") or raw.endswith(b"\n\n") or b"\r" in raw:
+        raise AssertionError("Atomic BIN V2 manifest must end in exactly one LF")
+    try:
+        text = raw.decode("utf-8")
+        parsed = json.loads(text)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise AssertionError(
+            f"Atomic BIN V2 manifest is not canonical UTF-8 JSON: {error}"
+        ) from error
+    try:
+        canonical = json.dumps(
+            parsed, ensure_ascii=False, allow_nan=False, separators=(",", ":")
+        ).encode("utf-8") + b"\n"
+    except (TypeError, ValueError) as error:
+        raise AssertionError(
+            f"Atomic BIN V2 manifest contains invalid JSON values: {error}"
+        ) from error
+    if raw != canonical:
+        raise AssertionError("Atomic BIN V2 manifest is not canonical minified JSON")
+    if load_atomic_bin_v2_manifest(manifest_path) != parsed:
+        raise AssertionError("Atomic BIN V2 strict manifest validation changed the document")
+
+    manifest = assert_json_keys(
+        parsed,
+        (
+            "manifest_version",
+            "manifest_schema_sha256",
+            "data_schema_sha256",
+            "format",
+            "engine",
+            "network",
+            "book",
+            "generation",
+            "statistics",
+            "shards",
+        ),
+        "root",
+    )
+    assert_manifest_has_no_absolute_paths_or_timestamps(manifest)
+    leaked_paths = (root, net, *(path for path, _, _ in shard_fixtures))
+    if book_path is not None:
+        leaked_paths += (book_path,)
+    for leaked_path in leaked_paths:
+        encoded = str(leaked_path).encode("utf-8")
+        normalized = str(leaked_path).replace("\\", "/").encode("utf-8")
+        if encoded in raw or normalized in raw:
+            raise AssertionError(
+                f"Atomic BIN V2 manifest leaks absolute path {leaked_path}"
+            )
+
+    if manifest["manifest_version"] != 1:
+        raise AssertionError("Atomic BIN V2 manifest version is not 1")
+    if manifest["manifest_schema_sha256"] != V2_MANIFEST_SCHEMA_SHA256:
+        raise AssertionError("Atomic BIN V2 manifest contains the wrong manifest schema hash")
+    if manifest["data_schema_sha256"] != V2_SCHEMA_SHA256:
+        raise AssertionError("Atomic BIN V2 manifest contains the wrong data schema hash")
+    if manifest["format"] != "atomic-bin-v2":
+        raise AssertionError("Atomic BIN V2 manifest format is invalid")
+
+    engine = assert_json_keys(manifest["engine"], ("commit", "version"), "engine")
+    commit = engine["commit"]
+    if not isinstance(commit, str) or (
+        commit != "unknown" and re.fullmatch(r"[0-9a-f]{40}", commit) is None
+    ):
+        raise AssertionError(f"Atomic BIN V2 manifest commit is invalid: {commit!r}")
+    expected_commit = current_repository_commit()
+    if expected_commit is not None and commit != expected_commit:
+        raise AssertionError(
+            "Atomic BIN V2 manifest commit does not match this checkout: "
+            f"expected {expected_commit}, got {commit}"
+        )
+    if not isinstance(engine["version"], str) or not engine["version"]:
+        raise AssertionError("Atomic BIN V2 manifest engine version is empty")
+
+    network = assert_json_keys(manifest["network"], ("file", "sha256"), "network")
+    if network != {"file": net.name, "sha256": net_sha256.lower()}:
+        raise AssertionError(
+            f"Atomic BIN V2 manifest network metadata mismatch: {network!r}"
+        )
+    book = assert_json_keys(manifest["book"], ("kind", "file", "sha256"), "book")
+    expected_book = (
+        {"kind": "builtin-startpos", "file": None, "sha256": None}
+        if book_path is None
+        else {
+            "kind": "file",
+            "file": book_path.name,
+            "sha256": hashlib.sha256(book_path.read_bytes()).hexdigest(),
+        }
+    )
+    if book != expected_book:
+        raise AssertionError(f"Atomic BIN V2 manifest book metadata mismatch: {book!r}")
+
+    generation = assert_json_keys(
+        manifest["generation"],
+        ("resolved_seed", "atomic960", "threads", "hash_mb", "use_nnue", "options"),
+        "generation",
+    )
+    expected_generation = {
+        "resolved_seed": str(RESOLVED_SEED),
+        "atomic960": atomic960,
+        "threads": 1,
+        "hash_mb": "16",
+        "use_nnue": "pure",
+    }
+    for key, expected in expected_generation.items():
+        if generation[key] != expected:
+            raise AssertionError(
+                f"Atomic BIN V2 manifest generation.{key} mismatch: "
+                f"expected {expected!r}, got {generation[key]!r}"
+            )
+    options = assert_json_keys(
+        generation["options"],
+        (
+            "search_depth_min",
+            "search_depth_max",
+            "nodes",
+            "requested_records",
+            "records_per_shard",
+            "eval_limit",
+            "eval_diff_limit",
+            "random_move_min_ply",
+            "random_move_max_ply",
+            "random_move_count",
+            "random_move_like_apery",
+            "random_multi_pv",
+            "random_multi_pv_diff",
+            "random_multi_pv_depth",
+            "write_min_ply",
+            "write_max_ply",
+            "keep_draws",
+            "adjudicate_draws_by_score",
+            "adjudicate_insufficient",
+            "filter_captures",
+            "filter_checks",
+            "filter_promotions",
+            "random_file_name",
+            "set_recommended_uci_options_seen",
+        ),
+        "generation.options",
+    )
+    expected_options = {
+        "search_depth_min": 1,
+        "search_depth_max": 1,
+        "nodes": "0",
+        "requested_records": str(records),
+        "records_per_shard": str(records_per_shard),
+        "eval_limit": 32000,
+        "eval_diff_limit": 64000,
+        "random_move_min_ply": 1,
+        "random_move_max_ply": 24,
+        "random_move_count": 0,
+        "random_move_like_apery": 0,
+        "random_multi_pv": 5,
+        "random_multi_pv_diff": 100,
+        "random_multi_pv_depth": 1,
+        "write_min_ply": 0,
+        "write_max_ply": 2,
+        "keep_draws": "1",
+        "adjudicate_draws_by_score": True,
+        "adjudicate_insufficient": True,
+        "filter_captures": False,
+        "filter_checks": False,
+        "filter_promotions": False,
+        "random_file_name": False,
+        "set_recommended_uci_options_seen": False,
+    }
+    if options != expected_options:
+        raise AssertionError(
+            "Atomic BIN V2 manifest effective options mismatch: "
+            f"expected {expected_options!r}, got {options!r}"
+        )
+
+    statistics = assert_json_keys(manifest["statistics"], ("records", "draws"), "statistics")
+    if statistics["records"] != str(records):
+        raise AssertionError("Atomic BIN V2 manifest record statistic is incorrect")
+    draws = statistics["draws"]
+    if not isinstance(draws, str) or re.fullmatch(r"0|[1-9][0-9]*", draws) is None:
+        raise AssertionError("Atomic BIN V2 manifest draw statistic is not canonical")
+    if int(draws) > records:
+        raise AssertionError("Atomic BIN V2 manifest draw statistic exceeds its record count")
+
+    shards = manifest["shards"]
+    if not isinstance(shards, list) or len(shards) != len(shard_fixtures):
+        raise AssertionError(
+            "Atomic BIN V2 manifest shard count mismatch: "
+            f"expected {len(shard_fixtures)}, got {len(shards) if isinstance(shards, list) else 'non-list'}"
+        )
+    for index, (shard_path, shard_data, shard_records) in enumerate(shard_fixtures):
+        shard = assert_json_keys(
+            shards[index],
+            ("index", "file", "records", "bytes", "sha256"),
+            f"shards[{index}]",
+        )
+        expected_shard = {
+            "index": index,
+            "file": shard_path.name,
+            "records": str(shard_records),
+            "bytes": str(len(shard_data)),
+            "sha256": hashlib.sha256(shard_data).hexdigest(),
+        }
+        if shard != expected_shard:
+            raise AssertionError(
+                "Atomic BIN V2 manifest shard metadata mismatch: "
+                f"expected {expected_shard!r}, got {shard!r}"
+            )
+    return manifest
 
 
 def packed_positions(data: bytes) -> tuple[bytes, ...]:
@@ -667,6 +1059,145 @@ def main(argv: Sequence[str] | None = None) -> int:
             unresolved=unresolved_hashes,
         )
 
+        v2 = root / "atomic-v2.atbin"
+        v2_manifest = Path(str(v2) + ".manifest.json")
+        v2_output = run_engine(
+            generator,
+            (
+                *setup_commands(net),
+                generation_command(v2, data_format="atomic-bin-v2"),
+                "quit",
+            ),
+            expect_success=True,
+        )
+        v2_lines = v2_output.splitlines()
+        if v2_lines.count("INFO: generate_training_data finished.") != 1:
+            raise AssertionError(f"Atomic BIN V2 generator did not finish once:\n{v2_output}")
+        if v2_lines.count(f"INFO: schema_sha256 = {V2_SCHEMA_SHA256}") != 1:
+            raise AssertionError(f"Atomic BIN V2 schema marker is incomplete:\n{v2_output}")
+        if (
+            v2_lines.count(
+                f"INFO: manifest_schema_sha256 = {V2_MANIFEST_SCHEMA_SHA256}"
+            )
+            != 1
+        ):
+            raise AssertionError(
+                f"Atomic BIN V2 manifest schema marker is incomplete:\n{v2_output}"
+            )
+        if v2_lines.count(f"INFO: manifest = {v2_manifest}") != 1:
+            raise AssertionError(f"Atomic BIN V2 manifest path marker is incomplete:\n{v2_output}")
+        v2_data = assert_atomic_bin_v2_dataset(v2, 2, atomic960=False)
+        assert_atomic_bin_v2_manifest(
+            v2_manifest,
+            ((v2, v2_data, 2),),
+            atomic960=False,
+            net=net,
+            net_sha256=net_sha256,
+            root=root,
+        )
+
+        multi_v2_base = root / "multi-v2"
+        multi_v2_first = root / "multi-v2.atbin"
+        multi_v2_second = root / "multi-v2_1.atbin"
+        multi_v2_manifest = Path(str(multi_v2_first) + ".manifest.json")
+        multi_v2_output = run_engine(
+            generator,
+            (
+                *setup_commands(net),
+                generation_command(
+                    multi_v2_base,
+                    records=4,
+                    data_format="atomic-bin-v2",
+                    save_every=2,
+                    book=multi_book,
+                ),
+                "quit",
+            ),
+            expect_success=True,
+        )
+        if multi_v2_output.splitlines().count("INFO: generate_training_data finished.") != 1:
+            raise AssertionError(
+                f"multi-shard Atomic BIN V2 generator did not finish once:\n{multi_v2_output}"
+            )
+        multi_v2_first_data = assert_atomic_bin_v2_dataset(
+            multi_v2_first, 2, atomic960=False
+        )
+        multi_v2_second_data = assert_atomic_bin_v2_dataset(
+            multi_v2_second, 2, atomic960=False
+        )
+        assert_atomic_bin_v2_manifest(
+            multi_v2_manifest,
+            (
+                (multi_v2_first, multi_v2_first_data, 2),
+                (multi_v2_second, multi_v2_second_data, 2),
+            ),
+            records_per_shard=2,
+            atomic960=False,
+            net=net,
+            net_sha256=net_sha256,
+            root=root,
+            book_path=multi_book,
+        )
+
+        atomic960_book = root / "atomic960-book.epd"
+        atomic960_book.write_bytes(b"7k/8/8/8/8/8/8/1RK5 w B - 0 1\n")
+        atomic960_v2 = root / "atomic960-v2.atbin"
+        atomic960_manifest = Path(str(atomic960_v2) + ".manifest.json")
+        atomic960_output = run_engine(
+            generator,
+            (
+                *setup_commands(net),
+                "setoption name UCI_Chess960 value true",
+                generation_command(
+                    atomic960_v2,
+                    data_format="atomic-bin-v2",
+                    book=atomic960_book,
+                ),
+                "quit",
+            ),
+            expect_success=True,
+        )
+        atomic960_lines = atomic960_output.splitlines()
+        if atomic960_lines.count("INFO: generate_training_data finished.") != 1:
+            raise AssertionError(
+                f"Atomic960 BIN V2 generator did not finish once:\n{atomic960_output}"
+            )
+        if atomic960_lines.count(f"INFO: schema_sha256 = {V2_SCHEMA_SHA256}") != 1:
+            raise AssertionError(
+                f"Atomic960 BIN V2 schema marker is incomplete:\n{atomic960_output}"
+            )
+        if (
+            atomic960_lines.count(
+                f"INFO: manifest_schema_sha256 = {V2_MANIFEST_SCHEMA_SHA256}"
+            )
+            != 1
+        ):
+            raise AssertionError(
+                f"Atomic960 BIN V2 manifest schema marker is incomplete:\n{atomic960_output}"
+            )
+        atomic960_data = assert_atomic_bin_v2_dataset(
+            atomic960_v2, 2, atomic960=True
+        )
+        first_position = V2_HEADER_SIZE
+        if (
+            atomic960_data[first_position + 33] != 2
+            or atomic960_data[first_position + 35] != 1
+        ):
+            raise AssertionError(
+                "Atomic960 BIN V2 did not preserve the non-orthodox b1 queenside rook origin"
+            )
+        atomic960_manifest_data = assert_atomic_bin_v2_manifest(
+            atomic960_manifest,
+            ((atomic960_v2, atomic960_data, 2),),
+            atomic960=True,
+            net=net,
+            net_sha256=net_sha256,
+            root=root,
+            book_path=atomic960_book,
+        )
+        if atomic960_manifest_data["generation"]["atomic960"] is not True:
+            raise AssertionError("Atomic960 BIN V2 manifest did not preserve atomic960=true")
+
         # This is a valid-net/valid-pure setup. Only the isolated generator may
         # acknowledge or execute the two generator-only commands.
         if normal_engine is not None:
@@ -757,6 +1288,37 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "Invalid generate_training_data parameter range",
             )
 
+            zero_v2_shard = root / "zero-v2-shard.atbin"
+            assert_failed_without_output(
+                generator,
+                (
+                    *setup_commands(net),
+                    generation_command(
+                        zero_v2_shard,
+                        data_format="atomic-bin-v2",
+                        save_every=0,
+                    ),
+                ),
+                zero_v2_shard,
+                "Invalid generate_training_data parameter range",
+            )
+            if Path(str(zero_v2_shard) + ".manifest.json").exists():
+                raise AssertionError("save_every=0 rejection created a V2 manifest")
+
+            syzygy_v2 = root / "syzygy-v2.atbin"
+            assert_failed_without_output(
+                generator,
+                (
+                    *setup_commands(net),
+                    f"setoption name SyzygyPath value {root}",
+                    generation_command(syzygy_v2, data_format="atomic-bin-v2"),
+                ),
+                syzygy_v2,
+                "requires an empty SyzygyPath",
+            )
+            if Path(str(syzygy_v2) + ".manifest.json").exists():
+                raise AssertionError("SyzygyPath rejection created a V2 manifest")
+
             inverted_depth = root / "inverted-depth.bin"
             assert_failed_without_output(
                 generator,
@@ -816,6 +1378,92 @@ def main(argv: Sequence[str] | None = None) -> int:
                 )
             if existing.read_bytes() != sentinel:
                 raise AssertionError("existing output was modified by a rejected generation")
+
+            existing_v2 = root / "existing-v2.atbin"
+            existing_v2_manifest = Path(str(existing_v2) + ".manifest.json")
+            existing_v2.write_bytes(sentinel)
+            existing_v2_output = run_engine(
+                generator,
+                (
+                    *setup_commands(net),
+                    generation_command(existing_v2, data_format="atomic-bin-v2"),
+                    "quit",
+                ),
+                expect_success=False,
+            )
+            if "output already exists" not in existing_v2_output:
+                raise AssertionError(
+                    "existing Atomic BIN V2 shard refusal was not explicit:\n"
+                    f"{existing_v2_output}"
+                )
+            if existing_v2.read_bytes() != sentinel:
+                raise AssertionError(
+                    "existing Atomic BIN V2 shard was modified by rejected generation"
+                )
+            if existing_v2_manifest.exists():
+                raise AssertionError(
+                    "rejected Atomic BIN V2 shard overwrite created a manifest"
+                )
+
+            sidecar_v2 = root / "existing-sidecar-v2.atbin"
+            sidecar_v2_manifest = Path(str(sidecar_v2) + ".manifest.json")
+            sidecar_v2_manifest.write_bytes(sentinel)
+            sidecar_v2_output = run_engine(
+                generator,
+                (
+                    *setup_commands(net),
+                    generation_command(sidecar_v2, data_format="atomic-bin-v2"),
+                    "quit",
+                ),
+                expect_success=False,
+            )
+            if "output already exists" not in sidecar_v2_output:
+                raise AssertionError(
+                    "existing Atomic BIN V2 sidecar refusal was not explicit:\n"
+                    f"{sidecar_v2_output}"
+                )
+            if sidecar_v2_manifest.read_bytes() != sentinel:
+                raise AssertionError(
+                    "existing Atomic BIN V2 sidecar was modified by rejected generation"
+                )
+            if sidecar_v2.exists():
+                raise AssertionError(
+                    "rejected Atomic BIN V2 sidecar overwrite created a shard"
+                )
+
+            rollback_v2_first = root / ".atbin"
+            rollback_v2_second = root / ".atbin_1.atbin"
+            rollback_v2_manifest = Path(str(rollback_v2_first) + ".manifest.json")
+            rollback_v2_output = run_engine(
+                generator,
+                (
+                    *setup_commands(net),
+                    generation_command(
+                        rollback_v2_first,
+                        records=4,
+                        data_format="atomic-bin-v2",
+                        save_every=2,
+                        book=multi_book,
+                    ),
+                    "quit",
+                ),
+                expect_success=False,
+            )
+            if "shard metadata is invalid" not in rollback_v2_output:
+                raise AssertionError(
+                    "Atomic BIN V2 post-finalization rollback was not explicit:\n"
+                    f"{rollback_v2_output}"
+                )
+            for rolled_back in (
+                rollback_v2_first,
+                rollback_v2_second,
+                rollback_v2_manifest,
+            ):
+                if rolled_back.exists():
+                    raise AssertionError(
+                        "Atomic BIN V2 rollback retained an owned output: "
+                        f"{rolled_back}"
+                    )
 
             datasets = (
                 (first, 2),

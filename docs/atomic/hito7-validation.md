@@ -237,12 +237,63 @@ the playing engine source/object set is unchanged. The plural
 Legacy V1 handshake and all 72-byte output remain byte-exact. Consequently
 this contract-only block does not trigger LOS matches.
 
+## H7.3-B - Atomic BIN V2 sink and manifest
+
+The isolated generator now accepts `data_format atomic-bin-v2` while retaining
+`data_format bin` as its byte-exact default. Each V2 shard is created with
+exclusive, non-appending semantics, starts with a provisional zero-count
+header, and is published only after the final count, exact file-size formula,
+same-descriptor SHA-256 and durable close succeed. The sink retains a file
+identity token to detect a replacement before rollback. Windows binds deletion
+to an open handle; on POSIX the caller must serialize writers in the output
+directory because the platform has no portable unlink-if-inode primitive.
+
+Every successful run requires an adjacent sidecar whose frozen schema is
+`schemas/atomic-bin-v2-manifest.json` (SHA-256
+`83d63922df3ac4a0c81a21ec9d9fd9e180efe50f26efee62fe01710e09da5b42`).
+The canonical one-line UTF-8 JSON records the full engine commit, version,
+authenticated network/book basenames and hashes, resolved seed, Atomic960 and
+UCI state, all effective generator settings, totals, and every shard's exact
+record count, byte count and checksum. It contains neither timestamps nor
+absolute paths and is never appended or overwritten. Linux writes it to an
+anonymous `O_TMPFILE` inode, synchronizes that inode and publishes it exactly
+once with a no-replace hard link. The generator preflights `O_TMPFILE` and the
+descriptor-link route in a uniquely named private directory before creating any
+shard, so an incompatible filesystem fails immediately. Cleanup is checked; a
+process killed inside the probe can leave its clearly prefixed private
+directory, but no error path ever unlinks the final pathname. Windows retains
+the exact exclusive handle through write, synchronization and identity-bound
+cleanup. Consequently a concurrent replacement of the final sidecar is never a
+rollback target.
+
+V2 rejects a non-empty `SyzygyPath` before creating any shard. This prevents
+tablebase-dependent moves or scores from escaping the authenticated manifest;
+tablebase files are deliberately not hashed as generator inputs.
+
+The build injects the full engine SHA only when `git status --porcelain` is
+empty. Dirty/source-export builds serialize `engine.commit=unknown`, preventing
+false attribution to a clean `HEAD`. File authentication rechecks size on the
+same descriptor after SHA-256 and fails closed if it changed during hashing.
+
+V2 accepts Atomic960 and sets its record flag while preserving castling-rook
+origins. Legacy V1 continues to reject Atomic960 and its singular capability,
+fixtures and 72-byte wire remain unchanged. The plural handshake now advertises
+V2 as `read:false,write:true`; H7.3-C is the separate reader rollout.
+
+The new gates cover SHA-256 boundaries, exclusive sink lifecycle, provisional
+and final headers, single-writer identity-checked abort, canonical manifest
+rendering and publication, native V2 generation, Atomic960, input/output
+checksums and overwrite refusal on GCC, Clang, MinGW, debug, sanitizers and
+Valgrind. Memcheck also runs a real one-record V2 generator transaction, not
+only the isolated codecs. These objects remain outside the playing binary, so
+the Atomic playing signature is the relevant non-regression gate and LOS is not
+triggered by this block.
+
 ## Remaining Hito 7 work
 
-H7.1, H7.2 and H7.3-A are compatibility boundaries, not completion of Hito 7.
-The next blocks add the V2 sink/manifest and then validate every V2 record in
-tools and trainer. Legacy V1 remains a supported fallback throughout the 1.x
-line.
+H7.1, H7.2 and H7.3-A/B are compatibility boundaries, not completion of Hito
+7. H7.3-C adds strict V2 readers and validates every record in tools and trainer.
+Legacy V1 remains a supported fallback throughout the 1.x line.
 
 This project remains isolated in the sibling repositories: every tools or
 trainer implementation branch starts from its dedicated `atomic` branch and
