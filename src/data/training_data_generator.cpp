@@ -11,7 +11,9 @@
 #include "training_data_generator.h"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
+#include <charconv>
 #include <chrono>
 #include <cmath>
 #include <cctype>
@@ -21,6 +23,7 @@
 #include <iomanip>
 #include <iostream>
 #include <limits>
+#include <locale>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -32,6 +35,9 @@
 #include <vector>
 
 #include "api/atomic_outcome.h"
+#include "atomic_bin_v2.h"
+#include "atomic_bin_v2_manifest.h"
+#include "atomic_bin_v2_sink.h"
 #include "engine.h"
 #include "legacy_atomic_v1.h"
 #include "misc.h"
@@ -39,6 +45,7 @@
 #include "position.h"
 #include "random_seed.h"
 #include "search.h"
+#include "sha256.h"
 #include "thread.h"
 #include "tt.h"
 
@@ -47,14 +54,21 @@ namespace {
 
 constexpr std::string_view AtomicStartFen =
   "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
-constexpr u64 ReportEvery         = 5000;
-constexpr u64 MinimumShardRecords = 200000;
-constexpr u64 MaximumShardFiles   = 100000;
-constexpr int MaximumGeneratedPly = 4096;
-constexpr int LegacyKnownWin      = 10000;
+constexpr u64              ReportEvery         = 5000;
+constexpr u64              MinimumShardRecords = 200000;
+constexpr u64              MaximumShardFiles   = 100000;
+constexpr int              MaximumGeneratedPly = 4096;
+constexpr int              LegacyKnownWin      = 10000;
+constexpr std::string_view LegacyAtomicV1SchemaSha256 =
+  "acca0f551f1c012c31a6c727dedccaebb7b5ebbc46810edb87e31bb208d5abe1";
 // Preserve the historical direct-mapped 64M-key deduplication table. Reducing
 // it changes collision/false-positive rates and therefore dataset selection.
 constexpr usize DedupeTableSize = usize(64) * 1024 * 1024;
+
+enum class DatasetFormat {
+    LEGACY_ATOMIC_V1,
+    ATOMIC_BIN_V2
+};
 
 struct GeneratorParams {
     int searchDepthMin = 3;
@@ -81,14 +95,18 @@ struct GeneratorParams {
     std::string seedText;
     std::string book;
 
-    double keepDraws                    = 1.0;
-    bool   adjudicateDrawsByScore       = true;
-    bool   adjudicateInsufficient       = true;
-    bool   filterCaptures               = true;
-    bool   filterChecks                 = false;
-    bool   filterPromotions             = false;
-    bool   randomFileName               = false;
-    bool   setRecommendedUciOptionsSeen = false;
+    DatasetFormat dataFormat = DatasetFormat::LEGACY_ATOMIC_V1;
+    bool          atomic960  = false;
+
+    double      keepDraws                    = 1.0;
+    std::string keepDrawsManifest            = "1";
+    bool        adjudicateDrawsByScore       = true;
+    bool        adjudicateInsufficient       = true;
+    bool        filterCaptures               = true;
+    bool        filterChecks                 = false;
+    bool        filterPromotions             = false;
+    bool        randomFileName               = false;
+    bool        setRecommendedUciOptionsSeen = false;
 };
 
 struct GameResolution {
@@ -153,8 +171,183 @@ bool read_u64_value(std::istream& input, u64& value, std::string_view name, std:
     return true;
 }
 
+bool canonicalize_keep_draws_token(std::string_view token,
+                                   std::string&     canonical,
+                                   std::string&     error) {
+    canonical.clear();
+    std::size_t cursor   = 0;
+    bool        negative = false;
+    if (token[cursor] == '+' || token[cursor] == '-')
+    {
+        negative = token[cursor] == '-';
+        ++cursor;
+    }
+    if (negative || cursor == token.size())
+    {
+        error = "keep_draws must be a non-negative decimal value";
+        return false;
+    }
+
+    std::string digits;
+    bool        sawDigit       = false;
+    bool        sawPoint       = false;
+    long long   fractionalSize = 0;
+    while (cursor < token.size() && token[cursor] != 'e' && token[cursor] != 'E')
+    {
+        const unsigned char byte = token[cursor++];
+        if (byte == '.')
+        {
+            if (sawPoint)
+            {
+                error = "keep_draws contains more than one decimal point";
+                return false;
+            }
+            sawPoint = true;
+            continue;
+        }
+        if (byte < '0' || byte > '9')
+        {
+            error = "keep_draws must use decimal notation";
+            return false;
+        }
+        sawDigit = true;
+        digits.push_back(char(byte));
+        if (sawPoint)
+            ++fractionalSize;
+    }
+    if (!sawDigit)
+    {
+        error = "keep_draws must contain decimal digits";
+        return false;
+    }
+
+    long long exponent = 0;
+    if (cursor < token.size())
+    {
+        ++cursor;
+        bool exponentNegative = false;
+        if (cursor < token.size() && (token[cursor] == '+' || token[cursor] == '-'))
+        {
+            exponentNegative = token[cursor] == '-';
+            ++cursor;
+        }
+        if (cursor == token.size())
+        {
+            error = "keep_draws exponent is missing decimal digits";
+            return false;
+        }
+        for (; cursor < token.size(); ++cursor)
+        {
+            const unsigned char byte = token[cursor];
+            if (byte < '0' || byte > '9')
+            {
+                error = "keep_draws exponent must contain decimal digits only";
+                return false;
+            }
+            const int digit = byte - '0';
+            exponent        = std::min(1000000LL, exponent * 10 + digit);
+        }
+        if (exponentNegative)
+            exponent = -exponent;
+    }
+
+    const auto firstNonZero = digits.find_first_not_of('0');
+    if (firstNonZero == std::string::npos)
+    {
+        canonical = "0";
+        return true;
+    }
+    digits.erase(0, firstNonZero);
+    long long trailingZeros = 0;
+    while (digits.size() > 1 && digits.back() == '0')
+    {
+        digits.pop_back();
+        ++trailingZeros;
+    }
+
+    const long long point =
+      static_cast<long long>(digits.size()) + exponent - fractionalSize + trailingZeros;
+    if (point > 1 || (point == 1 && digits != "1"))
+    {
+        error = "keep_draws exact decimal value exceeds 1";
+        return false;
+    }
+
+    if (point == 1)
+        canonical = "1";
+    else
+    {
+        if (point < -4096)
+        {
+            error = "keep_draws exact decimal expansion exceeds 4096 characters";
+            return false;
+        }
+        canonical = "0.";
+        if (point < 0)
+            canonical.append(std::size_t(-point), '0');
+        canonical += digits;
+    }
+    return true;
+}
+
+bool read_keep_draws(std::istream& input,
+                     double&       value,
+                     std::string&  canonical,
+                     std::string&  error) {
+    value = 0.0;
+    canonical.clear();
+
+    std::string token;
+    if (!(input >> token) || token.empty() || token.size() > 4096)
+    {
+        error = "Missing or invalid value for generate_training_data option keep_draws";
+        return false;
+    }
+
+    std::istringstream numeric(token);
+    numeric.imbue(std::locale::classic());
+    double parsed = 0.0;
+    if (!(numeric >> parsed) || !std::isfinite(parsed) || parsed < 0.0 || parsed > 1.0)
+    {
+        error = "keep_draws must be a finite decimal value between 0 and 1";
+        return false;
+    }
+    char trailing = 0;
+    if (numeric >> trailing)
+    {
+        error = "keep_draws must be a finite decimal value between 0 and 1";
+        return false;
+    }
+    if (!canonicalize_keep_draws_token(token, canonical, error))
+        return false;
+
+    std::array<char, 64> effectiveBuffer{};
+    const auto [effectiveEnd, conversionError] =
+      std::to_chars(effectiveBuffer.data(), effectiveBuffer.data() + effectiveBuffer.size(), parsed,
+                    std::chars_format::general);
+    if (conversionError != std::errc{})
+    {
+        error = "keep_draws effective value cannot be serialized reproducibly";
+        return false;
+    }
+
+    std::string effectiveCanonical;
+    if (!canonicalize_keep_draws_token(
+          std::string_view(effectiveBuffer.data(),
+                           std::size_t(effectiveEnd - effectiveBuffer.data())),
+          effectiveCanonical, error))
+        return false;
+    if (effectiveCanonical != canonical)
+    {
+        error = "keep_draws must round-trip exactly through the generator's floating-point value";
+        return false;
+    }
+
+    value = parsed;
+    return true;
+}
+
 bool parse_params(std::istream& input, GeneratorParams& params, std::string& error) {
-    std::string dataFormat = "bin";
     std::string token;
     bool        searchDepthMaxSeen = false;
     while (input >> token)
@@ -264,7 +457,7 @@ bool parse_params(std::istream& input, GeneratorParams& params, std::string& err
         }
         else if (token == "keep_draws")
         {
-            if (!read_value(input, params.keepDraws, token, error))
+            if (!read_keep_draws(input, params.keepDraws, params.keepDrawsManifest, error))
                 return false;
         }
         else if (token == "adjudicate_draws_by_score")
@@ -294,8 +487,18 @@ bool parse_params(std::istream& input, GeneratorParams& params, std::string& err
         }
         else if (token == "data_format")
         {
-            if (!read_value(input, dataFormat, token, error))
+            std::string value;
+            if (!read_value(input, value, token, error))
                 return false;
+            if (value == "bin")
+                params.dataFormat = DatasetFormat::LEGACY_ATOMIC_V1;
+            else if (value == "atomic-bin-v2")
+                params.dataFormat = DatasetFormat::ATOMIC_BIN_V2;
+            else
+            {
+                error = "Unknown generate_training_data data_format " + value;
+                return false;
+            }
         }
         else if (token == "seed")
         {
@@ -311,16 +514,11 @@ bool parse_params(std::istream& input, GeneratorParams& params, std::string& err
         }
     }
 
-    if (dataFormat != "bin")
-    {
-        error = "Legacy Atomic V1 data_format must be bin";
-        return false;
-    }
-
     if (!searchDepthMaxSeen)
         params.searchDepthMax = params.searchDepthMin;
     params.randomMultiPvDepth = std::max(params.searchDepthMax, params.randomMultiPvDepth);
-    if (params.saveEvery != std::numeric_limits<u64>::max())
+    if (params.dataFormat == DatasetFormat::LEGACY_ATOMIC_V1
+        && params.saveEvery != std::numeric_limits<u64>::max())
         params.saveEvery = std::max(params.saveEvery, MinimumShardRecords);
 
     const bool invalid =
@@ -336,7 +534,8 @@ bool parse_params(std::istream& input, GeneratorParams& params, std::string& err
       || params.randomMoveLikeApery < 0 || params.randomMultiPv < 0
       || params.randomMultiPv > int(MAX_MOVES) || params.randomMultiPvDiff < 0
       || params.randomMultiPvDepth < 0 || !std::isfinite(params.keepDraws) || params.keepDraws < 0.0
-      || params.keepDraws > 1.0 || params.outputFile.empty();
+      || params.keepDraws > 1.0 || params.outputFile.empty()
+      || (params.dataFormat == DatasetFormat::ATOMIC_BIN_V2 && params.saveEvery == 0);
 
     if (invalid)
     {
@@ -350,12 +549,14 @@ bool ends_with(std::string_view text, std::string_view suffix) {
     return text.size() >= suffix.size() && text.substr(text.size() - suffix.size()) == suffix;
 }
 
-std::filesystem::path shard_path(const std::string& rawName, u64 shard) {
+std::filesystem::path shard_path(const std::string& rawName, u64 shard, DatasetFormat dataFormat) {
     std::string name = rawName;
     if (shard)
         name += "_" + std::to_string(shard);
-    if (!ends_with(name, ".bin"))
-        name += ".bin";
+    const std::string_view extension =
+      dataFormat == DatasetFormat::LEGACY_ATOMIC_V1 ? ".bin" : ".atbin";
+    if (!ends_with(name, extension))
+        name += extension;
     return std::filesystem::path(name);
 }
 
@@ -373,7 +574,7 @@ std::optional<std::vector<std::filesystem::path>> output_paths(const GeneratorPa
     std::vector<std::filesystem::path> paths;
     paths.reserve(usize(shards));
     for (u64 shard = 0; shard < shards; ++shard)
-        paths.push_back(shard_path(params.outputFile, shard));
+        paths.push_back(shard_path(params.outputFile, shard, params.dataFormat));
     return paths;
 }
 
@@ -394,6 +595,152 @@ bool preflight_output_paths(const std::vector<std::filesystem::path>& paths, std
         }
     }
     return true;
+}
+
+struct AuthenticatedFile {
+    std::filesystem::path path;
+    std::string           sha256;
+    u64                   bytes = 0;
+};
+
+bool load_book(const std::string&        path,
+               bool                      atomic960,
+               std::vector<std::string>& positions,
+               std::string&              error);
+
+std::string path_to_utf8(const std::filesystem::path& path) {
+#ifdef _WIN32
+    return utf8_from_wstring(path.native());
+#else
+    return path.string();
+#endif
+}
+
+std::optional<std::filesystem::path> absolute_regular_file(const std::filesystem::path& path) {
+    std::error_code ec;
+    auto            absolute = std::filesystem::absolute(path, ec);
+    if (ec)
+        return std::nullopt;
+    absolute = absolute.lexically_normal();
+    if (!std::filesystem::is_regular_file(absolute, ec) || ec)
+        return std::nullopt;
+    return absolute;
+}
+
+bool authenticate_network(Engine&                      engine,
+                          const std::filesystem::path& binaryDirectory,
+                          Eval::NNUE::EvalFile&        networkFile,
+                          AuthenticatedFile&           authenticated,
+                          std::string&                 error) {
+    const auto requested = path_from_utf8(std::string(engine.get_options()["EvalFile"]));
+    if (requested.empty())
+    {
+        error = "Atomic BIN V2 requires an external EvalFile that can be authenticated";
+        return false;
+    }
+
+    std::vector<std::filesystem::path> candidates;
+    const auto                         add_candidate = [&](const std::filesystem::path& candidate) {
+        const auto absolute = absolute_regular_file(candidate);
+        if (absolute
+            && std::find(candidates.begin(), candidates.end(), *absolute) == candidates.end())
+            candidates.push_back(*absolute);
+    };
+    add_candidate(requested);
+    add_candidate(binaryDirectory / requested);
+#ifdef DEFAULT_NNUE_DIRECTORY
+    add_candidate(std::filesystem::path(stringify(DEFAULT_NNUE_DIRECTORY)) / requested);
+#endif
+
+    for (const auto& candidate : candidates)
+    {
+        std::string beforeSha;
+        u64         beforeSize = 0;
+        if (DataResult before = sha256_file(candidate, beforeSha, beforeSize); !before)
+        {
+            error = before.message;
+            return false;
+        }
+
+        std::istringstream option("name EvalFile value " + path_to_utf8(candidate));
+        // Force a byte reload even when the resolved pathname equals the
+        // already-selected EvalFile. Otherwise a file changed after the UCI
+        // setoption could be hashed while stale in-memory weights remain live.
+        networkFile.current.reset();
+        engine.get_options().setoption(option);
+        if (!engine.verify_network())
+            continue;
+
+        std::string afterSha;
+        u64         afterSize = 0;
+        if (DataResult after = sha256_file(candidate, afterSha, afterSize); !after)
+        {
+            error = after.message;
+            return false;
+        }
+        if (beforeSha != afterSha || beforeSize != afterSize)
+        {
+            error = "Atomic BIN V2 EvalFile changed while it was being loaded";
+            return false;
+        }
+
+        authenticated = {candidate, std::move(afterSha), afterSize};
+        return true;
+    }
+
+    error = "Atomic BIN V2 could not authenticate and load the selected compatible EvalFile";
+    return false;
+}
+
+bool authenticate_book_and_load(const std::string&        requested,
+                                bool                      atomic960,
+                                std::vector<std::string>& positions,
+                                AuthenticatedFile&        authenticated,
+                                std::string&              error) {
+    const auto path = absolute_regular_file(path_from_utf8(requested));
+    if (!path)
+    {
+        error = "Cannot authenticate training-data opening book: " + requested;
+        return false;
+    }
+
+    std::string beforeSha;
+    u64         beforeSize = 0;
+    if (DataResult before = sha256_file(*path, beforeSha, beforeSize); !before)
+    {
+        error = before.message;
+        return false;
+    }
+    if (!load_book(path_to_utf8(*path), atomic960, positions, error))
+        return false;
+
+    std::string afterSha;
+    u64         afterSize = 0;
+    if (DataResult after = sha256_file(*path, afterSha, afterSize); !after)
+    {
+        error = after.message;
+        return false;
+    }
+    if (beforeSha != afterSha || beforeSize != afterSize)
+    {
+        error = "Atomic BIN V2 opening book changed while it was being loaded";
+        return false;
+    }
+
+    authenticated = {*path, std::move(afterSha), afterSize};
+    return true;
+}
+
+bool dataset_rule50_fits(DatasetFormat dataFormat, int rule50) {
+    if (dataFormat == DatasetFormat::LEGACY_ATOMIC_V1)
+        return legacy_atomic_v1_rule50_fits(rule50);
+    return rule50 >= 0 && u64(rule50) <= AtomicBinV2MaxRule50;
+}
+
+bool dataset_position_clocks_fit(DatasetFormat dataFormat, const Position& position) {
+    return dataset_rule50_fits(dataFormat, position.rule50_count())
+        && (dataFormat != DatasetFormat::ATOMIC_BIN_V2
+            || atomic_bin_v2_fullmove_fits_game_ply(position.game_ply()));
 }
 
 std::string trim(std::string text) {
@@ -431,12 +778,25 @@ std::optional<std::string> normalize_book_line(std::string line) {
     return fen.str();
 }
 
-bool load_book(const std::string& path, std::vector<std::string>& positions, std::string& error) {
-    if (path.empty())
-    {
-        positions.emplace_back(AtomicStartFen);
+bool load_book(const std::string&        path,
+               bool                      atomic960,
+               std::vector<std::string>& positions,
+               std::string&              error) {
+    const auto append_position = [&](const std::string& candidate) {
+        Position  position;
+        StateInfo state{};
+        if (position.set(candidate, atomic960, &state) || !position.has_king(WHITE)
+            || !position.has_king(BLACK) || Atomic::outcome(position, true, 0).terminal())
+        {
+            error = "Opening book contains an invalid or unsupported Atomic FEN: " + candidate;
+            return false;
+        }
+        positions.push_back(position.fen());
         return true;
-    }
+    };
+
+    if (path.empty())
+        return append_position(std::string(AtomicStartFen));
 
     std::ifstream input(path);
     if (!input)
@@ -452,16 +812,8 @@ bool load_book(const std::string& path, std::vector<std::string>& positions, std
         if (!candidate)
             continue;
 
-        Position  position;
-        StateInfo state{};
-        if (position.set(*candidate, false, &state) || !position.has_king(WHITE)
-            || !position.has_king(BLACK) || position.is_chess960()
-            || Atomic::outcome(position, true, 0).terminal())
-        {
-            error = "Opening book contains an invalid or unsupported Atomic FEN: " + *candidate;
+        if (!append_position(*candidate))
             return false;
-        }
-        positions.push_back(position.fen());
     }
 
     if (positions.empty())
@@ -478,11 +830,22 @@ Color side_to_move_from_fen(const std::string& fen) {
     return fen[separator + 1] == 'b' ? BLACK : WHITE;
 }
 
+struct AtomicBinV2ShardMetadata {
+    std::filesystem::path path;
+    u64                   index   = 0;
+    u64                   records = 0;
+    u64                   bytes   = 0;
+    std::string           sha256;
+};
+
 class OutputSeries {
    public:
-    OutputSeries(std::vector<std::filesystem::path> paths_, u64 recordsPerFile_) :
+    OutputSeries(std::vector<std::filesystem::path> paths_,
+                 u64                                recordsPerFile_,
+                 DatasetFormat                      dataFormat_) :
         paths(std::move(paths_)),
-        recordsPerFile(recordsPerFile_) {}
+        recordsPerFile(recordsPerFile_),
+        dataFormat(dataFormat_) {}
 
     DataResult append(const TrainingDataSample& sample) {
         if (shard >= paths.size())
@@ -490,20 +853,18 @@ class OutputSeries {
                                        "Training-data output shard capacity was exhausted");
 
         if (!sink)
-            sink = std::make_unique<LegacyAtomicV1Sink>(paths[usize(shard)]);
+            sink = make_sink(paths[usize(shard)]);
 
         if (recordsInShard == recordsPerFile)
         {
-            if (DataResult result = sink->finalize(); !result)
+            if (DataResult result = finalize_current(); !result)
                 return result;
-            ++finalizedShards;
-            sink.reset();
             ++shard;
             recordsInShard = 0;
             if (shard >= paths.size())
                 return DataResult::failure(DataError::WRITE_FAILED,
                                            "Training-data output shard capacity was exhausted");
-            sink = std::make_unique<LegacyAtomicV1Sink>(paths[usize(shard)]);
+            sink = make_sink(paths[usize(shard)]);
         }
 
         if (DataResult result = sink->append(sample); !result)
@@ -517,7 +878,7 @@ class OutputSeries {
         if (!sink)
             return DataResult::failure(DataError::EMPTY_DATASET,
                                        "Cannot finalize an empty training dataset");
-        return sink->finalize();
+        return finalize_current();
     }
 
     DataResult abort() {
@@ -529,29 +890,75 @@ class OutputSeries {
             sink.reset();
         }
 
-        for (u64 i = 0; i < finalizedShards; ++i)
+        if (dataFormat == DatasetFormat::ATOMIC_BIN_V2)
         {
-            const auto&     path = paths[usize(i)];
-            std::error_code ec;
-            std::filesystem::remove(path, ec);
-            if (ec && first)
-                first = DataResult::failure(DataError::ABORT_FAILED, "Cannot remove partial output "
-                                                                       + path.string() + ": "
-                                                                       + ec.message());
+            for (auto& owner : finalizedV2Owners)
+                if (DataResult result = owner->remove_finalized_owned(); !result && first)
+                    first = result;
+        }
+        else
+        {
+            for (u64 i = 0; i < finalizedShards; ++i)
+            {
+                const auto&     path = paths[usize(i)];
+                std::error_code ec;
+                std::filesystem::remove(path, ec);
+                if (ec && first)
+                    first = DataResult::failure(DataError::ABORT_FAILED,
+                                                "Cannot remove partial output " + path.string()
+                                                  + ": " + ec.message());
+            }
+        }
+        if (first)
+        {
+            finalizedShards = 0;
+            finalizedV2Shards.clear();
+            finalizedV2Owners.clear();
         }
         return first;
     }
 
-    u64 records_written() const { return totalRecords; }
+    u64                                          records_written() const { return totalRecords; }
+    const std::vector<AtomicBinV2ShardMetadata>& atomic_bin_v2_shards() const noexcept {
+        return finalizedV2Shards;
+    }
 
    private:
-    std::vector<std::filesystem::path>  paths;
-    u64                                 recordsPerFile;
-    u64                                 shard           = 0;
-    u64                                 recordsInShard  = 0;
-    u64                                 totalRecords    = 0;
-    u64                                 finalizedShards = 0;
-    std::unique_ptr<LegacyAtomicV1Sink> sink;
+    std::unique_ptr<DatasetSink> make_sink(const std::filesystem::path& path) const {
+        if (dataFormat == DatasetFormat::LEGACY_ATOMIC_V1)
+            return std::make_unique<LegacyAtomicV1Sink>(path);
+        return std::make_unique<AtomicBinV2Sink>(path);
+    }
+
+    DataResult finalize_current() {
+        assert(sink);
+        if (DataResult result = sink->finalize(); !result)
+            return result;
+
+        if (dataFormat == DatasetFormat::ATOMIC_BIN_V2)
+        {
+            std::unique_ptr<AtomicBinV2Sink> v2(static_cast<AtomicBinV2Sink*>(sink.release()));
+            finalizedV2Shards.push_back({v2->output_path(), shard, v2->records_written(),
+                                         v2->finalized_size(), v2->sha256_hex()});
+            finalizedV2Owners.push_back(std::move(v2));
+        }
+        else
+            sink.reset();
+        ++finalizedShards;
+        return DataResult::success();
+    }
+
+    std::vector<std::filesystem::path> paths;
+    u64                                recordsPerFile;
+    DatasetFormat                      dataFormat;
+    u64                                shard           = 0;
+    u64                                recordsInShard  = 0;
+    u64                                totalRecords    = 0;
+    u64                                finalizedShards = 0;
+    std::unique_ptr<DatasetSink>       sink;
+
+    std::vector<AtomicBinV2ShardMetadata>         finalizedV2Shards;
+    std::vector<std::unique_ptr<AtomicBinV2Sink>> finalizedV2Owners;
 };
 
 class SeenPositions {
@@ -584,7 +991,8 @@ class Generator {
         tt(tt_),
         output(std::move(paths_),
                params_.saveEvery == std::numeric_limits<u64>::max() ? params_.count
-                                                                    : params_.saveEvery),
+                                                                    : params_.saveEvery,
+               params_.dataFormat),
         openingPositions(std::move(openingPositions_)) {
         ReplayablePRNG source(resolvedSeed);
         workerSeeds.reserve(threads.size());
@@ -649,6 +1057,13 @@ class Generator {
 
     u64 records_written() const { return written.load(std::memory_order_relaxed); }
     u64 draws_written() const { return draws.load(std::memory_order_relaxed); }
+    const std::vector<AtomicBinV2ShardMetadata>& atomic_bin_v2_shards() const noexcept {
+        return output.atomic_bin_v2_shards();
+    }
+    DataResult abort_output() {
+        std::lock_guard lock(outputMutex);
+        return output.abort();
+    }
 
    private:
     const GeneratorParams&   params;
@@ -852,7 +1267,7 @@ class Generator {
             StateInfo          rootState{};
             Position           position;
             const std::string& initialFen = next_opening();
-            if (const auto setError = position.set(initialFen, false, &rootState))
+            if (const auto setError = position.set(initialFen, params.atomic960, &rootState))
             {
                 fail(std::string("Cannot set opening FEN: ") + setError->what());
                 return;
@@ -931,7 +1346,7 @@ class Generator {
                   std::abs(int(qResult.value) - int(evalResult.value)) <= params.evalDiffLimit;
 
                 if (ply >= params.writeMinPly
-                    && legacy_atomic_v1_rule50_fits(position.rule50_count())
+                    && dataset_position_clocks_fit(params.dataFormat, position)
                     && !seen.already_seen(position.key()) && position.has_king(WHITE)
                     && position.has_king(BLACK)
                     && !position.atomic_in_check(position.side_to_move()) && stableTarget
@@ -940,7 +1355,8 @@ class Generator {
                     && !(params.filterPromotions && bestMove.type_of() == PROMOTION))
                 {
                     samples.push_back(
-                      {position.fen(), score, bestMove, ply, 0, NO_TRAINING_DATA_FLAGS});
+                      {position.fen(), score, bestMove, ply, 0,
+                       params.atomic960 ? TRAINING_DATA_CHESS960 : NO_TRAINING_DATA_FLAGS});
                 }
 
                 const auto randomMove =
@@ -986,8 +1402,11 @@ bool generate_training_data(Engine& engine, std::istream& input) {
     {
         std::istringstream skill("name Skill Level value 20");
         engine.options.setoption(skill);
-        std::istringstream chess960("name UCI_Chess960 value false");
-        engine.options.setoption(chess960);
+        if (params.dataFormat == DatasetFormat::LEGACY_ATOMIC_V1)
+        {
+            std::istringstream chess960("name UCI_Chess960 value false");
+            engine.options.setoption(chess960);
+        }
     }
 
     if (engine.options["Use NNUE"] != "pure")
@@ -995,12 +1414,36 @@ bool generate_training_data(Engine& engine, std::istream& input) {
         print_error("generate_training_data requires Use NNUE=pure");
         return false;
     }
-    if (int(engine.options["UCI_Chess960"]) != 0)
+    params.atomic960 = int(engine.options["UCI_Chess960"]) != 0;
+    if (params.dataFormat == DatasetFormat::LEGACY_ATOMIC_V1 && params.atomic960)
     {
         print_error("Legacy Atomic V1 cannot encode Atomic960; set UCI_Chess960=false");
         return false;
     }
-    if (!engine.verify_network())
+    if (params.dataFormat == DatasetFormat::ATOMIC_BIN_V2
+        && engine.threads.size() > std::numeric_limits<u32>::max())
+    {
+        print_error("Atomic BIN V2 thread count exceeds the manifest domain");
+        return false;
+    }
+    if (params.dataFormat == DatasetFormat::ATOMIC_BIN_V2
+        && !std::string(engine.options["SyzygyPath"]).empty())
+    {
+        print_error("Atomic BIN V2 generation requires an empty SyzygyPath");
+        return false;
+    }
+
+    AuthenticatedFile networkMetadata;
+    if (params.dataFormat == DatasetFormat::ATOMIC_BIN_V2)
+    {
+        if (!authenticate_network(engine, engine.binaryDirectory, engine.networkFile,
+                                  networkMetadata, error))
+        {
+            print_error(error);
+            return false;
+        }
+    }
+    else if (!engine.verify_network())
     {
         print_error("generate_training_data requires a valid compatible Atomic NNUE network");
         return false;
@@ -1011,7 +1454,13 @@ bool generate_training_data(Engine& engine, std::istream& input) {
         params.outputFile += random_suffix(resolvedSeed);
 
     std::vector<std::string> openings;
-    if (!load_book(params.book, openings, error))
+    AuthenticatedFile        bookMetadata;
+    const bool               bookIsFile = !params.book.empty();
+    const bool               bookLoaded =
+      params.dataFormat == DatasetFormat::ATOMIC_BIN_V2 && bookIsFile
+                      ? authenticate_book_and_load(params.book, params.atomic960, openings, bookMetadata, error)
+                      : load_book(params.book, params.atomic960, openings, error);
+    if (!bookLoaded)
     {
         print_error(error);
         return false;
@@ -1023,15 +1472,34 @@ bool generate_training_data(Engine& engine, std::istream& input) {
         print_error(error);
         return false;
     }
-    if (!preflight_output_paths(*paths, error))
+    std::vector<std::filesystem::path> preflightPaths = *paths;
+    std::filesystem::path              manifestPath;
+    if (params.dataFormat == DatasetFormat::ATOMIC_BIN_V2)
+    {
+        manifestPath = atomic_bin_v2_manifest_path(paths->front());
+        preflightPaths.push_back(manifestPath);
+    }
+    if (!preflight_output_paths(preflightPaths, error))
     {
         print_error(error);
         return false;
     }
+    if (params.dataFormat == DatasetFormat::ATOMIC_BIN_V2)
+    {
+        const DataResult publicationPreflight =
+          preflight_atomic_bin_v2_manifest_publication(manifestPath);
+        if (!publicationPreflight)
+        {
+            print_error(publicationPreflight.message);
+            return false;
+        }
+    }
 
     std::cout << "INFO: Executing generate_training_data command\n"
               << "INFO: schema_sha256 = "
-              << "acca0f551f1c012c31a6c727dedccaebb7b5ebbc46810edb87e31bb208d5abe1\n"
+              << (params.dataFormat == DatasetFormat::LEGACY_ATOMIC_V1 ? LegacyAtomicV1SchemaSha256
+                                                                       : AtomicBinV2SchemaSha256Hex)
+              << '\n'
               << "PRNG::initial_seed = " << resolvedSeed << '\n'
               << "INFO: threads = " << engine.threads.size() << '\n'
               << "INFO: depth = " << params.searchDepthMin << ".." << params.searchDepthMax << '\n'
@@ -1044,6 +1512,76 @@ bool generate_training_data(Engine& engine, std::istream& input) {
     {
         print_error(error);
         return false;
+    }
+
+    if (params.dataFormat == DatasetFormat::ATOMIC_BIN_V2)
+    {
+        AtomicBinV2Manifest manifest;
+        manifest.manifestPath = manifestPath;
+#ifdef ATOMIC_DATA_GENERATOR_GIT_SHA
+        manifest.engineCommit = stringify(ATOMIC_DATA_GENERATOR_GIT_SHA);
+#else
+        manifest.engineCommit = "unknown";
+#endif
+        manifest.engineVersion = engine_version_info();
+        manifest.networkPath   = networkMetadata.path;
+        manifest.networkSha256 = networkMetadata.sha256;
+        manifest.bookIsFile    = bookIsFile;
+        if (bookIsFile)
+        {
+            manifest.bookPath   = bookMetadata.path;
+            manifest.bookSha256 = bookMetadata.sha256;
+        }
+        manifest.resolvedSeed = resolvedSeed;
+        manifest.atomic960    = params.atomic960;
+        manifest.threads      = u32(engine.threads.size());
+        manifest.hashMb       = u64(int(engine.options["Hash"]));
+
+        auto& options            = manifest.options;
+        options.searchDepthMin   = params.searchDepthMin;
+        options.searchDepthMax   = params.searchDepthMax;
+        options.nodes            = params.nodes;
+        options.requestedRecords = params.count;
+        options.recordsPerShard =
+          params.saveEvery == std::numeric_limits<u64>::max() ? params.count : params.saveEvery;
+        options.evalLimit                    = params.evalLimit;
+        options.evalDiffLimit                = params.evalDiffLimit;
+        options.randomMoveMinPly             = params.randomMoveMinPly;
+        options.randomMoveMaxPly             = params.randomMoveMaxPly;
+        options.randomMoveCount              = params.randomMoveCount;
+        options.randomMoveLikeApery          = params.randomMoveLikeApery;
+        options.randomMultiPv                = params.randomMultiPv;
+        options.randomMultiPvDiff            = params.randomMultiPvDiff;
+        options.randomMultiPvDepth           = params.randomMultiPvDepth;
+        options.writeMinPly                  = params.writeMinPly;
+        options.writeMaxPly                  = params.writeMaxPly;
+        options.keepDraws                    = params.keepDrawsManifest;
+        options.adjudicateDrawsByScore       = params.adjudicateDrawsByScore;
+        options.adjudicateInsufficient       = params.adjudicateInsufficient;
+        options.filterCaptures               = params.filterCaptures;
+        options.filterChecks                 = params.filterChecks;
+        options.filterPromotions             = params.filterPromotions;
+        options.randomFileName               = params.randomFileName;
+        options.setRecommendedUciOptionsSeen = params.setRecommendedUciOptionsSeen;
+
+        manifest.records = generator.records_written();
+        manifest.draws   = generator.draws_written();
+        for (const auto& shard : generator.atomic_bin_v2_shards())
+            manifest.shards.push_back(
+              {shard.path, shard.index, shard.records, shard.bytes, shard.sha256});
+
+        if (DataResult published = write_atomic_bin_v2_manifest(manifest); !published)
+        {
+            error                    = published.message;
+            const DataResult cleanup = generator.abort_output();
+            if (!cleanup)
+                error += "; cleanup failed: " + cleanup.message;
+            print_error(error);
+            return false;
+        }
+        std::cout << "INFO: manifest = " << manifestPath.string() << '\n'
+                  << "INFO: manifest_schema_sha256 = " << AtomicBinV2ManifestSchemaSha256Hex
+                  << '\n';
     }
 
     std::cout << "INFO: generate_training_data finished.\n"

@@ -182,6 +182,17 @@ void test_layout_and_header_golden() {
     }
 }
 
+void test_generator_fullmove_eligibility() {
+    expect(!Data::atomic_bin_v2_fullmove_fits_game_ply(-1),
+           "negative game ply is outside the V2 fullmove domain");
+    expect(Data::atomic_bin_v2_fullmove_fits_game_ply(199998),
+           "white fullmove 100000 is inside the V2 domain");
+    expect(Data::atomic_bin_v2_fullmove_fits_game_ply(199999),
+           "black fullmove 100000 is inside the V2 domain");
+    expect(!Data::atomic_bin_v2_fullmove_fits_game_ply(200000),
+           "white fullmove 100001 is filtered before V2 buffering");
+}
+
 void test_start_record_golden_and_round_trip() {
     auto                  record   = encoded(sample(), "start record encodes");
     const std::vector<u8> expected = decode_hex("2453364211111111"
@@ -500,6 +511,7 @@ int main() {
     Position::init();
 
     test_layout_and_header_golden();
+    test_generator_fullmove_eligibility();
     test_start_record_golden_and_round_trip();
     test_special_move_vectors();
     test_atomic960_and_no_rights_mode();

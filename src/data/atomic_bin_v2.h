@@ -22,6 +22,11 @@ namespace Stockfish::Data {
 DataResult encode_atomic_bin_v2(const TrainingDataSample& sample, AtomicBinV2Record& record);
 DataResult decode_atomic_bin_v2(const AtomicBinV2Record& record, TrainingDataSample& sample);
 
+// Position::game_ply() is the authoritative generator clock. Keep the V2
+// sample eligibility gate in the format adapter so generation cannot buffer a
+// position that the wire encoder must later reject.
+bool atomic_bin_v2_fullmove_fits_game_ply(int gamePly) noexcept;
+
 }  // namespace Stockfish::Data
 
 #endif  // #ifndef ATOMIC_BIN_V2_H_INCLUDED

@@ -75,9 +75,10 @@ isolated executable from `src` instead:
 make -j data-generator ARCH=x86-64-bmi2
 ```
 
-It writes the frozen 72-byte `legacy-atomic-v1` format, requires a compatible
-network with `Use NNUE=pure`, rejects Atomic960 and never appends to or
-overwrites an existing output. See
+It writes the frozen 72-byte `legacy-atomic-v1` format by default and the
+manifested `atomic-bin-v2` format on request. It requires a compatible network
+with `Use NNUE=pure`; V2 preserves Atomic960 while Legacy V1 rejects it. Neither
+format appends to or overwrites an existing output. See
 [`docs/atomic/data-generator.md`](docs/atomic/data-generator.md) for the command
 contract, reproducibility rules and integration tests.
 

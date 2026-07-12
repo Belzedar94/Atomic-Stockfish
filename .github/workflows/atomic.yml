@@ -44,11 +44,15 @@ jobs:
           make -j2 ARCH=x86-64 COMP=${{ matrix.comp }} COMPCXX=${{ matrix.cxx }} atomic-syzygy-driver
           make -j2 ARCH=x86-64 COMP=${{ matrix.comp }} COMPCXX=${{ matrix.cxx }} legacy-atomic-v1-tests
           make -j2 ARCH=x86-64 COMP=${{ matrix.comp }} COMPCXX=${{ matrix.cxx }} atomic-bin-v2-tests
+          make -j2 ARCH=x86-64 COMP=${{ matrix.comp }} COMPCXX=${{ matrix.cxx }} atomic-bin-v2-sink-tests
+          make -j2 ARCH=x86-64 COMP=${{ matrix.comp }} COMPCXX=${{ matrix.cxx }} atomic-bin-v2-manifest-tests
           make -j2 ARCH=x86-64 COMP=${{ matrix.comp }} COMPCXX=${{ matrix.cxx }} data-generator
-      - name: Functional data-generator smoke (Threads=2)
+      - name: Functional data-generator gate (full on GCC, smoke on Clang)
         run: |
           python3 tests/create_synthetic_zero_nnue.py --output "$RUNNER_TEMP/atomic-zero.nnue"
-          python3 tests/data_generator.py --smoke-only \
+          mode=--smoke-only
+          if [ "${{ matrix.comp }}" = gcc ]; then mode=; fi
+          python3 tests/data_generator.py $mode \
             --generator src/atomic-stockfish-data-generator \
             --normal-engine src/atomic-stockfish \
             --net "$RUNNER_TEMP/atomic-zero.nnue" \
@@ -79,6 +83,8 @@ jobs:
           make -C src -j2 ARCH=x86-64 debug=yes optimize=no atomic-syzygy-driver
           make -C src -j2 ARCH=x86-64 debug=yes optimize=no legacy-atomic-v1-tests
           make -C src -j2 ARCH=x86-64 debug=yes optimize=no atomic-bin-v2-tests
+          make -C src -j2 ARCH=x86-64 debug=yes optimize=no atomic-bin-v2-sink-tests
+          make -C src -j2 ARCH=x86-64 debug=yes optimize=no atomic-bin-v2-manifest-tests
           make -C src -j2 ARCH=x86-64 debug=yes optimize=no data-generator
           bash tests/perft.sh src/atomic-stockfish
           python3 tests/atomic_search.py --candidate src/atomic-stockfish --use-nnue false
@@ -116,9 +122,12 @@ jobs:
           make -C src -j2 ARCH=x86-64 COMP=mingw data-generator
           make -C src -j2 ARCH=x86-64 COMP=mingw legacy-atomic-v1-tests
           make -C src -j2 ARCH=x86-64 COMP=mingw atomic-bin-v2-tests
+          make -C src -j2 ARCH=x86-64 COMP=mingw atomic-bin-v2-sink-tests
+          make -C src -j2 ARCH=x86-64 COMP=mingw atomic-bin-v2-manifest-tests
           printf 'atomic_data_schema\natomic_data_schemas\nquit\n' | src/atomic-stockfish-data-generator.exe > schema.txt
           grep -F '"schema_sha256":"acca0f551f1c012c31a6c727dedccaebb7b5ebbc46810edb87e31bb208d5abe1"' schema.txt
           grep -F '"schema_sha256":"0352b036f2a140c609e3eb9c9d635dc553e8d77253d8faa92437390f5cf93cb6"' schema.txt
+          rm -f schema.txt
       - name: Functional Windows data-generator smoke (Threads=2)
         run: |
           python tests/create_synthetic_zero_nnue.py --output "$RUNNER_TEMP/atomic-zero.nnue"
@@ -165,6 +174,8 @@ jobs:
           CXXFLAGS=-O1 make -C src -j2 ARCH=x86-64-sse41-popcnt sanitize=${{ matrix.sanitizer }} debug=yes optimize=no atomic-api-tests
           CXXFLAGS=-O1 make -C src -j2 ARCH=x86-64-sse41-popcnt sanitize=${{ matrix.sanitizer }} debug=yes optimize=no legacy-atomic-v1-tests
           CXXFLAGS=-O1 make -C src -j2 ARCH=x86-64-sse41-popcnt sanitize=${{ matrix.sanitizer }} debug=yes optimize=no atomic-bin-v2-tests
+          CXXFLAGS=-O1 make -C src -j2 ARCH=x86-64-sse41-popcnt sanitize=${{ matrix.sanitizer }} debug=yes optimize=no atomic-bin-v2-sink-tests
+          CXXFLAGS=-O1 make -C src -j2 ARCH=x86-64-sse41-popcnt sanitize=${{ matrix.sanitizer }} debug=yes optimize=no atomic-bin-v2-manifest-tests
           bash tests/perft.sh src/atomic-stockfish
       - name: Instrumented data-generator smoke (Threads=2)
         env:
@@ -201,7 +212,7 @@ jobs:
   atomic-bin-v2-valgrind:
     name: Atomic BIN V2 Valgrind
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -210,21 +221,39 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends valgrind
-      - name: Build isolated Atomic BIN V2 codec tests
+      - name: Build isolated Atomic BIN V2 tests
         working-directory: src
-        run: >-
-          make -j2 ARCH=x86-64 COMP=gcc COMPCXX=g++
-          debug=yes optimize=no atomic-bin-v2-tests.bin
-      - name: Run Atomic BIN V2 codec tests under Valgrind
-        run: >-
-          valgrind
-          --error-exitcode=99
-          --leak-check=full
-          --show-leak-kinds=all
-          --errors-for-leak-kinds=all
-          --track-origins=yes
-          --num-callers=30
-          src/atomic-bin-v2-tests.bin
+        run: |
+          make -j2 ARCH=x86-64 COMP=gcc COMPCXX=g++ \
+            debug=yes optimize=no atomic-bin-v2-tests.bin
+          make -j2 ARCH=x86-64 COMP=gcc COMPCXX=g++ \
+            debug=yes optimize=no atomic-bin-v2-sink-tests.bin
+          make -j2 ARCH=x86-64 COMP=gcc COMPCXX=g++ \
+            debug=yes optimize=no atomic-bin-v2-manifest-tests.bin
+      - name: Run Atomic BIN V2 tests under Valgrind
+        run: |
+          for test in atomic-bin-v2-tests atomic-bin-v2-sink-tests atomic-bin-v2-manifest-tests; do
+            valgrind \
+              --error-exitcode=99 \
+              --leak-check=full \
+              --show-leak-kinds=all \
+              --errors-for-leak-kinds=all \
+              --track-origins=yes \
+              --num-callers=30 \
+              "src/${test}.bin"
+          done
+      - name: Build optimized real generator
+        working-directory: src
+        run: |
+          make objclean
+          make -j2 ARCH=x86-64 COMP=gcc COMPCXX=g++ data-generator
+      - name: Run a real Atomic BIN V2 generator under Valgrind
+        run: |
+          python3 tests/create_synthetic_zero_nnue.py --output "$RUNNER_TEMP/atomic-zero.nnue"
+          python3 tests/atomic_bin_v2_valgrind.py \
+            --generator src/atomic-stockfish-data-generator \
+            --net "$RUNNER_TEMP/atomic-zero.nnue" \
+            --expected-net-sha256 "$ATOMIC_SYNTHETIC_NNUE_SHA256"
 
   python:
     name: Python stable ABI (${{ matrix.os }}, ${{ matrix.python-version }})
@@ -251,6 +280,8 @@ jobs:
           tests/python/test_atomic_compiler_preflight.py
           tests/python/test_atomic_training_data_schema.py
           tests/python/test_atomic_bin_v2_schema.py
+          tests/python/test_atomic_bin_v2_manifest_schema.py
+          tests/python/test_atomic_nnue_differential.py
           tests/python/test_legacy_pipeline_lock.py
           tests/python/test_legacy_pipeline_build_manifest.py
           tests/python/test_data_generator_build_manifest.py
@@ -367,6 +398,8 @@ jobs:
           make -C src -j2 ARCH=x86-64 atomic-api-tests
           make -C src -j2 ARCH=x86-64 legacy-atomic-v1-tests
           make -C src -j2 ARCH=x86-64 atomic-bin-v2-tests
+          make -C src -j2 ARCH=x86-64 atomic-bin-v2-sink-tests
+          make -C src -j2 ARCH=x86-64 atomic-bin-v2-manifest-tests
           bash tests/perft.sh src/atomic-stockfish
           python tests/atomic_search.py --candidate src/atomic-stockfish --use-nnue false
       - name: Enforce locked clean checkouts
