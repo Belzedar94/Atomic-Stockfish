@@ -30,6 +30,48 @@ Compiler __VERSION__ macro : 15.2.0
 """.strip()
 
 
+@pytest.mark.parametrize(
+    ("recipe_name", "root", "artifact"),
+    (
+        (
+            "strong-local-tools-windows-v2",
+            Path("C:/variant-nnue-tools"),
+            "src/atomic-data-tools.exe",
+        ),
+        (
+            "synthetic-ci-tools-linux-v2",
+            Path("/variant-nnue-tools"),
+            "src/atomic-data-tools",
+        ),
+    ),
+)
+def test_tools_recipe_uses_the_pinned_root_wrapper_contract(
+    recipe_name: str, root: Path, artifact: str
+) -> None:
+    recipe = build_manifest.RECIPES[recipe_name]
+    rendered = tuple(" ".join(command) for command in recipe.commands(root))
+    assert recipe.artifact_relative == artifact
+    assert len(rendered) == 2
+    if recipe.platform == "win32":
+        assert recipe.commands(root)[0][-1].endswith(
+            "&& make ARCH=x86-64 COMP=mingw verify-engine-pin"
+        )
+        assert recipe.commands(root)[1][-1].endswith(
+            "&& make -j2 ARCH=x86-64 COMP=mingw data-tools"
+        )
+    else:
+        assert recipe.commands(root) == (
+            ("make", "ARCH=x86-64", "COMP=gcc", "verify-engine-pin"),
+            ("make", "-j2", "ARCH=x86-64", "COMP=gcc", "data-tools"),
+        )
+    assert "make -C src" not in rendered[0]
+    assert "make -C src" not in rendered[1]
+    assert "all=no" not in "\n".join(rendered)
+    assert "largeboards=no" not in "\n".join(rendered)
+    assert "nnue=no" not in "\n".join(rendered)
+    assert "data-generator" not in "\n".join(rendered)
+
+
 def git(root: Path, *args: str) -> str:
     completed = subprocess.run(
         ["git", "-C", str(root), *args],

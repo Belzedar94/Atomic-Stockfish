@@ -118,7 +118,6 @@ def profile(**overrides: object) -> PipelineProfile:
         "seed": "20260711",
         "source_net_sha256": "0" * 64,
         "data_sha256": "1" * 64,
-        "atomic_data_sha256": "2" * 64,
         "hashes_resolved": True,
         "build_recipes": EXPECTED_BUILD_RECIPES["synthetic-ci"],
         "synthetic_model_seed": 20260711,
@@ -268,19 +267,9 @@ def atomic_generator_marker(source_hash: str, data_hash: str) -> str:
     )
 
 
-@pytest.mark.parametrize(
-    ("atomic_generator", "expected_option", "expected_suffix"),
-    (
-        (False, pipeline.TOOLS_PURE_OPTION, pipeline.TOOLS_PURE_LOAD_SUFFIX),
-        (True, pipeline.ATOMIC_PURE_OPTION, pipeline.ATOMIC_PURE_LOAD_SUFFIX),
-    ),
-)
-def test_generate_data_uses_the_target_specific_pure_protocol(
+def test_generate_data_uses_the_atomic_pure_protocol(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    atomic_generator: bool,
-    expected_option: str,
-    expected_suffix: str,
 ) -> None:
     output = tmp_path / "generated.bin"
     observed: dict[str, str] = {}
@@ -305,10 +294,12 @@ def test_generate_data_uses_the_target_specific_pure_protocol(
         output,
         8,
         "seed",
-        atomic_generator=atomic_generator,
     )
     assert generated == b"target-specific-protocol"
-    assert observed == {"option": expected_option, "suffix": expected_suffix}
+    assert observed == {
+        "option": pipeline.ATOMIC_PURE_OPTION,
+        "suffix": pipeline.ATOMIC_PURE_LOAD_SUFFIX,
+    }
 
 
 @pytest.mark.parametrize(
@@ -345,34 +336,11 @@ def test_atomic_generator_marker_rejects_duplicates_and_hash_drift() -> None:
         )
 
 
-def test_profile_pins_tools_and_atomic_datasets_independently() -> None:
-    selected = profile(data_sha256="a" * 64, atomic_data_sha256="b" * 64)
-    pipeline.verify_profile_data_hashes(
-        selected, data_hash="a" * 64, atomic_data_hash="b" * 64
-    )
-    with pytest.raises(AssertionError, match="pure generation fixture changed"):
-        pipeline.verify_profile_data_hashes(
-            selected, data_hash="c" * 64, atomic_data_hash="b" * 64
-        )
+def test_profile_pins_the_atomic_owned_dataset() -> None:
+    selected = profile(data_sha256="a" * 64)
+    pipeline.verify_profile_data_hash(selected, data_hash="a" * 64)
     with pytest.raises(AssertionError, match="Atomic generator fixture changed"):
-        pipeline.verify_profile_data_hashes(
-            selected, data_hash="a" * 64, atomic_data_hash="c" * 64
-        )
-
-
-def test_strong_atomic_dataset_sentinel_reports_measured_replacement() -> None:
-    selected = profile(
-        name="strong-local",
-        source_kind="external",
-        synthetic_model_seed=None,
-        data_sha256="a" * 64,
-        atomic_data_sha256=pipeline.PENDING_STRONG_ATOMIC_DATA_SHA256,
-    )
-    measured = "c" * 64
-    with pytest.raises(AssertionError, match=measured):
-        pipeline.verify_profile_data_hashes(
-            selected, data_hash="a" * 64, atomic_data_hash=measured
-        )
+        pipeline.verify_profile_data_hash(selected, data_hash="c" * 64)
 
 
 def test_python_environment_provenance_is_auditable_and_rehashed(

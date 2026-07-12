@@ -14,9 +14,10 @@ with head `e0b58ebd`, but checked out and tested synthetic merge commit
 `7968672f37f537aed6eeff169e5524f91a88f853` against base
 `753060ade187cf6b74428dd4f929b7380d6073a0`.
 
-That snapshot predates the Hito 7.2 Atomic-owned generator. Lock schema v3 now
-adds a separately pinned eight-record `atomic_data_sha256`; both synthetic and
-strong-local Atomic generator fixtures are frozen.
+That snapshot predates the complete Hito 7.2 ownership transfer. Lock schema v4
+now has one profile `data_sha256`, produced only by Atomic-Stockfish. The tools
+artifact validates and converts that dataset but cannot produce PV self-play
+data. Both synthetic and strong-local Atomic fixtures remain frozen.
 
 `Use NNUE=true` is the playing mode and is mandatory for all Elo/LOS gates.
 `Use NNUE=pure` exists for data generation: it exposes the unadjusted network
@@ -32,7 +33,7 @@ mode.
 | NNUE modes | `false`, `true` and `pure`; invalid networks reject `go` without killing UCI |
 | NNUE export | Export/import is byte-exact for the frozen Legacy Atomic V1 network |
 | UCI/NNUE WASM | Supported Node launcher, external SHA-pinned network, true/pure and reproducible manifest |
-| Cross-repository pipeline | Required in release: clean SHA-pinned tools, trainer and Atomic checkouts; retain the byte-pinned tools dataset as a control; independently generate the byte-pinned Atomic dataset twice with `pure`, validate and convert it with tools, decode it with the trainer, use that Atomic batch for one Ranger step, serialize/reimport and load the resulting network in the native engine |
+| Cross-repository pipeline | Required in release: clean SHA-pinned tools, trainer and Atomic checkouts; generate the byte-pinned Atomic dataset twice with `pure`, validate/decode/round-trip it with tools, decode it with the trainer, use that batch for one Ranger step, serialize/reimport and load the resulting network in the native engine |
 | Incremental accumulator | Exactly 1,000,000 deterministic make/undo operations plus fixed special-move fixtures |
 | Atomic captures | At least one capture exercised and exact marker `capture-forced-refresh=0` |
 | Full refresh | Incremental raw output, scaled true/pure values and accumulator lanes equal a fresh accumulator |
@@ -73,28 +74,25 @@ The profiles deliberately serve different purposes:
 | `strong-local` | External `atomic_run3b_e202_l05.nnue`, SHA-256 `99DC67EABF26A64FAEECA3A88B4C38597A840B8D4A874B9F2CF658C6F92A04A6` | Normative local release and real dataset-pipeline compatibility |
 | `synthetic-ci` | Ephemeral zero-weight HalfKAv2 network created by the pinned trainer's model and Legacy V1 serializer | Public CI without downloading or redistributing the strong network |
 
-Both profiles hard-pin record count, seed, source-network hash, the historical
-tools-generated 72-byte dataset hash and the Atomic-generated 72-byte dataset
-hash. The synthetic constructor zeroes every trainer parameter
+Both profiles hard-pin record count, seed, source-network hash and one
+Atomic-generated 72-byte dataset hash. The synthetic constructor zeroes every trainer parameter
 before serialization, so its bytes do not depend on PyTorch RNG or BLAS
 behavior. It is not a playing network and is never used for Elo/LOS. The lock
 pins the reviewed tools and trainer commits plus the measured synthetic source
 SHA-256 `9CF054CA00B82AB53A34473DE52D1104AEDDAA19B2E7B24091B5E613AF485985`
-tools-control data SHA-256
-`95565809C53E914A192D095B18C7BAB9A0C35AF9510347DC2C63BAA385D69988`,
 and Atomic data SHA-256
 `60308342207B66DA3D07DB5A7AEE937837D0CA107A7A876150AADF911E0C1484`.
 The one-time
 `--profile synthetic-ci --measure-synthetic-fixture` E2E invocation prints the
-source, tools-control and Atomic dataset hashes with an explicit `NON-RELEASE`
+source and Atomic dataset hashes with an explicit `NON-RELEASE`
 marker; CI deliberately fails after all postflights pass. Those values are now
 frozen and the normal synthetic job is enabled. Measurement mode remains
 accepted only for `synthetic-ci`.
 The strong-local Atomic dataset SHA-256 is
 `D95F5180C7D6319E8D838752B49C51F611C311AEF728C30B42C2DF02C2071639`.
-If a future profile needs bootstrapping, the temporary all-`f` sentinel cannot
-pass: the first normal run prints the measured eight-record value that must
-replace it.
+If a future synthetic profile needs bootstrapping, only its `data_sha256` may
+temporarily be all-zero under the explicit non-release measurement flag; the
+source-network hash and every repository pin remain resolved.
 
 ## Evaluation differences are diagnostic
 
@@ -131,7 +129,7 @@ records the compiler/toolchain and refuses to overwrite an existing manifest:
 New-Item -ItemType Directory -Force ../pipeline-manifests
 
 python tests/legacy_pipeline_build_manifest.py `
-  --recipe strong-local-tools-windows-v1 `
+  --recipe strong-local-tools-windows-v2 `
   --repository-root ../variant-nnue-tools `
   --output ../pipeline-manifests/tools-build.json
 
@@ -169,7 +167,7 @@ python tests/run_hito5.py `
   --esm tests/js/dist/esm/ffish.mjs `
   --tables ../research/shakmaty/shakmaty-syzygy/tables/atomic `
   --wasm-wrapper build/wasm-engine/atomic-stockfish-nnue-node.mjs `
-  --pipeline-tools-engine ../variant-nnue-tools/src/stockfish.exe `
+  --pipeline-tools-engine ../variant-nnue-tools/src/atomic-data-tools.exe `
   --pipeline-trainer-root ../variant-nnue-pytorch `
   --pipeline-tools-build-manifest ../pipeline-manifests/tools-build.json `
   --pipeline-trainer-build-manifest ../pipeline-manifests/trainer-build.json `
@@ -203,10 +201,11 @@ or any incomplete subset, omitting the set in release, a missing tools binary,
 an unbuilt trainer checkout or a stale manifest is a hard configuration error.
 
 Public CI uses the separate `synthetic-ci` profile. Its dedicated job checks
-out both sibling repositories at the lock SHAs, clean-builds and runs the tools
-and trainer internal suites, clean-builds both the playing and generator
-Atomic-Stockfish targets, re-verifies all three checkouts, and finally executes
-the same tools-control plus Atomic generate/decode/train/serialize/load E2E.
+out both sibling repositories at the lock SHAs, recursively initializes the
+tools engine submodule and authenticates its pinned `origin/main`, clean-builds
+and runs the tools and trainer internal suites, clean-builds both the playing
+and generator Atomic-Stockfish targets, re-verifies all three checkouts, and
+finally executes the Atomic generate/validate/round-trip/decode/train/serialize/load E2E.
 Its Python 3.10 dependency closure is generated from
 `tests/legacy_pipeline-ci-requirements.in`, contains hashes for every direct
 and transitive distribution, is itself SHA-pinned by the workflow, and is

@@ -21,10 +21,6 @@ from atomic_training_data_schema import (
 DEFAULT_LOCK_FILE = Path(__file__).with_name("legacy_pipeline.lock.json")
 ZERO_COMMIT = "0" * 40
 ZERO_SHA256 = "0" * 64
-# Temporary, deliberately impossible-to-accept release fixture.  The first
-# strong-local run prints the measured eight-record Atomic generator SHA-256;
-# replace this sentinel in the checked-in lock before the release gate can pass.
-PENDING_STRONG_ATOMIC_DATA_SHA256 = "f" * 64
 COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 EXPECTED_REPOSITORIES = {
@@ -37,12 +33,12 @@ EXPECTED_PROFILE_KINDS = {
 }
 EXPECTED_BUILD_RECIPES = {
     "strong-local": {
-        "tools": "strong-local-tools-windows-v1",
+        "tools": "strong-local-tools-windows-v2",
         "trainer": "strong-local-trainer-windows-v1",
         "atomic": "strong-local-atomic-windows-v2",
     },
     "synthetic-ci": {
-        "tools": "synthetic-ci-tools-linux-v1",
+        "tools": "synthetic-ci-tools-linux-v2",
         "trainer": "synthetic-ci-trainer-linux-v1",
         "atomic": "synthetic-ci-atomic-linux-v2",
     },
@@ -66,7 +62,6 @@ class PipelineProfile:
     seed: str
     source_net_sha256: str
     data_sha256: str
-    atomic_data_sha256: str
     hashes_resolved: bool
     build_recipes: Mapping[str, str]
     synthetic_model_seed: int | None = None
@@ -274,14 +269,9 @@ def _parse_profile(
     data_hash = _require_string(
         entry.get("data_sha256"), f"profiles.{name}.data_sha256"
     )
-    atomic_data_hash = _require_string(
-        entry.get("atomic_data_sha256"),
-        f"profiles.{name}.atomic_data_sha256",
-    )
     for label, value in (
         ("source_net_sha256", source_hash),
         ("data_sha256", data_hash),
-        ("atomic_data_sha256", atomic_data_hash),
     ):
         if not SHA256_RE.fullmatch(value):
             raise AssertionError(
@@ -296,7 +286,6 @@ def _parse_profile(
         "seed",
         "source_net_sha256",
         "data_sha256",
-        "atomic_data_sha256",
         "hashes_resolved",
         "build_recipes",
     }
@@ -305,26 +294,18 @@ def _parse_profile(
     if not hashes_resolved:
         expected_keys.add("placeholder")
     _exact_keys(entry, expected_keys, f"profiles.{name}")
-    if source_hash == ZERO_SHA256 or data_hash == ZERO_SHA256:
+    if source_hash == ZERO_SHA256:
         raise AssertionError(
-            f"profiles.{name} source_net_sha256 and data_sha256 must remain "
-            "measured while bootstrapping atomic_data_sha256"
+            f"profiles.{name}.source_net_sha256 must remain measured while "
+            "bootstrapping data_sha256"
         )
-    if (
-        atomic_data_hash == PENDING_STRONG_ATOMIC_DATA_SHA256
-        and name != "strong-local"
-    ):
-        raise AssertionError(
-            "the pending strong Atomic data sentinel is valid only for "
-            "profiles.strong-local.atomic_data_sha256"
-        )
-    if hashes_resolved and atomic_data_hash == ZERO_SHA256:
+    if hashes_resolved and data_hash == ZERO_SHA256:
         raise AssertionError(
             f"profiles.{name} is resolved but contains an all-zero hash"
         )
-    if not hashes_resolved and atomic_data_hash != ZERO_SHA256:
+    if not hashes_resolved and data_hash != ZERO_SHA256:
         raise AssertionError(
-            f"profiles.{name} is unresolved but atomic_data_sha256 is not all-zero"
+            f"profiles.{name} is unresolved but data_sha256 is not all-zero"
         )
     if not hashes_resolved:
         placeholder = _require_string(
@@ -375,7 +356,6 @@ def _parse_profile(
         seed=seed,
         source_net_sha256=source_hash,
         data_sha256=data_hash,
-        atomic_data_sha256=atomic_data_hash,
         hashes_resolved=hashes_resolved,
         build_recipes=dict(expected_recipes),
         synthetic_model_seed=synthetic_seed,
@@ -394,8 +374,8 @@ def load_pipeline_lock(
         "pipeline lock",
     )
     schema_version = root.get("schema_version")
-    if type(schema_version) is not int or schema_version != 3:
-        raise AssertionError("pipeline lock schema_version must be exactly 3")
+    if type(schema_version) is not int or schema_version != 4:
+        raise AssertionError("pipeline lock schema_version must be exactly 4")
     training_data_schema = _parse_training_data_schema(
         root.get("training_data_schema")
     )

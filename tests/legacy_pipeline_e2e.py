@@ -2,9 +2,9 @@
 """Exercise the complete Legacy Atomic V1 data-to-engine pipeline.
 
 This is intentionally an end-to-end gate rather than a collection of mocks. It
-retains the historical tools dataset as a control, then connects the
-Atomic-Stockfish 72-byte generator wire to the native trainer loader, one real
-optimizer update, the v1 serializer, and Atomic-Stockfish's NNUE loader.
+connects the Atomic-Stockfish 72-byte generator wire to the tools validator and
+converter, the native trainer loader, one real optimizer update, the v1
+serializer, and Atomic-Stockfish's NNUE loader.
 """
 
 from __future__ import annotations
@@ -48,7 +48,6 @@ from legacy_pipeline_build_manifest import (
 from legacy_pipeline_lock import (
     CheckoutState,
     DEFAULT_LOCK_FILE,
-    PENDING_STRONG_ATOMIC_DATA_SHA256,
     PipelineLock,
     PipelineProfile,
     find_checkout_root,
@@ -65,8 +64,6 @@ RESULT_OFFSET = TRAINING_DATA_SCHEMA.field("result").offset
 PADDING_OFFSET = TRAINING_DATA_SCHEMA.field("padding").offset
 LEGACY_NNUE_VERSION = 0x7AF32F20
 LEGACY_NNUE_ARCHITECTURE = 0x3C103E72
-TOOLS_PURE_OPTION = "option name Use NNUE type combo default true var true var false var pure"
-TOOLS_PURE_LOAD_SUFFIX = " enabled (Use NNUE=pure)"
 ATOMIC_PURE_OPTION = "option name Use NNUE type combo default true var false var true var pure"
 ATOMIC_PURE_LOAD_SUFFIX = " (45MiB, (45056, 1024, 16, 32, 1))"
 ATOMIC_DATA_GENERATOR_MARKER_RE = re.compile(
@@ -869,8 +866,6 @@ def generate_data(
     output: Path,
     records: int,
     seed: str,
-    *,
-    atomic_generator: bool = False,
 ) -> bytes:
     command = (
         "generate_training_data depth 1 count {records} write_min_ply 1 "
@@ -881,10 +876,8 @@ def generate_data(
         generator,
         source_net,
         command,
-        pure_option=ATOMIC_PURE_OPTION if atomic_generator else TOOLS_PURE_OPTION,
-        pure_load_suffix=(
-            ATOMIC_PURE_LOAD_SUFFIX if atomic_generator else TOOLS_PURE_LOAD_SUFFIX
-        ),
+        pure_option=ATOMIC_PURE_OPTION,
+        pure_load_suffix=ATOMIC_PURE_LOAD_SUFFIX,
     )
     if not output.is_file():
         raise AssertionError(f"generator did not create {output}")
@@ -1719,7 +1712,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--measure-synthetic-fixture",
         action="store_true",
         help=(
-            "NON-RELEASE: print the synthetic source/tools/Atomic data hashes "
+            "NON-RELEASE: print the synthetic source and Atomic data hashes "
             "needed to finalize the lock; valid only with synthetic-ci"
         ),
     )
@@ -1818,25 +1811,12 @@ def verify_atomic_data_generator(
     return data_hash
 
 
-def verify_profile_data_hashes(
-    profile: PipelineProfile, *, data_hash: str, atomic_data_hash: str
-) -> None:
+def verify_profile_data_hash(profile: PipelineProfile, *, data_hash: str) -> None:
     if data_hash != profile.data_sha256:
         raise AssertionError(
-            f"{profile.name} pure generation fixture changed or "
+            f"{profile.name} Atomic generator fixture changed or "
             "Use NNUE=pure was not applied: "
             f"expected {profile.data_sha256}, got {data_hash}"
-        )
-    if profile.atomic_data_sha256 == PENDING_STRONG_ATOMIC_DATA_SHA256:
-        raise AssertionError(
-            "strong-local atomic_data_sha256 is still the explicit bootstrap "
-            "sentinel; replace it in tests/legacy_pipeline.lock.json with "
-            f"{atomic_data_hash}"
-        )
-    if atomic_data_hash != profile.atomic_data_sha256:
-        raise AssertionError(
-            f"{profile.name} Atomic generator fixture changed: "
-            f"expected {profile.atomic_data_sha256}, got {atomic_data_hash}"
         )
 
 
@@ -2055,23 +2035,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             trainer_root=trainer_root,
         )
 
-        tools_first_path = root / "tools-generated-a.bin"
-        tools_second_path = root / "tools-generated-b.bin"
-        tools_first = generate_data(
-            tools_engine, source_net, tools_first_path, records, seed
-        )
-        tools_second = generate_data(
-            tools_engine, source_net, tools_second_path, records, seed
-        )
-        validate_legacy_records(tools_first, records)
-        validate_legacy_records(tools_second, records)
-        if tools_first != tools_second:
-            raise AssertionError(
-                "seeded tools generation is not byte-identical: "
-                f"first={sha256(tools_first)}, second={sha256(tools_second)}"
-            )
-        data_hash = sha256(tools_first)
-
         atomic_first_path = root / "atomic-generated-a.bin"
         atomic_second_path = root / "atomic-generated-b.bin"
         atomic_first = generate_data(
@@ -2080,7 +2043,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             atomic_first_path,
             records,
             seed,
-            atomic_generator=True,
         )
         atomic_second = generate_data(
             atomic_data_generator,
@@ -2088,7 +2050,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             atomic_second_path,
             records,
             seed,
-            atomic_generator=True,
         )
         validate_legacy_records(atomic_first, records)
         validate_legacy_records(atomic_second, records)
@@ -2097,41 +2058,17 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "seeded Atomic generation is not byte-identical: "
                 f"first={sha256(atomic_first)}, second={sha256(atomic_second)}"
             )
-        atomic_data_hash = sha256(atomic_first)
+        data_hash = sha256(atomic_first)
 
         if args.measure_synthetic_fixture:
             print(
                 "SYNTHETIC PIPELINE FIXTURE MEASURED (NON-RELEASE) "
                 f"source_sha256={source_net_hash} "
-                f"data_sha256={data_hash} "
-                f"atomic_data_sha256={atomic_data_hash}"
+                f"data_sha256={data_hash}"
             )
             return 0
 
-        verify_profile_data_hashes(
-            profile,
-            data_hash=data_hash,
-            atomic_data_hash=atomic_data_hash,
-        )
-
-        tools_roundtrip, tools_plain = convert_roundtrip(
-            tools_engine, tools_first_path, root, stem="tools-generated"
-        )
-        tools_plain_records = parse_plain_records(tools_plain, records)
-        tools_batch = decode_batch(
-            nnue_dataset,
-            tools_roundtrip,
-            records,
-            loader_seed(seed),
-        )
-        factorized_feature_set = features.get_feature_set_from_name("HalfKAv2^")
-        validate_batch_semantics(
-            tools_batch,
-            tools_plain_records,
-            tools_roundtrip.read_bytes(),
-            factorized_feature_set,
-            torch,
-        )
+        verify_profile_data_hash(profile, data_hash=data_hash)
 
         atomic_roundtrip, atomic_plain = convert_roundtrip(
             tools_engine, atomic_first_path, root, stem="atomic-generated"
@@ -2143,6 +2080,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             records,
             loader_seed(seed),
         )
+        factorized_feature_set = features.get_feature_set_from_name("HalfKAv2^")
         validate_batch_semantics(
             atomic_batch,
             atomic_plain_records,
@@ -2172,7 +2110,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             f"atomic_commit={checkouts['atomic'].head} "
             f"source_sha256={source_net_hash} "
             f"data_sha256={data_hash} "
-            f"atomic_data_sha256={atomic_data_hash} "
             f"nnue_sha256={network_hash} loss={loss:.9g} "
             f"ft_delta={ft_delta:.9g} fc_delta={fc_delta:.9g} "
             f"bestmove={bestmove}"

@@ -251,6 +251,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
+          submodules: recursive
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '3.10.18'
@@ -266,7 +267,16 @@ jobs:
           repository: ${{ steps.pipeline_lock.outputs.tools_repository }}
           ref: ${{ steps.pipeline_lock.outputs.tools_commit }}
           path: .pipeline/tools
+          fetch-depth: 0
           persist-credentials: false
+          submodules: recursive
+      - name: Fetch the tools engine authentication ref
+        working-directory: .pipeline/tools/engine/Atomic-Stockfish
+        run: |
+          if [ "$(git rev-parse --is-shallow-repository)" = true ]; then
+            git fetch --no-tags --unshallow origin
+          fi
+          git fetch --no-tags origin +main:refs/remotes/origin/main
       - name: Check out variant-nnue-pytorch at the locked commit
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -291,11 +301,11 @@ jobs:
       - name: Clean-build and test variant-nnue-tools
         run: |
           python tests/legacy_pipeline_build_manifest.py \
-            --recipe synthetic-ci-tools-linux-v1 \
+            --recipe synthetic-ci-tools-linux-v2 \
             --repository-root .pipeline/tools \
             --output "$RUNNER_TEMP/tools-build.json"
-          bash .pipeline/tools/tests/tools_unit.sh
-          python .pipeline/tools/tests/tools_integration.py --engine .pipeline/tools/src/stockfish
+          make -C .pipeline/tools pin-tests verify-delegated-tsan tools-unit
+          python .pipeline/tools/tests/tools_integration.py --engine .pipeline/tools/src/atomic-data-tools
       - name: Clean-build trainer native loader
         run: |
           python tests/legacy_pipeline_build_manifest.py \
@@ -329,7 +339,7 @@ jobs:
           --tools-root .pipeline/tools
           --trainer-root .pipeline/trainer
           --atomic-root .
-          --tools-engine .pipeline/tools/src/stockfish
+          --tools-engine .pipeline/tools/src/atomic-data-tools
           --engine src/atomic-stockfish
           --atomic-commit "$(git rev-parse HEAD)"
           --allow-unresolved-hashes
@@ -340,7 +350,7 @@ jobs:
         run: |
           python tests/legacy_pipeline_e2e.py \
             --profile synthetic-ci \
-            --tools-engine .pipeline/tools/src/stockfish \
+            --tools-engine .pipeline/tools/src/atomic-data-tools \
             --trainer-root .pipeline/trainer \
             --engine src/atomic-stockfish-pipeline \
             --atomic-data-generator src/atomic-stockfish-data-generator-pipeline \
@@ -351,7 +361,7 @@ jobs:
             --atomic-root . \
             --atomic-commit "$(git rev-parse HEAD)" \
             --measure-synthetic-fixture
-          echo "::error title=Synthetic fixture lock update required::Copy the measured source_sha256, data_sha256 and atomic_data_sha256 into tests/legacy_pipeline.lock.json, set hashes_resolved=true, and remove its placeholder."
+          echo "::error title=Synthetic fixture lock update required::Copy the measured source_sha256 and Atomic-owned data_sha256 into tests/legacy_pipeline.lock.json, set hashes_resolved=true, and remove its placeholder."
           exit 1
       - name: Synthetic Legacy Atomic V1 E2E
         if: steps.pipeline_lock.outputs.synthetic_hashes_resolved == 'true'
@@ -360,7 +370,7 @@ jobs:
         run: >-
           python tests/legacy_pipeline_e2e.py
           --profile synthetic-ci
-          --tools-engine .pipeline/tools/src/stockfish
+          --tools-engine .pipeline/tools/src/atomic-data-tools
           --trainer-root .pipeline/trainer
           --engine src/atomic-stockfish-pipeline
           --atomic-data-generator src/atomic-stockfish-data-generator-pipeline

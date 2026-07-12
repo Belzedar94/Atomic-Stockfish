@@ -476,13 +476,13 @@ Together with the final speed and LOS evidence above, these results close the
 runtime candidate's pipeline component. PR acceptance still requires the
 exact-head matrix and review condition stated at the top of this record.
 
-The normative Hito 5 release runner now requires one all-or-none set containing
-`--pipeline-tools-engine`, `--pipeline-trainer-root` and the three tools,
-trainer and Atomic clean-build manifests. It reuses its already SHA-pinned
-`--net` through the explicit `strong-local` profile. The E2E reads
+The normative Hito 5 release runner now requires one all-or-none seven-input
+set containing the tools artifact, trainer root, Atomic generator and all four
+tools/trainer/playing/generator clean-build manifests. It reuses its already
+SHA-pinned `--net` through the explicit `strong-local` profile. The E2E reads
 `tests/legacy_pipeline.lock.json` and fails on a floating/wrong HEAD, dirty
 worktree, cross-checkout artifact, stale manifest or artifact not produced by
-the tracked recipe. Only smoke mode may omit the complete five-input set, and
+the tracked recipe. Only smoke mode may omit the complete seven-input set, and
 it then receives the explicit non-release omission marker; partial
 configuration is always a hard error.
 
@@ -491,10 +491,14 @@ the public counterpart without redistributing the strong network. It checks
 out the Belzedar94 tools and trainer repositories at lock-file commits, runs
 their internal native/CPU suites, builds and tests Atomic-Stockfish, creates an
 ephemeral deterministic zero-weight HalfKAv2 network with the pinned trainer,
-and runs the complete generator-to-engine E2E in `synthetic-ci`. The resolved
-profile passed in run `29177376824`, job `86608800030`, with the locked
-source/data hashes and every artifact/checkout postflight intact. Automatic
-continuation from an existing `.nnue`
+and runs the complete generator-to-engine E2E in `synthetic-ci`. Since H7.2-C,
+PV generation comes only from Atomic-Stockfish; the pinned `atomic-data-tools`
+artifact is a validator/converter built through its root wrapper and no
+historical tools-generated control dataset remains. Run `29177376824`, job
+`86608800030`, passed the resolved pre-H7.2-C profile with the former
+tools-control plus Atomic flow; it remains historical baseline evidence and is
+not evidence for the new unidirectional gate. H7.2-C acceptance requires its
+own exact-head workflow pass. Automatic continuation from an existing `.nnue`
 and the production general dataset validator remain separate trainer/tools
 release debts; this gate does not claim to implement either feature.
 
