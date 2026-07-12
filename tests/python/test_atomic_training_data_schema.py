@@ -21,7 +21,7 @@ def checked_in_document() -> dict[str, object]:
 
 
 def write_schema(path: Path, document: dict[str, object]) -> Path:
-    path.write_text(json.dumps(document) + "\n", encoding="utf-8", newline="\n")
+    path.write_bytes((json.dumps(document) + "\n").encode("utf-8"))
     return path
 
 
@@ -68,7 +68,7 @@ def test_schema_rejects_duplicate_keys(tmp_path: Path) -> None:
         1,
     )
     path = tmp_path / "schema.json"
-    path.write_text(payload, encoding="utf-8", newline="\n")
+    path.write_bytes(payload.encode("utf-8"))
     with pytest.raises(AssertionError, match="duplicate JSON key"):
         schema_module.load_training_data_schema(path)
 

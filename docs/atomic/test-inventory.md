@@ -60,6 +60,7 @@ required Elo/LOS matches.
 | Board WASM lifecycle | Repeated construction/destruction, push/pop/reset, perft, Atomic terminals and error rollback share the 58-fixture suite. |
 | UCI/NNUE WASM | Run the actual interactive search engine and load the external SHA-pinned network; this is distinct from the lightweight Board WASM library. |
 | Atomic data schema | Validate the exact UTF-8/LF bytes, hash, 72-byte layout, legacy move wire, hand-count fields, clock order, little-endian host requirement and intentionally unsupported v1 states; require matching tools/trainer capabilities before generation. |
+| Atomic BIN V2 contract | Validate exact UTF-8/LF schema bytes and hash, 96-byte header, 48-byte canonical Atomic/Atomic960 position, 64-byte record, independent 32-bit move mapping, golden special moves, count/size overflow and fail-closed corrupt wire/adapter behavior. The sink, manifest, tools and trainer readers remain separately gated follow-up blocks. |
 | NNUE pipeline | The Legacy Atomic V1 generator/decode/train/serialize/re-import E2E is mandatory from Hito 5 onward and must run from clean, SHA-pinned sibling repositories. `strong-local` uses the external frozen playing net; `synthetic-ci` creates a deterministic ephemeral trainer net so public CI redistributes no strong weights. Hito 7 adds `atomic-bin-v2` and generator consolidation without weakening either profile. |
 
 ## Mandatory execution matrix

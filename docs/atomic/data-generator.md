@@ -26,6 +26,14 @@ wrapper pinned to Atomic-Stockfish: its `atomic-data-tools` artifact validates,
 decodes, converts and reports statistics, while PV self-play exists only in
 this Atomic-Stockfish generator.
 
+Clients that support version negotiation may issue `atomic_data_schemas`.
+Its `capability_version: 2` envelope preserves the same Legacy V1 write
+capability and reports the frozen `atomic-bin-v2` schema hash
+`0352b036...f93cb6`. During H7.3-A the V2 entry honestly reports
+`read:false,write:false`: its pure codec and Position/Move adapter exist and
+are tested, but the generator does not select a V2 sink until H7.3-B. The
+singular response above remains byte-exact for pinned Legacy clients.
+
 ## Generate Legacy Atomic V1 data
 
 Load a compatible Atomic network and select `pure` before starting generation:
@@ -93,3 +101,9 @@ commands. All valid fixtures and normal-binary isolation run in sanitizer and
 platform smoke jobs. The full `tests/data_generator.py` invocation additionally
 passes every generated dataset through the tools validator and trainer native
 loader.
+
+The same target also runs the isolated Atomic BIN V2 contract gate: exact
+96-byte header and 64-byte record goldens, canonical nibble-board layout,
+32-bit move vectors, Atomic960 rook origins, strict reserved/range checks and
+adapter round trips through Atomic legal move generation. It does not change
+the generated Legacy V1 fixture bytes.

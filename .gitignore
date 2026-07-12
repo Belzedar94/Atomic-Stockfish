@@ -15,6 +15,7 @@ src/atomic-api-tests*
 src/atomic-syzygy-driver*
 src/atomic-nnue-incremental-tests*
 src/legacy-atomic-v1-tests*
+src/atomic-bin-v2-tests*
 src/-lstdc++.res
 
 # Neural network for the NNUE evaluation

@@ -44,6 +44,11 @@ using LegacyAtomicV1Record = std::array<u8, LegacyAtomicV1RecordSize>;
 // schemas/atomic-schema.json. This codec is intentionally write-only.
 std::string_view atomic_data_schema_json() noexcept;
 
+// Additive capability envelope for clients that understand more than one
+// schema. The singular command above remains byte-exact for the pinned V1
+// tools/trainer handshake. V2 is codec-only until its sink is introduced.
+std::string_view atomic_data_schemas_json() noexcept;
+
 // Encode one historical headerless record. The output is zero-filled even on
 // failure, so callers cannot accidentally consume a partially encoded record.
 DataResult encode_legacy_atomic_v1(const TrainingDataSample& sample, LegacyAtomicV1Record& record);

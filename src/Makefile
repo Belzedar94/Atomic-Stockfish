@@ -117,6 +117,13 @@ ATOMIC_LEGACY_V1_TEST_EXE  = legacy-atomic-v1-tests$(ATOMIC_TEST_EXE_SUFFIX)
 ATOMIC_LEGACY_V1_TEST_OBJS = attacks.o bitboard.o misc.o movegen.o position.o tbprobe.o \
 	uci_move.o ucioption.o atomic_data_generator_legacy_atomic_v1.o \
 	legacy_atomic_v1_tests.o
+ATOMIC_BIN_V2_TEST_EXE  = atomic-bin-v2-tests$(ATOMIC_TEST_EXE_SUFFIX)
+ATOMIC_BIN_V2_TEST_OBJS = attacks.o bitboard.o misc.o movegen.o position.o tbprobe.o \
+	uci_move.o ucioption.o atomic_bin_v2_wire_codec.o atomic_bin_v2_adapter_codec.o \
+	atomic_bin_v2_tests.o
+
+ATOMIC_BIN_V2_SRCS = data/atomic_bin_v2_wire.cpp data/atomic_bin_v2.cpp
+ATOMIC_BIN_V2_HEADERS = data/atomic_bin_v2_wire.h data/atomic_bin_v2.h
 
 ifeq ($(target_windows),yes)
 	ATOMIC_DATA_GENERATOR_EXE = atomic-stockfish-data-generator.exe
@@ -128,9 +135,10 @@ endif
 # particular, uci.cpp and search.cpp are compiled into target-specific objects
 # with ATOMIC_DATA_GENERATOR enabled, so a generator build can never change or
 # reuse the normal uci.o/search.o objects.
-ATOMIC_DATA_GENERATOR_SRCS = data/legacy_atomic_v1.cpp data/training_data_generator.cpp
+ATOMIC_DATA_GENERATOR_SRCS = data/legacy_atomic_v1.cpp data/training_data_generator.cpp \
+	$(ATOMIC_BIN_V2_SRCS)
 ATOMIC_DATA_GENERATOR_HEADERS = data/legacy_atomic_v1.h data/random_seed.h \
-	data/training_data.h data/training_data_generator.h
+	data/training_data.h data/training_data_generator.h $(ATOMIC_BIN_V2_HEADERS)
 ATOMIC_DATA_GENERATOR_DATA_OBJS = \
 	$(patsubst data/%.cpp,atomic_data_generator_%.o,$(ATOMIC_DATA_GENERATOR_SRCS))
 ATOMIC_DATA_GENERATOR_OBJS = $(filter-out uci.o search.o,$(OBJS)) \
@@ -1071,6 +1079,7 @@ help:
 	echo "atomic-syzygy-driver    > build the standalone Atomic Syzygy probe driver" && \
 	echo "atomic-nnue-incremental-tests > verify LegacyAtomicV1 incremental updates" && \
 	echo "legacy-atomic-v1-tests  > build and run the frozen 72-byte data codec tests" && \
+	echo "atomic-bin-v2-tests     > build and run the isolated 96/64-byte V2 codec tests" && \
 	echo "macos-lipo              > macOS x86-64 + Apple silicon universal binary" && \
 	echo "net                     > Download the default nnue nets" && \
 	echo "strip                   > Strip executable" && \
@@ -1142,7 +1151,7 @@ ifneq ($(SUPPORTED_ARCH), true)
 endif
 
 
-.PHONY: help analyze build profile-build data-generator data-generator-tests atomic-unit-tests atomic-api-tests atomic-syzygy-driver atomic-nnue-incremental-tests legacy-atomic-v1-tests macos-lipo strip install clean net \
+.PHONY: help analyze build profile-build data-generator data-generator-tests atomic-unit-tests atomic-api-tests atomic-syzygy-driver atomic-nnue-incremental-tests legacy-atomic-v1-tests atomic-bin-v2-tests macos-lipo strip install clean net \
 	objclean profileclean config-sanity \
 	icx-profile-use icx-profile-make \
 	gcc-profile-use gcc-profile-make \
@@ -1264,7 +1273,7 @@ clean: objclean profileclean universalclean
 
 # clean binaries and objects
 objclean:
-	@rm -f stockfish stockfish.exe atomic-stockfish atomic-stockfish.exe atomic-stockfish.js atomic-stockfish-data-generator atomic-stockfish-data-generator.exe atomic-unit-tests atomic-unit-tests.exe atomic-unit-tests.bin atomic-api-tests atomic-api-tests.exe atomic-api-tests.bin atomic-syzygy-driver* atomic-nnue-incremental-tests atomic-nnue-incremental-tests.exe atomic-nnue-incremental-tests.bin legacy-atomic-v1-tests legacy-atomic-v1-tests.exe legacy-atomic-v1-tests.bin *.o ./api/*.o ./syzygy/*.o ./nnue/*.o ./nnue/features/*.o $(BUILD_SHA_FILE) $(BUILD_DATE_FILE)
+	@rm -f stockfish stockfish.exe atomic-stockfish atomic-stockfish.exe atomic-stockfish.js atomic-stockfish-data-generator atomic-stockfish-data-generator.exe atomic-unit-tests atomic-unit-tests.exe atomic-unit-tests.bin atomic-api-tests atomic-api-tests.exe atomic-api-tests.bin atomic-syzygy-driver* atomic-nnue-incremental-tests atomic-nnue-incremental-tests.exe atomic-nnue-incremental-tests.bin legacy-atomic-v1-tests legacy-atomic-v1-tests.exe legacy-atomic-v1-tests.bin atomic-bin-v2-tests atomic-bin-v2-tests.exe atomic-bin-v2-tests.bin atomic-bin-v2-tests.* *.o ./api/*.o ./syzygy/*.o ./nnue/*.o ./nnue/features/*.o $(BUILD_SHA_FILE) $(BUILD_DATE_FILE)
 
 # clean auxiliary profiling files
 profileclean:
@@ -1297,8 +1306,9 @@ all: $(EXE) .depend
 
 data-generator: config-sanity $(ATOMIC_DATA_GENERATOR_EXE)
 
-data-generator-tests: config-sanity $(ATOMIC_DATA_GENERATOR_EXE) $(EXE) $(ATOMIC_LEGACY_V1_TEST_EXE)
+data-generator-tests: config-sanity $(ATOMIC_DATA_GENERATOR_EXE) $(EXE) $(ATOMIC_LEGACY_V1_TEST_EXE) $(ATOMIC_BIN_V2_TEST_EXE)
 	./$(ATOMIC_LEGACY_V1_TEST_EXE)
+	./$(ATOMIC_BIN_V2_TEST_EXE)
 	$(PYTHON) ../tests/data_generator.py --generator ./$(ATOMIC_DATA_GENERATOR_EXE) --normal-engine ./$(EXE) --net "$(ATOMIC_NNUE_TEST_NET)"
 
 atomic-unit-tests: config-sanity $(ATOMIC_UNIT_TEST_EXE)
@@ -1314,6 +1324,9 @@ atomic-nnue-incremental-tests: config-sanity $(ATOMIC_NNUE_INCREMENTAL_TEST_EXE)
 
 legacy-atomic-v1-tests: config-sanity $(ATOMIC_LEGACY_V1_TEST_EXE)
 	./$(ATOMIC_LEGACY_V1_TEST_EXE)
+
+atomic-bin-v2-tests: config-sanity $(ATOMIC_BIN_V2_TEST_EXE)
+	./$(ATOMIC_BIN_V2_TEST_EXE)
 
 config-sanity:
 	@echo ""
@@ -1407,6 +1420,9 @@ $(ATOMIC_NNUE_INCREMENTAL_TEST_EXE): $(ATOMIC_NNUE_INCREMENTAL_TEST_OBJS)
 $(ATOMIC_LEGACY_V1_TEST_EXE): $(ATOMIC_LEGACY_V1_TEST_OBJS)
 	+$(CXX) -o $@ $(ATOMIC_LEGACY_V1_TEST_OBJS) $(LDFLAGS)
 
+$(ATOMIC_BIN_V2_TEST_EXE): $(ATOMIC_BIN_V2_TEST_OBJS)
+	+$(CXX) -o $@ $(ATOMIC_BIN_V2_TEST_OBJS) $(LDFLAGS)
+
 atomic_see_tests.o: ../tests/atomic_see.cpp
 	$(strip $(CXX) $(CPPFLAGS) $(CXXFLAGS)) -I. -c -o $@ $<
 
@@ -1423,6 +1439,15 @@ atomic_nnue_incremental_tests.o: ../tests/atomic_nnue_incremental.cpp
 	$(strip $(CXX) $(CPPFLAGS) $(CXXFLAGS)) -I. -c -o $@ $<
 
 legacy_atomic_v1_tests.o: ../tests/legacy_atomic_v1.cpp $(ATOMIC_DATA_GENERATOR_HEADERS)
+	$(strip $(CXX) $(CPPFLAGS) $(CXXFLAGS)) -I. -c -o $@ $<
+
+atomic_bin_v2_tests.o: ../tests/atomic_bin_v2.cpp $(HEADERS) $(ATOMIC_BIN_V2_HEADERS)
+	$(strip $(CXX) $(CPPFLAGS) $(CXXFLAGS)) -I. -c -o $@ $<
+
+atomic_bin_v2_wire_codec.o: data/atomic_bin_v2_wire.cpp $(HEADERS) $(ATOMIC_BIN_V2_HEADERS)
+	$(strip $(CXX) $(CPPFLAGS) $(CXXFLAGS)) -I. -c -o $@ $<
+
+atomic_bin_v2_adapter_codec.o: data/atomic_bin_v2.cpp $(HEADERS) $(ATOMIC_BIN_V2_HEADERS)
 	$(strip $(CXX) $(CPPFLAGS) $(CXXFLAGS)) -I. -c -o $@ $<
 
 atomic_data_generator_uci.o: uci.cpp $(HEADERS) $(ATOMIC_DATA_GENERATOR_HEADERS)

@@ -6,3 +6,4 @@ tests/legacy_pipeline-ci-requirements.txt text eol=lf
 tests/pip-bootstrap-requirements.txt text eol=lf
 tests/python-ci-requirements.txt text eol=lf
 schemas/atomic-schema.json text eol=lf
+schemas/atomic-bin-v2.json text eol=lf
