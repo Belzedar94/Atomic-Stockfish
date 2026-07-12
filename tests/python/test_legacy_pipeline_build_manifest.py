@@ -137,12 +137,14 @@ def successful_manifest(tmp_path: Path, monkeypatch):
     return root, head, artifact, output, recorded
 
 
-def successful_engine_manifest(tmp_path: Path, monkeypatch):
+def successful_engine_manifest(
+    tmp_path: Path, monkeypatch, *, role: str = "atomic"
+):
     root, head = clean_repo(tmp_path)
     artifact = root / "artifact.bin"
     recipe = fixture_recipe(
         root,
-        role="atomic",
+        role=role,
         expected_engine_target=build_manifest.X86_64_BMI2_RELEASE_TARGET,
     )
     monkeypatch.setitem(build_manifest.RECIPES, recipe.name, recipe)
@@ -158,6 +160,23 @@ def successful_engine_manifest(tmp_path: Path, monkeypatch):
         output=output,
     )
     return root, head, artifact, output, recorded
+
+
+def test_data_generator_role_uses_the_engine_manifest_contract(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root, head, artifact, output, recorded = successful_engine_manifest(
+        tmp_path, monkeypatch, role="atomic-data-generator"
+    )
+    assert recorded.role == "atomic-data-generator"
+    verified = build_manifest.verify_build_manifest(
+        output,
+        expected_recipe="fixture-v1",
+        repository_root=root,
+        artifact=artifact,
+        expected_commit=head,
+    )
+    assert verified.artifact_sha256 == recorded.artifact_sha256
 
 
 def trainer_cmake_fixture(

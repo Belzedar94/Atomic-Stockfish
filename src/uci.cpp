@@ -30,6 +30,10 @@
 #include <vector>
 
 #include "benchmark.h"
+#ifdef ATOMIC_DATA_GENERATOR
+    #include "data/legacy_atomic_v1.h"
+    #include "data/training_data_generator.h"
+#endif
 #include "engine.h"
 #include "memory.h"
 #include "position.h"
@@ -142,6 +146,16 @@ void UCIEngine::loop() {
             engine.search_clear();
         else if (token == "isready")
             sync_cout << "readyok" << sync_endl;
+
+#ifdef ATOMIC_DATA_GENERATOR
+        else if (token == "atomic_data_schema")
+            sync_cout << Data::atomic_data_schema_json() << sync_endl;
+        else if (token == "generate_training_data")
+        {
+            if (!Data::generate_training_data(engine, is))
+                std::exit(EXIT_FAILURE);
+        }
+#endif
 
         // Add custom non-UCI commands, mainly for debugging purposes.
         // These commands must not be used during a search!
@@ -268,8 +282,7 @@ void UCIEngine::bench(std::istream& args) {
                 {
                     if (!engine.go(limits))
                     {
-                        engine.set_on_update_full(
-                          [&](const auto& i) { on_update_full(i, false); });
+                        engine.set_on_update_full([&](const auto& i) { on_update_full(i, false); });
                         std::cerr << "\nBench aborted: NNUE verification failed." << std::endl;
                         return;
                     }
@@ -591,17 +604,11 @@ std::string UCIEngine::wdl(Value v, const Position& pos) {
     return ss.str();
 }
 
-std::string UCIEngine::square(Square s) {
-    return UCI::square(s);
-}
+std::string UCIEngine::square(Square s) { return UCI::square(s); }
 
-std::string UCIEngine::move(Move m, bool chess960) {
-    return UCI::move(m, chess960);
-}
+std::string UCIEngine::move(Move m, bool chess960) { return UCI::move(m, chess960); }
 
-std::string UCIEngine::to_lower(std::string str) {
-    return UCI::to_lower(std::move(str));
-}
+std::string UCIEngine::to_lower(std::string str) { return UCI::to_lower(std::move(str)); }
 
 Move UCIEngine::to_move(const Position& pos, std::string str) {
     return UCI::to_move(pos, std::move(str));

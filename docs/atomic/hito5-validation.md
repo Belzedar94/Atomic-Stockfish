@@ -14,6 +14,10 @@ with head `e0b58ebd`, but checked out and tested synthetic merge commit
 `7968672f37f537aed6eeff169e5524f91a88f853` against base
 `753060ade187cf6b74428dd4f929b7380d6073a0`.
 
+That snapshot predates the Hito 7.2 Atomic-owned generator. Lock schema v3 now
+adds a separately pinned eight-record `atomic_data_sha256`; both synthetic and
+strong-local Atomic generator fixtures are frozen.
+
 `Use NNUE=true` is the playing mode and is mandatory for all Elo/LOS gates.
 `Use NNUE=pure` exists for data generation: it exposes the unadjusted network
 output used by the dataset/training pipeline. Release tests preserve `pure`
@@ -28,7 +32,7 @@ mode.
 | NNUE modes | `false`, `true` and `pure`; invalid networks reject `go` without killing UCI |
 | NNUE export | Export/import is byte-exact for the frozen Legacy Atomic V1 network |
 | UCI/NNUE WASM | Supported Node launcher, external SHA-pinned network, true/pure and reproducible manifest |
-| Cross-repository pipeline | Required in release: clean SHA-pinned tools, trainer and Atomic checkouts; generate twice with `pure`, validate/decode, train one Ranger step, serialize/reimport and load the resulting network in the native engine |
+| Cross-repository pipeline | Required in release: clean SHA-pinned tools, trainer and Atomic checkouts; retain the byte-pinned tools dataset as a control; independently generate the byte-pinned Atomic dataset twice with `pure`, validate and convert it with tools, decode it with the trainer, use that Atomic batch for one Ranger step, serialize/reimport and load the resulting network in the native engine |
 | Incremental accumulator | Exactly 1,000,000 deterministic make/undo operations plus fixed special-move fixtures |
 | Atomic captures | At least one capture exercised and exact marker `capture-forced-refresh=0` |
 | Full refresh | Incremental raw output, scaled true/pure values and accumulator lanes equal a fresh accumulator |
@@ -69,20 +73,28 @@ The profiles deliberately serve different purposes:
 | `strong-local` | External `atomic_run3b_e202_l05.nnue`, SHA-256 `99DC67EABF26A64FAEECA3A88B4C38597A840B8D4A874B9F2CF658C6F92A04A6` | Normative local release and real dataset-pipeline compatibility |
 | `synthetic-ci` | Ephemeral zero-weight HalfKAv2 network created by the pinned trainer's model and Legacy V1 serializer | Public CI without downloading or redistributing the strong network |
 
-Both profiles hard-pin record count, seed, source-network hash and generated
-72-byte data hash. The synthetic constructor zeroes every trainer parameter
+Both profiles hard-pin record count, seed, source-network hash, the historical
+tools-generated 72-byte dataset hash and the Atomic-generated 72-byte dataset
+hash. The synthetic constructor zeroes every trainer parameter
 before serialization, so its bytes do not depend on PyTorch RNG or BLAS
 behavior. It is not a playing network and is never used for Elo/LOS. The lock
 pins the reviewed tools and trainer commits plus the measured synthetic source
 SHA-256 `9CF054CA00B82AB53A34473DE52D1104AEDDAA19B2E7B24091B5E613AF485985`
-and data SHA-256
-`95565809C53E914A192D095B18C7BAB9A0C35AF9510347DC2C63BAA385D69988`.
+tools-control data SHA-256
+`95565809C53E914A192D095B18C7BAB9A0C35AF9510347DC2C63BAA385D69988`,
+and Atomic data SHA-256
+`60308342207B66DA3D07DB5A7AEE937837D0CA107A7A876150AADF911E0C1484`.
 The one-time
 `--profile synthetic-ci --measure-synthetic-fixture` E2E invocation prints the
-two observed hashes with an explicit `NON-RELEASE` marker and deliberately
-returns a failing CI job after all postflights pass. Those values are now in the
-lock and the profile is resolved; only the following run without the
-measurement flag can pass the release gate.
+source, tools-control and Atomic dataset hashes with an explicit `NON-RELEASE`
+marker; CI deliberately fails after all postflights pass. Those values are now
+frozen and the normal synthetic job is enabled. Measurement mode remains
+accepted only for `synthetic-ci`.
+The strong-local Atomic dataset SHA-256 is
+`D95F5180C7D6319E8D838752B49C51F611C311AEF728C30B42C2DF02C2071639`.
+If a future profile needs bootstrapping, the temporary all-`f` sentinel cannot
+pass: the first normal run prints the measured eight-record value that must
+replace it.
 
 ## Evaluation differences are diagnostic
 
@@ -129,9 +141,14 @@ python tests/legacy_pipeline_build_manifest.py `
   --output ../pipeline-manifests/trainer-build.json
 
 python tests/legacy_pipeline_build_manifest.py `
-  --recipe strong-local-atomic-windows-v1 `
+  --recipe strong-local-atomic-windows-v2 `
   --repository-root . `
   --output ../pipeline-manifests/atomic-build.json
+
+python tests/legacy_pipeline_build_manifest.py `
+  --recipe strong-local-atomic-data-generator-windows-v2 `
+  --repository-root . `
+  --output ../pipeline-manifests/atomic-data-generator-build.json
 ```
 
 Run the global workload preflight before each of those build/test workloads.
@@ -145,7 +162,7 @@ repository dirty and invalidate the release gate.
 make -C src -j2 ARCH=x86-64-avx2 COMP=mingw atomic-syzygy-driver
 
 python tests/run_hito5.py `
-  --native src/atomic-stockfish.exe `
+  --native src/atomic-stockfish-pipeline.exe `
   --net ../atomic_run3b_e202_l05.nnue `
   --pyffish pyffish.pyd `
   --cjs tests/js/dist/cjs/ffish.js `
@@ -156,11 +173,19 @@ python tests/run_hito5.py `
   --pipeline-trainer-root ../variant-nnue-pytorch `
   --pipeline-tools-build-manifest ../pipeline-manifests/tools-build.json `
   --pipeline-trainer-build-manifest ../pipeline-manifests/trainer-build.json `
-  --pipeline-atomic-build-manifest ../pipeline-manifests/atomic-build.json
+  --pipeline-atomic-build-manifest ../pipeline-manifests/atomic-build.json `
+  --pipeline-atomic-data-generator src/atomic-stockfish-data-generator-pipeline.exe `
+  --pipeline-atomic-data-generator-build-manifest ../pipeline-manifests/atomic-data-generator-build.json
 ```
 
-The two checkout/artifact paths and all three clean-build manifests form one
-all-or-none set of five `--pipeline-*` inputs and are mandatory in release
+The role-specific `*-pipeline` copies remain byte-identical to the artifacts
+recorded by their manifests even though the generator recipe restores the
+public `atomic-stockfish` executable for the remaining native tests. This is
+required because separate MinGW LTO links are not guaranteed to be
+byte-reproducible.
+
+The three checkout/artifact paths and all four clean-build manifests form one
+all-or-none set of seven `--pipeline-*` inputs and are mandatory in release
 mode. The runner invokes the `strong-local` profile of
 `tests/legacy_pipeline_e2e.py` under a whole-process timeout and reuses the
 SHA-pinned `--net` as its `pure` source network. The E2E independently enforces
@@ -171,7 +196,7 @@ origins. Every runtime/imported artifact used at preflight contributes to a
 per-dependency and whole-environment SHA-256 manifest and is rehashed after the
 training step; lazily imported additions are accepted only after ownership and
 same-distribution origin validation. Smoke mode may omit the complete
-five-input set;
+seven-input set;
 it then emits the exact
 `LEGACY PIPELINE E2E NOT REQUESTED (NON-RELEASE)` marker. Supplying only one
 or any incomplete subset, omitting the set in release, a missing tools binary,
@@ -179,8 +204,9 @@ an unbuilt trainer checkout or a stale manifest is a hard configuration error.
 
 Public CI uses the separate `synthetic-ci` profile. Its dedicated job checks
 out both sibling repositories at the lock SHAs, clean-builds and runs the tools
-and trainer internal suites, clean-builds Atomic-Stockfish, re-verifies all
-three checkouts, and finally executes the same decode/train/serialize/load E2E.
+and trainer internal suites, clean-builds both the playing and generator
+Atomic-Stockfish targets, re-verifies all three checkouts, and finally executes
+the same tools-control plus Atomic generate/decode/train/serialize/load E2E.
 Its Python 3.10 dependency closure is generated from
 `tests/legacy_pipeline-ci-requirements.in`, contains hashes for every direct
 and transitive distribution, is itself SHA-pinned by the workflow, and is

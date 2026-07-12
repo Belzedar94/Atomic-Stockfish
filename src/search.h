@@ -172,6 +172,32 @@ struct RootMove {
 
 using RootMoves = std::vector<RootMove>;
 
+enum class TrainingSearchMode : u8 {
+    Evaluate,
+    Quiescence,
+    FixedDepth
+};
+
+struct TrainingSearchRequest {
+    TrainingSearchMode mode    = TrainingSearchMode::Evaluate;
+    Depth              depth   = 0;
+    u64                nodes   = 0;
+    usize              multiPV = 1;
+};
+
+struct TrainingSearchLine {
+    Value   value = VALUE_NONE;
+    PVMoves pv;
+};
+
+struct TrainingSearchResult {
+    Value                           value = VALUE_NONE;
+    PVMoves                         pv;
+    std::vector<TrainingSearchLine> lines;
+    u64                             nodes = 0;
+    Depth                           depth = 0;
+};
+
 
 // LimitsType struct stores information sent by the caller about the analysis required.
 struct LimitsType {
@@ -346,6 +372,10 @@ class Worker {
     bool is_mainthread() const { return threadIdx == 0; }
 
     void ensure_network_replicated();
+
+    // Synchronous per-worker entry point used only by the in-process data
+    // generator. Values are raw engine Values; no UCI score conversion occurs.
+    TrainingSearchResult training_search(Position&, const TrainingSearchRequest&);
 
     // Public because they need to be updatable by the stats
     ButterflyHistory mainHistory;

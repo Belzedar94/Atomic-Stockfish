@@ -91,11 +91,82 @@ search, evaluation or generated data bytes, it does not trigger the three-TC
 strength-change gate. Those matches remain mandatory for every future change
 that can affect play.
 
+## H7.2-A — Isolated in-engine Legacy V1 generator
+
+Atomic-Stockfish now owns the PV self-play path behind a separate
+`data-generator` build. The resulting `atomic-stockfish-data-generator`
+artifact compiles dedicated `uci.cpp` and `search.cpp` objects with
+`ATOMIC_DATA_GENERATOR`; the normal UCI/XBoard binary neither links the codec
+nor recognizes the generator commands. The public playing path compiles to the
+same search behavior and retains the exact NNUE signature `338376`.
+
+The generator writes only the frozen 72-byte Legacy Atomic V1 format in this
+block. It requires a valid compatible network and `Use NNUE=pure`, rejects
+Atomic960 and invalid configuration before creating output, uses exclusive
+creation, removes only files owned by a failed run, and clears search/TT state
+between commands. A separate clean-build manifest authenticates its commit,
+compiler target and immutable role-specific `*-pipeline` artifact SHA rather
+than treating it as an unauthenticated side product of the playing binary.
+The normal and generator copies survive the later restoration build, avoiding
+any assumption that independent MinGW LTO links are byte-reproducible.
+
+The deterministic synthetic network and generated fixtures are frozen as:
+
+| Fixture | SHA-256 |
+| --- | --- |
+| Zero-weight Legacy Atomic V1 network | `9CF054CA...F485985` |
+| Basic same/fresh-process dataset | `762555D8...C1F339A` |
+| True Apery insert/reply dataset | `CF2B0F7B...76D91F0` |
+| Random-MultiPV same-process replay dataset | `2EDCD682...F809A3D` |
+| `INT_MAX` MultiPV-diff dataset | `2EDCD682...F809A3D` |
+| `random_move_min_ply=-1` RNG dataset | `2EDCD682...F809A3D` |
+| Two-opening/two-game shuffled-book dataset | `B77E197E...9C750D1` |
+
+All seven valid fixtures and normal-binary isolation run in the GCC, Clang,
+MinGW, debug/assert, ASan/UBSan and TSan smoke matrices. The full gate also
+exercises the historical PRNG order, true Apery vector insertion, terminal
+search/RNG ordering across games, multi-FEN book shuffle/round-robin,
+direct-mapped 64M-key deduplication table, Threads=2, invalid
+network/mode/Atomic960/options, output collision behavior, tools validation and
+trainer native decoding. With the frozen playing network, the basic two-record
+dataset SHA-256 is `7E89411B...3B27CC0`.
+
+Local validation for this block passed:
+
+- GCC 15, Clang 20 and MinGW BMI2 release builds; MinGW debug/assert build.
+- The complete 504-byte Fairy codec fixture and sink cleanup/destructor tests.
+- ASan+UBSan and TSan functional self-play, including Threads=2.
+- Pipeline/lock/build-manifest/E2E Python units: `128/128`.
+- Full cross-repository validation of all seven generated datasets in tools and
+  the trainer native loader.
+- Mutation checks rejected Apery overwrite (`FB6B314B...B87C2E8`), omitted
+  `-1` RNG consumption (`0FD4B1AA...D074F92`), early terminal resolution
+  (`A8F93701...FC4ABC`) and signed `INT_MAX` overflow (`762555D8...C1F339A`).
+- Hito 4 release and debug surfaces, including C++ `63/63`, API `34/34`,
+  `test.py` `22/22`, Python `60/60`, CommonJS/ESM/WASM, XBoard, Syzygy, all
+  eight exact perfts, NNUE modes, reprosearch and signature.
+- Legacy NNUE incremental/full-refresh equivalence for 1,000,000 operations
+  and the `10,000/10,000` Fairy differential.
+- Normative BMI2 speed gate: candidate median `1,132,156` NPS versus Fairy
+  `914,168` NPS, ratio `1.2385` (`+23.85%`), with the candidate 17,546 bytes
+  smaller in that run.
+
+The three LOS controls are not triggered by H7.2-A: every generator/search
+addition is compile-time isolated from the playing target, and its exact
+playing signature is unchanged. They remain mandatory as soon as a shared
+search, evaluation or move-generation change can affect games.
+
 ## Remaining Hito 7 work
 
-H7.1 is a compatibility boundary, not completion of Hito 7. The next blocks
-must add the Atomic-Stockfish `data-generator` target, make tools a thin pinned
-wrapper, implement the versioned `atomic-bin-v2` header/manifest and 32-bit
-move wire, add Atomic960-capable canonical positions, and validate every V2
-record in tools and trainer. Legacy V1 remains a supported fallback throughout
-the 1.x line.
+H7.1 and H7.2-A are compatibility boundaries, not completion of Hito 7. The
+next blocks must make tools a thin wrapper pinned to the Atomic engine, then
+implement the versioned `atomic-bin-v2` header/manifest and 32-bit move wire,
+add Atomic960-capable canonical positions, and validate every V2 record in
+tools and trainer. Legacy V1 remains a supported fallback throughout the 1.x
+line.
+
+This project remains isolated in the sibling repositories: every tools or
+trainer implementation branch starts from its dedicated `atomic` branch and
+every corresponding pull request targets `atomic`, never the upstream default
+branch (`main` or `master`). The pipeline lock records the exact commits from
+those Atomic-only lines.

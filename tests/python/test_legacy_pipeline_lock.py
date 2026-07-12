@@ -19,7 +19,7 @@ import legacy_pipeline_build_manifest as build_manifest
 def resolved_document() -> dict[str, object]:
     schema = pipeline_lock.load_training_data_schema()
     return {
-        "schema_version": 2,
+        "schema_version": 3,
         "training_data_schema": {
             "path": pipeline_lock.EXPECTED_TRAINING_DATA_SCHEMA_PATH,
             "schema_id": schema.schema_id,
@@ -45,6 +45,7 @@ def resolved_document() -> dict[str, object]:
                 "seed": "20260711",
                 "source_net_sha256": "e" * 64,
                 "data_sha256": "f" * 64,
+                "atomic_data_sha256": "a" * 64,
                 "hashes_resolved": True,
                 "build_recipes": pipeline_lock.EXPECTED_BUILD_RECIPES[
                     "strong-local"
@@ -57,6 +58,7 @@ def resolved_document() -> dict[str, object]:
                 "synthetic_model_seed": 20260711,
                 "source_net_sha256": "c" * 64,
                 "data_sha256": "d" * 64,
+                "atomic_data_sha256": "b" * 64,
                 "hashes_resolved": True,
                 "build_recipes": pipeline_lock.EXPECTED_BUILD_RECIPES[
                     "synthetic-ci"
@@ -75,10 +77,9 @@ def placeholder_document() -> dict[str, object]:
             placeholder=f"REPLACE_WITH_{name.upper()}_COMMIT",
         )
     document["profiles"]["synthetic-ci"].update(
-        source_net_sha256=pipeline_lock.ZERO_SHA256,
-        data_sha256=pipeline_lock.ZERO_SHA256,
+        atomic_data_sha256=pipeline_lock.ZERO_SHA256,
         hashes_resolved=False,
-        placeholder="REPLACE_WITH_SYNTHETIC_HASHES",
+        placeholder="REPLACE_WITH_SYNTHETIC_ATOMIC_DATA_SHA256",
     )
     return document
 
@@ -96,6 +97,15 @@ def test_checked_in_lock_is_structurally_valid() -> None:
     assert set(lock.profiles) == {"strong-local", "synthetic-ci"}
     assert lock.training_data_schema.schema_id == "legacy-atomic-v1"
     assert lock.training_data_schema.record_size == 72
+    assert (
+        lock.profiles["strong-local"].atomic_data_sha256
+        == "d95f5180c7d6319e8d838752b49c51f611c311aef728c30b42c2df02c2071639"
+    )
+    assert (
+        lock.profiles["synthetic-ci"].atomic_data_sha256
+        == "60308342207b66da3d07db5a7aee937837d0ca107a7a876150aadf911e0c1484"
+    )
+    assert lock.profiles["synthetic-ci"].hashes_resolved is True
 
 
 def test_lock_rejects_duplicate_json_keys_at_any_depth(tmp_path: Path) -> None:
@@ -110,11 +120,14 @@ def test_lock_rejects_duplicate_json_keys_at_any_depth(tmp_path: Path) -> None:
         pipeline_lock.load_pipeline_lock(lock_path)
 
 
-def test_lock_schema_version_rejects_json_boolean(tmp_path: Path) -> None:
+@pytest.mark.parametrize("invalid_version", (True, 2, 4))
+def test_lock_requires_schema_version_three(
+    tmp_path: Path, invalid_version: object
+) -> None:
     document = resolved_document()
-    document["schema_version"] = True
+    document["schema_version"] = invalid_version
     lock_path = write_document(tmp_path / "lock.json", document)
-    with pytest.raises(AssertionError, match="schema_version must be exactly 2"):
+    with pytest.raises(AssertionError, match="schema_version must be exactly 3"):
         pipeline_lock.load_pipeline_lock(lock_path)
 
 
@@ -202,15 +215,39 @@ def test_profile_rejects_mixed_zero_and_real_hashes(
     document = resolved_document()
     synthetic = document["profiles"]["synthetic-ci"]
     synthetic.update(
-        source_net_sha256=pipeline_lock.ZERO_SHA256,
-        data_sha256="d" * 64,
+        atomic_data_sha256=(
+            pipeline_lock.ZERO_SHA256 if resolved else "b" * 64
+        ),
         hashes_resolved=resolved,
     )
     if not resolved:
-        synthetic["placeholder"] = "REPLACE_WITH_SYNTHETIC_HASHES"
+        synthetic["placeholder"] = "REPLACE_WITH_SYNTHETIC_ATOMIC_DATA_SHA256"
     lock_path = write_document(tmp_path / "lock.json", document)
-    with pytest.raises(AssertionError, match="all-zero|two all-zero"):
+    with pytest.raises(AssertionError, match="all-zero|atomic_data_sha256"):
         pipeline_lock.load_pipeline_lock(lock_path, allow_placeholders=True)
+
+
+@pytest.mark.parametrize("field", ("source_net_sha256", "data_sha256"))
+def test_atomic_hash_bootstrap_keeps_existing_hashes_resolved(
+    tmp_path: Path, field: str
+) -> None:
+    document = placeholder_document()
+    document["profiles"]["synthetic-ci"][field] = pipeline_lock.ZERO_SHA256
+    lock_path = write_document(tmp_path / "lock.json", document)
+    with pytest.raises(AssertionError, match="must remain measured"):
+        pipeline_lock.load_pipeline_lock(lock_path, allow_placeholders=True)
+
+
+def test_pending_strong_atomic_hash_sentinel_is_profile_scoped(
+    tmp_path: Path,
+) -> None:
+    document = resolved_document()
+    document["profiles"]["synthetic-ci"]["atomic_data_sha256"] = (
+        pipeline_lock.PENDING_STRONG_ATOMIC_DATA_SHA256
+    )
+    lock_path = write_document(tmp_path / "lock.json", document)
+    with pytest.raises(AssertionError, match="valid only for profiles.strong-local"):
+        pipeline_lock.load_pipeline_lock(lock_path)
 
 
 def test_github_outputs_emit_only_resolved_repository_pins(tmp_path: Path) -> None:
@@ -235,10 +272,9 @@ def test_github_outputs_can_bootstrap_only_unresolved_synthetic_hashes(
 ) -> None:
     document = resolved_document()
     document["profiles"]["synthetic-ci"].update(
-        source_net_sha256=pipeline_lock.ZERO_SHA256,
-        data_sha256=pipeline_lock.ZERO_SHA256,
+        atomic_data_sha256=pipeline_lock.ZERO_SHA256,
         hashes_resolved=False,
-        placeholder="REPLACE_WITH_SYNTHETIC_HASHES",
+        placeholder="REPLACE_WITH_SYNTHETIC_ATOMIC_DATA_SHA256",
     )
     lock_path = write_document(tmp_path / "lock.json", document)
     output = tmp_path / "github-output.txt"
@@ -263,10 +299,9 @@ def test_github_outputs_rejects_unresolved_synthetic_hashes_without_bootstrap(
 ) -> None:
     document = resolved_document()
     document["profiles"]["synthetic-ci"].update(
-        source_net_sha256=pipeline_lock.ZERO_SHA256,
-        data_sha256=pipeline_lock.ZERO_SHA256,
+        atomic_data_sha256=pipeline_lock.ZERO_SHA256,
         hashes_resolved=False,
-        placeholder="REPLACE_WITH_SYNTHETIC_HASHES",
+        placeholder="REPLACE_WITH_SYNTHETIC_ATOMIC_DATA_SHA256",
     )
     lock_path = write_document(tmp_path / "lock.json", document)
 
@@ -308,10 +343,9 @@ def test_github_outputs_bootstrap_rejects_other_unresolved_profile_hashes(
 ) -> None:
     document = resolved_document()
     document["profiles"]["strong-local"].update(
-        source_net_sha256=pipeline_lock.ZERO_SHA256,
-        data_sha256=pipeline_lock.ZERO_SHA256,
+        atomic_data_sha256=pipeline_lock.ZERO_SHA256,
         hashes_resolved=False,
-        placeholder="REPLACE_WITH_STRONG_LOCAL_HASHES",
+        placeholder="REPLACE_WITH_STRONG_LOCAL_ATOMIC_DATA_SHA256",
     )
     lock_path = write_document(tmp_path / "lock.json", document)
 
@@ -351,10 +385,9 @@ def test_verify_checkouts_can_bootstrap_only_unresolved_synthetic_hashes(
 ) -> None:
     document = resolved_document()
     document["profiles"]["synthetic-ci"].update(
-        source_net_sha256=pipeline_lock.ZERO_SHA256,
-        data_sha256=pipeline_lock.ZERO_SHA256,
+        atomic_data_sha256=pipeline_lock.ZERO_SHA256,
         hashes_resolved=False,
-        placeholder="REPLACE_WITH_SYNTHETIC_HASHES",
+        placeholder="REPLACE_WITH_SYNTHETIC_ATOMIC_DATA_SHA256",
     )
     lock_path = write_document(tmp_path / "lock.json", document)
     lock = pipeline_lock.load_pipeline_lock(
@@ -378,10 +411,9 @@ def test_verify_checkouts_rejects_unresolved_synthetic_without_bootstrap(
 ) -> None:
     document = resolved_document()
     document["profiles"]["synthetic-ci"].update(
-        source_net_sha256=pipeline_lock.ZERO_SHA256,
-        data_sha256=pipeline_lock.ZERO_SHA256,
+        atomic_data_sha256=pipeline_lock.ZERO_SHA256,
         hashes_resolved=False,
-        placeholder="REPLACE_WITH_SYNTHETIC_HASHES",
+        placeholder="REPLACE_WITH_SYNTHETIC_ATOMIC_DATA_SHA256",
     )
     lock_path = write_document(tmp_path / "lock.json", document)
     lock = pipeline_lock.load_pipeline_lock(
@@ -425,10 +457,9 @@ def test_verify_checkouts_bootstrap_rejects_unresolved_strong_local(
 ) -> None:
     document = resolved_document()
     document["profiles"]["strong-local"].update(
-        source_net_sha256=pipeline_lock.ZERO_SHA256,
-        data_sha256=pipeline_lock.ZERO_SHA256,
+        atomic_data_sha256=pipeline_lock.ZERO_SHA256,
         hashes_resolved=False,
-        placeholder="REPLACE_WITH_STRONG_LOCAL_HASHES",
+        placeholder="REPLACE_WITH_STRONG_LOCAL_ATOMIC_DATA_SHA256",
     )
     lock_path = write_document(tmp_path / "lock.json", document)
     lock = pipeline_lock.load_pipeline_lock(
@@ -456,10 +487,9 @@ def test_verify_checkouts_cli_loads_and_forwards_measurement_bootstrap(
 ) -> None:
     document = resolved_document()
     document["profiles"]["synthetic-ci"].update(
-        source_net_sha256=pipeline_lock.ZERO_SHA256,
-        data_sha256=pipeline_lock.ZERO_SHA256,
+        atomic_data_sha256=pipeline_lock.ZERO_SHA256,
         hashes_resolved=False,
-        placeholder="REPLACE_WITH_SYNTHETIC_HASHES",
+        placeholder="REPLACE_WITH_SYNTHETIC_ATOMIC_DATA_SHA256",
     )
     lock_path = write_document(tmp_path / "lock.json", document)
 

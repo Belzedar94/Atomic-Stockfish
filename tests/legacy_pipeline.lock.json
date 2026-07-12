@@ -1,5 +1,5 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "training_data_schema": {
     "path": "schemas/atomic-schema.json",
     "schema_id": "legacy-atomic-v1",
@@ -25,10 +25,11 @@
       "seed": "20260711",
       "source_net_sha256": "99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f92a04a6",
       "data_sha256": "7de72b1385dbc8e37312a513d1cf4c7d99f889ec8b747f548ed32e8d7a261a2d",
+      "atomic_data_sha256": "d95f5180c7d6319e8d838752b49c51f611c311aef728c30b42c2df02c2071639",
       "build_recipes": {
         "tools": "strong-local-tools-windows-v1",
         "trainer": "strong-local-trainer-windows-v1",
-        "atomic": "strong-local-atomic-windows-v1"
+        "atomic": "strong-local-atomic-windows-v2"
       },
       "hashes_resolved": true
     },
@@ -39,10 +40,11 @@
       "synthetic_model_seed": 20260711,
       "source_net_sha256": "9cf054ca00b82ab53a34473de52d1104aeddaa19b2e7b24091b5e613af485985",
       "data_sha256": "95565809c53e914a192d095b18c7bab9a0c35af9510347dc2c63baa385d69988",
+      "atomic_data_sha256": "60308342207b66da3d07db5a7aee937837d0ca107a7a876150aadf911e0c1484",
       "build_recipes": {
         "tools": "synthetic-ci-tools-linux-v1",
         "trainer": "synthetic-ci-trainer-linux-v1",
-        "atomic": "synthetic-ci-atomic-linux-v1"
+        "atomic": "synthetic-ci-atomic-linux-v2"
       },
       "hashes_resolved": true
     }
