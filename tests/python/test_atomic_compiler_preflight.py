@@ -527,9 +527,9 @@ def test_uci_engine_rejects_silent_affinity_noop_and_closes_child(
     assert process.stdin.getvalue() == "quit\n"
 
 
-def test_bench_ready_output_requires_exact_enabled_nnue_path(tmp_path):
+def test_bench_nnue_output_requires_exact_enabled_nnue_path(tmp_path):
     net = (tmp_path / "atomic.nnue").resolve()
-    bench_compare.require_nnue_ready_output(
+    bench_compare.require_nnue_output(
         "candidate",
         net,
         [
@@ -538,23 +538,48 @@ def test_bench_ready_output_requires_exact_enabled_nnue_path(tmp_path):
             "readyok",
         ],
     )
-    bench_compare.require_nnue_ready_output(
+    bench_compare.require_nnue_output(
         "baseline",
         net,
         [f"info string NNUE evaluation using {net} enabled", "readyok"],
     )
     with pytest.raises(RuntimeError, match="did not confirm selected NNUE"):
-        bench_compare.require_nnue_ready_output(
+        bench_compare.require_nnue_output(
             "candidate",
             net,
             ["info string classical evaluation enabled", "readyok"],
         )
     with pytest.raises(RuntimeError, match="NNUE/protocol error"):
-        bench_compare.require_nnue_ready_output(
+        bench_compare.require_nnue_output(
             "candidate",
             net,
             ["info string ERROR: incompatible net", "readyok"],
         )
+
+
+def test_bench_nnue_preflight_accepts_candidate_marker_emitted_on_go(tmp_path):
+    net = (tmp_path / "atomic.nnue").resolve()
+    commands = []
+    engine = object.__new__(bench_compare.UciEngine)
+    engine.label = "candidate"
+    engine.ready = lambda: ["readyok"]
+    engine.send = commands.append
+
+    search_output = [
+        "info string NNUE evaluation using "
+        f"{net} {bench_compare.CANDIDATE_NNUE_ARCHITECTURE_MARKER}",
+        "info depth 1 nodes 1 time 1",
+        "bestmove b2b3",
+    ]
+
+    def read_until(predicate):
+        assert predicate(search_output[-1])
+        return list(search_output)
+
+    engine.read_until = read_until
+    engine.verify_nnue(net)
+
+    assert commands == ["position startpos", "go nodes 1"]
 
 
 def test_bench_infrastructure_failure_exits_two(tmp_path, monkeypatch, capsys):

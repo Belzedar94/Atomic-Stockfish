@@ -132,7 +132,7 @@ class Measurement:
         return 1000.0 * self.nodes / self.elapsed_ms
 
 
-def require_nnue_ready_output(label: str, net: Path, output: list[str]) -> None:
+def require_nnue_output(label: str, net: Path, output: list[str]) -> None:
     if any("ERROR:" in line.upper() for line in output):
         raise RuntimeError(f"{label} reported an NNUE/protocol error: {output[-10:]}")
     selected_net = str(net)
@@ -219,7 +219,7 @@ class UciEngine:
             self.send("setoption name Use NNUE value true")
             self.send(f"setoption name EvalFile value {net}")
             self.set_chess960(False)
-            require_nnue_ready_output(label, net, self.ready())
+            self.verify_nnue(net)
         except BaseException:
             self.close()
             raise
@@ -262,6 +262,17 @@ class UciEngine:
     def ready(self) -> list[str]:
         self.send("isready")
         return self.read_until(lambda line: line == "readyok")
+
+    def verify_nnue(self, net: Path) -> None:
+        # Atomic-Stockfish reports network verification when `go` starts,
+        # while Fairy may report it during `isready`. Keep the smoke search
+        # outside every timed measurement and accept the marker from either
+        # phase only when the one-node search also reaches bestmove.
+        output = self.ready()
+        self.send("position startpos")
+        self.send("go nodes 1")
+        output.extend(self.read_until(lambda line: line.startswith("bestmove ")))
+        require_nnue_output(self.label, net, output)
 
     def set_chess960(self, enabled: bool) -> None:
         if self.chess960 != enabled:
