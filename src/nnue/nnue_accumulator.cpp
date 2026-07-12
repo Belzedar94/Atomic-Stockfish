@@ -75,7 +75,7 @@ void AccumulatorStack::evaluate_side(Color                     perspective,
         return;
     }
 
-    const Square ksq = pos.has_king(perspective) ? pos.square<KING>(perspective) : SQ_A1;
+    const Square ksq = pos.has_king(perspective) ? pos.square<KING>(perspective) : SQ_NONE;
     for (usize current = base + 1; current < size; ++current)
     {
         if (FeatureSet::requires_refresh(accumulators[current].dirtyPiece, perspective))

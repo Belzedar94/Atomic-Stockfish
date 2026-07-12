@@ -44,7 +44,7 @@ struct SharedHistories;
 
 struct StateInfo {
 
-    static constexpr usize MAX_ATOMIC_BLAST_PIECES = 9;
+    static constexpr usize MAX_ATOMIC_BLAST_PIECES = DirtyPiece::MAX_ATOMIC_BLAST_PIECES;
 
     struct AtomicBlastPiece {
         Piece  piece;

@@ -28,6 +28,7 @@
 #include "evaluate.h"
 #include "misc.h"
 #include "movegen.h"
+#include "nnue/features/half_ka_v2_atomic.h"
 #include "nnue/network.h"
 #include "nnue/nnue_accumulator.h"
 #include "nnue/nnue_misc.h"
@@ -40,8 +41,7 @@ namespace {
 
 namespace NNUE = Eval::NNUE;
 
-constexpr std::string_view StartFEN =
-  "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+constexpr std::string_view StartFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
 struct Context {
     u64         seed;
@@ -73,9 +73,9 @@ struct Snapshot {
     Key                    key;
 };
 
-Snapshot take_snapshot(const Position&       pos,
-                       const NNUE::Network&  network,
-                       NNUE::AccumulatorStack& stack,
+Snapshot take_snapshot(const Position&          pos,
+                       const NNUE::Network&     network,
+                       NNUE::AccumulatorStack&  stack,
                        NNUE::AccumulatorCaches& caches) {
     const auto raw = network.evaluate_raw(pos, stack, caches);
     const auto trueValue =
@@ -108,10 +108,10 @@ void compare_snapshots(const Snapshot& expected, const Snapshot& actual, const C
                         + raw_string(actual.raw));
 
     if (actual.trueValue != expected.trueValue || actual.pureValue != expected.pureValue)
-        fail(context,
-             "scaled NNUE mismatch: expected true=" + std::to_string(expected.trueValue)
-               + " pure=" + std::to_string(expected.pureValue) + ", got true="
-               + std::to_string(actual.trueValue) + " pure=" + std::to_string(actual.pureValue));
+        fail(context, "scaled NNUE mismatch: expected true=" + std::to_string(expected.trueValue)
+                        + " pure=" + std::to_string(expected.pureValue)
+                        + ", got true=" + std::to_string(actual.trueValue)
+                        + " pure=" + std::to_string(actual.pureValue));
 
     for (Color perspective : {WHITE, BLACK})
     {
@@ -127,16 +127,14 @@ void compare_snapshots(const Snapshot& expected, const Snapshot& actual, const C
                        + std::to_string(int(perspective)) + " index=" + std::to_string(i)
                        + ": expected="
                        + std::to_string(expected.accumulator.accumulation[perspective][i])
-                       + " got="
-                       + std::to_string(actual.accumulator.accumulation[perspective][i]));
+                       + " got=" + std::to_string(actual.accumulator.accumulation[perspective][i]));
 
         for (usize bucket = 0; bucket < NNUE::PSQTBuckets; ++bucket)
             if (actual.accumulator.psqtAccumulation[perspective][bucket]
                 != expected.accumulator.psqtAccumulation[perspective][bucket])
                 fail(context,
-                     "PSQT accumulator mismatch for perspective="
-                       + std::to_string(int(perspective)) + " bucket=" + std::to_string(bucket)
-                       + ": expected="
+                     "PSQT accumulator mismatch for perspective=" + std::to_string(int(perspective))
+                       + " bucket=" + std::to_string(bucket) + ": expected="
                        + std::to_string(expected.accumulator.psqtAccumulation[perspective][bucket])
                        + " got="
                        + std::to_string(actual.accumulator.psqtAccumulation[perspective][bucket]));
@@ -144,10 +142,10 @@ void compare_snapshots(const Snapshot& expected, const Snapshot& actual, const C
 }
 
 Snapshot full_refresh_snapshot(const Position& pos, const NNUE::Network& network) {
-    NNUE::AccumulatorStack  freshStack;
-    NNUE::AccumulatorCaches freshCaches(network);
-    freshStack.reset();
-    return take_snapshot(pos, network, freshStack, freshCaches);
+    auto freshStack  = std::make_unique<NNUE::AccumulatorStack>();
+    auto freshCaches = std::make_unique<NNUE::AccumulatorCaches>(network);
+    freshStack->reset();
+    return take_snapshot(pos, network, *freshStack, *freshCaches);
 }
 
 Value evaluate_fen(std::string_view fen,
@@ -189,22 +187,25 @@ struct Fixture {
     std::string_view fen;
     std::string_view move;
     bool             chess960;
-    bool             requiresAtomicRefresh;
+    bool             refreshWhite;
+    bool             refreshBlack;
+    usize            atomicBlastCount;
 };
 
 constexpr std::array FixedFixtures = {
-  Fixture{"quiet", StartFEN, "e2e4", false, false},
-  Fixture{"capture", "7k/8/8/8/3p4/2B5/8/K7 w - - 0 1", "c3d4", false, true},
-  Fixture{"explosion-with-bycatch", "7k/8/8/2pBn3/3r4/2PQN3/8/K7 w - - 0 1",
-          "d3d4", false, true},
-  Fixture{"en-passant", "7k/8/2N1b3/2ppP3/8/8/8/K7 w - d6 0 2", "e5d6", false,
-          true},
-  Fixture{"promotion", "7k/P7/8/8/8/8/8/K7 w - - 0 1", "a7a8q", false, false},
-  Fixture{"capture-promotion", "k5br/6P1/8/8/8/8/8/K7 w - - 0 1", "g7h8q", false,
-          true},
-  Fixture{"castling", "4k3/8/8/8/8/8/8/R3K2R w KQ - 0 1", "e1g1", false, false},
-  Fixture{"atomic960-castling", "7k/8/8/8/8/8/8/1RK5 w Q - 0 1", "c1b1", true,
-          false},
+  Fixture{"quiet", StartFEN, "e2e4", false, false, false, 0},
+  Fixture{"capture-king-explosion", "7k/6p1/8/8/8/8/8/K5R1 w - - 0 1", "g1g7", false, false, true,
+          2},
+  Fixture{"direct-king-capture", "7k/7R/8/8/8/8/8/K7 w - - 0 1", "h7h8", false, false, true, 1},
+  Fixture{"explosion-with-bycatch", "7k/8/8/2pBn3/3r4/2PQN3/8/K7 w - - 0 1", "d3d4", false, false,
+          false, 4},
+  Fixture{"maximum-nine-piece-blast", "7k/8/8/2nnn3/2nrn3/2nnnN2/8/K7 w - - 0 1", "f3d4", false,
+          false, false, DirtyPiece::MAX_ATOMIC_BLAST_PIECES},
+  Fixture{"en-passant", "7k/8/2N1b3/2ppP3/8/8/8/K7 w - d6 0 2", "e5d6", false, false, false, 3},
+  Fixture{"promotion", "7k/P7/8/8/8/8/8/K7 w - - 0 1", "a7a8q", false, false, false, 0},
+  Fixture{"capture-promotion", "k5br/6P1/8/8/8/8/8/K7 w - - 0 1", "g7h8q", false, false, false, 2},
+  Fixture{"castling", "4k3/8/8/8/8/8/8/R3K2R w KQ - 0 1", "e1g1", false, true, false, 0},
+  Fixture{"atomic960-castling", "7k/8/8/8/8/8/8/1RK5 w Q - 0 1", "c1b1", true, true, false, 0},
 };
 
 void run_fixed_fixture(const Fixture& fixture, const NNUE::Network& network) {
@@ -217,35 +218,58 @@ void run_fixed_fixture(const Fixture& fixture, const NNUE::Network& network) {
             + error->what());
 
     const Move move = UCI::to_move(pos, std::string(fixture.move));
-    Context context{0, pos.fen(), std::string(fixture.move), std::string(fixture.name)};
+    Context    context{0, pos.fen(), std::string(fixture.move), std::string(fixture.name)};
     if (!move)
         fail(context, "fixture move is not legal");
 
-    NNUE::AccumulatorStack  incremental;
-    NNUE::AccumulatorCaches caches(network);
-    incremental.reset();
+    auto incremental = std::make_unique<NNUE::AccumulatorStack>();
+    auto caches      = std::make_unique<NNUE::AccumulatorCaches>(network);
+    incremental->reset();
 
-    const Snapshot before = take_snapshot(pos, network, incremental, caches);
+    const Snapshot before = take_snapshot(pos, network, *incremental, *caches);
     compare_snapshots(full_refresh_snapshot(pos, network), before, context);
 
-    auto [dirtyPiece, dirtyThreats] = incremental.push();
-    pos.do_move(move, childState, pos.gives_check(move), dirtyPiece, dirtyThreats, nullptr, nullptr);
+    auto [dirtyPiece, dirtyThreats] = incremental->push();
+    pos.do_move(move, childState, pos.gives_check(move), dirtyPiece, dirtyThreats, nullptr,
+                nullptr);
 
-    if (dirtyPiece.requiresRefresh != fixture.requiresAtomicRefresh)
-        fail(context,
-             "unexpected Atomic full-refresh flag: expected="
-               + std::to_string(fixture.requiresAtomicRefresh) + " got="
-               + std::to_string(dirtyPiece.requiresRefresh));
+    if (dirtyPiece.requiresRefresh)
+        fail(context, "move set the global full-refresh flag");
 
-    context.phase = std::string(fixture.name) + ":after-move";
-    const Snapshot after = take_snapshot(pos, network, incremental, caches);
+    if (dirtyPiece.atomicBlast.size() != fixture.atomicBlastCount)
+        fail(context, "unexpected Atomic blast delta size: expected="
+                        + std::to_string(fixture.atomicBlastCount)
+                        + " got=" + std::to_string(dirtyPiece.atomicBlast.size()));
+
+    if (!pos.has_king(BLACK))
+    {
+        NNUE::Features::HalfKAv2Atomic::IndexList active;
+        NNUE::Features::HalfKAv2Atomic::append_active_indices(pos, BLACK, active);
+        // With only the white king on A1, black-oriented piece square A8 is 56,
+        // KING uses the legacy COMMONER plane at 640, and the missing black
+        // king must contribute anchor zero: 56 + 640 = 696.
+        constexpr NNUE::IndexType ExpectedMissingBlackKingIndex = 696;
+        if (active.size() != 1 || active[0] != ExpectedMissingBlackKingIndex)
+            fail(context, "missing black king did not use the legacy A1 feature anchor");
+    }
+
+    const bool refreshWhite = NNUE::Features::HalfKAv2Atomic::requires_refresh(dirtyPiece, WHITE);
+    const bool refreshBlack = NNUE::Features::HalfKAv2Atomic::requires_refresh(dirtyPiece, BLACK);
+    if (refreshWhite != fixture.refreshWhite || refreshBlack != fixture.refreshBlack)
+        fail(context, "unexpected perspective refresh: expected white="
+                        + std::to_string(fixture.refreshWhite)
+                        + " black=" + std::to_string(fixture.refreshBlack) + ", got white="
+                        + std::to_string(refreshWhite) + " black=" + std::to_string(refreshBlack));
+
+    context.phase        = std::string(fixture.name) + ":after-move";
+    const Snapshot after = take_snapshot(pos, network, *incremental, *caches);
     compare_snapshots(full_refresh_snapshot(pos, network), after, context);
 
     pos.undo_move(move);
-    incremental.pop();
-    context.phase = std::string(fixture.name) + ":after-undo";
-    context.fen   = pos.fen();
-    const Snapshot undone = take_snapshot(pos, network, incremental, caches);
+    incremental->pop();
+    context.phase         = std::string(fixture.name) + ":after-undo";
+    context.fen           = pos.fen();
+    const Snapshot undone = take_snapshot(pos, network, *incremental, *caches);
     compare_snapshots(before, undone, context);
     compare_snapshots(full_refresh_snapshot(pos, network), undone, context);
 
@@ -260,11 +284,9 @@ struct RandomSequence {
 
 constexpr std::array RandomSequences = {
   RandomSequence{0x243F6A8885A308D3ULL, StartFEN, false},
-  RandomSequence{0x13198A2E03707344ULL,
-                 "7k/8/8/2pBn3/3r4/2PQN3/8/K7 w - - 0 1", false},
+  RandomSequence{0x13198A2E03707344ULL, "7k/8/8/2pBn3/3r4/2PQN3/8/K7 w - - 0 1", false},
   RandomSequence{0xA4093822299F31D0ULL,
-                 "r3k2r/ppp2ppp/2npbn2/3q4/3P4/2N1PN2/PPP2PPP/R2QK2R w KQkq - 0 1",
-                 false},
+                 "r3k2r/ppp2ppp/2npbn2/3q4/3P4/2N1PN2/PPP2PPP/R2QK2R w KQkq - 0 1", false},
   RandomSequence{0x082EFA98EC4E6C89ULL, StartFEN, true},
 };
 
@@ -273,28 +295,31 @@ struct RandomStats {
     u64 makes{};
     u64 undos{};
     u64 fullRefreshComparisons{};
+    u64 captures{};
+    u64 captureForcedRefresh{};
+    u64 perspectiveRefresh[COLOR_NB]{};
 };
 
 RandomStats run_random_sequence(const RandomSequence& sequence,
                                 const NNUE::Network&  network,
-                                u64                    operations,
-                                u64                    fullRefreshInterval) {
+                                u64                   operations,
+                                u64                   fullRefreshInterval) {
     constexpr usize MaxDepth = 96;
 
-    Position                              pos;
-    std::array<StateInfo, MaxDepth + 1>   states{};
-    std::vector<Move>                     path;
-    std::vector<Snapshot>                 frames;
-    NNUE::AccumulatorStack                incremental;
-    NNUE::AccumulatorCaches               caches(network);
-    PRNG                                  rng(sequence.seed);
-    RandomStats                           stats;
+    Position                            pos;
+    std::array<StateInfo, MaxDepth + 1> states{};
+    std::vector<Move>                   path;
+    std::vector<Snapshot>               frames;
+    auto                                incremental = std::make_unique<NNUE::AccumulatorStack>();
+    auto                                caches = std::make_unique<NNUE::AccumulatorCaches>(network);
+    PRNG                                rng(sequence.seed);
+    RandomStats                         stats;
 
     if (auto error = pos.set(std::string(sequence.fen), sequence.chess960, &states[0]))
         die("invalid random-sequence fixture: " + std::string(error->what()));
 
-    incremental.reset();
-    frames.push_back(take_snapshot(pos, network, incremental, caches));
+    incremental->reset();
+    frames.push_back(take_snapshot(pos, network, *incremental, *caches));
     Context context{sequence.seed, pos.fen(), "", "random-root"};
     compare_snapshots(full_refresh_snapshot(pos, network), frames.back(), context);
     ++stats.fullRefreshComparisons;
@@ -303,26 +328,26 @@ RandomStats run_random_sequence(const RandomSequence& sequence,
     {
         const usize           depth = path.size();
         const MoveList<LEGAL> legal(pos);
-        const u64             remaining = operations - operation;
-        const bool shouldUndo = depth > 0
+        const u64             remaining  = operations - operation;
+        const bool            shouldUndo = depth > 0
                              && (remaining <= depth || depth >= MaxDepth || legal.size() == 0
                                  || rng.rand<u32>() % 100 < 38);
 
         if (shouldUndo)
         {
-            const Move        move        = path.back();
-            const std::string moveText    = UCI::move(move, pos.is_chess960());
-            const Snapshot    expected    = frames[frames.size() - 2];
-            const std::string beforeUndo  = pos.fen();
+            const Move        move       = path.back();
+            const std::string moveText   = UCI::move(move, pos.is_chess960());
+            const Snapshot    expected   = frames[frames.size() - 2];
+            const std::string beforeUndo = pos.fen();
 
             pos.undo_move(move);
-            incremental.pop();
+            incremental->pop();
             path.pop_back();
             frames.pop_back();
 
-            context = {sequence.seed, beforeUndo, moveText,
-                       "random-undo-" + std::to_string(operation)};
-            const Snapshot undone = take_snapshot(pos, network, incremental, caches);
+            context               = {sequence.seed, beforeUndo, moveText,
+                                     "random-undo-" + std::to_string(operation)};
+            const Snapshot undone = take_snapshot(pos, network, *incremental, *caches);
             compare_snapshots(expected, undone, context);
 
             if (fullRefreshInterval && operation % fullRefreshInterval == 0)
@@ -335,19 +360,37 @@ RandomStats run_random_sequence(const RandomSequence& sequence,
         }
         else if (legal.size())
         {
-            const Move move = legal.begin()[rng.rand<usize>() % legal.size()];
-            context = {sequence.seed, pos.fen(), UCI::move(move, pos.is_chess960()),
-                       "random-make-" + std::to_string(operation)};
+            const Move move      = legal.begin()[rng.rand<usize>() % legal.size()];
+            const bool isCapture = pos.capture(move);
+            context              = {sequence.seed, pos.fen(), UCI::move(move, pos.is_chess960()),
+                                    "random-make-" + std::to_string(operation)};
 
-            auto [dirtyPiece, dirtyThreats] = incremental.push();
+            auto [dirtyPiece, dirtyThreats] = incremental->push();
             pos.do_move(move, states[depth + 1], pos.gives_check(move), dirtyPiece, dirtyThreats,
                         nullptr, nullptr);
 
-            const Snapshot after = take_snapshot(pos, network, incremental, caches);
-            const bool compareFull = fullRefreshInterval == 1
-                                  || (fullRefreshInterval
-                                      && operation % fullRefreshInterval == 0)
-                                  || dirtyPiece.requiresRefresh;
+            if (isCapture)
+            {
+                ++stats.captures;
+                if (dirtyPiece.requiresRefresh)
+                {
+                    ++stats.captureForcedRefresh;
+                    fail(context, "Atomic capture set the global full-refresh flag");
+                }
+            }
+
+            bool perspectiveRefresh = false;
+            for (Color perspective : {WHITE, BLACK})
+                if (NNUE::Features::HalfKAv2Atomic::requires_refresh(dirtyPiece, perspective))
+                {
+                    ++stats.perspectiveRefresh[perspective];
+                    perspectiveRefresh = true;
+                }
+
+            const Snapshot after       = take_snapshot(pos, network, *incremental, *caches);
+            const bool     compareFull = fullRefreshInterval == 1
+                                  || (fullRefreshInterval && operation % fullRefreshInterval == 0)
+                                  || perspectiveRefresh;
             if (compareFull)
             {
                 compare_snapshots(full_refresh_snapshot(pos, network), after, context);
@@ -405,8 +448,8 @@ Options parse_options(int argc, char* argv[]) {
     Options options;
     for (int i = 1; i < argc; ++i)
     {
-        const std::string argument = argv[i];
-        auto requireValue = [&](std::string_view option) -> std::string {
+        const std::string argument     = argv[i];
+        auto              requireValue = [&](std::string_view option) -> std::string {
             if (++i >= argc)
                 die("missing value for " + std::string(option));
             return argv[i];
@@ -422,9 +465,8 @@ Options parse_options(int argc, char* argv[]) {
             options.fullRefreshInterval = parse_u64(requireValue(argument), argument);
         else if (argument == "--help" || argument == "-h")
         {
-            std::cout
-              << "Usage: atomic-nnue-incremental-tests --net FILE [--mode smoke|release] "
-                 "[--operations N] [--full-refresh-interval N]\n";
+            std::cout << "Usage: atomic-nnue-incremental-tests --net FILE [--mode smoke|release] "
+                         "[--operations N] [--full-refresh-interval N]\n";
             std::exit(0);
         }
         else
@@ -441,8 +483,7 @@ Options parse_options(int argc, char* argv[]) {
     if (!options.fullRefreshInterval)
         options.fullRefreshInterval = options.mode == "release" ? 1'024 : 1;
     if (options.operations % (2 * RandomSequences.size()) != 0)
-        die("--operations must be a multiple of "
-            + std::to_string(2 * RandomSequences.size())
+        die("--operations must be a multiple of " + std::to_string(2 * RandomSequences.size())
             + " so every deterministic sequence can return to its root");
 
     return options;
@@ -474,26 +515,35 @@ int main(int argc, char* argv[]) {
     RandomStats totals;
     for (usize index = 0; index < RandomSequences.size(); ++index)
     {
-        const u64 base = options.operations / RandomSequences.size();
-        const u64 extra = index < options.operations % RandomSequences.size() ? 1 : 0;
+        const u64  base  = options.operations / RandomSequences.size();
+        const u64  extra = index < options.operations % RandomSequences.size() ? 1 : 0;
         const auto stats = run_random_sequence(RandomSequences[index], *network, base + extra,
                                                options.fullRefreshInterval);
         totals.operations += stats.operations;
         totals.makes += stats.makes;
         totals.undos += stats.undos;
         totals.fullRefreshComparisons += stats.fullRefreshComparisons;
+        totals.captures += stats.captures;
+        totals.captureForcedRefresh += stats.captureForcedRefresh;
+        for (Color perspective : {WHITE, BLACK})
+            totals.perspectiveRefresh[perspective] += stats.perspectiveRefresh[perspective];
 
         std::cout << "PASS random seed=0x" << std::hex << std::uppercase
                   << RandomSequences[index].seed << std::dec << " requested=" << base + extra
                   << " operations=" << stats.operations << " makes=" << stats.makes
-                  << " undos=" << stats.undos
+                  << " undos=" << stats.undos << " captures=" << stats.captures
+                  << " perspective-refresh-white=" << stats.perspectiveRefresh[WHITE]
+                  << " perspective-refresh-black=" << stats.perspectiveRefresh[BLACK]
                   << " full-refresh=" << stats.fullRefreshComparisons << '\n';
     }
 
     std::cout << "LegacyAtomicV1 incremental gate passed: mode=" << options.mode
               << " requested-random-operations=" << options.operations
-              << " actual-random-operations=" << totals.operations
-              << " makes=" << totals.makes << " undos=" << totals.undos
+              << " actual-random-operations=" << totals.operations << " makes=" << totals.makes
+              << " undos=" << totals.undos << " captures=" << totals.captures
+              << " capture-forced-refresh=" << totals.captureForcedRefresh
+              << " perspective-refresh-white=" << totals.perspectiveRefresh[WHITE]
+              << " perspective-refresh-black=" << totals.perspectiveRefresh[BLACK]
               << " full-refresh-comparisons=" << totals.fullRefreshComparisons << '\n';
     return 0;
 }

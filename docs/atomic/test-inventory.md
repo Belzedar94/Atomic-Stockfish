@@ -74,6 +74,9 @@ At every major milestone, all implemented surfaces run in these configurations:
 9. No eligible table, eligible local Atomic table, and corrupt/missing table
    directories.
 
+The `pure` matrix entry protects the data-generation contract only. Speed and
+Elo/LOS comparisons always use the normal playing mode, `Use NNUE=true`.
+
 Perft itself does not evaluate positions, but NNUE-on jobs still assert that
 the expected network was loaded before running the vectors.
 

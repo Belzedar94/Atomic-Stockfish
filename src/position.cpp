@@ -963,6 +963,7 @@ void Position::do_move(Move                      m,
     dp.to              = to;
     dp.add_sq          = SQ_NONE;
     dp.requiresRefresh = false;
+    dp.atomicBlast     = {};
 
     assert(color_of(pc) == us);
     assert(captured == NO_PIECE || color_of(captured) == (m.type_of() != CASTLING ? them : us));
@@ -1127,10 +1128,6 @@ void Position::do_move(Move                      m,
     // delta so undo does not need a generic variant state.
     if (captured)
     {
-        // Until LegacyAtomicV1 supplies a native multi-piece delta, force both
-        // modern feature perspectives to rebuild from the post-blast board.
-        dp.requiresRefresh = true;
-
         Bitboard blast = (to | (attacks_bb<KING>(to) & (pieces() ^ pieces(PAWN)))) & pieces();
 
         assert(!(blast & pieces(us, KING)) && "Atomic capture may not explode own king");
@@ -1143,6 +1140,7 @@ void Position::do_move(Move                      m,
 
             assert(st->atomicBlastCount < StateInfo::MAX_ATOMIC_BLAST_PIECES);
             st->atomicBlast[st->atomicBlastCount++] = {bpc, bsq};
+            dp.atomicBlast.push_back({bpc, bsq});
 
             k ^= Zobrist::psq[bpc][bsq];
             st->materialKey ^= Zobrist::psq[bpc][8 + pieceCount[bpc] - 1];
