@@ -118,6 +118,7 @@ def profile(**overrides: object) -> PipelineProfile:
         "seed": "20260711",
         "source_net_sha256": "0" * 64,
         "data_sha256": "1" * 64,
+        "atomic_data_sha256": "2" * 64,
         "hashes_resolved": True,
         "build_recipes": EXPECTED_BUILD_RECIPES["synthetic-ci"],
         "synthetic_model_seed": 20260711,
@@ -258,6 +259,120 @@ def test_strong_profile_requires_external_source() -> None:
     args = SimpleNamespace(records=None, seed=None, source_net=None)
     with pytest.raises(AssertionError, match="requires --source-net"):
         pipeline.resolve_profile_arguments(args, strong)
+
+
+def atomic_generator_marker(source_hash: str, data_hash: str) -> str:
+    return (
+        "Atomic data-generator tests passed fixtures=7 "
+        f"data_sha256={data_hash.upper()} net_sha256={source_hash.upper()}"
+    )
+
+
+@pytest.mark.parametrize(
+    ("atomic_generator", "expected_option", "expected_suffix"),
+    (
+        (False, pipeline.TOOLS_PURE_OPTION, pipeline.TOOLS_PURE_LOAD_SUFFIX),
+        (True, pipeline.ATOMIC_PURE_OPTION, pipeline.ATOMIC_PURE_LOAD_SUFFIX),
+    ),
+)
+def test_generate_data_uses_the_target_specific_pure_protocol(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    atomic_generator: bool,
+    expected_option: str,
+    expected_suffix: str,
+) -> None:
+    output = tmp_path / "generated.bin"
+    observed: dict[str, str] = {}
+
+    def fake_run(
+        engine: Path,
+        source_net: Path,
+        command: str,
+        *,
+        pure_option: str,
+        pure_load_suffix: str,
+    ) -> str:
+        del engine, source_net, command
+        observed.update(option=pure_option, suffix=pure_load_suffix)
+        output.write_bytes(b"target-specific-protocol")
+        return ""
+
+    monkeypatch.setattr(pipeline, "run_generation_command", fake_run)
+    generated = pipeline.generate_data(
+        tmp_path / "engine",
+        tmp_path / "source.nnue",
+        output,
+        8,
+        "seed",
+        atomic_generator=atomic_generator,
+    )
+    assert generated == b"target-specific-protocol"
+    assert observed == {"option": expected_option, "suffix": expected_suffix}
+
+
+@pytest.mark.parametrize(
+    ("source_hash", "data_hash"),
+    tuple(pipeline.ATOMIC_DATA_GENERATOR_BASIC_SHA256.items()),
+)
+def test_atomic_generator_marker_is_exact_and_source_pinned(
+    source_hash: str, data_hash: str
+) -> None:
+    marker = atomic_generator_marker(source_hash, data_hash)
+    assert pipeline.parse_atomic_data_generator_marker(
+        f"diagnostic\n{marker}\n", source_net_hash=source_hash
+    ) == data_hash
+
+
+def test_atomic_generator_marker_rejects_duplicates_and_hash_drift() -> None:
+    source_hash, data_hash = next(
+        iter(pipeline.ATOMIC_DATA_GENERATOR_BASIC_SHA256.items())
+    )
+    marker = atomic_generator_marker(source_hash, data_hash)
+    with pytest.raises(AssertionError, match="exactly one exact"):
+        pipeline.parse_atomic_data_generator_marker(
+            f"{marker}\n{marker}\n", source_net_hash=source_hash
+        )
+    with pytest.raises(AssertionError, match="network mismatch"):
+        pipeline.parse_atomic_data_generator_marker(
+            atomic_generator_marker("a" * 64, data_hash),
+            source_net_hash=source_hash,
+        )
+    with pytest.raises(AssertionError, match="basic fixture changed"):
+        pipeline.parse_atomic_data_generator_marker(
+            atomic_generator_marker(source_hash, "b" * 64),
+            source_net_hash=source_hash,
+        )
+
+
+def test_profile_pins_tools_and_atomic_datasets_independently() -> None:
+    selected = profile(data_sha256="a" * 64, atomic_data_sha256="b" * 64)
+    pipeline.verify_profile_data_hashes(
+        selected, data_hash="a" * 64, atomic_data_hash="b" * 64
+    )
+    with pytest.raises(AssertionError, match="pure generation fixture changed"):
+        pipeline.verify_profile_data_hashes(
+            selected, data_hash="c" * 64, atomic_data_hash="b" * 64
+        )
+    with pytest.raises(AssertionError, match="Atomic generator fixture changed"):
+        pipeline.verify_profile_data_hashes(
+            selected, data_hash="a" * 64, atomic_data_hash="c" * 64
+        )
+
+
+def test_strong_atomic_dataset_sentinel_reports_measured_replacement() -> None:
+    selected = profile(
+        name="strong-local",
+        source_kind="external",
+        synthetic_model_seed=None,
+        data_sha256="a" * 64,
+        atomic_data_sha256=pipeline.PENDING_STRONG_ATOMIC_DATA_SHA256,
+    )
+    measured = "c" * 64
+    with pytest.raises(AssertionError, match=measured):
+        pipeline.verify_profile_data_hashes(
+            selected, data_hash="a" * 64, atomic_data_hash=measured
+        )
 
 
 def test_python_environment_provenance_is_auditable_and_rehashed(

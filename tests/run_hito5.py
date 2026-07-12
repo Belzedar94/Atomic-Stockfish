@@ -122,7 +122,7 @@ def run_step(
     return output
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--native", type=Path, required=True)
     parser.add_argument("--net", type=Path, required=True)
@@ -174,7 +174,7 @@ def parse_args() -> argparse.Namespace:
         "--pipeline-tools-engine",
         type=Path,
         help=(
-            "optional variant-nnue-tools executable; all five --pipeline-* "
+            "optional variant-nnue-tools executable; all seven --pipeline-* "
             "inputs must be supplied together to run the cross-repository E2E gate"
         ),
     )
@@ -182,7 +182,7 @@ def parse_args() -> argparse.Namespace:
         "--pipeline-trainer-root",
         type=Path,
         help=(
-            "optional built variant-nnue-pytorch checkout; all five "
+            "optional built variant-nnue-pytorch checkout; all seven "
             "--pipeline-* inputs must be supplied together"
         ),
     )
@@ -190,7 +190,7 @@ def parse_args() -> argparse.Namespace:
         "--pipeline-tools-build-manifest",
         type=Path,
         help=(
-            "clean-build manifest for --pipeline-tools-engine; all five "
+            "clean-build manifest for --pipeline-tools-engine; all seven "
             "--pipeline-* inputs are required together"
         ),
     )
@@ -198,7 +198,7 @@ def parse_args() -> argparse.Namespace:
         "--pipeline-trainer-build-manifest",
         type=Path,
         help=(
-            "clean-build manifest for the trainer native loader; all five "
+            "clean-build manifest for the trainer native loader; all seven "
             "--pipeline-* inputs are required together"
         ),
     )
@@ -206,8 +206,24 @@ def parse_args() -> argparse.Namespace:
         "--pipeline-atomic-build-manifest",
         type=Path,
         help=(
-            "clean-build manifest for --native; all five --pipeline-* inputs "
+            "clean-build manifest for --native; all seven --pipeline-* inputs "
             "are required together"
+        ),
+    )
+    parser.add_argument(
+        "--pipeline-atomic-data-generator",
+        type=Path,
+        help=(
+            "Atomic-Stockfish data-generator executable; all seven "
+            "--pipeline-* inputs are required together"
+        ),
+    )
+    parser.add_argument(
+        "--pipeline-atomic-data-generator-build-manifest",
+        type=Path,
+        help=(
+            "independent clean-build manifest for the data-generator; all seven "
+            "--pipeline-* inputs are required together"
         ),
     )
     parser.add_argument("--python", default=sys.executable)
@@ -241,12 +257,72 @@ def parse_args() -> argparse.Namespace:
         default=900.0,
         help="whole-process timeout for the optional cross-repository pipeline gate",
     )
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def validate_positive(value: float | int, option: str) -> None:
     if not math.isfinite(float(value)) or value <= 0:
         raise GateFailure(f"{option} must be finite and positive")
+
+
+def validate_pipeline_configuration(
+    pipeline_options: Sequence[Path | None], mode: str
+) -> None:
+    if len(pipeline_options) != 7:
+        raise GateFailure("internal error: expected seven pipeline inputs")
+    if any(value is not None for value in pipeline_options) and not all(
+        value is not None for value in pipeline_options
+    ):
+        raise GateFailure(
+            "pipeline tools/trainer/generator paths and all four clean-build "
+            "manifests must be supplied together"
+        )
+    if mode == "release" and not all(
+        value is not None for value in pipeline_options
+    ):
+        raise GateFailure(
+            "release mode requires pipeline tools/trainer/generator paths and "
+            "all four clean-build manifests"
+        )
+
+
+def build_pipeline_e2e_command(
+    *,
+    python: str,
+    tools_engine: Path,
+    trainer_root: Path,
+    native: Path,
+    atomic_data_generator: Path,
+    tools_build_manifest: Path,
+    trainer_build_manifest: Path,
+    atomic_build_manifest: Path,
+    atomic_data_generator_build_manifest: Path,
+    source_net: Path,
+) -> list[str]:
+    return [
+        python,
+        str(REPO_ROOT / "tests" / "legacy_pipeline_e2e.py"),
+        "--profile",
+        "strong-local",
+        "--tools-engine",
+        str(tools_engine),
+        "--trainer-root",
+        str(trainer_root),
+        "--engine",
+        str(native),
+        "--atomic-data-generator",
+        str(atomic_data_generator),
+        "--tools-build-manifest",
+        str(tools_build_manifest),
+        "--trainer-build-manifest",
+        str(trainer_build_manifest),
+        "--atomic-build-manifest",
+        str(atomic_build_manifest),
+        "--atomic-data-generator-build-manifest",
+        str(atomic_data_generator_build_manifest),
+        "--source-net",
+        str(source_net),
+    ]
 
 
 def main() -> int:
@@ -272,21 +348,10 @@ def main() -> int:
             args.pipeline_tools_build_manifest,
             args.pipeline_trainer_build_manifest,
             args.pipeline_atomic_build_manifest,
+            args.pipeline_atomic_data_generator,
+            args.pipeline_atomic_data_generator_build_manifest,
         )
-        if any(value is not None for value in pipeline_options) and not all(
-            value is not None for value in pipeline_options
-        ):
-            raise GateFailure(
-                "pipeline tools/trainer paths and all three clean-build "
-                "manifests must be supplied together"
-            )
-        if args.mode == "release" and not all(
-            value is not None for value in pipeline_options
-        ):
-            raise GateFailure(
-                "release mode requires pipeline tools/trainer paths and "
-                "all three clean-build manifests"
-            )
+        validate_pipeline_configuration(pipeline_options, args.mode)
 
         python = command_path(args.python, "Python")
         native = require_file(args.native, "native engine")
@@ -344,6 +409,10 @@ def main() -> int:
                     REPO_ROOT
                     / "tests/python/test_legacy_pipeline_e2e.py"
                 ),
+                str(
+                    REPO_ROOT
+                    / "tests/python/test_data_generator_build_manifest.py"
+                ),
             ],
             timeout=300.0,
             required_markers=(
@@ -358,42 +427,42 @@ def main() -> int:
             pipeline_trainer_root = require_directory(
                 args.pipeline_trainer_root, "variant-nnue-pytorch checkout"
             )
+            pipeline_atomic_data_generator = require_file(
+                args.pipeline_atomic_data_generator,
+                "Atomic-Stockfish data-generator",
+            )
             run_step(
                 "Legacy Atomic V1 cross-repository data-to-engine pipeline",
-                [
-                    python,
-                    str(REPO_ROOT / "tests" / "legacy_pipeline_e2e.py"),
-                    "--profile",
-                    "strong-local",
-                    "--tools-engine",
-                    str(pipeline_tools_engine),
-                    "--trainer-root",
-                    str(pipeline_trainer_root),
-                    "--engine",
-                    str(native),
-                    "--tools-build-manifest",
-                    str(args.pipeline_tools_build_manifest),
-                    "--trainer-build-manifest",
-                    str(args.pipeline_trainer_build_manifest),
-                    "--atomic-build-manifest",
-                    str(args.pipeline_atomic_build_manifest),
-                    "--source-net",
-                    str(net),
-                ],
+                build_pipeline_e2e_command(
+                    python=python,
+                    tools_engine=pipeline_tools_engine,
+                    trainer_root=pipeline_trainer_root,
+                    native=native,
+                    atomic_data_generator=pipeline_atomic_data_generator,
+                    tools_build_manifest=args.pipeline_tools_build_manifest,
+                    trainer_build_manifest=args.pipeline_trainer_build_manifest,
+                    atomic_build_manifest=args.pipeline_atomic_build_manifest,
+                    atomic_data_generator_build_manifest=(
+                        args.pipeline_atomic_data_generator_build_manifest
+                    ),
+                    source_net=net,
+                ),
                 timeout=args.pipeline_timeout,
                 required_markers=(
                     "LEGACY PIPELINE E2E PASSED ",
                     "profile=strong-local",
                     f"source_sha256={EXPECTED_NET_SHA256}",
+                    "atomic_data_sha256=",
                     "ft_delta=",
                     "fc_delta=",
+                    "Atomic data-generator tests passed",
                 ),
             )
         else:
             print(
                 "\n=== Legacy Atomic V1 cross-repository data-to-engine pipeline ===\n"
                 "LEGACY PIPELINE E2E NOT REQUESTED (NON-RELEASE): supply the "
-                "tools/trainer paths and all three clean-build manifests",
+                "tools/trainer/generator paths and all four clean-build manifests",
                 flush=True,
             )
 

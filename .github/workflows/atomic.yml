@@ -12,6 +12,9 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  ATOMIC_SYNTHETIC_NNUE_SHA256: 9CF054CA00B82AB53A34473DE52D1104AEDDAA19B2E7B24091B5E613AF485985
+
 jobs:
   native:
     name: Native ${{ matrix.compiler }}
@@ -39,6 +42,16 @@ jobs:
           make -j2 ARCH=x86-64 COMP=${{ matrix.comp }} COMPCXX=${{ matrix.cxx }} atomic-unit-tests
           make -j2 ARCH=x86-64 COMP=${{ matrix.comp }} COMPCXX=${{ matrix.cxx }} atomic-api-tests
           make -j2 ARCH=x86-64 COMP=${{ matrix.comp }} COMPCXX=${{ matrix.cxx }} atomic-syzygy-driver
+          make -j2 ARCH=x86-64 COMP=${{ matrix.comp }} COMPCXX=${{ matrix.cxx }} legacy-atomic-v1-tests
+          make -j2 ARCH=x86-64 COMP=${{ matrix.comp }} COMPCXX=${{ matrix.cxx }} data-generator
+      - name: Functional data-generator smoke (Threads=2)
+        run: |
+          python3 tests/create_synthetic_zero_nnue.py --output "$RUNNER_TEMP/atomic-zero.nnue"
+          python3 tests/data_generator.py --smoke-only \
+            --generator src/atomic-stockfish-data-generator \
+            --normal-engine src/atomic-stockfish \
+            --net "$RUNNER_TEMP/atomic-zero.nnue" \
+            --expected-net-sha256 "$ATOMIC_SYNTHETIC_NNUE_SHA256"
       - name: Atomic Syzygy source/domain contract
         run: python3 tests/atomic_syzygy.py --contract-only
       - name: Atomic and Atomic960 perft
@@ -63,8 +76,53 @@ jobs:
           make -C src -j2 ARCH=x86-64 debug=yes optimize=no atomic-unit-tests
           make -C src -j2 ARCH=x86-64 debug=yes optimize=no atomic-api-tests
           make -C src -j2 ARCH=x86-64 debug=yes optimize=no atomic-syzygy-driver
+          make -C src -j2 ARCH=x86-64 debug=yes optimize=no legacy-atomic-v1-tests
+          make -C src -j2 ARCH=x86-64 debug=yes optimize=no data-generator
           bash tests/perft.sh src/atomic-stockfish
           python3 tests/atomic_search.py --candidate src/atomic-stockfish --use-nnue false
+      - name: Functional debug data-generator smoke (Threads=2)
+        run: |
+          python3 tests/create_synthetic_zero_nnue.py --output "$RUNNER_TEMP/atomic-zero.nnue"
+          python3 tests/data_generator.py --smoke-only \
+            --generator src/atomic-stockfish-data-generator \
+            --normal-engine src/atomic-stockfish \
+            --net "$RUNNER_TEMP/atomic-zero.nnue" \
+            --expected-net-sha256 "$ATOMIC_SYNTHETIC_NNUE_SHA256"
+
+  data-generator-windows:
+    name: Data generator Windows MinGW
+    runs-on: windows-2022
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.12'
+      - name: Set up MinGW
+        uses: msys2/setup-msys2@e9898307ac31d1a803454791be09ab9973336e1c # v2.31.1
+        with:
+          msystem: mingw64
+          path-type: inherit
+          install: mingw-w64-x86_64-gcc make
+      - name: Build isolated generator and run frozen codec fixture
+        run: |
+          make -C src -j2 ARCH=x86-64 COMP=mingw build
+          make -C src -j2 ARCH=x86-64 COMP=mingw data-generator
+          make -C src -j2 ARCH=x86-64 COMP=mingw legacy-atomic-v1-tests
+          printf 'atomic_data_schema\nquit\n' | src/atomic-stockfish-data-generator.exe > schema.txt
+          grep -F '"schema_sha256":"acca0f551f1c012c31a6c727dedccaebb7b5ebbc46810edb87e31bb208d5abe1"' schema.txt
+      - name: Functional Windows data-generator smoke (Threads=2)
+        run: |
+          python tests/create_synthetic_zero_nnue.py --output "$RUNNER_TEMP/atomic-zero.nnue"
+          python tests/data_generator.py --smoke-only \
+            --generator src/atomic-stockfish-data-generator.exe \
+            --normal-engine src/atomic-stockfish.exe \
+            --net "$RUNNER_TEMP/atomic-zero.nnue" \
+            --expected-net-sha256 "$ATOMIC_SYNTHETIC_NNUE_SHA256"
 
   sanitizers:
     name: ${{ matrix.name }}
@@ -90,7 +148,9 @@ jobs:
         working-directory: src
         env:
           CXXFLAGS: -O1
-        run: make -j2 ARCH=x86-64-sse41-popcnt sanitize=${{ matrix.sanitizer }} debug=yes optimize=no build
+        run: |
+          make -j2 ARCH=x86-64-sse41-popcnt sanitize=${{ matrix.sanitizer }} debug=yes optimize=no build
+          make -j2 ARCH=x86-64-sse41-popcnt sanitize=${{ matrix.sanitizer }} debug=yes optimize=no data-generator
       - name: Memory-sanitized units
         if: matrix.mode == 'memory'
         env:
@@ -99,7 +159,26 @@ jobs:
         run: |
           CXXFLAGS=-O1 make -C src -j2 ARCH=x86-64-sse41-popcnt sanitize=${{ matrix.sanitizer }} debug=yes optimize=no atomic-unit-tests
           CXXFLAGS=-O1 make -C src -j2 ARCH=x86-64-sse41-popcnt sanitize=${{ matrix.sanitizer }} debug=yes optimize=no atomic-api-tests
+          CXXFLAGS=-O1 make -C src -j2 ARCH=x86-64-sse41-popcnt sanitize=${{ matrix.sanitizer }} debug=yes optimize=no legacy-atomic-v1-tests
           bash tests/perft.sh src/atomic-stockfish
+      - name: Instrumented data-generator smoke (Threads=2)
+        env:
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+          TSAN_OPTIONS: halt_on_error=1:log_path=tsan-generator
+        run: |
+          python3 tests/create_synthetic_zero_nnue.py --output "$RUNNER_TEMP/atomic-zero.nnue"
+          set +e
+          python3 tests/data_generator.py --smoke-only \
+            --generator src/atomic-stockfish-data-generator \
+            --normal-engine src/atomic-stockfish \
+            --net "$RUNNER_TEMP/atomic-zero.nnue" \
+            --expected-net-sha256 "$ATOMIC_SYNTHETIC_NNUE_SHA256"
+          status=$?
+          if compgen -G 'tsan-generator.*' > /dev/null; then
+            cat tsan-generator.*
+          fi
+          exit "$status"
       - name: Instrumented XBoard workload
         env:
           ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
@@ -139,6 +218,7 @@ jobs:
           tests/python/test_atomic_compiler_preflight.py
           tests/python/test_legacy_pipeline_lock.py
           tests/python/test_legacy_pipeline_build_manifest.py
+          tests/python/test_data_generator_build_manifest.py
           tests/python/test_legacy_pipeline_e2e.py
       - run: python setup.py sdist --dist-dir dist/sdist
       - run: python tests/python/build_wheel_from_sdist.py dist/sdist dist/wheel
@@ -234,8 +314,13 @@ jobs:
             --recipe synthetic-ci-atomic-linux-v1 \
             --repository-root . \
             --output "$RUNNER_TEMP/atomic-build.json"
+          python tests/legacy_pipeline_build_manifest.py \
+            --recipe synthetic-ci-atomic-data-generator-linux-v1 \
+            --repository-root . \
+            --output "$RUNNER_TEMP/atomic-data-generator-build.json"
           make -C src -j2 ARCH=x86-64 atomic-unit-tests
           make -C src -j2 ARCH=x86-64 atomic-api-tests
+          make -C src -j2 ARCH=x86-64 legacy-atomic-v1-tests
           bash tests/perft.sh src/atomic-stockfish
           python tests/atomic_search.py --candidate src/atomic-stockfish --use-nnue false
       - name: Enforce locked clean checkouts
@@ -258,13 +343,15 @@ jobs:
             --tools-engine .pipeline/tools/src/stockfish \
             --trainer-root .pipeline/trainer \
             --engine src/atomic-stockfish \
+            --atomic-data-generator src/atomic-stockfish-data-generator \
             --tools-build-manifest "$RUNNER_TEMP/tools-build.json" \
             --trainer-build-manifest "$RUNNER_TEMP/trainer-build.json" \
             --atomic-build-manifest "$RUNNER_TEMP/atomic-build.json" \
+            --atomic-data-generator-build-manifest "$RUNNER_TEMP/atomic-data-generator-build.json" \
             --atomic-root . \
             --atomic-commit "$(git rev-parse HEAD)" \
             --measure-synthetic-fixture
-          echo "::error title=Synthetic fixture lock update required::Copy the measured source_sha256 and data_sha256 into tests/legacy_pipeline.lock.json, set hashes_resolved=true, and remove its placeholder."
+          echo "::error title=Synthetic fixture lock update required::Copy the measured source_sha256, data_sha256 and atomic_data_sha256 into tests/legacy_pipeline.lock.json, set hashes_resolved=true, and remove its placeholder."
           exit 1
       - name: Synthetic Legacy Atomic V1 E2E
         if: steps.pipeline_lock.outputs.synthetic_hashes_resolved == 'true'
@@ -276,8 +363,10 @@ jobs:
           --tools-engine .pipeline/tools/src/stockfish
           --trainer-root .pipeline/trainer
           --engine src/atomic-stockfish
+          --atomic-data-generator src/atomic-stockfish-data-generator
           --tools-build-manifest "$RUNNER_TEMP/tools-build.json"
           --trainer-build-manifest "$RUNNER_TEMP/trainer-build.json"
           --atomic-build-manifest "$RUNNER_TEMP/atomic-build.json"
+          --atomic-data-generator-build-manifest "$RUNNER_TEMP/atomic-data-generator-build.json"
           --atomic-root .
           --atomic-commit "$(git rev-parse HEAD)"

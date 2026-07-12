@@ -33,7 +33,7 @@ SCHEMA = "legacy-atomic-v1-clean-build-v1"
 UPPER_SHA256_RE = re.compile(r"^[0-9A-F]{64}$")
 X86_64_RELEASE_TARGET = "64bit SSE2"
 X86_64_BMI2_RELEASE_TARGET = "64bit BMI2 AVX2 SSE41 SSSE3 SSE2 POPCNT"
-ENGINE_ROLES = frozenset({"tools", "atomic"})
+ENGINE_ROLES = frozenset({"tools", "atomic", "atomic-data-generator"})
 CMAKE_SET_RE = re.compile(r"^set\((?P<name>[A-Za-z0-9_]+)\s+(?P<value>.*)\)$")
 MSVC_TARGET_RE = re.compile(
     r"\bfor\s+(?P<target>[A-Za-z0-9_.-]+)\s*$", re.IGNORECASE | re.MULTILINE
@@ -106,6 +106,17 @@ def _windows_atomic(root: Path) -> Tuple[Tuple[str, ...], ...]:
     )
 
 
+def _windows_atomic_data_generator(root: Path) -> Tuple[Tuple[str, ...], ...]:
+    return (
+        _msys_make(root, "ARCH=x86-64-bmi2 COMP=mingw clean"),
+        _msys_make(root, "-j2 ARCH=x86-64-bmi2 COMP=mingw data-generator"),
+        # The clean generator recipe runs after the normal-engine recipe in the
+        # strong-local gate. Restore the authenticated playing artifact without
+        # removing the separately authenticated generator.
+        _msys_make(root, "-j2 ARCH=x86-64-bmi2 COMP=mingw build"),
+    )
+
+
 def _windows_trainer(root: Path) -> Tuple[Tuple[str, ...], ...]:
     build = root / "build" / "pipeline-manifest-release"
     return (
@@ -147,6 +158,23 @@ def _linux_tools(root: Path) -> Tuple[Tuple[str, ...], ...]:
 def _linux_atomic(root: Path) -> Tuple[Tuple[str, ...], ...]:
     return (
         ("make", "-C", "src", "ARCH=x86-64", "clean"),
+        ("make", "-C", "src", "-j2", "ARCH=x86-64", "build"),
+    )
+
+
+def _linux_atomic_data_generator(root: Path) -> Tuple[Tuple[str, ...], ...]:
+    return (
+        ("make", "-C", "src", "ARCH=x86-64", "clean"),
+        (
+            "make",
+            "-C",
+            "src",
+            "-j2",
+            "ARCH=x86-64",
+            "data-generator",
+        ),
+        # Keep the authenticated playing artifact available after the
+        # generator's clean build, mirroring the strong-local Windows recipe.
         ("make", "-C", "src", "-j2", "ARCH=x86-64", "build"),
     )
 
@@ -205,6 +233,14 @@ RECIPES = {
             expected_engine_target=X86_64_BMI2_RELEASE_TARGET,
         ),
         BuildRecipe(
+            "strong-local-atomic-data-generator-windows-v1",
+            "atomic-data-generator",
+            "win32",
+            "src/atomic-stockfish-data-generator.exe",
+            _windows_atomic_data_generator,
+            expected_engine_target=X86_64_BMI2_RELEASE_TARGET,
+        ),
+        BuildRecipe(
             "synthetic-ci-tools-linux-v1",
             "tools",
             "linux",
@@ -228,8 +264,43 @@ RECIPES = {
             _linux_atomic,
             expected_engine_target=X86_64_RELEASE_TARGET,
         ),
+        BuildRecipe(
+            "synthetic-ci-atomic-data-generator-linux-v1",
+            "atomic-data-generator",
+            "linux",
+            "src/atomic-stockfish-data-generator",
+            _linux_atomic_data_generator,
+            expected_engine_target=X86_64_RELEASE_TARGET,
+        ),
     )
 }
+
+
+ATOMIC_DATA_GENERATOR_RECIPES = {
+    "strong-local-atomic-windows-v1": (
+        "strong-local-atomic-data-generator-windows-v1"
+    ),
+    "synthetic-ci-atomic-linux-v1": (
+        "synthetic-ci-atomic-data-generator-linux-v1"
+    ),
+}
+
+
+def atomic_data_generator_recipe_for(atomic_recipe: str) -> str:
+    """Return the separately authenticated generator recipe for an Atomic build."""
+
+    try:
+        generator_recipe = ATOMIC_DATA_GENERATOR_RECIPES[atomic_recipe]
+    except KeyError as exc:
+        raise AssertionError(
+            f"Atomic build recipe {atomic_recipe!r} has no data-generator recipe"
+        ) from exc
+    recipe = RECIPES.get(generator_recipe)
+    if recipe is None or recipe.role != "atomic-data-generator":
+        raise AssertionError(
+            f"invalid Atomic data-generator recipe mapping for {atomic_recipe!r}"
+        )
+    return generator_recipe
 
 
 def _mapping(value: object, label: str) -> Mapping[str, object]:

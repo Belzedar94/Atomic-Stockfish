@@ -66,6 +66,21 @@ make -j build ARCH=x86-64-bmi2
 The resulting executable is `atomic-stockfish` (or
 `atomic-stockfish.exe` on Windows).
 
+## Training-data generator
+
+The playing binary deliberately excludes data-generation commands. Build the
+isolated executable from `src` instead:
+
+```sh
+make -j data-generator ARCH=x86-64-bmi2
+```
+
+It writes the frozen 72-byte `legacy-atomic-v1` format, requires a compatible
+network with `Use NNUE=pure`, rejects Atomic960 and never appends to or
+overwrites an existing output. See
+[`docs/atomic/data-generator.md`](docs/atomic/data-generator.md) for the command
+contract, reproducibility rules and integration tests.
+
 ## Bindings and WebAssembly
 
 Build the Python extension or wheel from the repository root:
