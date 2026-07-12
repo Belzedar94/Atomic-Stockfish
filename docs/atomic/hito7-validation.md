@@ -37,7 +37,7 @@ Pinned implementation commits used by the local release run are:
 | Repository | Commit |
 | --- | --- |
 | Atomic-Stockfish schema/code/test commit | `518175e20f127bf47b57ba1faad580b975e45929` |
-| Atomic-Stockfish clean validation snapshot | `d4b4b6768f80e2ef8db142d16f2b485f8e3df78b` |
+| Atomic-Stockfish clean validation snapshot | `b4e4dee4a412754ff3ce6728426a0c9d35308239` |
 | variant-nnue-tools | `17bfb6eb1bd02f86a63cfbc10aaf1bdf6f0a74c6` |
 | variant-nnue-pytorch | `350a28f2cee225c546333aded75b9db64caa526d` |
 
@@ -51,8 +51,8 @@ release gate used clean, commit-bound Windows builds:
 
 | Artifact | Target | SHA-256 |
 | --- | --- | --- |
-| Atomic-Stockfish | MinGW BMI2 | `848DF11F...19D29C22` |
-| data tools | MinGW x86-64 SSE2 | `A20A7518...E19B9204` |
+| Atomic-Stockfish | MinGW BMI2 | `52849402...22B13E86` |
+| data tools | MinGW x86-64 SSE2 | `C51F7ED0...116F8C29` |
 | trainer loader | MSVC x64 Release | `8E322B1A...968923A0` |
 
 The following gates passed:
@@ -69,7 +69,7 @@ The following gates passed:
   data hash `7de72b13...7a261a2d`. The exact clean commits were tools
   `17bfb6eb1bd02f86a63cfbc10aaf1bdf6f0a74c6`, trainer
   `350a28f2cee225c546333aded75b9db64caa526d` and Atomic
-  `d4b4b6768f80e2ef8db142d16f2b485f8e3df78b`.
+  `b4e4dee4a412754ff3ce6728426a0c9d35308239`.
 - Hito 4 release surface: C++ `63/63`, API `34/34`, historical `test.py`
   `22/22`, Python `60/60`, CommonJS, ES module, Board WASM, native parity,
   eight exact perfts, focused rules `19/19`, UCI, XBoard, Syzygy, NNUE modes,
