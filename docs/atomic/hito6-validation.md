@@ -2,10 +2,11 @@
 
 Hito 6 integrates Atomic search policy in small, attributable blocks. This
 record is cumulative: blocks 1 through 3 retain their block-local acceptance
-evidence, and block 4 is the current candidate. The clean commit-pinned pipeline
-passed for the block-4 runtime candidate in both profiles. The milestone and
-its PR remain open until the hardened matched-BMI2 speed rerun, all three
-current exact LOS reruns and full release matrix are closed.
+evidence, and block 4 is the current search change. The clean commit-pinned
+pipeline passed in both profiles. The final hardened runtime artifact also
+passed the matched-BMI2 speed comparison and all three current exact LOS gates.
+The acceptance record is valid only while PR #3's exact-head CI matrix, Codex
+review and review-thread audit are clean.
 
 `Use NNUE=true` is the only playing mode used for speed and strength. `pure`
 remains a data-generation mode: its option and network-loading contract is
@@ -111,7 +112,62 @@ spread make this coverage evidence, not a speed claim. The normalized raw log
 is `evidence/hito6-nmp/diagnostic-counters.log` (6,274 bytes, SHA-256
 `1D40421F700F32B0F6C183821734B725F6388B5E9F2DEFBD86CCAFE74C870BB6`).
 
-### Prior matched-BMI2 evidence (current gate rerun pending)
+### Final hardened matched-BMI2 acceptance
+
+The normative runtime artifact is built from commit
+`ebfe93420c9998e4ea7dcbf4c6ba20516f1dee63`, tree
+`a390c1e4156fad9bff57e7d66494d01821b9aa02`. It is 4,264,325 bytes with
+SHA-256
+`47B7873E40887C213C623E45ADBADD307DA77E5EA02953BE2F1E33363F0390A0`.
+The clean-build manifest is SHA-256
+`169D4C1A9D93F95555FDD74B5149C7B26894CC1A1C153C35B5073C2969C9DBBC`;
+its compiler report is `g++ (GNUC) 15.2.0` with
+`64bit BMI2 AVX2 SSE41 SSSE3 SSE2 POPCNT`. The frozen Fairy artifact uses the
+same compiler signature, is 4,281,871 bytes and has SHA-256
+`4EACAAB40DCA84F5A255EA57231F2795D43B5DDA85CE50EBBA1A1B2937B46331`.
+
+The serialized, affinity-pinned benchmark used the fixed 13-position
+Atomic/Atomic960 corpus, one warm-up and five alternating repetitions at
+100,000 nodes per position:
+
+| Binary | Median NPS | Bytes |
+| --- | ---: | ---: |
+| Atomic-Stockfish `ebfe9342` | 1,338,320 | 4,264,325 |
+| Frozen Fairy BMI2 | 1,165,646 | 4,281,871 |
+
+Atomic-Stockfish was `+14.81%` faster (`1.1481x`) and 17,546 bytes smaller.
+The runner verified the compiler target, NNUE marker, CPU affinity and all
+artifact hashes before and after the run. It emitted `PERFORMANCE GATE: PASS`.
+
+All three strength controls used the same Legacy Atomic V1 network with
+`Use NNUE=true`, `Threads=1`, `Hash=512`, four runner workers, the fixed Atomic
+book and color-swapped pairs. `pure` remained exclusively a data-generation
+mode.
+
+| TC | Total | W-L-D | Elo (95%) | Normalised Elo | Pentanomial | Draws | Time losses | LOS |
+| --- | ---: | ---: | ---: | ---: | --- | ---: | ---: | ---: |
+| 2+0.02 | 110 | 50-22-38 | +90.43 +/-53.7 | +111.77 | `[2,7,17,19,10]` | 34.55% | 0 / 0 | 100.0% |
+| 10+0.1 | 184 | 66-33-85 | +62.99 +/-37.0 | +85.88 | `[1,7,47,32,5]` | 46.20% | 0 / 0 | 100.0% |
+| 30+0.3 | 136 | 46-19-71 | +69.90 +/-40.4 | +101.12 | `[0,3,37,26,2]` | 52.21% | 0 / 0 | 100.0% |
+
+Every control ended on a complete color-swapped pair with `Total > 100`, exact
+displayed `LOS: 100.0%`, zero time losses, no leaked engine processes and a
+17-file artifact postflight. The normalized versioned evidence is under
+`evidence/hito6-nmp/bmi2/final-ebfe9342/`. The TC transcodes also remove the
+single trailing space from a captured blank separator line. Their hashes are:
+
+| Evidence | Raw UTF-16LE bytes / SHA-256 | Versioned UTF-8/LF bytes / SHA-256 |
+| --- | --- | --- |
+| Benchmark | 3,282 / `A550D729053960CEC8F4D2D418B636DC5B3D948CD8A5184DE9439F5237094A7D` | 1,619 / `1AAE639BB6908137D40245472AC64738375AA37A2EE8FE7D75A66153BBABF734` |
+| TC1 | 155,254 / `B1ABACCE45DE5F3BB81C2424A96BB0C59086C213AB879487CCF8AE3C0F3FF556` | 76,622 / `EBAA87422053A9E5DD28E1CFD2A595262B15DF4A7EEC27F7612F5F22285AF359` |
+| TC2 | 268,176 / `0E37B18EDBC861B048A32EC2EFB95B14072451EE68351FE9A9CAC71FBB8CE9B4` | 132,455 / `B02F8065FADF2E48D4399A4EC322DF7191DA12A9F92A03978887C26C5B41733D` |
+| TC3 | 223,288 / `A01504138F6308DA227E5E2B5EA4730A985B75F6230E8B5EC35AD64824DA3884` | 110,419 / `D3896FADAC0F5564373300910C20A5E0E969536D2F67A188F9FBBC8A1951EFD5` |
+
+The canonical 47-file package manifest is
+`evidence/hito6-nmp/manifest.json`, SHA-256
+`4094341162F500C68D806DA83A21FC7C3D1CC00F138CAEE2844C1789B411196B`.
+
+### Historical matched-BMI2 evidence
 
 The immutable candidate is source commit
 `0c45a9bf711814621607f3d0bed546a026cdf4d1`, tree
@@ -170,11 +226,10 @@ all eight inputs after each TC preflight. The 6,244-byte audit is SHA-256
 `6A545AF088D5629F5BBA87100A30C9E8B18594295E92B4861BB4052B0EE72AF7`.
 The canonical package index is `evidence/hito6-nmp/manifest.json`.
 
-These samples establish that the NNUE search block was materially stronger and
-faster in the matched-BMI2 setup, but they do not close current Hito 6
-acceptance. The immutable candidate and Fairy artifacts must be rerun through
-the final `atomic_bench_compare.py` and all three current
-`atomic_los_gate.py` controls; only those new logs can clear speed and strength.
+These samples established that the NNUE search block was materially stronger
+and faster in the earlier matched-BMI2 setup. They remain historical because
+the final acceptance above uses the hardened runners and immutable `ebfe9342`
+artifact.
 The material-only `Use NNUE=false` curiosity
 match in the evidence package is explicitly non-normative: Fairy retains a
 much richer handcrafted Atomic evaluation, so that sample does not isolate
@@ -397,9 +452,29 @@ The normalized 2,051-byte summary at
 `evidence/hito6-pinned-pipeline/summary.log`, SHA-256
 `00F51FD8F0062AFC62E93ED5EFA799996B6CCE201D630124C770EC267EADE654`,
 records the observed local output and GitHub Actions API/job-log facts without
-claiming to be raw stdout. These results close the pipeline component for the
-identified candidate; they do not waive the remaining speed, LOS or full-matrix
-gates.
+claiming to be raw stdout.
+
+The hardened runtime candidate `ebfe9342` repeated the clean `strong-local`
+profile with the same pinned tools and trainer. Its 1,680-byte Atomic build
+manifest is SHA-256
+`169D4C1A9D93F95555FDD74B5149C7B26894CC1A1C153C35B5073C2969C9DBBC`;
+the run reproduced data SHA-256
+`7DE72B1385DBC8E37312A513D1CF4C7D99F889EC8B747F548ED32E8D7A261A2D`,
+network SHA-256
+`A69FB0A7DC211AA4D8BB0974BA881F6CA0F98C5FBC30E0203B9E08B99076E3DC`,
+loss `0.0347999074`, FT delta `8.66651535e-05`, FC delta `8.454262e-07`
+and `bestmove=b2b3`, with every checkout, environment and artifact postflight
+passing. The public pinned profile for the exact same source head passed in
+[run 29178527310](https://github.com/Belzedar94/Atomic-Stockfish/actions/runs/29178527310),
+[job 86612025190](https://github.com/Belzedar94/Atomic-Stockfish/actions/runs/29178527310/job/86612025190).
+The 1,563-byte normalized observed-facts summary is
+`evidence/hito6-nmp/bmi2/final-ebfe9342/pipeline-strong-local-summary.log`,
+SHA-256
+`526B47B30FF98726802AFEE5644F4E36A3E050ECE67DD9A48D154372D3839B4C`;
+it is explicitly not represented as raw stdout.
+Together with the final speed and LOS evidence above, these results close the
+runtime candidate's pipeline component. PR acceptance still requires the
+exact-head matrix and review condition stated at the top of this record.
 
 The normative Hito 5 release runner now requires one all-or-none set containing
 `--pipeline-tools-engine`, `--pipeline-trainer-root` and the three tools,

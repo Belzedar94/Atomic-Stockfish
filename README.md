@@ -9,10 +9,11 @@ the frozen rules and playing-strength reference.
 > This repository is under active development and has no strength-qualified
 > release yet. The Hito 4 interface matrix and Hito 5 engine/backend matrix have
 > passed. The clean, commit-pinned cross-repository pipeline also passed both
-> `strong-local` and public `synthetic-ci` for candidate `e0b58ebd`. Hito 6
-> search blocks 1 through 4 are implemented; the final hardened BMI2 speed
-> rerun, all three exact LOS reruns and complete release matrix are still
-> required before acceptance.
+> `strong-local` and public `synthetic-ci`. Hito 6 search blocks 1 through 4 are
+> implemented, and the hardened `ebfe9342` BMI2 artifact passed the reproducible
+> speed gate plus all three exact LOS gates. This is still a pre-release: the
+> Hito 6 record is accepted only when PR #3 also has a clean exact-head CI
+> matrix and Codex review.
 
 ## Scope
 

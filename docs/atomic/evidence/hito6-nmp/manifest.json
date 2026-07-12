@@ -1,18 +1,31 @@
 {
-  "schema": "atomic-stockfish-hito6-nmp-evidence-v1",
-  "result": "HISTORICAL_PASS_CURRENT_GATE_RERUN_PENDING",
-  "normative": false,
+  "schema": "atomic-stockfish-hito6-nmp-evidence-v2",
+  "result": "PASS",
+  "normative": true,
+  "milestone_change": {
+    "description": "shallower Atomic null-move reduction",
+    "commit": "0c45a9bf711814621607f3d0bed546a026cdf4d1",
+    "tree": "f92e23c5104bf30d7e909be558ef23934c401d14"
+  },
   "source": {
     "repository": "Belzedar94/Atomic-Stockfish",
-    "head": "0c45a9bf711814621607f3d0bed546a026cdf4d1",
-    "tree": "f92e23c5104bf30d7e909be558ef23934c401d14"
+    "head": "ebfe93420c9998e4ea7dcbf4c6ba20516f1dee63",
+    "tree": "a390c1e4156fad9bff57e7d66494d01821b9aa02"
   },
   "external_artifacts": {
     "candidate": {
-      "path": "reports/hito6-bmi2-0c45a9bf/artifacts/Atomic-Stockfish-0c45a9bf-bmi2.exe",
-      "bytes": 4263216,
-      "sha256": "289267DEEC8A082D375EC25CC6385475487CF6BD7BF907AA1B0D5730F1FC2901",
-      "compiler_settings": "64bit BMI2 AVX2 SSE41 SSSE3 SSE2 POPCNT"
+      "path": "reports/hito6-bmi2-ebfe9342/artifacts/Atomic-Stockfish-ebfe9342-bmi2.exe",
+      "bytes": 4264325,
+      "sha256": "47B7873E40887C213C623E45ADBADD307DA77E5EA02953BE2F1E33363F0390A0",
+      "compiler": "g++ (GNUC) 15.2.0",
+      "compiler_settings": "64bit BMI2 AVX2 SSE41 SSSE3 SSE2 POPCNT",
+      "build_manifest": {
+        "external_path": "pipeline-manifests/hito6-ebfe9342/atomic-build.json",
+        "versioned_path": "bmi2/final-ebfe9342/atomic-build.json",
+        "bytes": 1680,
+        "sha256": "169D4C1A9D93F95555FDD74B5149C7B26894CC1A1C153C35B5073C2969C9DBBC",
+        "build_log_sha256": "B634352381EB7C190F3588D164345419D8F097D6E72E0F0E0E3E9751EA1E002A"
+      }
     },
     "baseline": {
       "path": "reports/fsf-baseline-fb78cb56-bmi2/artifacts/FSF-fb78cb56-bmi2-all-no-largeboards-no.exe",
@@ -22,6 +35,7 @@
       "commit": "fb78cb561aa01708338e35b3dc3b65a42149a3c4",
       "tree": "dfe4b96037c10ab60e22613bf634452612fc2b04",
       "configuration": "ARCH=x86-64-bmi2 COMP=mingw all=no largeboards=no nnue=no optimize=yes debug=no pgo=no",
+      "compiler": "g++ (GNUC) 15.2.0",
       "compiler_settings": "64bit BMI2 AVX2 SSE41 SSSE3 SSE2 POPCNT"
     },
     "network": {
@@ -40,8 +54,8 @@
     },
     "benchmark_gate": {
       "path": "tests/atomic_bench_compare.py",
-      "bytes": 15411,
-      "sha256": "225D0FA6BDDACA054462D105E4458995360B9EFDFE7EE24C7D99BA634A5A4A23"
+      "bytes": 18447,
+      "sha256": "329772E10B577BE02429BDAB25849E3A3EE0968C8703887230257A2F3C90E238"
     },
     "compiler_preflight": {
       "path": "tests/atomic_compiler_preflight.py",
@@ -50,8 +64,8 @@
     },
     "los_gate": {
       "path": "tests/atomic_los_gate.py",
-      "bytes": 20656,
-      "sha256": "0B799918858A5FD2938B9164655FC108B43E68D5DE768635B462786D48B2EE84"
+      "bytes": 42306,
+      "sha256": "0B84CCB5AFB652948D5DD47616A5138E7EC68F4F73E04F5B3F8E8D3B82EB241C"
     },
     "match_runner": {
       "path": "C:/Users/djime/Documents/Chess_variants/Match script/variantfishtest_new1.py",
@@ -72,62 +86,222 @@
       "path": "C:/Users/djime/Documents/Chess_variants/Match script/books/atomic.epd",
       "bytes": 394785,
       "sha256": "28ED51C2F42E723D5E127D2D3F21C0BFA4A9B318615AFDB299B93EA62DEA2B1E"
+    },
+    "normative_runtime": {
+      "python": {
+        "implementation": "CPython",
+        "version": "3.12.0",
+        "executable_sha256": "42AC541168E97DEDB9AABD8BE335539FC41C682E414B9E8D137B164FB68683B0",
+        "runtime_sha256": "E7890E38256F04EE0B55AC5276BBF3AC61392C3A3CE150BB5497B709803E17CE"
+      },
+      "chess": {
+        "version": "0.8.0",
+        "init_sha256": "28BB8423AE3D64752713CB7430821D5B0E7CE3DC9872CA329EC3EC39FAD8EE5E",
+        "uci_sha256": "B9E5AAD44EB2047698866AB3E141B22B6744DA6A504D96268F3A330654278991"
+      },
+      "psutil": {
+        "version": "7.2.2",
+        "module_sha256": {
+          "psutil": "7B6A0675824EB1FA2FF0CB1EB36E358DC454703E51DFA4E9A0E6CCD26A159F0C",
+          "psutil._common": "6FC6BF5F86491BA962521374472570238929003CEBEA8E9B6C55224084B52BB0",
+          "psutil._ntuples": "96F42BC24549636B5707A949B7CC92E89C87F7CEA7D343A6D17821AC670DFCD2",
+          "psutil._psutil_windows": "0035450801BD7D938E9E146C5EC28E619CB5A5F4A18CDC53AC7E9734C7F94F78",
+          "psutil._pswindows": "0BBD52DCB214735BE4168D11A2AE192D5BC7265C8CF72C611179476479687F54"
+        }
+      }
+    }
+  },
+  "capture_provenance": {
+    "benchmark": {
+      "external_path": "reports/hito6-bmi2-ebfe9342/bench-reproducible-vs-fairy.log",
+      "raw": {
+        "encoding": "UTF-16LE-BOM",
+        "bytes": 3282,
+        "sha256": "A550D729053960CEC8F4D2D418B636DC5B3D948CD8A5184DE9439F5237094A7D"
+      },
+      "versioned": {
+        "path": "bmi2/final-ebfe9342/bench-reproducible-vs-fairy.log",
+        "encoding": "UTF-8",
+        "line_endings": "LF",
+        "bytes": 1619,
+        "sha256": "1AAE639BB6908137D40245472AC64738375AA37A2EE8FE7D75A66153BBABF734"
+      }
+    },
+    "tc1": {
+      "external_path": "reports/hito6-bmi2-ebfe9342/matches-reproducible/tc1-2000-20.log",
+      "raw": {
+        "encoding": "UTF-16LE-BOM",
+        "bytes": 155254,
+        "sha256": "B1ABACCE45DE5F3BB81C2424A96BB0C59086C213AB879487CCF8AE3C0F3FF556"
+      },
+      "versioned": {
+        "path": "bmi2/final-ebfe9342/tc1-2000-20.log",
+        "encoding": "UTF-8",
+        "line_endings": "LF",
+        "trailing_whitespace_stripped": true,
+        "bytes": 76622,
+        "sha256": "EBAA87422053A9E5DD28E1CFD2A595262B15DF4A7EEC27F7612F5F22285AF359"
+      }
+    },
+    "tc2": {
+      "external_path": "reports/hito6-bmi2-ebfe9342/matches-reproducible/tc2-10000-100.log",
+      "raw": {
+        "encoding": "UTF-16LE-BOM",
+        "bytes": 268176,
+        "sha256": "0E37B18EDBC861B048A32EC2EFB95B14072451EE68351FE9A9CAC71FBB8CE9B4"
+      },
+      "versioned": {
+        "path": "bmi2/final-ebfe9342/tc2-10000-100.log",
+        "encoding": "UTF-8",
+        "line_endings": "LF",
+        "trailing_whitespace_stripped": true,
+        "bytes": 132455,
+        "sha256": "B02F8065FADF2E48D4399A4EC322DF7191DA12A9F92A03978887C26C5B41733D"
+      }
+    },
+    "tc3": {
+      "external_path": "reports/hito6-bmi2-ebfe9342/matches-reproducible/tc3-30000-300.log",
+      "raw": {
+        "encoding": "UTF-16LE-BOM",
+        "bytes": 223288,
+        "sha256": "A01504138F6308DA227E5E2B5EA4730A985B75F6230E8B5EC35AD64824DA3884"
+      },
+      "versioned": {
+        "path": "bmi2/final-ebfe9342/tc3-30000-300.log",
+        "encoding": "UTF-8",
+        "line_endings": "LF",
+        "trailing_whitespace_stripped": true,
+        "bytes": 110419,
+        "sha256": "D3896FADAC0F5564373300910C20A5E0E969536D2F67A188F9FBBC8A1951EFD5"
+      }
     }
   },
   "acceptance": {
-    "posthoc_normative_preflight": {
-      "evidence": "bmi2/posthoc-normative-preflight.log",
-      "classification": "audit-only-not-a-match",
-      "validated_time_controls": 3,
+    "pipeline": {
+      "tools_commit": "22c271c30641134109252e0665a98837d4f74ba8",
+      "trainer_commit": "dafec1daa594ff7eff3dca79064ed10660702a36",
+      "engine_commit": "ebfe93420c9998e4ea7dcbf4c6ba20516f1dee63",
+      "strong_local": {
+        "evidence": "bmi2/final-ebfe9342/pipeline-strong-local-summary.log",
+        "evidence_bytes": 1563,
+        "evidence_sha256": "526B47B30FF98726802AFEE5644F4E36A3E050ECE67DD9A48D154372D3839B4C",
+        "records": 8,
+        "source_sha256": "99DC67EABF26A64FAEECA3A88B4C38597A840B8D4A874B9F2CF658C6F92A04A6",
+        "data_sha256": "7DE72B1385DBC8E37312A513D1CF4C7D99F889EC8B747F548ED32E8D7A261A2D",
+        "nnue_sha256": "A69FB0A7DC211AA4D8BB0974BA881F6CA0F98C5FBC30E0203B9E08B99076E3DC",
+        "loss": 0.0347999074,
+        "ft_delta": 0.0000866651535,
+        "fc_delta": 8.454262e-7,
+        "bestmove": "b2b3",
+        "postflights": "PASS",
+        "result": "PASS"
+      },
+      "public_synthetic_ci": {
+        "evidence": "bmi2/final-ebfe9342/pipeline-strong-local-summary.log",
+        "run_id": 29178527310,
+        "job_id": 86612025190,
+        "job_name": "Pinned Legacy Atomic V1 pipeline",
+        "result": "PASS"
+      },
       "result": "PASS"
     },
     "benchmark": {
-      "evidence": "bmi2/bench-reproducible-vs-fairy.log",
-      "candidate_median_nps": 1287967,
-      "baseline_median_nps": 1145124,
-      "ratio": 1.1247,
-      "speed_delta_percent": 12.47,
-      "binary_size_delta_bytes": -18655,
+      "evidence": "bmi2/final-ebfe9342/bench-reproducible-vs-fairy.log",
+      "positions": 13,
+      "threads": 1,
+      "hash_mb": 64,
+      "cpu_affinity": 0,
+      "nodes_per_position": 100000,
+      "warmups": 1,
+      "repetitions": 5,
+      "candidate_median_nps": 1338320,
+      "baseline_median_nps": 1165646,
+      "ratio": 1.1481,
+      "speed_delta_percent": 14.81,
+      "binary_size_delta_bytes": -17546,
+      "artifact_postflight_files": 8,
       "result": "PASS"
     },
     "strength": [
       {
-        "evidence": "bmi2/tc1-2000-20.log",
+        "evidence": "bmi2/final-ebfe9342/tc1-2000-20.log",
         "time_ms": 2000,
         "increment_ms": 20,
-        "total": 108,
-        "wins": 53,
-        "losses": 13,
-        "draws": 42,
+        "total": 110,
+        "wins": 50,
+        "losses": 22,
+        "draws": 38,
+        "elo": 90.43,
+        "elo_95": 53.7,
+        "normalized_elo": 111.77,
+        "pentanomial": [
+          2,
+          7,
+          17,
+          19,
+          10
+        ],
+        "draw_rate_percent": 34.55,
         "los_display_percent": "100.0",
         "time_losses_candidate": 0,
         "time_losses_baseline": 0,
+        "engine_process_postflight": "PASS",
+        "artifact_postflight_files": 17,
+        "complete_pairs": true,
         "result": "PASS"
       },
       {
-        "evidence": "bmi2/tc2-10000-100.log",
+        "evidence": "bmi2/final-ebfe9342/tc2-10000-100.log",
         "time_ms": 10000,
         "increment_ms": 100,
-        "total": 108,
-        "wins": 39,
-        "losses": 9,
-        "draws": 60,
+        "total": 184,
+        "wins": 66,
+        "losses": 33,
+        "draws": 85,
+        "elo": 62.99,
+        "elo_95": 37,
+        "normalized_elo": 85.88,
+        "pentanomial": [
+          1,
+          7,
+          47,
+          32,
+          5
+        ],
+        "draw_rate_percent": 46.2,
         "los_display_percent": "100.0",
         "time_losses_candidate": 0,
         "time_losses_baseline": 0,
+        "engine_process_postflight": "PASS",
+        "artifact_postflight_files": 17,
+        "complete_pairs": true,
         "result": "PASS"
       },
       {
-        "evidence": "bmi2/tc3-30000-300.log",
+        "evidence": "bmi2/final-ebfe9342/tc3-30000-300.log",
         "time_ms": 30000,
         "increment_ms": 300,
-        "total": 120,
-        "wins": 41,
-        "losses": 15,
-        "draws": 64,
+        "total": 136,
+        "wins": 46,
+        "losses": 19,
+        "draws": 71,
+        "elo": 69.9,
+        "elo_95": 40.4,
+        "normalized_elo": 101.12,
+        "pentanomial": [
+          0,
+          3,
+          37,
+          26,
+          2
+        ],
+        "draw_rate_percent": 52.21,
         "los_display_percent": "100.0",
         "time_losses_candidate": 0,
         "time_losses_baseline": 0,
+        "engine_process_postflight": "PASS",
+        "artifact_postflight_files": 17,
+        "complete_pairs": true,
         "result": "PASS"
       }
     ]
@@ -135,7 +309,7 @@
   "package": {
     "root": "docs/atomic/evidence/hito6-nmp",
     "manifest_self_included": false,
-    "file_count": 41,
+    "file_count": 47,
     "files": [
       {
         "path": "bindings/manifest.json",
@@ -181,6 +355,36 @@
         "path": "bmi2/fairy-baseline-manifest.json",
         "bytes": 4466,
         "sha256": "B28C204785D95AE1E5B19DEF7630230825F74A60B7A2354BC15292AA26508646"
+      },
+      {
+        "path": "bmi2/final-ebfe9342/atomic-build.json",
+        "bytes": 1680,
+        "sha256": "169D4C1A9D93F95555FDD74B5149C7B26894CC1A1C153C35B5073C2969C9DBBC"
+      },
+      {
+        "path": "bmi2/final-ebfe9342/bench-reproducible-vs-fairy.log",
+        "bytes": 1619,
+        "sha256": "1AAE639BB6908137D40245472AC64738375AA37A2EE8FE7D75A66153BBABF734"
+      },
+      {
+        "path": "bmi2/final-ebfe9342/pipeline-strong-local-summary.log",
+        "bytes": 1563,
+        "sha256": "526B47B30FF98726802AFEE5644F4E36A3E050ECE67DD9A48D154372D3839B4C"
+      },
+      {
+        "path": "bmi2/final-ebfe9342/tc1-2000-20.log",
+        "bytes": 76622,
+        "sha256": "EBAA87422053A9E5DD28E1CFD2A595262B15DF4A7EEC27F7612F5F22285AF359"
+      },
+      {
+        "path": "bmi2/final-ebfe9342/tc2-10000-100.log",
+        "bytes": 132455,
+        "sha256": "B02F8065FADF2E48D4399A4EC322DF7191DA12A9F92A03978887C26C5B41733D"
+      },
+      {
+        "path": "bmi2/final-ebfe9342/tc3-30000-300.log",
+        "bytes": 110419,
+        "sha256": "D3896FADAC0F5564373300910C20A5E0E969536D2F67A188F9FBBC8A1951EFD5"
       },
       {
         "path": "bmi2/native-final-smoke.log",
@@ -314,8 +518,8 @@
       },
       {
         "path": "README.md",
-        "bytes": 1864,
-        "sha256": "00AB3AC0D14E2253334E2C5C4886D9A24890DF284508F056E3ED02A03A512B09"
+        "bytes": 2272,
+        "sha256": "1956C5C7295433E977D9BDB315A996589447AD77CD4CCA200A3EEADC535378B6"
       },
       {
         "path": "wasm/manifest.json",
