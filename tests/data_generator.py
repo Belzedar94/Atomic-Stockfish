@@ -722,6 +722,55 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "Invalid generate_training_data parameter range",
             )
 
+            zero_write_window = root / "zero-write-window.bin"
+            assert_failed_without_output(
+                generator,
+                (
+                    "uci",
+                    generation_command(
+                        zero_write_window,
+                        write_min_ply=0,
+                        write_max_ply=0,
+                    ),
+                ),
+                zero_write_window,
+                "Invalid generate_training_data parameter range",
+            )
+
+            inverted_depth = root / "inverted-depth.bin"
+            assert_failed_without_output(
+                generator,
+                (
+                    "uci",
+                    generation_command(
+                        inverted_depth,
+                        min_depth=8,
+                        max_depth=4,
+                    ),
+                ),
+                inverted_depth,
+                "Invalid generate_training_data parameter range",
+            )
+
+            terminal_book_path = root / "terminal-book.epd"
+            terminal_book_path.write_text(
+                "7k/8/8/8/8/8/8/K7 w - - 0 1\n",
+                encoding="utf-8",
+            )
+            terminal_book_output = root / "terminal-book.bin"
+            assert_failed_without_output(
+                generator,
+                (
+                    *setup_commands(net),
+                    generation_command(
+                        terminal_book_output,
+                        book=terminal_book_path,
+                    ),
+                ),
+                terminal_book_output,
+                "Opening book contains an invalid or unsupported Atomic FEN",
+            )
+
             negative_count = root / "negative-count.bin"
             assert_failed_without_output(
                 generator,

@@ -13,6 +13,7 @@
 #include "attacks.h"
 #include "bitboard.h"
 #include "data/legacy_atomic_v1.h"
+#include "data/training_data_generator.h"
 #include "position.h"
 #include "tt.h"
 
@@ -113,6 +114,9 @@ void test_capability_and_layout() {
       "schema capability");
     static_assert(Data::LegacyAtomicV1PackedPositionSize == 64);
     static_assert(Data::LegacyAtomicV1RecordSize == 72);
+    static_assert(Data::LegacyAtomicV1MaxRule50 == 127);
+    static_assert(Data::legacy_atomic_v1_rule50_fits(127));
+    static_assert(!Data::legacy_atomic_v1_rule50_fits(128));
 
     Data::LegacyAtomicV1Record record{};
     expect(bool(encode(sample(), record)), "start position encodes");
@@ -121,6 +125,34 @@ void test_capability_and_layout() {
     expect(record[68] == 0x2A && record[69] == 0x00, "ply uint16 little-endian");
     expect(record[70] == 0xFF, "result int8");
     expect(record[71] == 0, "padding zero");
+}
+
+void test_generator_draw_projection() {
+    expect(!Data::legacy_atomic_v1_draw_game_fits(0, 99, 100, 1000, 0.01),
+           "whole drawn game projected before retention");
+    expect(Data::legacy_atomic_v1_draw_game_fits(0, 99, 100, 100, 0.01),
+           "only records fitting target are projected");
+    expect(Data::legacy_atomic_v1_draw_game_fits(1, 100, 1, 1000, 0.02),
+           "draw game within retention accepted");
+    expect(!Data::legacy_atomic_v1_draw_game_fits(0, 100, 1, 100, 1.0),
+           "full target rejects another draw game");
+}
+
+void test_generator_resolution_precedence() {
+    using Data::TrainingResolutionSource;
+
+    expect(Data::training_resolution_source(true, false, true, true)
+             == TrainingResolutionSource::OUTCOME,
+           "decisive outcome precedes max-ply draw");
+    expect(Data::training_resolution_source(true, true, false, true)
+             == TrainingResolutionSource::MAX_PLY,
+           "ignored insufficient outcome falls through to max ply");
+    expect(Data::training_resolution_source(false, false, true, true)
+             == TrainingResolutionSource::MAX_PLY,
+           "nonterminal max ply is a draw");
+    expect(Data::training_resolution_source(false, false, true, false)
+             == TrainingResolutionSource::NONE,
+           "nonterminal position below max ply continues");
 }
 
 void expect_move_wire(const char* fen, Move move, u16 wire, const char* label) {
@@ -292,6 +324,8 @@ int main() {
     Position::init();
 
     test_capability_and_layout();
+    test_generator_draw_projection();
+    test_generator_resolution_precedence();
     test_fairy_oracle_fixture();
     test_raw_move_wire();
     test_rejections();

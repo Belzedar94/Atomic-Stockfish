@@ -123,7 +123,7 @@ DataResult pack_position(const Position& pos, LegacyAtomicV1Record& record) {
                                    "Legacy Atomic V1 requires exactly one king per color");
 
     const int rule50 = pos.rule50_count();
-    if (rule50 < 0 || rule50 > 127)
+    if (!legacy_atomic_v1_rule50_fits(rule50))
         return DataResult::failure(DataError::POSITION_CLOCK_OUT_OF_RANGE,
                                    "Legacy Atomic V1 rule50 must fit in seven bits");
 
@@ -242,7 +242,7 @@ DataResult encode_legacy_atomic_v1(const TrainingDataSample& sample, LegacyAtomi
 
     u64 rule50   = 0;
     u64 fullmove = 0;
-    if (!parse_decimal_field(requestedFields[4], 127, rule50)
+    if (!parse_decimal_field(requestedFields[4], LegacyAtomicV1MaxRule50, rule50)
         || !parse_decimal_field(requestedFields[5], std::numeric_limits<u16>::max(), fullmove)
         || fullmove == 0)
         return DataResult::failure(

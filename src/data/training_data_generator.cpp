@@ -156,6 +156,7 @@ bool read_u64_value(std::istream& input, u64& value, std::string_view name, std:
 bool parse_params(std::istream& input, GeneratorParams& params, std::string& error) {
     std::string dataFormat = "bin";
     std::string token;
+    bool        searchDepthMaxSeen = false;
     while (input >> token)
     {
         if (token == "depth")
@@ -163,6 +164,7 @@ bool parse_params(std::istream& input, GeneratorParams& params, std::string& err
             if (!read_value(input, params.searchDepthMin, token, error))
                 return false;
             params.searchDepthMax = params.searchDepthMin;
+            searchDepthMaxSeen    = true;
         }
         else if (token == "min_depth")
         {
@@ -173,6 +175,7 @@ bool parse_params(std::istream& input, GeneratorParams& params, std::string& err
         {
             if (!read_value(input, params.searchDepthMax, token, error))
                 return false;
+            searchDepthMaxSeen = true;
         }
         else if (token == "nodes")
         {
@@ -314,7 +317,8 @@ bool parse_params(std::istream& input, GeneratorParams& params, std::string& err
         return false;
     }
 
-    params.searchDepthMax     = std::max(params.searchDepthMin, params.searchDepthMax);
+    if (!searchDepthMaxSeen)
+        params.searchDepthMax = params.searchDepthMin;
     params.randomMultiPvDepth = std::max(params.searchDepthMax, params.randomMultiPvDepth);
     if (params.saveEvery != std::numeric_limits<u64>::max())
         params.saveEvery = std::max(params.saveEvery, MinimumShardRecords);
@@ -324,7 +328,7 @@ bool parse_params(std::istream& input, GeneratorParams& params, std::string& err
       || params.searchDepthMax < params.searchDepthMin || params.evalLimit <= 0
       || params.searchDepthMax >= MAX_PLY || params.randomMultiPvDepth >= MAX_PLY
       || params.evalLimit > std::numeric_limits<i16>::max() || params.evalDiffLimit < 0
-      || params.writeMinPly < 0 || params.writeMaxPly < params.writeMinPly
+      || params.writeMinPly < 0 || params.writeMaxPly <= params.writeMinPly
       || params.writeMaxPly > MaximumGeneratedPly || params.randomMoveMinPly < -1
       || params.randomMoveMaxPly < 0 || params.randomMoveMaxPly > MaximumGeneratedPly
       || (params.randomMoveMinPly != -1 && params.randomMoveMaxPly < params.randomMoveMinPly)
@@ -451,7 +455,8 @@ bool load_book(const std::string& path, std::vector<std::string>& positions, std
         Position  position;
         StateInfo state{};
         if (position.set(*candidate, false, &state) || !position.has_king(WHITE)
-            || !position.has_king(BLACK) || position.is_chess960())
+            || !position.has_king(BLACK) || position.is_chess960()
+            || Atomic::outcome(position, true, 0).terminal())
         {
             error = "Opening book contains an invalid or unsupported Atomic FEN: " + *candidate;
             return false;
@@ -761,17 +766,14 @@ class Generator {
 
     GameResolution
     current_resolution(const Position& position, int ply, const std::vector<int>& scores) const {
-        if (ply >= params.writeMaxPly)
-            return {true, std::nullopt};
-
-        const auto outcome = Atomic::outcome(position, true, 0);
-        if (outcome.terminal())
-        {
-            if (!params.adjudicateInsufficient
-                && outcome.termination == Atomic::Termination::InsufficientMaterial)
-                return {};
+        const auto outcome          = Atomic::outcome(position, true, 0);
+        const auto resolutionSource = training_resolution_source(
+          outcome.terminal(), outcome.termination == Atomic::Termination::InsufficientMaterial,
+          params.adjudicateInsufficient, ply >= params.writeMaxPly);
+        if (resolutionSource == TrainingResolutionSource::OUTCOME)
             return {true, outcome.winner};
-        }
+        if (resolutionSource == TrainingResolutionSource::MAX_PLY)
+            return {true, std::nullopt};
 
         if (params.adjudicateDrawsByScore && ply >= 80 && scores.size() >= 8)
         {
@@ -791,10 +793,11 @@ class Generator {
         if (!failure.empty() || finished.load(std::memory_order_relaxed))
             return true;
 
-        const bool   draw         = !winner.has_value();
-        const double nextDrawRate = double(draws.load(std::memory_order_relaxed) + 1)
-                                  / double(written.load(std::memory_order_relaxed) + 1);
-        if (draw && nextDrawRate > params.keepDraws)
+        const bool draw = !winner.has_value();
+        if (draw
+            && !legacy_atomic_v1_draw_game_fits(
+              draws.load(std::memory_order_relaxed), written.load(std::memory_order_relaxed),
+              u64(samples.size()), params.count, params.keepDraws))
             return false;
 
         for (auto& sample : samples)
@@ -927,8 +930,10 @@ class Generator {
                 const bool stableTarget =
                   std::abs(int(qResult.value) - int(evalResult.value)) <= params.evalDiffLimit;
 
-                if (ply >= params.writeMinPly && !seen.already_seen(position.key())
-                    && position.has_king(WHITE) && position.has_king(BLACK)
+                if (ply >= params.writeMinPly
+                    && legacy_atomic_v1_rule50_fits(position.rule50_count())
+                    && !seen.already_seen(position.key()) && position.has_king(WHITE)
+                    && position.has_king(BLACK)
                     && !position.atomic_in_check(position.side_to_move()) && stableTarget
                     && !(params.filterCaptures && position.capture(bestMove))
                     && !(params.filterChecks && position.gives_check(bestMove))

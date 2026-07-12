@@ -30,6 +30,11 @@ namespace Stockfish::Data {
 
 inline constexpr std::size_t LegacyAtomicV1PackedPositionSize = 64;
 inline constexpr std::size_t LegacyAtomicV1RecordSize         = 72;
+inline constexpr int         LegacyAtomicV1MaxRule50          = 127;
+
+inline constexpr bool legacy_atomic_v1_rule50_fits(int rule50) noexcept {
+    return rule50 >= 0 && rule50 <= LegacyAtomicV1MaxRule50;
+}
 
 static_assert(sizeof(Move) == sizeof(u16), "Legacy Atomic V1 requires the native 16-bit Move wire");
 
