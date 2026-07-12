@@ -36,10 +36,11 @@ Pinned implementation commits used by the local release run are:
 | Repository | Commit |
 | --- | --- |
 | Atomic-Stockfish code/test commit | `518175e20f127bf47b57ba1faad580b975e45929` |
-| variant-nnue-tools | `b409ea6f1a6740021c0691b6529ccf264c7a9d81` |
+| variant-nnue-tools | `864bf29c337d21cf9d0d79a40667f86e566be737` |
 | variant-nnue-pytorch | `350a28f2cee225c546333aded75b9db64caa526d` |
 
-The documentation-only follow-up does not alter the compiled source tree.
+The follow-up commits only update the reviewed dependency pin and validation
+documentation; they do not alter the compiled source tree.
 
 ## Local release evidence
 
@@ -54,8 +55,9 @@ release gate used clean, commit-bound Windows builds:
 
 The following gates passed:
 
-- Schema/lock/E2E focused suite: `59/59`.
-- Tools C++ units and full integration, including frozen hashes
+- Schema/lock/build-manifest/E2E focused suite: `97/97`.
+- Tools C++ units in both `DATA_SIZE=512` and `DATA_SIZE=1024`, plus the full
+  standard-layout integration, including frozen hashes
   `C8F5C7FE...B229B2AA` and `1E7A3166...CC12E9CE`.
 - Trainer native CTest: `1/1`; Python CPU and required CUDA gates: `58/58`
   each on the RTX 3080.

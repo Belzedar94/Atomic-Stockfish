@@ -9,7 +9,7 @@
   "repositories": {
     "tools": {
       "repository": "Belzedar94/variant-nnue-tools",
-      "commit": "b409ea6f1a6740021c0691b6529ccf264c7a9d81",
+      "commit": "864bf29c337d21cf9d0d79a40667f86e566be737",
       "resolved": true
     },
     "trainer": {
