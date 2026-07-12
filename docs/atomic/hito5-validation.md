@@ -6,9 +6,13 @@ normative `release` contract. The native, Python, JavaScript and UCI/NNUE WASM
 release matrix passed on 2026-07-11 with freshly rebuilt artifacts. The first
 cross-repository E2E used a fully fingerprinted but dirty local tools/trainer
 snapshot. The stricter clean, commit-pinned public-CI closeout described below
-is now part of the release contract. Its synthetic hashes are measured and
-locked; the public release rerun and clean local `strong-local` execution remain
-pending before closeout.
+is now part of the release contract. Both profiles passed for the pinned
+candidate: `strong-local` on exact clean Atomic head
+`e0b58ebd9c171eb8555dbb2827ccdf90c7f5a924`, and `synthetic-ci` in GitHub
+Actions run `29177376824`, job `86608800030`. The pull-request run is associated
+with head `e0b58ebd`, but checked out and tested synthetic merge commit
+`7968672f37f537aed6eeff169e5524f91a88f853` against base
+`753060ade187cf6b74428dd4f929b7380d6073a0`.
 
 `Use NNUE=true` is the playing mode and is mandatory for all Elo/LOS gates.
 `Use NNUE=pure` exists for data generation: it exposes the unadjusted network

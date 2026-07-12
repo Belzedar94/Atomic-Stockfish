@@ -8,10 +8,11 @@ the frozen rules and playing-strength reference.
 > [!WARNING]
 > This repository is under active development and has no strength-qualified
 > release yet. The Hito 4 interface matrix and Hito 5 engine/backend matrix have
-> passed, while the stricter clean, commit-pinned cross-repository pipeline
-> closeout remains open. Hito 6 search blocks 1 through 4 are implemented; the
-> final hardened BMI2 speed rerun, all three exact LOS reruns, locked pipeline
-> evidence and complete release matrix are still required before acceptance.
+> passed. The clean, commit-pinned cross-repository pipeline also passed both
+> `strong-local` and public `synthetic-ci` for candidate `e0b58ebd`. Hito 6
+> search blocks 1 through 4 are implemented; the final hardened BMI2 speed
+> rerun, all three exact LOS reruns and complete release matrix are still
+> required before acceptance.
 
 ## Scope
 

@@ -2,9 +2,10 @@
 
 Hito 6 integrates Atomic search policy in small, attributable blocks. This
 record is cumulative: blocks 1 through 3 retain their block-local acceptance
-evidence, and block 4 is the current candidate. The milestone and its PR remain
-open until the clean commit-pinned pipeline, hardened matched-BMI2 speed rerun,
-all three current exact LOS reruns and full release matrix are closed.
+evidence, and block 4 is the current candidate. The clean commit-pinned pipeline
+passed for the block-4 runtime candidate in both profiles. The milestone and
+its PR remain open until the hardened matched-BMI2 speed rerun, all three
+current exact LOS reruns and full release matrix are closed.
 
 `Use NNUE=true` is the only playing mode used for speed and strength. `pure`
 remains a data-generation mode: its option and network-loading contract is
@@ -290,13 +291,18 @@ The final 3,619,835-byte Windows release driver is SHA-256
 
 ## Generator and trainer compatibility
 
-The current `variant-nnue-tools` integration gate passed its Atomic-only engine
-selection, historical 72-byte records, special moves, deterministic defaults,
-overwrite refusal, conversions and seeded generation smoke. Its C++ unit gate
-also passed in a clean Clang 20 container. The new cross-repository pipeline
-gate uses `Use NNUE=pure` only while generating training records; all
-conversion and final engine-loading commands use their appropriate non-pure
-modes.
+Pinned `variant-nnue-tools` commit
+`22c271c30641134109252e0665a98837d4f74ba8` passed all 12 release, Fairy and
+Stockfish checks in PR #26, including Valgrind, UBSan and TSan, after a clean
+Codex review. Its integration gate covers Atomic-only engine selection,
+historical 72-byte records, special moves, deterministic defaults, overwrite
+refusal, conversions and seeded generation. The hardening reconstructs the
+complete unique en-passant state for custom initial moves, rejects ambiguous
+legacy-v1 provenance, rejects Chess960 selected either explicitly or by the
+variant across every legacy entrypoint, and initializes `Thread::trend` before
+direct data-generation evaluation. The cross-repository pipeline uses
+`Use NNUE=pure` only while generating training records; conversion and final
+engine-loading commands use their appropriate non-pure modes.
 
 The current `variant-nnue-pytorch` native loader passed CTest `1/1`, and its
 Python suite passed `30/30` on CPU and CUDA. That covers the pinned 32-record
@@ -352,6 +358,49 @@ at `evidence/hito6-qsearch-futility/pipeline-e2e.log`. It records the candidate,
 network, generator, loader, runner and snapshot hashes and ends with
 `pipeline_exit_code=0`. The local pass does not waive the clean pinned gate.
 
+### Clean commit-pinned pipeline snapshot
+
+The lock/build/profile unit suite passed `76/76`. The clean local
+`strong-local` E2E used tools commit
+`22c271c30641134109252e0665a98837d4f74ba8`, trainer commit
+`dafec1daa594ff7eff3dca79064ed10660702a36` and Atomic commit
+`e0b58ebd9c171eb8555dbb2827ccdf90c7f5a924`. Its three clean-build manifests
+are preserved under `evidence/hito6-pinned-pipeline/manifests/` with SHA-256:
+
+- tools: `874F3A9313F0E0B29ADC88BC79A4898FE17229F88B9CF2BF03B228E9C8E29FEF`;
+- trainer: `C37A0E12C316D4849E05763C126A8CFBFED99E38174356525FA9F075A5787CB2`;
+- Atomic BMI2: `6E7C050EAE18A08116E1654EA307779A95FEF50A466593DFECB7107FC29E8C82`.
+
+The local profile reproduced data SHA-256
+`7DE72B1385DBC8E37312A513D1CF4C7D99F889EC8B747F548ED32E8D7A261A2D`,
+trained and reloaded network SHA-256
+`A69FB0A7DC211AA4D8BB0974BA881F6CA0F98C5FBC30E0203B9E08B99076E3DC`,
+and finished with loss `0.0347999074`, FT delta `8.66651535e-05`, FC delta
+`8.454262e-07` and `bestmove=b2b3`.
+
+The public `synthetic-ci` profile passed in
+[run 29177376824](https://github.com/Belzedar94/Atomic-Stockfish/actions/runs/29177376824),
+[job 86608800030](https://github.com/Belzedar94/Atomic-Stockfish/actions/runs/29177376824/job/86608800030).
+The run metadata is attached to branch head `e0b58ebd`; because this was a
+`pull_request` event, the tested checkout was synthetic merge
+`7968672f37f537aed6eeff169e5524f91a88f853` of that head into base
+`753060ade187cf6b74428dd4f929b7380d6073a0`. It reproduced source SHA-256
+`9CF054CA00B82AB53A34473DE52D1104AEDDAA19B2E7B24091B5E613AF485985` and
+data SHA-256
+`95565809C53E914A192D095B18C7BAB9A0C35AF9510347DC2C63BAA385D69988`,
+then trained and loaded network SHA-256
+`0F84B1702A48540BBDED521B227524FA55B72A92E36CA9CADC4FDDF4345F95C7`
+with loss `0.000145109807`, FT delta `9.38773155e-07`, FC delta
+`1.50070571e-06` and `bestmove=b2b3`.
+
+The normalized 2,051-byte summary at
+`evidence/hito6-pinned-pipeline/summary.log`, SHA-256
+`00F51FD8F0062AFC62E93ED5EFA799996B6CCE201D630124C770EC267EADE654`,
+records the observed local output and GitHub Actions API/job-log facts without
+claiming to be raw stdout. These results close the pipeline component for the
+identified candidate; they do not waive the remaining speed, LOS or full-matrix
+gates.
+
 The normative Hito 5 release runner now requires one all-or-none set containing
 `--pipeline-tools-engine`, `--pipeline-trainer-root` and the three tools,
 trainer and Atomic clean-build manifests. It reuses its already SHA-pinned
@@ -367,12 +416,10 @@ the public counterpart without redistributing the strong network. It checks
 out the Belzedar94 tools and trainer repositories at lock-file commits, runs
 their internal native/CPU suites, builds and tests Atomic-Stockfish, creates an
 ephemeral deterministic zero-weight HalfKAv2 network with the pinned trainer,
-and runs the complete generator-to-engine E2E in `synthetic-ci`. The job is
-present but is intentionally fail-closed during release preparation: the lock
-pins the tools and trainer commits and now contains the measured synthetic
-source/data hashes. Hito 6 cannot close until the resolved-profile rerun is
-green. Automatic continuation
-from an existing `.nnue`
+and runs the complete generator-to-engine E2E in `synthetic-ci`. The resolved
+profile passed in run `29177376824`, job `86608800030`, with the locked
+source/data hashes and every artifact/checkout postflight intact. Automatic
+continuation from an existing `.nnue`
 and the production general dataset validator remain separate trainer/tools
 release debts; this gate does not claim to implement either feature.
 
