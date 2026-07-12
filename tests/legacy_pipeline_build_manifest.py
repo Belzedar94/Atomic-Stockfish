@@ -92,6 +92,14 @@ def _msys_make(root: Path, arguments: str) -> Tuple[str, ...]:
     return (r"C:\msys64\usr\bin\bash.exe", "-lc", command)
 
 
+def _msys_root_make(root: Path, arguments: str) -> Tuple[str, ...]:
+    command = (
+        "export PATH=/mingw64/bin:$PATH; "
+        f"cd {shlex.quote(_msys_path(root))} && make {arguments}"
+    )
+    return (r"C:\msys64\usr\bin\bash.exe", "-lc", command)
+
+
 def _msys_copy(root: Path, source: str, destination: str) -> Tuple[str, ...]:
     command = (
         "export PATH=/mingw64/bin:$PATH; "
@@ -103,8 +111,8 @@ def _msys_copy(root: Path, source: str, destination: str) -> Tuple[str, ...]:
 
 def _windows_tools(root: Path) -> Tuple[Tuple[str, ...], ...]:
     return (
-        _msys_make(root, "ARCH=x86-64 COMP=mingw all=no largeboards=no nnue=no clean"),
-        _msys_make(root, "-j2 ARCH=x86-64 COMP=mingw all=no largeboards=no nnue=no build"),
+        _msys_root_make(root, "ARCH=x86-64 COMP=mingw verify-engine-pin"),
+        _msys_root_make(root, "-j2 ARCH=x86-64 COMP=mingw data-tools"),
     )
 
 
@@ -169,8 +177,8 @@ def _windows_trainer(root: Path) -> Tuple[Tuple[str, ...], ...]:
 
 def _linux_tools(root: Path) -> Tuple[Tuple[str, ...], ...]:
     return (
-        ("make", "-C", "src", "ARCH=x86-64", "all=no", "largeboards=no", "nnue=no", "clean"),
-        ("make", "-C", "src", "-j2", "ARCH=x86-64", "all=no", "largeboards=no", "nnue=no", "build"),
+        ("make", "ARCH=x86-64", "COMP=gcc", "verify-engine-pin"),
+        ("make", "-j2", "ARCH=x86-64", "COMP=gcc", "data-tools"),
     )
 
 
@@ -234,10 +242,10 @@ RECIPES = {
     recipe.name: recipe
     for recipe in (
         BuildRecipe(
-            "strong-local-tools-windows-v1",
+            "strong-local-tools-windows-v2",
             "tools",
             "win32",
-            "src/stockfish.exe",
+            "src/atomic-data-tools.exe",
             _windows_tools,
             expected_engine_target=X86_64_RELEASE_TARGET,
         ),
@@ -266,10 +274,10 @@ RECIPES = {
             expected_engine_target=X86_64_BMI2_RELEASE_TARGET,
         ),
         BuildRecipe(
-            "synthetic-ci-tools-linux-v1",
+            "synthetic-ci-tools-linux-v2",
             "tools",
             "linux",
-            "src/stockfish",
+            "src/atomic-data-tools",
             _linux_tools,
             expected_engine_target=X86_64_RELEASE_TARGET,
         ),

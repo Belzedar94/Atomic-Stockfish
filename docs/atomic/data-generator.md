@@ -21,9 +21,10 @@ Windows). Its `atomic_data_schema` command reports the exact write capability:
 ```
 
 The schema is frozen in `schemas/atomic-schema.json`. The generator is
-write-only; validation, decoding, conversion and statistics remain in
-`variant-nnue-tools` until its thin `atomic` wrapper replaces the historical
-engine copy.
+write-only. The `variant-nnue-tools` `atomic` line is now a thin reader/writer
+wrapper pinned to Atomic-Stockfish: its `atomic-data-tools` artifact validates,
+decodes, converts and reports statistics, while PV self-play exists only in
+this Atomic-Stockfish generator.
 
 ## Generate Legacy Atomic V1 data
 
@@ -55,7 +56,7 @@ Current H7.2 scope is deliberately narrow:
 - depth starts at one; `depth=0` is rejected rather than silently changing to
   quiescence behavior;
 - non-PV generation, converters, puzzle generation and statistics remain in
-  tools for the next consolidation block.
+  the thin tools wrapper during the Legacy V1 consolidation.
 
 ## Safety and reproducibility
 

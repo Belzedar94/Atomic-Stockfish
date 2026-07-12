@@ -452,7 +452,7 @@ def main() -> int:
                     "LEGACY PIPELINE E2E PASSED ",
                     "profile=strong-local",
                     f"source_sha256={EXPECTED_NET_SHA256}",
-                    "atomic_data_sha256=",
+                    "data_sha256=",
                     "ft_delta=",
                     "fc_delta=",
                     "Atomic data-generator tests passed",
