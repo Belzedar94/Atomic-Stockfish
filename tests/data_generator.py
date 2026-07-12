@@ -1305,6 +1305,23 @@ def main(argv: Sequence[str] | None = None) -> int:
             if Path(str(zero_v2_shard) + ".manifest.json").exists():
                 raise AssertionError("save_every=0 rejection created a V2 manifest")
 
+            rounded_keep_draws = root / "rounded-keep-draws.atbin"
+            assert_failed_without_output(
+                generator,
+                (
+                    *setup_commands(net),
+                    generation_command(
+                        rounded_keep_draws,
+                        data_format="atomic-bin-v2",
+                        keep_draws="0.99999999999999999",
+                    ),
+                ),
+                rounded_keep_draws,
+                "keep_draws must round-trip exactly",
+            )
+            if Path(str(rounded_keep_draws) + ".manifest.json").exists():
+                raise AssertionError("non-round-trippable keep_draws created a V2 manifest")
+
             syzygy_v2 = root / "syzygy-v2.atbin"
             assert_failed_without_output(
                 generator,

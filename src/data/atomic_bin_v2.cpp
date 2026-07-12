@@ -297,6 +297,10 @@ std::string fields_to_fen(const AtomicBinV2PositionFields& fields, bool atomic96
 
 }  // namespace
 
+bool atomic_bin_v2_fullmove_fits_game_ply(int gamePly) noexcept {
+    return gamePly >= 0 && u64(gamePly) / 2 + 1 <= AtomicBinV2MaxFullmove;
+}
+
 DataResult encode_atomic_bin_v2(const TrainingDataSample& sample, AtomicBinV2Record& record) {
     record.fill(0);
     if (sample.flags & ~u32(TRAINING_DATA_CHESS960))

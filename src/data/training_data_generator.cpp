@@ -11,7 +11,9 @@
 #include "training_data_generator.h"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
+#include <charconv>
 #include <chrono>
 #include <cmath>
 #include <cctype>
@@ -33,6 +35,7 @@
 #include <vector>
 
 #include "api/atomic_outcome.h"
+#include "atomic_bin_v2.h"
 #include "atomic_bin_v2_manifest.h"
 #include "atomic_bin_v2_sink.h"
 #include "engine.h"
@@ -168,38 +171,10 @@ bool read_u64_value(std::istream& input, u64& value, std::string_view name, std:
     return true;
 }
 
-bool read_keep_draws(std::istream& input,
-                     double&       value,
-                     std::string&  canonical,
-                     std::string&  error) {
-    std::string token;
-    if (!(input >> token) || token.empty() || token.size() > 4096)
-    {
-        error = "Missing or invalid value for generate_training_data option keep_draws";
-        return false;
-    }
-
-    std::istringstream numeric(token);
-    numeric.imbue(std::locale::classic());
-    double parsed = 0.0;
-    if (!(numeric >> parsed) || !std::isfinite(parsed) || parsed < 0.0 || parsed > 1.0)
-    {
-        error = "keep_draws must be a finite decimal value between 0 and 1";
-        return false;
-    }
-    char trailing = 0;
-    if (numeric >> trailing)
-    {
-        error = "keep_draws must be a finite decimal value between 0 and 1";
-        return false;
-    }
-    if (parsed == 0.0)
-    {
-        value     = 0.0;
-        canonical = "0";
-        return true;
-    }
-
+bool canonicalize_keep_draws_token(std::string_view token,
+                                   std::string&     canonical,
+                                   std::string&     error) {
+    canonical.clear();
     std::size_t cursor   = 0;
     bool        negative = false;
     if (token[cursor] == '+' || token[cursor] == '-')
@@ -279,7 +254,6 @@ bool read_keep_draws(std::istream& input,
     const auto firstNonZero = digits.find_first_not_of('0');
     if (firstNonZero == std::string::npos)
     {
-        value     = 0.0;
         canonical = "0";
         return true;
     }
@@ -303,11 +277,72 @@ bool read_keep_draws(std::istream& input,
         canonical = "1";
     else
     {
+        if (point < -4096)
+        {
+            error = "keep_draws exact decimal expansion exceeds 4096 characters";
+            return false;
+        }
         canonical = "0.";
         if (point < 0)
             canonical.append(std::size_t(-point), '0');
         canonical += digits;
     }
+    return true;
+}
+
+bool read_keep_draws(std::istream& input,
+                     double&       value,
+                     std::string&  canonical,
+                     std::string&  error) {
+    value = 0.0;
+    canonical.clear();
+
+    std::string token;
+    if (!(input >> token) || token.empty() || token.size() > 4096)
+    {
+        error = "Missing or invalid value for generate_training_data option keep_draws";
+        return false;
+    }
+
+    std::istringstream numeric(token);
+    numeric.imbue(std::locale::classic());
+    double parsed = 0.0;
+    if (!(numeric >> parsed) || !std::isfinite(parsed) || parsed < 0.0 || parsed > 1.0)
+    {
+        error = "keep_draws must be a finite decimal value between 0 and 1";
+        return false;
+    }
+    char trailing = 0;
+    if (numeric >> trailing)
+    {
+        error = "keep_draws must be a finite decimal value between 0 and 1";
+        return false;
+    }
+    if (!canonicalize_keep_draws_token(token, canonical, error))
+        return false;
+
+    std::array<char, 64> effectiveBuffer{};
+    const auto [effectiveEnd, conversionError] =
+      std::to_chars(effectiveBuffer.data(), effectiveBuffer.data() + effectiveBuffer.size(), parsed,
+                    std::chars_format::general);
+    if (conversionError != std::errc{})
+    {
+        error = "keep_draws effective value cannot be serialized reproducibly";
+        return false;
+    }
+
+    std::string effectiveCanonical;
+    if (!canonicalize_keep_draws_token(
+          std::string_view(effectiveBuffer.data(),
+                           std::size_t(effectiveEnd - effectiveBuffer.data())),
+          effectiveCanonical, error))
+        return false;
+    if (effectiveCanonical != canonical)
+    {
+        error = "keep_draws must round-trip exactly through the generator's floating-point value";
+        return false;
+    }
+
     value = parsed;
     return true;
 }
@@ -700,6 +735,12 @@ bool dataset_rule50_fits(DatasetFormat dataFormat, int rule50) {
     if (dataFormat == DatasetFormat::LEGACY_ATOMIC_V1)
         return legacy_atomic_v1_rule50_fits(rule50);
     return rule50 >= 0 && u64(rule50) <= AtomicBinV2MaxRule50;
+}
+
+bool dataset_position_clocks_fit(DatasetFormat dataFormat, const Position& position) {
+    return dataset_rule50_fits(dataFormat, position.rule50_count())
+        && (dataFormat != DatasetFormat::ATOMIC_BIN_V2
+            || atomic_bin_v2_fullmove_fits_game_ply(position.game_ply()));
 }
 
 std::string trim(std::string text) {
@@ -1305,7 +1346,7 @@ class Generator {
                   std::abs(int(qResult.value) - int(evalResult.value)) <= params.evalDiffLimit;
 
                 if (ply >= params.writeMinPly
-                    && dataset_rule50_fits(params.dataFormat, position.rule50_count())
+                    && dataset_position_clocks_fit(params.dataFormat, position)
                     && !seen.already_seen(position.key()) && position.has_king(WHITE)
                     && position.has_king(BLACK)
                     && !position.atomic_in_check(position.side_to_move()) && stableTarget
