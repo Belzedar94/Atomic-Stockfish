@@ -33,6 +33,11 @@ capability and reports the frozen `atomic-bin-v2` schema hash
 `read:false,write:true`; readers arrive separately in H7.3-C. The historical
 singular response above remains byte-exact for pinned Legacy clients.
 
+H7.3-C1 provides the authoritative C++ reader in Atomic-Stockfish. A V2
+dataset is opened only through its `.atbin.manifest.json` sidecar; passing a
+raw `.atbin` shard is an error. The generator capability remains `read:false`
+until the H7.3-C2 data-tools CLI exposes that library contract.
+
 ## Generate Legacy Atomic V1 data
 
 Load a compatible Atomic network and select `pure` before starting generation:
@@ -158,3 +163,23 @@ gates: exact
 adapter round trips through Atomic legal move generation, SHA/sink lifecycle,
 canonical manifests, native V2 generation and Atomic960 records. It does not
 change the generated Legacy V1 fixture bytes.
+
+The H7.3-C1 reader targets add strict canonical-sidecar parsing and an
+authenticated streaming audit. They reject BOM/CRLF/whitespace, invalid UTF-8,
+noncanonical escapes or key order, unknown/duplicate/missing fields, schema or
+integer drift, unsafe basenames, repeated shard paths or identities, links and
+reparse points, bad headers/sizes/checksums/counts, and every structurally or
+semantically invalid record. Each decoded record must also re-encode to its
+exact 64 input bytes. Errors report shard, local and global record indexes.
+Network and book entries remain provenance: a reader does not require those
+inputs to be present beside a completed dataset.
+Authentication and the semantic audit process shards sequentially, keeping at
+most one shard descriptor open; one-record sharding therefore does not consume
+one OS handle per shard. Streaming likewise opens only the current shard.
+
+The focused reader gates can also be run independently from `src`:
+
+```sh
+make -j atomic-bin-v2-manifest-reader-tests ARCH=x86-64
+make -j atomic-bin-v2-reader-tests ARCH=x86-64
+```

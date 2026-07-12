@@ -92,6 +92,19 @@ DataResult preflight_atomic_bin_v2_manifest_publication(const std::filesystem::p
 // manifest contains no timestamps or absolute paths.
 DataResult render_atomic_bin_v2_manifest(const AtomicBinV2Manifest& manifest, std::string& json);
 
+// Parse only the frozen canonical representation produced by
+// render_atomic_bin_v2_manifest(). The caller supplies the sidecar path because
+// shard basenames are resolved relative to it. Output is reset before parsing;
+// a failure can never leave partially trusted metadata behind.
+DataResult parse_atomic_bin_v2_manifest(std::string_view             bytes,
+                                        const std::filesystem::path& manifestPath,
+                                        AtomicBinV2Manifest&         output);
+
+// Read and parse a regular, non-symlink sidecar through one authenticated file
+// descriptor. Raw .atbin paths are intentionally not accepted as datasets.
+DataResult load_atomic_bin_v2_manifest(const std::filesystem::path& manifestPath,
+                                       AtomicBinV2Manifest&         output);
+
 // Create the sidecar with exclusive-create semantics. An error never replaces
 // an existing file and removes only a partial sidecar created by this call.
 DataResult write_atomic_bin_v2_manifest(const AtomicBinV2Manifest& manifest);

@@ -289,10 +289,40 @@ only the isolated codecs. These objects remain outside the playing binary, so
 the Atomic playing signature is the relevant non-regression gate and LOS is not
 triggered by this block.
 
+## H7.3-C1 - Authoritative manifest and dataset reader
+
+Atomic-Stockfish now owns the strict C++ reader used by the later tools and
+trainer integrations. `parse_atomic_bin_v2_manifest` accepts only the exact
+canonical JSON bytes emitted by the frozen renderer, and
+`AtomicBinV2DatasetReader::open` accepts only an
+`.atbin.manifest.json` entrypoint. Legacy Atomic V1 retains its independent
+72-byte loader; there is no format guessing and no raw V2 shard entrypoint.
+
+Opening a dataset resolves portable shard basenames relative to the sidecar,
+rejects path or file-identity duplicates and opens regular non-link files. It
+then checks exact size, same-descriptor SHA-256, frozen header and record count,
+audits every record through structural decoding and Atomic/Atomic960 legal move
+generation, requires a byte-exact re-encode, and reconciles record/draw totals.
+The returned object streams from those authenticated descriptors and verifies
+that each pathname still names the same file before exposing data. Audit and
+streaming retain at most one shard descriptor at a time, so the producer's
+100,000-shard upper bound does not become an OS-handle limit. Diagnostics carry
+shard/local/global indexes.
+
+The stationary-king Atomic960 regression is explicit: `c1b1` remains the rook-
+origin move wire in a legal position, while
+`7k/8/8/8/8/8/2PP4/1RK4q w Q - 0 1` rejects the same castle because the king is
+in check. Parser and reader targets cover canonical JSON drift, unsafe paths,
+missing/directory/link/hardlink/replaced shards, header/SHA/size/count failures,
+reserved bytes, illegal moves, aggregate statistics, rewind and streaming.
+This C1 library is not yet advertised as a generator read capability; the C2
+CLI and sibling tools/trainer integrations are the remaining H7.3-C work.
+
 ## Remaining Hito 7 work
 
-H7.1, H7.2 and H7.3-A/B are compatibility boundaries, not completion of Hito
-7. H7.3-C adds strict V2 readers and validates every record in tools and trainer.
+H7.1, H7.2 and H7.3-A/B/C1 are compatibility boundaries, not completion of Hito
+7. H7.3-C2 exposes the reader through data-tools and validates every record in
+the tools and trainer.
 Legacy V1 remains a supported fallback throughout the 1.x line.
 
 This project remains isolated in the sibling repositories: every tools or
