@@ -11,6 +11,12 @@ import re
 import subprocess
 from typing import Mapping, Sequence
 
+from atomic_training_data_schema import (
+    EXPECTED_RECORD_SIZE as EXPECTED_TRAINING_DATA_RECORD_SIZE,
+    EXPECTED_SCHEMA_ID as EXPECTED_TRAINING_DATA_SCHEMA_ID,
+    load_training_data_schema,
+)
+
 
 DEFAULT_LOCK_FILE = Path(__file__).with_name("legacy_pipeline.lock.json")
 ZERO_COMMIT = "0" * 40
@@ -37,6 +43,7 @@ EXPECTED_BUILD_RECIPES = {
         "atomic": "synthetic-ci-atomic-linux-v1",
     },
 }
+EXPECTED_TRAINING_DATA_SCHEMA_PATH = "schemas/atomic-schema.json"
 
 
 @dataclass(frozen=True)
@@ -61,7 +68,16 @@ class PipelineProfile:
 
 
 @dataclass(frozen=True)
+class TrainingDataSchemaPin:
+    path: str
+    schema_id: str
+    sha256: str
+    record_size: int
+
+
+@dataclass(frozen=True)
 class PipelineLock:
+    training_data_schema: TrainingDataSchemaPin
     repositories: Mapping[str, RepositoryPin]
     profiles: Mapping[str, PipelineProfile]
 
@@ -121,6 +137,62 @@ def _require_string(value: object, label: str) -> str:
     if not isinstance(value, str) or not value:
         raise AssertionError(f"{label} must be a non-empty JSON string")
     return value
+
+
+def _parse_training_data_schema(raw: object) -> TrainingDataSchemaPin:
+    entry = _require_mapping(raw, "training_data_schema")
+    _exact_keys(
+        entry,
+        {"path", "schema_id", "sha256", "record_size"},
+        "training_data_schema",
+    )
+    path = _require_string(entry.get("path"), "training_data_schema.path")
+    if path != EXPECTED_TRAINING_DATA_SCHEMA_PATH:
+        raise AssertionError(
+            "training_data_schema.path must be exactly "
+            f"{EXPECTED_TRAINING_DATA_SCHEMA_PATH!r}"
+        )
+    schema_id = _require_string(
+        entry.get("schema_id"), "training_data_schema.schema_id"
+    )
+    if schema_id != EXPECTED_TRAINING_DATA_SCHEMA_ID:
+        raise AssertionError(
+            "training_data_schema.schema_id must be exactly "
+            f"{EXPECTED_TRAINING_DATA_SCHEMA_ID!r}"
+        )
+    sha256 = _require_string(entry.get("sha256"), "training_data_schema.sha256")
+    if not SHA256_RE.fullmatch(sha256):
+        raise AssertionError(
+            "training_data_schema.sha256 must be a lowercase SHA-256"
+        )
+    record_size = entry.get("record_size")
+    if type(record_size) is not int or record_size != EXPECTED_TRAINING_DATA_RECORD_SIZE:
+        raise AssertionError(
+            "training_data_schema.record_size must be exactly "
+            f"{EXPECTED_TRAINING_DATA_RECORD_SIZE}"
+        )
+    actual = load_training_data_schema()
+    if actual.schema_id != schema_id:
+        raise AssertionError(
+            "training-data schema ID mismatch: "
+            f"lock has {schema_id!r}, file has {actual.schema_id!r}"
+        )
+    if actual.sha256 != sha256:
+        raise AssertionError(
+            "training-data schema SHA-256 mismatch: "
+            f"lock has {sha256}, file has {actual.sha256}"
+        )
+    if actual.record_size != record_size:
+        raise AssertionError(
+            "training-data schema record size mismatch: "
+            f"lock has {record_size}, file has {actual.record_size}"
+        )
+    return TrainingDataSchemaPin(
+        path=path,
+        schema_id=schema_id,
+        sha256=sha256,
+        record_size=record_size,
+    )
 
 
 def _parse_repository_pin(
@@ -292,10 +364,17 @@ def load_pipeline_lock(
     resolved_path = path.expanduser().resolve()
     document = load_json_file(resolved_path, "pipeline lock")
     root = _require_mapping(document, "pipeline lock")
-    _exact_keys(root, {"schema_version", "repositories", "profiles"}, "pipeline lock")
+    _exact_keys(
+        root,
+        {"schema_version", "training_data_schema", "repositories", "profiles"},
+        "pipeline lock",
+    )
     schema_version = root.get("schema_version")
-    if type(schema_version) is not int or schema_version != 1:
-        raise AssertionError("pipeline lock schema_version must be exactly 1")
+    if type(schema_version) is not int or schema_version != 2:
+        raise AssertionError("pipeline lock schema_version must be exactly 2")
+    training_data_schema = _parse_training_data_schema(
+        root.get("training_data_schema")
+    )
     raw_repositories = _require_mapping(root.get("repositories"), "repositories")
     raw_profiles = _require_mapping(root.get("profiles"), "profiles")
     if set(raw_repositories) != set(EXPECTED_REPOSITORIES):
@@ -318,7 +397,11 @@ def load_pipeline_lock(
         )
         for name in EXPECTED_PROFILE_KINDS
     }
-    return PipelineLock(repositories=repositories, profiles=profiles)
+    return PipelineLock(
+        training_data_schema=training_data_schema,
+        repositories=repositories,
+        profiles=profiles,
+    )
 
 
 def _run_git(root: Path, *arguments: str) -> str:
@@ -477,6 +560,13 @@ def _write_github_outputs(
         allow_unresolved_hashes=allow_unresolved_hashes,
     )
     lines: list[str] = []
+    lines.extend(
+        (
+            f"training_data_schema_id={lock.training_data_schema.schema_id}",
+            f"training_data_schema_sha256={lock.training_data_schema.sha256}",
+            f"training_data_record_size={lock.training_data_schema.record_size}",
+        )
+    )
     for name in ("tools", "trainer"):
         pin = lock.repositories[name]
         lines.extend(

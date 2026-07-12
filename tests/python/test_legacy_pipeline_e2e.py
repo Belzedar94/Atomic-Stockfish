@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from contextlib import nullcontext
 import hashlib
+import json
 from pathlib import Path
 import struct
 import sys
@@ -123,6 +124,115 @@ def profile(**overrides: object) -> PipelineProfile:
     }
     values.update(overrides)
     return PipelineProfile(**values)
+
+
+def schema_lock() -> SimpleNamespace:
+    return SimpleNamespace(
+        training_data_schema=SimpleNamespace(
+            schema_id="legacy-atomic-v1",
+            sha256=(
+                "acca0f551f1c012c31a6c727dedccaebb7b5ebbc46810edb87e31bb208d5abe1"
+            ),
+            record_size=72,
+        )
+    )
+
+
+def capability(*, write: bool, sha256: str | None = None) -> dict[str, object]:
+    return {
+        "schema_sha256": sha256 or schema_lock().training_data_schema.sha256,
+        "formats": {
+            "legacy-atomic-v1": {
+                "read": True,
+                "write": write,
+                "record_size": 72,
+            }
+        },
+    }
+
+
+def test_training_data_schema_handshake_is_fail_fast(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    tools_payload = json.dumps(capability(write=True), separators=(",", ":"))
+    monkeypatch.setattr(
+        pipeline,
+        "run_tools_command",
+        lambda engine, command: (
+            f"id name fixture\nreadyok\n{tools_payload}\n"
+            if engine == tmp_path / "tools" and command == "atomic_data_schema"
+            else ""
+        ),
+    )
+    trainer = SimpleNamespace(
+        atomic_training_data_schema=lambda: capability(write=False)
+    )
+    pipeline.verify_training_data_schema_handshake(
+        schema_lock(),
+        tools_engine=tmp_path / "tools",
+        nnue_dataset=trainer,
+    )
+    assert "LEGACY PIPELINE SCHEMA VERIFIED" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ("target", "value", "message"),
+    (
+        ("tools-hash", "f" * 64, "tools schema SHA-256 mismatch"),
+        ("trainer-hash", "f" * 64, "trainer schema SHA-256 mismatch"),
+        ("tools-write", False, "read=true, write=true"),
+        ("trainer-write", True, "read=true, write=false"),
+        ("trainer-size", 71, "trainer record size mismatch"),
+    ),
+)
+def test_training_data_schema_handshake_rejects_drift(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    target: str,
+    value: object,
+    message: str,
+) -> None:
+    tools = capability(write=True)
+    trainer = capability(write=False)
+    selected = tools if target.startswith("tools") else trainer
+    if target.endswith("hash"):
+        selected["schema_sha256"] = value
+    elif target.endswith("write"):
+        selected["formats"]["legacy-atomic-v1"]["write"] = value
+    else:
+        selected["formats"]["legacy-atomic-v1"]["record_size"] = value
+    monkeypatch.setattr(
+        pipeline,
+        "run_tools_command",
+        lambda unused_engine, unused_command: (
+            json.dumps(tools, separators=(",", ":")) + "\nreadyok\n"
+        ),
+    )
+    nnue_dataset = SimpleNamespace(
+        atomic_training_data_schema=lambda: trainer
+    )
+    with pytest.raises(AssertionError, match=message):
+        pipeline.verify_training_data_schema_handshake(
+            schema_lock(),
+            tools_engine=tmp_path / "tools",
+            nnue_dataset=nnue_dataset,
+        )
+
+
+def test_tools_schema_response_rejects_duplicate_json_keys(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    payload = json.dumps(capability(write=True), separators=(",", ":"))
+    payload = payload.replace(
+        '"schema_sha256":', '"schema_sha256":"0","schema_sha256":', 1
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "run_tools_command",
+        lambda unused_engine, unused_command: payload + "\nreadyok\n",
+    )
+    with pytest.raises(AssertionError, match="duplicate JSON key"):
+        pipeline.query_tools_training_data_schema(tmp_path / "tools")
 
 
 def test_profile_arguments_are_locked() -> None:

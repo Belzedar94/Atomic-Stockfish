@@ -17,8 +17,15 @@ import legacy_pipeline_build_manifest as build_manifest
 
 
 def resolved_document() -> dict[str, object]:
+    schema = pipeline_lock.load_training_data_schema()
     return {
-        "schema_version": 1,
+        "schema_version": 2,
+        "training_data_schema": {
+            "path": pipeline_lock.EXPECTED_TRAINING_DATA_SCHEMA_PATH,
+            "schema_id": schema.schema_id,
+            "sha256": schema.sha256,
+            "record_size": schema.record_size,
+        },
         "repositories": {
             "tools": {
                 "repository": "Belzedar94/variant-nnue-tools",
@@ -87,6 +94,8 @@ def test_checked_in_lock_is_structurally_valid() -> None:
     )
     assert set(lock.repositories) == {"tools", "trainer"}
     assert set(lock.profiles) == {"strong-local", "synthetic-ci"}
+    assert lock.training_data_schema.schema_id == "legacy-atomic-v1"
+    assert lock.training_data_schema.record_size == 72
 
 
 def test_lock_rejects_duplicate_json_keys_at_any_depth(tmp_path: Path) -> None:
@@ -105,7 +114,26 @@ def test_lock_schema_version_rejects_json_boolean(tmp_path: Path) -> None:
     document = resolved_document()
     document["schema_version"] = True
     lock_path = write_document(tmp_path / "lock.json", document)
-    with pytest.raises(AssertionError, match="schema_version must be exactly 1"):
+    with pytest.raises(AssertionError, match="schema_version must be exactly 2"):
+        pipeline_lock.load_pipeline_lock(lock_path)
+
+
+@pytest.mark.parametrize(
+    ("key", "value", "message"),
+    (
+        ("path", "schemas/other.json", "path must be exactly"),
+        ("schema_id", "atomic-bin-v2", "schema_id must be exactly"),
+        ("sha256", "f" * 64, "SHA-256 mismatch"),
+        ("record_size", 71, "record_size must be exactly"),
+    ),
+)
+def test_lock_rejects_training_data_schema_drift(
+    tmp_path: Path, key: str, value: object, message: str
+) -> None:
+    document = resolved_document()
+    document["training_data_schema"][key] = value
+    lock_path = write_document(tmp_path / "lock.json", document)
+    with pytest.raises(AssertionError, match=message):
         pipeline_lock.load_pipeline_lock(lock_path)
 
 
@@ -191,6 +219,9 @@ def test_github_outputs_emit_only_resolved_repository_pins(tmp_path: Path) -> No
     output = tmp_path / "github-output.txt"
     pipeline_lock._write_github_outputs(lock, output)
     assert output.read_text(encoding="utf-8").splitlines() == [
+        "training_data_schema_id=legacy-atomic-v1",
+        f"training_data_schema_sha256={lock.training_data_schema.sha256}",
+        "training_data_record_size=72",
         "tools_repository=Belzedar94/variant-nnue-tools",
         f"tools_commit={'a' * 40}",
         "trainer_repository=Belzedar94/variant-nnue-pytorch",
