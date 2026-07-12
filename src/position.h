@@ -44,6 +44,13 @@ struct SharedHistories;
 
 struct StateInfo {
 
+    static constexpr usize MAX_ATOMIC_BLAST_PIECES = 9;
+
+    struct AtomicBlastPiece {
+        Piece  piece;
+        Square square;
+    };
+
     // Copied when making a move
     Key    materialKey;
     Key    pawnKey;
@@ -54,16 +61,19 @@ struct StateInfo {
     int    rule50;
     int    pliesFromNull;
     Square epSquare;
+    bool   atomicOpponentInCheck;
 
     // Not copied when making a move (will be recomputed anyhow)
-    Key        key;
-    Bitboard   checkersBB;
-    StateInfo* previous;
-    Bitboard   blockersForKing[COLOR_NB];
-    Bitboard   pinners[COLOR_NB];
-    Bitboard   checkSquares[PIECE_TYPE_NB];
-    Piece      capturedPiece;
-    int        repetition;
+    Key                                                   key;
+    Bitboard                                              checkersBB;
+    StateInfo*                                            previous;
+    Bitboard                                              blockersForKing[COLOR_NB];
+    Bitboard                                              pinners[COLOR_NB];
+    Bitboard                                              checkSquares[PIECE_TYPE_NB];
+    Piece                                                 capturedPiece;
+    std::array<AtomicBlastPiece, MAX_ATOMIC_BLAST_PIECES> atomicBlast;
+    u8                                                    atomicBlastCount;
+    int                                                   repetition;
 };
 
 
@@ -139,6 +149,12 @@ class Position {
     bool  capture(Move m) const;
     bool  capture_stage(Move m) const;
     bool  gives_check(Move m) const;
+    bool  has_king(Color c) const;
+    bool  is_atomic_terminal() const;
+    bool  atomic_in_check(Color c) const;
+    bool  atomic_wins(Move m) const;
+    bool  has_legal_quiet() const;
+    bool  has_legal_move() const;
     Piece moved_piece(Move m) const;
     Piece captured_piece() const;
 
@@ -373,6 +389,10 @@ inline bool Position::capture_stage(Move m) const {
 }
 
 inline Piece Position::captured_piece() const { return st->capturedPiece; }
+
+inline bool Position::has_king(Color c) const { return bool(pieces(c, KING)); }
+
+inline bool Position::is_atomic_terminal() const { return !has_king(WHITE) || !has_king(BLACK); }
 
 inline void Position::put_piece(Piece pc, Square s, DirtyThreats* const dts) {
     board[s] = pc;

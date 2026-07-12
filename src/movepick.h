@@ -69,7 +69,8 @@ class MovePicker {
     int                          threshold;
     Depth                        depth;
     int                          ply;
-    bool                         skipQuiets = false;
+    bool                         skipQuiets      = false;
+    bool                         quietChecksOnly = false;
     ExtMove                      moves[MAX_MOVES];
 };
 

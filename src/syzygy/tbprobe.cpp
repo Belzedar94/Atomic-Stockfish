@@ -102,7 +102,18 @@ namespace Stockfish {
 
 namespace {
 
-constexpr int TBPIECES = 7;  // Max number of supported pieces
+// The published Atomic Syzygy set contains up to six pieces. Keeping this
+// bound in the decoder is important: the Atomic generator uses a different
+// king-pair pivot and no compatible seven-piece format has been released.
+constexpr int TBPIECES = 6;
+
+constexpr std::string_view AtomicWdlSuffix = ".atbw";
+constexpr std::string_view AtomicDtzSuffix = ".atbz";
+
+// Keep the format markers named by metric. A historical Fairy-Stockfish PR
+// accidentally swapped these two values, which made valid tables look corrupt.
+constexpr std::array<u8, 4> AtomicWdlMagic = {0x55, 0x8D, 0xA4, 0x49};
+constexpr std::array<u8, 4> AtomicDtzMagic = {0x91, 0xA9, 0x5E, 0xEB};
 constexpr int MAX_DTZ =
   1 << 18;  // Max DTZ supported times 2, large enough to deal with the syzygy TB limit.
 
@@ -231,8 +242,8 @@ class TBFile: public std::ifstream {
     std::filesystem::path fname;
 
    public:
-    // Look for and open the file among the Paths directories where the .rtbw
-    // and .rtbz files can be found. Multiple directories are separated by ";"
+    // Look for and open the file among the Paths directories where the .atbw
+    // and .atbz files can be found. Multiple directories are separated by ";"
     // on Windows and by ":" on Unix-based operating systems.
     //
     // Example:
@@ -320,9 +331,9 @@ class TBFile: public std::ifstream {
     #endif
         u8* data = (u8*) *baseAddress;
 
-        constexpr u8 Magics[][4] = {{0xD7, 0x66, 0x0C, 0xA5}, {0x71, 0xE8, 0x23, 0x5D}};
+        const auto& magic = type == WDL ? AtomicWdlMagic : AtomicDtzMagic;
 
-        if (memcmp(data, Magics[type == WDL], 4))
+        if (memcmp(data, magic.data(), magic.size()))
         {
             std::cerr << "Corrupted table in file " << fname.string() << std::endl;
             unmap(*baseAddress, *mapping);
@@ -559,14 +570,14 @@ void TBTables::add(const std::vector<PieceType>& pieces) {
         code += PieceToChar[pt];
     code.insert(code.find('K', 1), "v");
 
-    TBFile file_dtz(code + ".rtbz");  // KRK -> KRvK
+    TBFile file_dtz(code + std::string(AtomicDtzSuffix));  // KRK -> KRvK
     if (file_dtz.is_open())
     {
         file_dtz.close();
         foundDTZFiles++;
     }
 
-    TBFile file(code + ".rtbw");  // KRK -> KRvK
+    TBFile file(code + std::string(AtomicWdlSuffix));  // KRK -> KRvK
 
     if (!file.is_open())  // Only WDL file is checked
         return;
@@ -956,9 +967,20 @@ Ret do_probe_table(const Position& pos, T* entry, WDLScore wdl, ProbeState* resu
                 + (rank_of(squares[1]) - adjust1) * 6 + (rank_of(squares[2]) - adjust2);
     }
     else
-        // We don't have at least 3 unique pieces, like in KRRvKBB, just map
-        // the kings.
-        idx = MapKK[MapA1D1D4[squares[0]]][squares[1]];
+    {
+        // Atomic kings may be adjacent. Encode every non-overlapping king pair
+        // after board symmetry reduction (518 configurations), rather than the
+        // 462 non-adjacent pairs used by orthodox Syzygy.
+        int adjust = squares[1] > squares[0];
+
+        if (off_A1H8(squares[0]))
+            idx = MapA1D1D4[squares[0]] * 63 + (squares[1] - adjust);
+        else if (off_A1H8(squares[1]))
+            idx = 6 * 63 + rank_of(squares[0]) * 28 + MapB1H1H7[squares[1]];
+        else
+            idx = 6 * 63 + 4 * 28 + rank_of(squares[0]) * 7
+                + (rank_of(squares[1]) - adjust);
+    }
 
 encode_remaining:
     idx *= d->groupIdx[0];
@@ -1038,7 +1060,8 @@ void set_groups(T& e, PairsData* d, int order[], File f) {
         if (k == order[0])  // Leading pawns or pieces
         {
             d->groupIdx[0] = idx;
-            idx *= e.hasPawns ? LeadPawnsSize[d->groupLen[0]][f] : e.hasUniquePieces ? 31332 : 462;
+            idx *= e.hasPawns ? LeadPawnsSize[d->groupLen[0]][f]
+                              : e.hasUniquePieces ? 31332 : 518;
         }
         else if (k == order[1])  // Remaining pawns
         {
@@ -1289,8 +1312,8 @@ void* mapped(TBTable<Type>& e, const Position& pos) {
         b += std::string(popcount(pos.pieces(BLACK, pt)), PieceToChar[pt]);
     }
 
-    fname =
-      (e.key == pos.material_key() ? w + 'v' + b : b + 'v' + w) + (Type == WDL ? ".rtbw" : ".rtbz");
+    fname = (e.key == pos.material_key() ? w + 'v' + b : b + 'v' + w)
+          + std::string(Type == WDL ? AtomicWdlSuffix : AtomicDtzSuffix);
 
     u8* data = TBFile(fname).map(&e.baseAddress, &e.mapping, Type);
 
@@ -1303,6 +1326,22 @@ void* mapped(TBTable<Type>& e, const Position& pos) {
 
 template<TBType Type, typename Ret = typename TBTable<Type>::Ret>
 Ret probe_table(const Position& pos, ProbeState* result, WDLScore wdl = WDLDraw) {
+
+    // An Atomic capture can explode a king. Such terminal positions are not
+    // represented in a table file and must be classified before material lookup
+    // (including the otherwise hard-coded KvK draw).
+    if (pos.is_atomic_terminal())
+    {
+        *result            = OK;
+        const bool stmWins = pos.has_king(pos.side_to_move());
+
+        if constexpr (Type == WDL)
+            return stmWins ? Ret(WDLWin) : Ret(WDLLoss);
+        else
+            // Stored DTZ magnitudes are unsigned here; probe_dtz() applies the
+            // WDL sign exactly once below.
+            return Ret(1);
+    }
 
     if (pos.count<ALL_PIECES>() == 2)  // KvK
         return Ret(WDLDraw);
@@ -1438,7 +1477,11 @@ void Tablebases::init(const std::string& paths) {
     for (auto s : diagonal)
         MapA1D1D4[s] = code++;
 
-    // MapKK[] encodes all the 462 possible legal positions of two kings where
+    // MapKK[] retains the orthodox 462-position map for the common decoder
+    // initialization. Atomic pawnless tables use the connected-king formula in
+    // do_probe_table() instead.
+    //
+    // It encodes legal positions of two non-adjacent kings where
     // the first is in the a1-d1-d4 triangle. If the first king is on the a1-d4
     // diagonal, the other one shall not be above the a1-h8 diagonal.
     std::vector<std::pair<int, Square>> bothOnDiagonal;
@@ -1480,9 +1523,9 @@ void Tablebases::init(const std::string& paths) {
     // among pawns with the same file, the one with the lowest rank.
     int availableSquares = 47;  // Available squares when lead pawn is in a2
 
-    // Init the tables for the encoding of leading pawns group: with 7-men TB we
-    // can have up to 5 leading pawns (KPPPPPK).
-    for (int leadPawnsCnt = 1; leadPawnsCnt <= 5; ++leadPawnsCnt)
+    // Init the tables for the encoding of leading pawns group: with six-piece
+    // Atomic TBs we can have up to four leading pawns (KPPPPvK).
+    for (int leadPawnsCnt = 1; leadPawnsCnt <= 4; ++leadPawnsCnt)
         for (File f = FILE_A; f <= FILE_D; ++f)
         {
             // Restart the index at every file because TB table is split
@@ -1512,7 +1555,7 @@ void Tablebases::init(const std::string& paths) {
             LeadPawnsSize[leadPawnsCnt][f] = idx;
         }
 
-    // Add entries in TB tables if the corresponding ".rtbw" file exists
+    // Add entries in TB tables if the corresponding ".atbw" file exists.
     for (PieceType p1 = PAWN; p1 < KING; ++p1)
     {
         TBTables.add({KING, p1, KING});
@@ -1530,23 +1573,10 @@ void Tablebases::init(const std::string& paths) {
                 TBTables.add({KING, p1, p2, p3, KING});
 
                 for (PieceType p4 = PAWN; p4 <= p3; ++p4)
-                {
                     TBTables.add({KING, p1, p2, p3, p4, KING});
 
-                    for (PieceType p5 = PAWN; p5 <= p4; ++p5)
-                        TBTables.add({KING, p1, p2, p3, p4, p5, KING});
-
-                    for (PieceType p5 = PAWN; p5 < KING; ++p5)
-                        TBTables.add({KING, p1, p2, p3, p4, KING, p5});
-                }
-
                 for (PieceType p4 = PAWN; p4 < KING; ++p4)
-                {
                     TBTables.add({KING, p1, p2, p3, KING, p4});
-
-                    for (PieceType p5 = PAWN; p5 <= p4; ++p5)
-                        TBTables.add({KING, p1, p2, p3, KING, p4, p5});
-                }
             }
 
             for (PieceType p3 = PAWN; p3 <= p1; ++p3)
@@ -1637,7 +1667,7 @@ int Tablebases::probe_dtz(Position& pos, ProbeState* result) {
         dtz = zeroing ? -dtz_before_zeroing(search<false>(pos, result)) : -probe_dtz(pos, result);
 
         // If the move mates, force minDTZ to 1
-        if (dtz == 1 && pos.checkers() && MoveList<LEGAL>(pos).size() == 0)
+        if (dtz == 1 && pos.atomic_in_check(pos.side_to_move()) && MoveList<LEGAL>(pos).size() == 0)
             minDTZ = 1;
 
         // Convert result from 1-ply search. Zeroing moves are already accounted
@@ -1707,7 +1737,7 @@ bool Tablebases::root_probe(Position&                    pos,
         }
 
         // Make sure that a mating move is assigned a dtz value of 1
-        if (pos.checkers() && dtz == 2 && MoveList<LEGAL>(pos).size() == 0)
+        if (pos.atomic_in_check(pos.side_to_move()) && dtz == 2 && MoveList<LEGAL>(pos).size() == 0)
             dtz = 1;
 
         pos.undo_move(m.pv[0]);

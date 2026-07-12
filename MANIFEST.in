@@ -1,0 +1,2 @@
+include pyffish.pyi
+recursive-include src *.h

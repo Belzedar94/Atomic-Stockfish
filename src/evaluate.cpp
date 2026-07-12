@@ -32,35 +32,117 @@
 #include "nnue/nnue_misc.h"
 #include "position.h"
 #include "types.h"
-#include "uci.h"
 #include "nnue/nnue_accumulator.h"
 
 namespace Stockfish {
 
+namespace {
+
+constexpr Value CorneredBishop = Value(50);
+constexpr Value LegacyAtomicRoyalValue = Value(700);
+
+Value classical_atomic(const Position& pos) {
+    int material = PawnValue * (pos.count<PAWN>(WHITE) - pos.count<PAWN>(BLACK))
+                 + KnightValue * (pos.count<KNIGHT>(WHITE) - pos.count<KNIGHT>(BLACK))
+                 + BishopValue * (pos.count<BISHOP>(WHITE) - pos.count<BISHOP>(BLACK))
+                 + RookValue * (pos.count<ROOK>(WHITE) - pos.count<ROOK>(BLACK))
+                 + QueenValue * (pos.count<QUEEN>(WHITE) - pos.count<QUEEN>(BLACK));
+
+    return pos.side_to_move() == WHITE ? Value(material) : Value(-material);
+}
+
+// Fisher Random correction used by the legacy Fairy evaluator. Atomic960 is a
+// public mode, so preserving this small cornered-bishop term is part of V1
+// evaluation compatibility.
+Value fix_frc(const Position& pos) {
+    constexpr Bitboard Corners = square_bb(SQ_A1) | square_bb(SQ_H1) | square_bb(SQ_A8)
+                               | square_bb(SQ_H8);
+
+    if (!(pos.pieces(BISHOP) & Corners))
+        return VALUE_ZERO;
+
+    int correction = 0;
+
+    if (pos.piece_on(SQ_A1) == W_BISHOP && pos.piece_on(SQ_B2) == W_PAWN)
+        correction += !pos.empty(SQ_B3) ? -CorneredBishop * 4 : -CorneredBishop * 3;
+    if (pos.piece_on(SQ_H1) == W_BISHOP && pos.piece_on(SQ_G2) == W_PAWN)
+        correction += !pos.empty(SQ_G3) ? -CorneredBishop * 4 : -CorneredBishop * 3;
+    if (pos.piece_on(SQ_A8) == B_BISHOP && pos.piece_on(SQ_B7) == B_PAWN)
+        correction += !pos.empty(SQ_B6) ? CorneredBishop * 4 : CorneredBishop * 3;
+    if (pos.piece_on(SQ_H8) == B_BISHOP && pos.piece_on(SQ_G7) == B_PAWN)
+        correction += !pos.empty(SQ_G6) ? CorneredBishop * 4 : CorneredBishop * 3;
+
+    return pos.side_to_move() == WHITE ? Value(correction) : Value(-correction);
+}
+
+Value damp_for_atomic_rule50(Value value, const Position& pos) {
+    // Fairy Atomic uses nMoveRule=50, i.e. a draw at 100 reversible plies.
+    // Imported or composed FENs may legally carry a larger halfmove clock.
+    // Once the draw boundary is reached the evaluation stays neutral; it must
+    // never cross through zero and reverse sign.
+    const int remaining = std::max(0, 100 - pos.rule50_count());
+    return Value(int(value) * remaining / 100);
+}
+
+}  // namespace
+
 // Evaluate is the evaluator for the outer world. It returns a static evaluation
 // of the position from the point of view of the side to move.
 Value Eval::evaluate(const Eval::NNUE::Network&     network,
-                     const Position&                pos,
-                     Eval::NNUE::AccumulatorStack&  accumulators,
-                     Eval::NNUE::AccumulatorCaches& caches,
-                     int                            optimism) {
+                      const Position&                pos,
+                      Eval::NNUE::AccumulatorStack&  accumulators,
+                      Eval::NNUE::AccumulatorCaches& caches,
+                      int                            optimism,
+                      UseNNUEMode                    mode) {
+
+    if (!pos.has_king(pos.side_to_move()))
+        return -VALUE_MATE;
+    if (!pos.has_king(~pos.side_to_move()))
+        return VALUE_MATE;
 
     assert(!pos.checkers());
 
-    auto [psqt, positional] = network.evaluate(pos, accumulators, caches);
+    // Modern Stockfish optimism belongs to its current orthodox net/search
+    // calibration and must not leak into the legacy Atomic V1 contract.
+    (void) optimism;
 
-    Value nnue = psqt + positional;
+    Value v;
 
-    // Blend optimism and eval with nnue complexity
-    int nnueComplexity = std::abs(psqt - positional);
-    optimism += optimism * i64(nnueComplexity) / 476;
-    nnue -= nnue * i64(nnueComplexity) / 18236;
+    if (mode == UseNNUEMode::False)
+        v = damp_for_atomic_rule50(classical_atomic(pos), pos);
+    else
+    {
+        const auto [rawPsqt, rawPositional] =
+          network.evaluate_raw(pos, accumulators, caches);
 
-    int material = 534 * pos.count<PAWN>() + pos.non_pawn_material();
-    int v        = (nnue * i64(77871 + material) + optimism * i64(7191 + material)) / 77871;
+        if (mode == UseNNUEMode::Pure)
+            // Pure is the raw legacy network result: no compatibility scale,
+            // Chess960 correction, or fifty-move damping.
+            v = Value((rawPsqt + rawPositional) / 16);
+        else
+        {
+            const int deltaNpm = std::abs(int(pos.non_pawn_material(WHITE)
+                                              - pos.non_pawn_material(BLACK)));
+            const int entertainment = deltaNpm <= BishopValue - KnightValue ? 7 : 0;
+            const int blendedRaw = ((128 - entertainment) * rawPsqt
+                                  + (128 + entertainment) * rawPositional)
+                                 / 128;
 
-    // Damp down the evaluation linearly when shuffling
-    v -= v * pos.rule50_count() / 199;
+            // Fairy's Atomic net was trained with its royal piece represented
+            // as COMMONER, whose middlegame value (700) contributed to NPM.
+            // Keep KING zero-valued in the specialized search, but restore that
+            // historical material proxy locally for Legacy Atomic V1 scaling.
+            const int legacyNpm = int(pos.non_pawn_material())
+                                + LegacyAtomicRoyalValue * pos.count<KING>();
+            const int scale = 903 + 32 * pos.count<PAWN>() + 32 * legacyNpm / 1024;
+            v = Value((blendedRaw / 16) * scale / 1024);
+
+            if (pos.is_chess960())
+                v += fix_frc(pos);
+
+            v = damp_for_atomic_rule50(v, pos);
+        }
+    }
 
     // Guarantee evaluation does not hit the tablebase range
     v = std::clamp(v, VALUE_TB_LOSS_IN_MAX_PLY + 1, VALUE_TB_WIN_IN_MAX_PLY - 1);
@@ -72,7 +154,10 @@ Value Eval::evaluate(const Eval::NNUE::Network&     network,
 // a string (suitable for outputting to stdout) that contains the detailed
 // descriptions and values of each evaluation term. Useful for debugging.
 // Trace scores are from white's point of view
-std::string Eval::trace(Position& pos, const Eval::NNUE::Network& network) {
+std::string Eval::trace(Position& pos, const Eval::NNUE::Network& network, UseNNUEMode mode) {
+
+    if (pos.is_atomic_terminal())
+        return "Final evaluation: none (Atomic terminal)";
 
     if (pos.checkers())
         return "Final evaluation: none (in check)";
@@ -82,22 +167,29 @@ std::string Eval::trace(Position& pos, const Eval::NNUE::Network& network) {
 
     std::stringstream ss;
     ss << std::showpoint << std::noshowpos << std::fixed << std::setprecision(2);
-    ss << '\n' << NNUE::trace(pos, network, *caches) << '\n';
+    if (mode != UseNNUEMode::False)
+        ss << '\n' << NNUE::trace(pos, network, *caches) << '\n';
 
     ss << std::showpoint << std::showpos << std::fixed << std::setprecision(2) << std::setw(15);
 
-    auto [psqt, positional] = network.evaluate(pos, *accumulators, *caches);
-    Value v                 = psqt + positional;
-    ss << "NNUE evaluation          " << v << " (side to move, internal units)\n";
-    v = pos.side_to_move() == WHITE ? v : -v;
-    ss << "NNUE evaluation        " << 0.01 * UCIEngine::to_cp(v, pos) << " (white side)\n";
+    Value v;
+    if (mode != UseNNUEMode::False)
+    {
+        auto [rawPsqt, rawPositional] = network.evaluate_raw(pos, *accumulators, *caches);
+        v = Value((rawPsqt + rawPositional) / 16);
+        ss << "NNUE evaluation          " << v << " (side to move, internal units)\n";
+        v = pos.side_to_move() == WHITE ? v : -v;
+        ss << "NNUE evaluation        " << double(v) / PawnValue << " (white side)\n";
+    }
 
-    v = evaluate(network, pos, *accumulators, *caches, VALUE_ZERO);
+    v = evaluate(network, pos, *accumulators, *caches, VALUE_ZERO, mode);
     v = pos.side_to_move() == WHITE ? v : -v;
 
     ss << "Final evaluation      ";
-    ss << 0.01 * UCIEngine::to_cp(v, pos) << " (white side)";
-    ss << " [with scaled NNUE, ...]\n";
+    ss << double(v) / PawnValue << " (white side)";
+    ss << " [Use NNUE="
+       << (mode == UseNNUEMode::False ? "false" : mode == UseNNUEMode::Pure ? "pure" : "true")
+       << "]\n";
 
     return ss.str();
 }

@@ -270,16 +270,15 @@ template Move* generate<NON_EVASIONS>(const Position&, Move*);
 template<>
 Move* generate<LEGAL>(const Position& pos, Move* moveList) {
 
-    Color    us     = pos.side_to_move();
-    Bitboard pinned = pos.blockers_for_king(us) & pos.pieces(us);
-    Square   ksq    = pos.square<KING>(us);
-    Move*    cur    = moveList;
+    if (pos.is_atomic_terminal())
+        return moveList;
+
+    Move* cur = moveList;
 
     moveList =
       pos.checkers() ? generate<EVASIONS>(pos, moveList) : generate<NON_EVASIONS>(pos, moveList);
     while (cur != moveList)
-        if (((pinned & cur->from_sq()) || cur->from_sq() == ksq || cur->type_of() == EN_PASSANT)
-            && !pos.legal(*cur))
+        if (!pos.legal(*cur))
             *cur = *(--moveList);
         else
             ++cur;

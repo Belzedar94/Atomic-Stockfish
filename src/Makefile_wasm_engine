@@ -1,0 +1,28 @@
+# Atomic-Stockfish NNUE command-line WebAssembly build.
+#
+# PowerShell is the authoritative local build entry point because the supported
+# Windows workspace does not require GNU make. This wrapper keeps CI and users
+# with make on the same commands.
+
+POWERSHELL ?= powershell.exe
+OUT_DIR ?= ../build/wasm-engine
+NET ?= ../atomic_run3b_e202_l05.nnue
+
+.PHONY: all build test repro clean help
+
+all build:
+	$(POWERSHELL) -NoProfile -ExecutionPolicy Bypass -File ../tests/wasm-engine/build.ps1 -OutDir "$(OUT_DIR)"
+
+test: build
+	node ../tests/wasm-engine/run-engine-tests.mjs --engine "$(OUT_DIR)/atomic-stockfish-nnue-node.mjs" --net "$(NET)"
+
+repro:
+	$(POWERSHELL) -NoProfile -ExecutionPolicy Bypass -File ../tests/wasm-engine/check-reproducible.ps1
+
+clean:
+	$(POWERSHELL) -NoProfile -ExecutionPolicy Bypass -File ../tests/wasm-engine/clean.ps1 -OutDir "$(OUT_DIR)"
+
+help:
+	@echo "make -f Makefile_wasm_engine build  Build Node UCI + NNUE WebAssembly"
+	@echo "make -f Makefile_wasm_engine test   Build and run the Node integration suite"
+	@echo "make -f Makefile_wasm_engine repro  Build twice and compare runtime hashes"

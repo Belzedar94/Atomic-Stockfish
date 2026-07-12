@@ -46,7 +46,7 @@
 #include "timeman.h"
 #include "tt.h"
 #include "types.h"
-#include "uci.h"
+#include "uci_move.h"
 #include "ucioption.h"
 
 namespace Stockfish {
@@ -188,6 +188,9 @@ void Search::Worker::ensure_network_replicated() {
 void Search::Worker::start_searching() {
 
     accumulatorStack.reset();
+    useNnueMode = options["Use NNUE"] == "pure" ? Eval::UseNNUEMode::Pure
+                : options["Use NNUE"] == "true" ? Eval::UseNNUEMode::True
+                                                : Eval::UseNNUEMode::False;
 
     // Non-main threads go directly to iterative_deepening()
     if (!is_mainthread())
@@ -202,9 +205,13 @@ void Search::Worker::start_searching() {
 
     if (rootMoves.empty())
     {
-        main_manager()->updates.onUpdateNoMoves(
-          {0, {rootPos.checkers() ? -VALUE_MATE : VALUE_DRAW, rootPos}});
-        main_manager()->updates.onBestmove(UCIEngine::move(Move::none()), "");
+        const Color us     = rootPos.side_to_move();
+        const Value result = !rootPos.has_king(us)       ? -VALUE_MATE
+                           : !rootPos.has_king(~us)      ? VALUE_MATE
+                           : rootPos.atomic_in_check(us) ? -VALUE_MATE
+                                                         : VALUE_DRAW;
+        main_manager()->updates.onUpdateNoMoves({0, {result, rootPos}});
+        main_manager()->updates.onBestmove(UCI::move(Move::none()), "");
         return;
     }
 
@@ -234,8 +241,7 @@ void Search::Worker::start_searching() {
                                               - limits.inc[rootPos.side_to_move()]);
 
     Worker* bestThread = this;
-    Skill   skill =
-      Skill(options["Skill Level"], options["UCI_LimitStrength"] ? int(options["UCI_Elo"]) : 0);
+    Skill   skill      = Skill(options["Skill Level"], 0);
 
     if (!limits.depth && !skill.enabled())
         bestThread = threads.get_best_thread()->worker.get();
@@ -254,9 +260,9 @@ void Search::Worker::start_searching() {
     // In rare cases, pv() may change the ponder move through syzygy_extend_pv().
     std::string ponder;
     if (bestThread->rootMoves[0].pv.size() > 1)
-        ponder = UCIEngine::move(bestThread->rootMoves[0].pv[1], rootPos.is_chess960());
+        ponder = UCI::move(bestThread->rootMoves[0].pv[1], rootPos.is_chess960());
 
-    auto bestmove = UCIEngine::move(bestThread->rootMoves[0].pv[0], rootPos.is_chess960());
+    auto bestmove = UCI::move(bestThread->rootMoves[0].pv[0], rootPos.is_chess960());
     main_manager()->updates.onBestmove(bestmove, ponder);
 }
 
@@ -307,7 +313,7 @@ bool Search::Worker::iterative_deepening() {
     }
 
     usize multiPV = usize(options["MultiPV"]);
-    Skill skill(options["Skill Level"], options["UCI_LimitStrength"] ? int(options["UCI_Elo"]) : 0);
+    Skill skill(options["Skill Level"], 0);
 
     // When playing with strength handicap enable MultiPV search that we will
     // use behind-the-scenes to retrieve a set of possible moves.
@@ -636,13 +642,24 @@ void Search::Worker::do_move(
   Position& pos, const Move move, StateInfo& st, const bool givesCheck, Stack* const ss) {
     // prefetch_key does not model castling, en passant or promotion keys
     // exactly; for rare moves the prefetch lands on an unused line.
-    prefetch(tt.first_entry(pos.prefetch_key(move)));
+    if (!pos.capture(move))
+        prefetch(tt.first_entry(pos.prefetch_key(move)));
 
     bool capture = pos.capture_stage(move);
     ++nodes;
 
     auto [dirtyPiece, dirtyThreats] = accumulatorStack.push();
     pos.do_move(move, st, givesCheck, dirtyPiece, dirtyThreats, &tt, &sharedHistory);
+
+#ifndef NDEBUG
+    const bool actualAtomicCheck = pos.atomic_in_check(pos.side_to_move());
+    if (givesCheck != actualAtomicCheck)
+        std::cerr << "Atomic gives_check mismatch after " << UCI::move(move, pos.is_chess960())
+                  << ": predicted=" << givesCheck << " actual=" << actualAtomicCheck
+                  << " cached_parent_attack=" << st.previous->atomicOpponentInCheck
+                  << " child_fen=" << pos.fen() << '\n';
+    assert(givesCheck == actualAtomicCheck);
+#endif
 
     if (ss != nullptr)
     {
@@ -742,9 +759,9 @@ Value Search::Worker::search(
     SearchedList quietsSearched;
 
     // Step 1. Initialize node
-    ss->inCheck   = pos.checkers();
-    priorCapture  = pos.captured_piece();
     Color us      = pos.side_to_move();
+    ss->inCheck   = pos.atomic_in_check(us);
+    priorCapture  = pos.captured_piece();
     ss->moveCount = 0;
     bestValue     = -VALUE_INFINITE;
     maxValue      = VALUE_INFINITE;
@@ -764,6 +781,11 @@ Value Search::Worker::search(
 
     if (!rootNode)
     {
+        if (!pos.has_king(us))
+            return mated_in(ss->ply);
+        if (!pos.has_king(~us))
+            return mate_in(ss->ply);
+
         // Step 2. Check for aborted search and immediate draw
         if (threads.stop.load(std::memory_order_relaxed) || pos.is_draw(ss->ply)
             || ss->ply >= MAX_PLY)
@@ -1122,15 +1144,16 @@ moves_loop:  // When in check, search starts here
         if (rootNode && is_mainthread() && nodes > NODES_LIMIT_OUTPUT)
         {
             main_manager()->updates.onIter(
-              {depth, UCIEngine::move(move, pos.is_chess960()), moveCount + pvIdx});
+              {depth, UCI::move(move, pos.is_chess960()), moveCount + pvIdx});
         }
         if (PvNode)
             (ss + 1)->pv = nullptr;
 
-        extension  = 0;
-        capture    = pos.capture_stage(move);
-        movedPiece = pos.moved_piece(move);
-        givesCheck = pos.gives_check(move);
+        extension            = 0;
+        capture              = pos.capture_stage(move);
+        movedPiece           = pos.moved_piece(move);
+        givesCheck           = pos.gives_check(move);
+        const bool atomicWin = pos.atomic_wins(move);
 
         // Calculate new depth for this move
         newDepth = depth - 1;
@@ -1161,7 +1184,7 @@ moves_loop:  // When in check, search starts here
                 int   captHist = captureHistory[movedPiece][move.to_sq()][type_of(capturedPiece)];
 
                 // Futility pruning for captures
-                if (!givesCheck && lmrDepth < 7)
+                if (!atomicWin && !givesCheck && lmrDepth < 7)
                 {
                     Value futilityValue = ss->staticEval + 231 + 232 * lmrDepth
                                         + PieceValue[capturedPiece] + 131 * captHist / 1024;
@@ -1173,7 +1196,8 @@ moves_loop:  // When in check, search starts here
                 // SEE based pruning for captures and checks
                 // Avoid pruning sacrifices of our last piece for stalemate
                 int margin = 175 * depth + captHist * 34 / 1024;
-                if ((alpha >= VALUE_DRAW || pos.non_pawn_material(us) != PieceValue[movedPiece])
+                if (!atomicWin
+                    && (alpha >= VALUE_DRAW || pos.non_pawn_material(us) != PieceValue[movedPiece])
                     && !pos.see_ge(move, -margin))
                     continue;
             }
@@ -1508,7 +1532,7 @@ moves_loop:  // When in check, search starts here
         bestValue = (bestValue * depth + beta) / (depth + 1);
 
     if (!moveCount)
-        bestValue = excludedMove ? alpha : ss->inCheck ? mated_in(ss->ply) : VALUE_DRAW;
+        bestValue = excludedMove ? alpha : pos.atomic_in_check(us) ? mated_in(ss->ply) : VALUE_DRAW;
 
     // If there is a move that produces search value greater than alpha,
     // we update the stats of searched moves.
@@ -1627,7 +1651,7 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
     }
 
     bestMove    = Move::none();
-    ss->inCheck = pos.checkers();
+    ss->inCheck = pos.atomic_in_check(pos.side_to_move());
     moveCount   = 0;
 
     // Used to send selDepth info to GUI (selDepth counts from 1, ply from 0)
@@ -1635,6 +1659,11 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
         selDepth = ss->ply + 1;
 
     // Step 2. Check for an immediate draw or maximum ply reached
+    if (!pos.has_king(pos.side_to_move()))
+        return mated_in(ss->ply);
+    if (!pos.has_king(~pos.side_to_move()))
+        return mate_in(ss->ply);
+
     if (pos.is_draw(ss->ply) || ss->ply >= MAX_PLY)
         return (ss->ply >= MAX_PLY && !ss->inCheck) ? evaluate(pos) : VALUE_DRAW;
 
@@ -1650,10 +1679,16 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
     pvHit        = ttHit && ttData.is_pv;
 
     // At non-PV nodes we check for an early TT cutoff
+    const bool legalTtMove = ttData.move && pos.pseudo_legal(ttData.move) && pos.legal(ttData.move);
+
     if (!PvNode && ttData.depth >= DEPTH_QS
         && is_valid(ttData.value)  // Can happen when !ttHit or when access race in probe()
         && (ttData.bound & (ttData.value >= beta ? BOUND_LOWER : BOUND_UPPER)))
-        return ttData.value;
+    {
+        if (ss->inCheck || legalTtMove || pos.has_legal_move())
+            return ttData.value;
+        return VALUE_DRAW;
+    }
 
     // Step 4. Static evaluation of the position
     Value unadjustedStaticEval = VALUE_NONE;
@@ -1689,6 +1724,11 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
         // Stand pat. Return immediately if static value is at least beta
         if (bestValue >= beta)
         {
+            // Stand-pat must not hide Atomic stalemate. A legal TT move is the
+            // common zero-cost proof that the position is not terminal.
+            if (!legalTtMove && !pos.has_legal_move())
+                return VALUE_DRAW;
+
             if (!is_decisive(bestValue))
                 bestValue = (467 * bestValue + 557 * beta) / 1024;
 
@@ -1704,15 +1744,21 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
         futilityBase = ss->staticEval + 335;
     }
 
-    const PieceToHistory* contHist[] = {(ss - 1)->continuationHistory};
+    const PieceToHistory* contHist[] = {
+      (ss - 1)->continuationHistory, (ss - 2)->continuationHistory, (ss - 3)->continuationHistory,
+      (ss - 4)->continuationHistory, (ss - 5)->continuationHistory, (ss - 6)->continuationHistory};
 
     Square prevSq = ((ss - 1)->currentMove).is_ok() ? ((ss - 1)->currentMove).to_sq() : SQ_NONE;
 
-    // Initialize a MovePicker object for the current position, and prepare to search
-    // the moves. We presently use two stages of move generator in quiescence search:
-    // captures, or evasions only when in check.
-    MovePicker mp(pos, ttData.move, DEPTH_QS, &mainHistory, &lowPlyHistory, &captureHistory,
-                  contHist, &sharedHistory, ss->ply);
+    // Initialize a MovePicker object for the current position. Quiescence is
+    // capture-only normally, but an Atomic check requires every legal evasion.
+    // Atomic check evasions are not orthodox EVASIONS: adjacent kings are
+    // legal and an explosion can remove the checking piece. Keep checkersBB
+    // empty for move generation, but search every capture and quiet whenever
+    // the separate Atomic check predicate forbids stand-pat.
+    const Depth movePickerDepth = ss->inCheck ? 1 : DEPTH_QS;
+    MovePicker  mp(pos, ttData.move, movePickerDepth, &mainHistory, &lowPlyHistory, &captureHistory,
+                   contHist, &sharedHistory, ss->ply);
 
     // Step 5. Loop through all pseudo-legal moves until no moves remain or a beta
     // cutoff occurs.
@@ -1723,13 +1769,14 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
         if (!pos.legal(move))
             continue;
 
-        givesCheck = pos.gives_check(move);
-        capture    = pos.capture_stage(move);
+        givesCheck           = pos.gives_check(move);
+        capture              = pos.capture_stage(move);
+        const bool atomicWin = pos.atomic_wins(move);
 
         moveCount++;
 
         // Step 6. Pruning
-        if (!is_loss(bestValue))
+        if (!atomicWin && !is_loss(bestValue))
         {
             // Futility pruning and moveCount pruning
             if (!givesCheck && move.to_sq() != prevSq && !is_loss(futilityBase)
@@ -1805,11 +1852,7 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
             return mated_in(ss->ply);  // Plies to mate from the root
         }
 
-        // Only check for stalemate under specific conditions
-        Color us = pos.side_to_move();
-        if (!(pawn_single_push_bb(us, pos.pieces(us, PAWN)) & ~pos.pieces())
-            && !pos.non_pawn_material(us) && type_of(pos.captured_piece()) >= KNIGHT
-            && !MoveList<LEGAL>(pos).size())
+        if (!pos.has_legal_quiet())
             bestValue = VALUE_DRAW;
     }
 
@@ -1842,7 +1885,7 @@ TimePoint Search::Worker::elapsed() const {
 
 Value Search::Worker::evaluate(const Position& pos) {
     return Eval::evaluate(network[numaAccessToken], pos, accumulatorStack, refreshTable,
-                          optimism[pos.side_to_move()]);
+                          optimism[pos.side_to_move()], useNnueMode);
 }
 
 namespace {
@@ -2231,13 +2274,13 @@ void SearchManager::pv(Search::Worker&           worker,
 
         std::string pv;
         for (Move m : usePreviousScore ? rootMoves[i].previousPV : rootMoves[i].pv)
-            pv += UCIEngine::move(m, pos.is_chess960()) + " ";
+            pv += UCI::move(m, pos.is_chess960()) + " ";
 
         // Remove last whitespace
         if (!pv.empty())
             pv.pop_back();
 
-        auto wdl   = worker.options["UCI_ShowWDL"] ? UCIEngine::wdl(v, pos) : "";
+        auto wdl   = std::string{};
         auto bound = rootMoves[i].scoreLowerbound
                      ? "lowerbound"
                      : (rootMoves[i].scoreUpperbound ? "upperbound" : "");

@@ -30,6 +30,7 @@
 #include <vector>
 
 #include "misc.h"
+#include "evaluate.h"
 #include "history.h"
 #include "nnue/network.h"
 #include "nnue/nnue_misc.h"
@@ -62,7 +63,7 @@ class Engine {
     u64 perft(const std::string& fen, Depth depth, bool isChess960);
 
     // non blocking call to start searching
-    void go(Search::LimitsType&);
+    bool go(Search::LimitsType&);
     // non blocking call to stop searching
     void stop();
 
@@ -88,7 +89,7 @@ class Engine {
 
     // network related
 
-    void                                 verify_network() const;
+    bool                                 verify_network() const;
     std::unique_ptr<Eval::NNUE::Network> get_default_network();
     void                                 load_network(const std::filesystem::path& file);
     void save_network(const std::optional<std::filesystem::path>& file);
@@ -128,6 +129,8 @@ class Engine {
     Search::SearchManager::UpdateContext  updateContext;
     std::function<void(std::string_view)> onVerifyNetwork;
     std::map<NumaIndex, SharedHistories>  sharedHists;
+
+    Eval::UseNNUEMode nnue_mode() const;
 };
 
 }  // namespace Stockfish

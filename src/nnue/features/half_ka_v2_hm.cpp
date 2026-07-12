@@ -109,7 +109,7 @@ void HalfKAv2_hm::append_changed_indices(
 }
 
 bool HalfKAv2_hm::requires_refresh(const DiffType& diff, Color perspective) {
-    return diff.pc == make_piece(perspective, KING);
+    return diff.requiresRefresh || diff.pc == make_piece(perspective, KING);
 }
 
 }  // namespace Stockfish::Eval::NNUE::Features

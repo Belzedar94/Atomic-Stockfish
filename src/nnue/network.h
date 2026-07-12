@@ -44,6 +44,7 @@ class AccumulatorStack;
 struct AccumulatorCaches;
 
 using NetworkOutput = std::tuple<Value, Value>;
+using RawNetworkOutput = std::tuple<i32, i32>;
 
 // The network must be a trivial type, i.e. the memory must be in-line.
 // This is required to allow sharing the network via shared memory, as
@@ -69,8 +70,15 @@ class Network {
                            AccumulatorStack&  accumulatorStack,
                            AccumulatorCaches& cache) const;
 
+    // Legacy Atomic blends the materialist and positional terms before the
+    // final division by OutputScale. Expose the pre-division values so the
+    // caller can reproduce that rounding exactly for both true and pure modes.
+    RawNetworkOutput evaluate_raw(const Position&    pos,
+                                  AccumulatorStack&  accumulatorStack,
+                                  AccumulatorCaches& cache) const;
 
-    void verify(const std::function<void(std::string_view)>& f,
+
+    bool verify(const std::function<void(std::string_view)>& f,
                 const EvalFile&                              evalFile,
                 std::filesystem::path                        evalfilePath) const;
 
@@ -104,6 +112,8 @@ class Network {
     // Hash value of evaluation function structure
     static constexpr u32 hash =
       FeatureTransformer::get_hash_value() ^ NetworkArchitecture::get_hash_value();
+
+    static_assert(hash == 0x3C103E72u);
 
     friend struct AccumulatorCaches;
 };
