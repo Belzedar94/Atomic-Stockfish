@@ -7,19 +7,19 @@ optimizer update, serializes the resulting network and proves that the current
 Atomic playing engine can evaluate and search with it.
 
 The gate is implemented and covered by mocked/unit tests. The final tools
-decode-wrapper dependency is now available on its `atomic` branch. The first
-normative real execution is still separate evidence and must use the exact
-reviewed Atomic gate commit; a PR or release must not claim the real gate as
-passed from unit-test evidence alone.
+decode-wrapper dependency is available on its `atomic` branch. The first
+normative real execution passed on 2026-07-13 against the immutable gate-code
+commit `e3a4ae87354b255c3bf2aeafa682a78ca4ae9dc3`. Its compact, path-free evidence
+is recorded in [`evidence/hito7-final-e2e/summary.log`](evidence/hito7-final-e2e/summary.log)
+and [`evidence/hito7-final-e2e/result.json`](evidence/hito7-final-e2e/result.json).
+Unit-test evidence alone must still never be reported as a real gate pass.
 
 | Dependency | Immutable commit |
 | --- | --- |
 | Contract engine pinned by tools/trainer | `76764c3c01ce5965a793a65e4580dd5c95cd2916` |
 | `variant-nnue-tools` `atomic` | `40d2db224ef890f76b346ff4687e18fb33c98e23` |
 | `variant-nnue-pytorch` `atomic` | `3e5651a977eca1351d7ef101acb8ff5c45588b12` |
-
-The Atomic gate commit is intentionally not written here until the gate PR has
-a reviewed immutable head.
+| Atomic gate code | `e3a4ae87354b255c3bf2aeafa682a78ca4ae9dc3` |
 
 ## Frozen workload
 
