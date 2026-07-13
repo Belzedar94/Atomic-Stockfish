@@ -33,6 +33,11 @@ capability and reports the frozen `atomic-bin-v2` schema hash
 `read:false,write:true`; readers arrive separately in H7.3-C. The historical
 singular response above remains byte-exact for pinned Legacy clients.
 
+H7.3-C1 provides the authoritative C++ reader in Atomic-Stockfish. A V2
+dataset is opened only through its `.atbin.manifest.json` sidecar; passing a
+raw `.atbin` shard is an error. The generator capability remains `read:false`
+until the H7.3-C2 data-tools CLI exposes that library contract.
+
 ## Generate Legacy Atomic V1 data
 
 Load a compatible Atomic network and select `pure` before starting generation:
@@ -158,3 +163,46 @@ gates: exact
 adapter round trips through Atomic legal move generation, SHA/sink lifecycle,
 canonical manifests, native V2 generation and Atomic960 records. It does not
 change the generated Legacy V1 fixture bytes.
+
+The H7.3-C1 reader targets add strict canonical-sidecar parsing and an
+authenticated streaming audit. They reject BOM/CRLF/whitespace, invalid UTF-8,
+noncanonical escapes or key order, unknown/duplicate/missing fields, schema or
+integer drift, unsafe basenames, repeated shard paths or identities, links and
+reparse points, bad headers/sizes/checksums/counts, and every structurally or
+semantically invalid record. Each decoded record must also re-encode to its
+exact 64 input bytes. Errors report shard, local and global record indexes.
+Network and book entries remain provenance: a reader does not require those
+inputs to be present beside a completed dataset.
+
+Generator parsing and manifest loading share the exact `keep_draws` validator:
+the input and expanded canonical decimal are capped at 4096 bytes and the value
+must round-trip through the generator's effective `double` without changing.
+Basenames retain the already-frozen manifest-schema contract exactly; the C++
+reader does not add platform-specific device-name, length or trailing-character
+rules under an unchanged schema SHA. A host filesystem can still reject a name
+when the corresponding file is actually accessed.
+
+Opening a dataset parses the authoritative manifest and captures absolute paths
+without reading any shard. Authentication and semantic validation are lazy and
+process shards sequentially, retaining at most one authenticated snapshot;
+one-record sharding therefore does not consume one OS handle per shard. A source
+descriptor exists only while copying the current shard into that snapshot.
+Before streaming any record from that shard, the reader copies its complete
+contents to a private auto-deleting file in the system temporary directory and
+authenticates the snapshot against the manifest SHA-256. Windows creates it
+atomically with a cryptographic name, no sharing and delete-on-close; POSIX uses
+a mode-0600 `mkstemp` file and unlinks it immediately. Records are exposed only
+from the private authenticated descriptor, so a later source mutation cannot
+create a hash-to-read race. Peak temporary disk use is therefore one complete
+shard; snapshot creation or exhaustion of temporary storage fails closed before
+a record is returned. Manifest and shard paths are captured as absolute paths
+during open, so changing the process CWD cannot rebind them.
+POSIX opens candidate sidecars and shards nonblocking until `fstat` proves they
+are regular files, so a FIFO or other special file cannot hang validation.
+
+The focused reader gates can also be run independently from `src`:
+
+```sh
+make -j atomic-bin-v2-manifest-reader-tests ARCH=x86-64
+make -j atomic-bin-v2-reader-tests ARCH=x86-64
+```

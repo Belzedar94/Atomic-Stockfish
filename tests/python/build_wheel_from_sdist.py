@@ -27,6 +27,7 @@ def main() -> int:
         members = archive.getnames()
     required_suffixes = (
         "/pyffish.pyi",
+        "/src/atomic_init.h",
         "/src/api/atomic_board.h",
         "/src/position.h",
         "/src/syzygy/tbprobe.h",

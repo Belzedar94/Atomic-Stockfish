@@ -15,10 +15,17 @@
 #include "atomic_bin_v2_manifest.h"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cerrno>
+#include <charconv>
+#include <cmath>
 #include <cstddef>
+#include <cstring>
 #include <limits>
+#include <locale>
+#include <optional>
+#include <sstream>
 #include <string>
 #include <system_error>
 #include <utility>
@@ -35,6 +42,9 @@
         #define WIN32_LEAN_AND_MEAN
     #endif
     #include <windows.h>
+    #include <fcntl.h>
+    #include <io.h>
+    #include <sys/stat.h>
 #else
     #include <fcntl.h>
     #include <sys/stat.h>
@@ -44,7 +54,9 @@
 namespace Stockfish::Data {
 namespace {
 
-constexpr std::string_view DataSchemaSha256 = AtomicBinV2SchemaSha256Hex;
+constexpr std::string_view DataSchemaSha256      = AtomicBinV2SchemaSha256Hex;
+constexpr u64              MaximumManifestShards = 100000;
+constexpr int              MaximumGeneratedPly   = 4096;
 
 DataResult invalid_manifest(std::string message) {
     return DataResult::failure(DataError::INVALID_MANIFEST, std::move(message));
@@ -115,13 +127,199 @@ bool valid_utf8(std::string_view text) {
     return true;
 }
 
-bool valid_decimal(std::string_view text) {
-    if (text == "0" || text == "1")
-        return true;
-    return text.size() >= 3 && text[0] == '0' && text[1] == '.' && text.back() >= '1'
-        && text.back() <= '9' && std::all_of(text.begin() + 2, text.end(), [](unsigned char value) {
-               return value >= '0' && value <= '9';
-           });
+DataResult
+canonicalize_keep_draws(std::string_view token, double& effective, std::string& canonical) {
+    effective = 0.0;
+    canonical.clear();
+    if (token.empty() || token.size() > 4096)
+        return invalid_manifest("keep_draws must contain between 1 and 4096 bytes");
+
+    std::size_t cursor   = 0;
+    bool        negative = false;
+    if (token[cursor] == '+' || token[cursor] == '-')
+    {
+        negative = token[cursor] == '-';
+        ++cursor;
+    }
+    if (negative || cursor == token.size())
+        return invalid_manifest("keep_draws must be a non-negative decimal value");
+
+    std::string digits;
+    bool        sawDigit       = false;
+    bool        sawPoint       = false;
+    long long   fractionalSize = 0;
+    while (cursor < token.size() && token[cursor] != 'e' && token[cursor] != 'E')
+    {
+        const unsigned char byte = token[cursor++];
+        if (byte == '.')
+        {
+            if (sawPoint)
+                return invalid_manifest("keep_draws contains more than one decimal point");
+            sawPoint = true;
+            continue;
+        }
+        if (byte < '0' || byte > '9')
+            return invalid_manifest("keep_draws must use decimal notation");
+        sawDigit = true;
+        digits.push_back(char(byte));
+        if (sawPoint)
+            ++fractionalSize;
+    }
+    if (!sawDigit)
+        return invalid_manifest("keep_draws must contain decimal digits");
+
+    long long exponent = 0;
+    if (cursor < token.size())
+    {
+        ++cursor;
+        bool exponentNegative = false;
+        if (cursor < token.size() && (token[cursor] == '+' || token[cursor] == '-'))
+        {
+            exponentNegative = token[cursor] == '-';
+            ++cursor;
+        }
+        if (cursor == token.size())
+            return invalid_manifest("keep_draws exponent is missing decimal digits");
+        for (; cursor < token.size(); ++cursor)
+        {
+            const unsigned char byte = token[cursor];
+            if (byte < '0' || byte > '9')
+                return invalid_manifest("keep_draws exponent must contain decimal digits only");
+            // The input is deliberately allowed to be thousands of bytes long
+            // so it can be rejected with a domain-specific error. Saturate
+            // before multiplying to avoid signed overflow on such tokens.
+            if (exponent < 1000000LL)
+                exponent = std::min(1000000LL, exponent * 10 + int(byte - '0'));
+        }
+        if (exponentNegative)
+            exponent = -exponent;
+    }
+
+    const auto firstNonZero = digits.find_first_not_of('0');
+    if (firstNonZero == std::string::npos)
+        canonical = "0";
+    else
+    {
+        digits.erase(0, firstNonZero);
+        long long trailingZeros = 0;
+        while (digits.size() > 1 && digits.back() == '0')
+        {
+            digits.pop_back();
+            ++trailingZeros;
+        }
+
+        const long long point =
+          static_cast<long long>(digits.size()) + exponent - fractionalSize + trailingZeros;
+        if (point > 1 || (point == 1 && digits != "1"))
+            return invalid_manifest("keep_draws exact decimal value exceeds 1");
+        if (point == 1)
+            canonical = "1";
+        else
+        {
+            canonical = "0.";
+            if (point < 0)
+            {
+                if (point < -4096)
+                    return invalid_manifest(
+                      "keep_draws exact decimal expansion exceeds 4096 bytes");
+                canonical.append(std::size_t(-point), '0');
+            }
+            canonical += digits;
+        }
+    }
+    if (canonical.size() > 4096)
+        return invalid_manifest("keep_draws exact decimal expansion exceeds 4096 bytes");
+
+    std::istringstream numeric{std::string(token)};
+    numeric.imbue(std::locale::classic());
+    double parsed = 0.0;
+    if (!(numeric >> parsed) || !std::isfinite(parsed) || parsed < 0.0 || parsed > 1.0)
+        return invalid_manifest("keep_draws must be a finite decimal value between 0 and 1");
+    char trailing = 0;
+    if (numeric >> trailing)
+        return invalid_manifest("keep_draws must be a finite decimal value between 0 and 1");
+
+    std::array<char, 64> effectiveBuffer{};
+    const auto [effectiveEnd, conversionError] =
+      std::to_chars(effectiveBuffer.data(), effectiveBuffer.data() + effectiveBuffer.size(), parsed,
+                    std::chars_format::general);
+    if (conversionError != std::errc{})
+        return invalid_manifest("keep_draws effective value cannot be serialized reproducibly");
+
+    std::string effectiveCanonical;
+    // Canonicalize the shortest floating-point spelling without applying the
+    // double round-trip check a second time.
+    const std::string_view effectiveToken(effectiveBuffer.data(),
+                                          std::size_t(effectiveEnd - effectiveBuffer.data()));
+    std::size_t            effectiveCursor = 0;
+    // The effective token is short and already finite. Expand it independently
+    // below so the comparison remains exact rather than numeric.
+    effective = parsed;
+    if (effectiveToken == token)
+        return DataResult::success();
+
+    // A second normalization is safe because to_chars emits at most 64 bytes.
+    // Temporarily compare through a local exact-decimal expansion.
+    std::string effectiveDigits;
+    bool        effectivePoint    = false;
+    long long   effectiveFraction = 0;
+    long long   effectiveExponent = 0;
+    if (effectiveToken[effectiveCursor] == '-')
+        return invalid_manifest("keep_draws effective value became negative");
+    while (effectiveCursor < effectiveToken.size() && effectiveToken[effectiveCursor] != 'e')
+    {
+        const char byte = effectiveToken[effectiveCursor++];
+        if (byte == '.')
+            effectivePoint = true;
+        else
+        {
+            effectiveDigits.push_back(byte);
+            if (effectivePoint)
+                ++effectiveFraction;
+        }
+    }
+    if (effectiveCursor < effectiveToken.size())
+    {
+        ++effectiveCursor;
+        bool negativeExponent = false;
+        if (effectiveToken[effectiveCursor] == '+' || effectiveToken[effectiveCursor] == '-')
+        {
+            negativeExponent = effectiveToken[effectiveCursor] == '-';
+            ++effectiveCursor;
+        }
+        for (; effectiveCursor < effectiveToken.size(); ++effectiveCursor)
+            effectiveExponent = effectiveExponent * 10 + (effectiveToken[effectiveCursor] - '0');
+        if (negativeExponent)
+            effectiveExponent = -effectiveExponent;
+    }
+    const auto effectiveFirst = effectiveDigits.find_first_not_of('0');
+    if (effectiveFirst == std::string::npos)
+        effectiveCanonical = "0";
+    else
+    {
+        effectiveDigits.erase(0, effectiveFirst);
+        long long trailingZeros = 0;
+        while (effectiveDigits.size() > 1 && effectiveDigits.back() == '0')
+        {
+            effectiveDigits.pop_back();
+            ++trailingZeros;
+        }
+        const long long point = static_cast<long long>(effectiveDigits.size()) + effectiveExponent
+                              - effectiveFraction + trailingZeros;
+        if (point == 1)
+            effectiveCanonical = "1";
+        else
+        {
+            effectiveCanonical = "0.";
+            if (point < 0)
+                effectiveCanonical.append(std::size_t(-point), '0');
+            effectiveCanonical += effectiveDigits;
+        }
+    }
+    if (effectiveCanonical != canonical)
+        return invalid_manifest(
+          "keep_draws must round-trip exactly through the generator's floating-point value");
+    return DataResult::success();
 }
 
 std::string path_filename_utf8(const std::filesystem::path& path) {
@@ -150,6 +348,9 @@ std::string path_filename_utf8(const std::filesystem::path& path) {
 bool valid_filename(const std::filesystem::path& path, std::string_view suffix = {}) {
     const std::string          filename  = path_filename_utf8(path);
     constexpr std::string_view Forbidden = "/\\:<>\"|?*";
+    // This is the exact frozen portable-basename contract. Host filesystems
+    // may reject additional names when accessed, but the manifest reader must
+    // not silently narrow the schema shared by other implementations.
     return !filename.empty() && valid_utf8(filename) && filename != "." && filename != ".."
         && filename.find('\0') == std::string::npos
         && filename.find_first_of(Forbidden) == std::string::npos
@@ -248,13 +449,35 @@ DataResult validate_manifest(const AtomicBinV2Manifest& manifest) {
         return invalid_manifest("Atomic BIN V2 built-in book metadata must use null fields");
     if (manifest.threads == 0 || manifest.hashMb == 0)
         return invalid_manifest("Atomic BIN V2 UCI options are outside their domain");
-    if (!valid_decimal(manifest.options.keepDraws))
-        return invalid_manifest("Atomic BIN V2 keep_draws is not a canonical decimal string");
+    double      keepDrawsEffective = 0.0;
+    std::string keepDrawsCanonical;
+    if (DataResult keepDraws = normalize_atomic_keep_draws(manifest.options.keepDraws,
+                                                           keepDrawsEffective, keepDrawsCanonical);
+        !keepDraws || keepDrawsCanonical != manifest.options.keepDraws)
+        return invalid_manifest(
+          "Atomic BIN V2 keep_draws is not an exact canonical generator value");
+    const auto& options = manifest.options;
+    if (options.searchDepthMin <= 0 || options.searchDepthMax < options.searchDepthMin
+        || options.searchDepthMax >= MAX_PLY || options.evalLimit <= 0
+        || options.evalLimit > std::numeric_limits<i16>::max() || options.evalDiffLimit < 0
+        || options.writeMinPly < 0 || options.writeMaxPly <= options.writeMinPly
+        || options.writeMaxPly > MaximumGeneratedPly || options.randomMoveMinPly < -1
+        || options.randomMoveMaxPly < 0 || options.randomMoveMaxPly > MaximumGeneratedPly
+        || (options.randomMoveMinPly != -1 && options.randomMoveMaxPly < options.randomMoveMinPly)
+        || options.randomMoveCount < 0 || options.randomMoveCount > MaximumGeneratedPly
+        || options.randomMoveLikeApery < 0 || options.randomMultiPv < 0
+        || options.randomMultiPv > MAX_MOVES || options.randomMultiPvDiff < 0
+        || options.randomMultiPvDepth < options.searchDepthMax
+        || options.randomMultiPvDepth >= MAX_PLY)
+        return invalid_manifest("Atomic BIN V2 generation options are outside producer domains");
     if (manifest.records == 0 || manifest.draws > manifest.records || manifest.shards.empty())
         return invalid_manifest("Atomic BIN V2 manifest statistics are inconsistent");
     if (manifest.options.requestedRecords != manifest.records
         || manifest.options.recordsPerShard == 0)
         return invalid_manifest("Atomic BIN V2 requested record metadata is inconsistent");
+
+    if (manifest.shards.size() > MaximumManifestShards)
+        return invalid_manifest("Atomic BIN V2 manifest exceeds the producer shard limit");
 
     u64 summedRecords = 0;
     for (std::size_t index = 0; index < manifest.shards.size(); ++index)
@@ -334,6 +557,19 @@ DataResult write_all(int descriptor, const std::string& bytes) {
 #endif
 
 }  // namespace
+
+DataResult
+normalize_atomic_keep_draws(std::string_view token, double& effective, std::string& canonical) {
+    effective = 0.0;
+    canonical.clear();
+    double      parsed = 0.0;
+    std::string normalized;
+    if (DataResult result = canonicalize_keep_draws(token, parsed, normalized); !result)
+        return result;
+    effective = parsed;
+    canonical = std::move(normalized);
+    return DataResult::success();
+}
 
 std::filesystem::path atomic_bin_v2_manifest_path(const std::filesystem::path& firstShard) {
     std::filesystem::path path = firstShard;
@@ -509,6 +745,542 @@ DataResult preflight_atomic_bin_v2_manifest_publication(const std::filesystem::p
       DataError::OPEN_FAILED,
       "Race-free Atomic BIN V2 manifest publication requires Linux O_TMPFILE or Windows");
 #endif
+}
+
+namespace {
+
+class CanonicalManifestParser {
+   public:
+    explicit CanonicalManifestParser(std::string_view input) :
+        bytes(input) {}
+
+    DataResult parse(const std::filesystem::path& manifestPath, AtomicBinV2Manifest& manifest) {
+        manifest              = {};
+        manifest.manifestPath = manifestPath.lexically_normal();
+
+        if (!valid_utf8(bytes))
+            return failure("is not valid UTF-8");
+        if (bytes.size() > 64U * 1024U * 1024U)
+            return failure("exceeds the 64 MiB manifest limit");
+
+        u64         manifestVersion = 0;
+        std::string manifestSchema;
+        std::string dataSchema;
+        std::string format;
+        std::string useNnue;
+
+        if (!character('{') || !key("manifest_version") || !unsigned_number(manifestVersion)
+            || !comma() || !key("manifest_schema_sha256") || !string(manifestSchema) || !comma()
+            || !key("data_schema_sha256") || !string(dataSchema) || !comma() || !key("format")
+            || !string(format) || !comma() || !key("engine") || !character('{') || !key("commit")
+            || !string(manifest.engineCommit) || !comma() || !key("version")
+            || !string(manifest.engineVersion) || !character('}') || !comma() || !key("network")
+            || !character('{') || !key("file"))
+            return failure("does not match the frozen field order");
+
+        std::string filename;
+        if (!string(filename))
+            return failure("contains an invalid network filename");
+        manifest.networkPath = resolve(manifest.manifestPath, filename);
+        if (!comma() || !key("sha256") || !string(manifest.networkSha256) || !character('}')
+            || !comma() || !key("book") || !character('{') || !key("kind"))
+            return failure("does not match the frozen network/book layout");
+
+        std::string bookKind;
+        if (!string(bookKind) || !comma() || !key("file"))
+            return failure("contains invalid book metadata");
+        if (bookKind == "file")
+        {
+            if (!string(filename))
+                return failure("contains an invalid book filename");
+            manifest.bookIsFile = true;
+            manifest.bookPath   = resolve(manifest.manifestPath, filename);
+            if (!comma() || !key("sha256") || !string(manifest.bookSha256))
+                return failure("contains invalid book authentication metadata");
+        }
+        else if (bookKind == "builtin-startpos")
+        {
+            if (!literal("null") || !comma() || !key("sha256") || !literal("null"))
+                return failure("must use null file/hash for the built-in book");
+        }
+        else
+            return failure("contains an unsupported book kind");
+
+        if (!character('}') || !comma() || !key("generation") || !character('{')
+            || !key("resolved_seed") || !unsigned_string(manifest.resolvedSeed) || !comma()
+            || !key("atomic960") || !boolean(manifest.atomic960) || !comma() || !key("threads")
+            || !unsigned32(manifest.threads) || !comma() || !key("hash_mb")
+            || !unsigned_string(manifest.hashMb) || !comma() || !key("use_nnue") || !string(useNnue)
+            || !comma() || !key("options") || !character('{'))
+            return failure("does not match the frozen generation layout");
+
+        auto& options = manifest.options;
+        if (!key("search_depth_min") || !signed32(options.searchDepthMin) || !comma()
+            || !key("search_depth_max") || !signed32(options.searchDepthMax) || !comma()
+            || !key("nodes") || !unsigned_string(options.nodes) || !comma()
+            || !key("requested_records") || !unsigned_string(options.requestedRecords) || !comma()
+            || !key("records_per_shard") || !unsigned_string(options.recordsPerShard) || !comma()
+            || !key("eval_limit") || !signed32(options.evalLimit) || !comma()
+            || !key("eval_diff_limit") || !signed32(options.evalDiffLimit) || !comma()
+            || !key("random_move_min_ply") || !signed32(options.randomMoveMinPly) || !comma()
+            || !key("random_move_max_ply") || !signed32(options.randomMoveMaxPly) || !comma()
+            || !key("random_move_count") || !signed32(options.randomMoveCount) || !comma()
+            || !key("random_move_like_apery") || !signed32(options.randomMoveLikeApery) || !comma()
+            || !key("random_multi_pv") || !signed32(options.randomMultiPv) || !comma()
+            || !key("random_multi_pv_diff") || !signed32(options.randomMultiPvDiff) || !comma()
+            || !key("random_multi_pv_depth") || !signed32(options.randomMultiPvDepth) || !comma()
+            || !key("write_min_ply") || !signed32(options.writeMinPly) || !comma()
+            || !key("write_max_ply") || !signed32(options.writeMaxPly) || !comma()
+            || !key("keep_draws") || !string(options.keepDraws) || !comma()
+            || !key("adjudicate_draws_by_score") || !boolean(options.adjudicateDrawsByScore)
+            || !comma() || !key("adjudicate_insufficient")
+            || !boolean(options.adjudicateInsufficient) || !comma() || !key("filter_captures")
+            || !boolean(options.filterCaptures) || !comma() || !key("filter_checks")
+            || !boolean(options.filterChecks) || !comma() || !key("filter_promotions")
+            || !boolean(options.filterPromotions) || !comma() || !key("random_file_name")
+            || !boolean(options.randomFileName) || !comma()
+            || !key("set_recommended_uci_options_seen")
+            || !boolean(options.setRecommendedUciOptionsSeen) || !character('}') || !character('}')
+            || !comma() || !key("statistics") || !character('{') || !key("records")
+            || !unsigned_string(manifest.records) || !comma() || !key("draws")
+            || !unsigned_string(manifest.draws) || !character('}') || !comma() || !key("shards")
+            || !character('['))
+            return failure("does not match the frozen options/statistics layout");
+
+        if (peek() == ']')
+            return failure("contains no shards");
+        for (u64 expected = 0;; ++expected)
+        {
+            if (expected > std::numeric_limits<u32>::max() || expected >= MaximumManifestShards)
+                return failure("contains too many shards");
+            AtomicBinV2ManifestShard shard;
+            u32                      parsedIndex = 0;
+            if (!character('{') || !key("index") || !unsigned32(parsedIndex) || !comma()
+                || !key("file") || !string(filename) || !comma() || !key("records")
+                || !unsigned_string(shard.records) || !comma() || !key("bytes")
+                || !unsigned_string(shard.bytes) || !comma() || !key("sha256")
+                || !string(shard.sha256) || !character('}'))
+                return failure("contains invalid shard metadata");
+            shard.index = parsedIndex;
+            shard.path  = resolve(manifest.manifestPath, filename);
+            manifest.shards.push_back(std::move(shard));
+            if (peek() != ',')
+                break;
+            ++cursor;
+        }
+        if (!character(']') || !character('}') || !character('\n') || cursor != bytes.size())
+            return failure("contains trailing or noncanonical bytes");
+
+        if (manifestVersion != 1 || manifestSchema != AtomicBinV2ManifestSchemaSha256Hex
+            || dataSchema != DataSchemaSha256 || format != "atomic-bin-v2" || useNnue != "pure")
+            return DataResult::failure(DataError::SCHEMA_MISMATCH,
+                                       "Atomic BIN V2 manifest schema/capability constants differ");
+
+        std::string rendered;
+        if (DataResult valid = render_atomic_bin_v2_manifest(manifest, rendered); !valid)
+            return valid;
+        if (rendered != bytes)
+            return failure("is not byte-exact canonical JSON");
+        return DataResult::success();
+    }
+
+   private:
+    DataResult failure(std::string message) const {
+        return invalid_manifest("Atomic BIN V2 manifest " + std::move(message) + " at byte "
+                                + std::to_string(cursor));
+    }
+
+    static std::filesystem::path resolve(const std::filesystem::path& manifestPath,
+                                         const std::string&           filename) {
+#ifdef _WIN32
+        if (filename.empty() || filename.size() > std::size_t(std::numeric_limits<int>::max()))
+            return {};
+        const int length = ::MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, filename.data(),
+                                                 int(filename.size()), nullptr, 0);
+        if (length <= 0)
+            return {};
+        std::wstring wide(std::size_t(length), L'\0');
+        if (::MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, filename.data(),
+                                  int(filename.size()), wide.data(), length)
+            != length)
+            return {};
+        return (manifestPath.parent_path() / std::filesystem::path(wide)).lexically_normal();
+#else
+        return (manifestPath.parent_path() / std::filesystem::path(filename)).lexically_normal();
+#endif
+    }
+
+    char peek() const { return cursor < bytes.size() ? bytes[cursor] : '\0'; }
+    bool character(char expected) {
+        if (peek() != expected)
+            return false;
+        ++cursor;
+        return true;
+    }
+    bool comma() { return character(','); }
+    bool literal(std::string_view expected) {
+        if (bytes.substr(cursor, expected.size()) != expected)
+            return false;
+        cursor += expected.size();
+        return true;
+    }
+    bool key(std::string_view expected) {
+        return character('"') && literal(expected) && character('"') && character(':');
+    }
+    bool boolean(bool& value) {
+        if (literal("true"))
+        {
+            value = true;
+            return true;
+        }
+        if (literal("false"))
+        {
+            value = false;
+            return true;
+        }
+        return false;
+    }
+    static bool hex_digit(char input, u32& value) {
+        if (input >= '0' && input <= '9')
+            value = u32(input - '0');
+        else if (input >= 'a' && input <= 'f')
+            value = u32(input - 'a' + 10);
+        else if (input >= 'A' && input <= 'F')
+            value = u32(input - 'A' + 10);
+        else
+            return false;
+        return true;
+    }
+    bool unicode_escape(u32& codepoint) {
+        codepoint = 0;
+        for (unsigned count = 0; count < 4; ++count)
+        {
+            u32 digit = 0;
+            if (cursor == bytes.size() || !hex_digit(bytes[cursor++], digit))
+                return false;
+            codepoint = codepoint * 16 + digit;
+        }
+        return true;
+    }
+    static void append_utf8(std::string& output, u32 codepoint) {
+        if (codepoint <= 0x7F)
+            output.push_back(char(codepoint));
+        else if (codepoint <= 0x7FF)
+        {
+            output.push_back(char(0xC0 | (codepoint >> 6)));
+            output.push_back(char(0x80 | (codepoint & 0x3F)));
+        }
+        else if (codepoint <= 0xFFFF)
+        {
+            output.push_back(char(0xE0 | (codepoint >> 12)));
+            output.push_back(char(0x80 | ((codepoint >> 6) & 0x3F)));
+            output.push_back(char(0x80 | (codepoint & 0x3F)));
+        }
+        else
+        {
+            output.push_back(char(0xF0 | (codepoint >> 18)));
+            output.push_back(char(0x80 | ((codepoint >> 12) & 0x3F)));
+            output.push_back(char(0x80 | ((codepoint >> 6) & 0x3F)));
+            output.push_back(char(0x80 | (codepoint & 0x3F)));
+        }
+    }
+    bool string(std::string& output) {
+        output.clear();
+        if (!character('"'))
+            return false;
+        while (cursor < bytes.size())
+        {
+            const unsigned char current = bytes[cursor++];
+            if (current == '"')
+                return true;
+            if (current < 0x20)
+                return false;
+            if (current != '\\')
+            {
+                output.push_back(char(current));
+                continue;
+            }
+            if (cursor == bytes.size())
+                return false;
+            switch (bytes[cursor++])
+            {
+            case '"' :
+                output.push_back('"');
+                break;
+            case '\\' :
+                output.push_back('\\');
+                break;
+            case '/' :
+                output.push_back('/');
+                break;
+            case 'b' :
+                output.push_back('\b');
+                break;
+            case 'f' :
+                output.push_back('\f');
+                break;
+            case 'n' :
+                output.push_back('\n');
+                break;
+            case 'r' :
+                output.push_back('\r');
+                break;
+            case 't' :
+                output.push_back('\t');
+                break;
+            case 'u' : {
+                u32 codepoint = 0;
+                if (!unicode_escape(codepoint))
+                    return false;
+                if (codepoint >= 0xD800 && codepoint <= 0xDBFF)
+                {
+                    if (!literal("\\u"))
+                        return false;
+                    u32 low = 0;
+                    if (!unicode_escape(low) || low < 0xDC00 || low > 0xDFFF)
+                        return false;
+                    codepoint = 0x10000 + ((codepoint - 0xD800) << 10) + (low - 0xDC00);
+                }
+                else if (codepoint >= 0xDC00 && codepoint <= 0xDFFF)
+                    return false;
+                append_utf8(output, codepoint);
+                break;
+            }
+            default :
+                return false;
+            }
+        }
+        return false;
+    }
+    bool unsigned_number(u64& value) {
+        const std::size_t start = cursor;
+        if (peek() < '0' || peek() > '9')
+            return false;
+        value = 0;
+        do
+        {
+            const u64 digit = u64(bytes[cursor++] - '0');
+            if (value > (std::numeric_limits<u64>::max() - digit) / 10)
+                return false;
+            value = value * 10 + digit;
+        } while (peek() >= '0' && peek() <= '9');
+        return cursor - start == 1 || bytes[start] != '0';
+    }
+    bool unsigned_string(u64& value) {
+        std::string text;
+        if (!string(text) || text.empty() || (text.size() > 1 && text[0] == '0'))
+            return false;
+        value = 0;
+        for (char digit : text)
+        {
+            if (digit < '0' || digit > '9'
+                || value > (std::numeric_limits<u64>::max() - u64(digit - '0')) / 10)
+                return false;
+            value = value * 10 + u64(digit - '0');
+        }
+        return true;
+    }
+    bool unsigned32(u32& value) {
+        u64 parsed = 0;
+        if (!unsigned_number(parsed) || parsed > std::numeric_limits<u32>::max())
+            return false;
+        value = u32(parsed);
+        return true;
+    }
+    bool signed32(int& value) {
+        const bool negative = peek() == '-';
+        if (negative)
+            ++cursor;
+        u64 parsed = 0;
+        if (!unsigned_number(parsed))
+            return false;
+        const u64 maximum = negative ? u64(std::numeric_limits<i32>::max()) + 1
+                                     : u64(std::numeric_limits<i32>::max());
+        if (parsed > maximum || (negative && parsed == 0))
+            return false;
+        value = negative ? int(-std::int64_t(parsed)) : int(parsed);
+        return true;
+    }
+
+    std::string_view bytes;
+    std::size_t      cursor = 0;
+};
+
+DataResult read_manifest_file(const std::filesystem::path& path, std::string& bytes) {
+    bytes.clear();
+#ifdef _WIN32
+    const HANDLE handle =
+      ::CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+                    FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
+    if (handle == INVALID_HANDLE_VALUE)
+        return DataResult::failure(DataError::OPEN_FAILED,
+                                   "Cannot open Atomic BIN V2 manifest: "
+                                     + windows_error_message(::GetLastError()));
+    FILE_ATTRIBUTE_TAG_INFO tag{};
+    LARGE_INTEGER           size{};
+    if (!::GetFileInformationByHandleEx(handle, FileAttributeTagInfo, &tag, sizeof(tag))
+        || (tag.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)
+        || (tag.FileAttributes & FILE_ATTRIBUTE_DIRECTORY) || !::GetFileSizeEx(handle, &size)
+        || size.QuadPart < 0 || u64(size.QuadPart) > 64U * 1024U * 1024U)
+    {
+        ::CloseHandle(handle);
+        return DataResult::failure(
+          DataError::OPEN_FAILED,
+          "Atomic BIN V2 manifest must be a small regular non-reparse file");
+    }
+    bytes.resize(std::size_t(size.QuadPart));
+    std::size_t offset = 0;
+    while (offset < bytes.size())
+    {
+        const DWORD request = DWORD(std::min<std::size_t>(bytes.size() - offset, 1U << 20));
+        DWORD       count   = 0;
+        if (!::ReadFile(handle, bytes.data() + offset, request, &count, nullptr) || count == 0)
+        {
+            ::CloseHandle(handle);
+            bytes.clear();
+            return DataResult::failure(DataError::READ_FAILED,
+                                       "Cannot read complete Atomic BIN V2 manifest");
+        }
+        offset += count;
+    }
+    LARGE_INTEGER finalSize{};
+    if (!::GetFileSizeEx(handle, &finalSize) || finalSize.QuadPart != size.QuadPart)
+    {
+        ::CloseHandle(handle);
+        bytes.clear();
+        return DataResult::failure(DataError::FILE_IDENTITY_MISMATCH,
+                                   "Atomic BIN V2 manifest changed while being read");
+    }
+    ::CloseHandle(handle);
+#else
+    int flags = O_RDONLY;
+    #ifdef O_CLOEXEC
+    flags |= O_CLOEXEC;
+    #endif
+    #ifdef O_NOFOLLOW
+    flags |= O_NOFOLLOW;
+    #endif
+    #ifdef O_NONBLOCK
+    flags |= O_NONBLOCK;
+    #endif
+    int descriptor;
+    do
+    {
+        descriptor = ::open(path.c_str(), flags);
+    } while (descriptor == -1 && errno == EINTR);
+    if (descriptor == -1)
+        return DataResult::failure(DataError::OPEN_FAILED, "Cannot open Atomic BIN V2 manifest: "
+                                                             + system_error_message(errno));
+    struct stat before{};
+    if (::fstat(descriptor, &before) != 0 || !S_ISREG(before.st_mode) || before.st_size < 0
+        || u64(before.st_size) > 64U * 1024U * 1024U)
+    {
+        ::close(descriptor);
+        return DataResult::failure(
+          DataError::OPEN_FAILED,
+          "Atomic BIN V2 manifest must be a small regular non-symlink file");
+    }
+    #ifdef O_NONBLOCK
+    int descriptorFlags;
+    do
+    {
+        descriptorFlags = ::fcntl(descriptor, F_GETFL);
+    } while (descriptorFlags == -1 && errno == EINTR);
+    int clearResult = 0;
+    if (descriptorFlags != -1 && (descriptorFlags & O_NONBLOCK))
+        do
+        {
+            clearResult = ::fcntl(descriptor, F_SETFL, descriptorFlags & ~O_NONBLOCK);
+        } while (clearResult == -1 && errno == EINTR);
+    if (descriptorFlags == -1 || clearResult == -1)
+    {
+        const int error = errno;
+        ::close(descriptor);
+        return DataResult::failure(
+          DataError::OPEN_FAILED, "Cannot configure the regular Atomic BIN V2 manifest descriptor: "
+                                    + system_error_message(error));
+    }
+    #endif
+    bytes.resize(std::size_t(before.st_size));
+    std::size_t offset = 0;
+    while (offset < bytes.size())
+    {
+        const ssize_t count = ::read(descriptor, bytes.data() + offset, bytes.size() - offset);
+        if (count < 0 && errno == EINTR)
+            continue;
+        if (count <= 0)
+        {
+            ::close(descriptor);
+            bytes.clear();
+            return DataResult::failure(DataError::READ_FAILED,
+                                       "Cannot read complete Atomic BIN V2 manifest");
+        }
+        offset += std::size_t(count);
+    }
+    struct stat after{};
+    const bool  inspected       = ::fstat(descriptor, &after) == 0;
+    const bool  timestampsMatch = [&] {
+    #if defined(__APPLE__)
+        return before.st_mtimespec.tv_sec == after.st_mtimespec.tv_sec
+            && before.st_mtimespec.tv_nsec == after.st_mtimespec.tv_nsec
+            && before.st_ctimespec.tv_sec == after.st_ctimespec.tv_sec
+            && before.st_ctimespec.tv_nsec == after.st_ctimespec.tv_nsec;
+    #else
+        return before.st_mtim.tv_sec == after.st_mtim.tv_sec
+            && before.st_mtim.tv_nsec == after.st_mtim.tv_nsec
+            && before.st_ctim.tv_sec == after.st_ctim.tv_sec
+            && before.st_ctim.tv_nsec == after.st_ctim.tv_nsec;
+    #endif
+    }();
+    if (!inspected || before.st_dev != after.st_dev || before.st_ino != after.st_ino
+        || before.st_size != after.st_size || !timestampsMatch)
+    {
+        ::close(descriptor);
+        bytes.clear();
+        return DataResult::failure(DataError::FILE_IDENTITY_MISMATCH,
+                                   "Atomic BIN V2 manifest changed while being read");
+    }
+    ::close(descriptor);
+#endif
+    return DataResult::success();
+}
+
+}  // namespace
+
+DataResult parse_atomic_bin_v2_manifest(std::string_view             bytes,
+                                        const std::filesystem::path& manifestPath,
+                                        AtomicBinV2Manifest&         output) {
+    output = {};
+    if (manifestPath.extension() == ".atbin"
+        || !ends_with(path_filename_utf8(manifestPath), ".atbin.manifest.json"))
+        return invalid_manifest(
+          "Atomic BIN V2 datasets must be opened through an .atbin.manifest.json sidecar");
+    CanonicalManifestParser parser(bytes);
+    AtomicBinV2Manifest     parsed;
+    if (DataResult result = parser.parse(manifestPath, parsed); !result)
+        return result;
+    output = std::move(parsed);
+    return DataResult::success();
+}
+
+DataResult load_atomic_bin_v2_manifest(const std::filesystem::path& manifestPath,
+                                       AtomicBinV2Manifest&         output) {
+    output = {};
+    if (manifestPath.extension() == ".atbin"
+        || !ends_with(path_filename_utf8(manifestPath), ".atbin.manifest.json"))
+        return invalid_manifest(
+          "Atomic BIN V2 datasets must be opened through an .atbin.manifest.json sidecar");
+    std::error_code       pathError;
+    std::filesystem::path capturedPath = std::filesystem::absolute(manifestPath, pathError);
+    if (pathError || capturedPath.empty())
+        return DataResult::failure(DataError::OPEN_FAILED,
+                                   "Cannot capture an absolute Atomic BIN V2 manifest path: "
+                                     + pathError.message());
+    capturedPath = capturedPath.lexically_normal();
+    std::string bytes;
+    if (DataResult read = read_manifest_file(capturedPath, bytes); !read)
+        return read;
+    return parse_atomic_bin_v2_manifest(bytes, capturedPath, output);
 }
 
 DataResult render_atomic_bin_v2_manifest(const AtomicBinV2Manifest& manifest, std::string& json) {

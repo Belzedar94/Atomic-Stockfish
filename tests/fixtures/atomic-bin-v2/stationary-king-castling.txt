@@ -1,0 +1,7 @@
+# Atomic960 stationary-king castling regression fixture
+# The move wire uses the rook-origin destination, c1b1.
+
+legal_fen=7k/8/8/8/8/8/8/1RK5 w B - 0 1
+illegal_in_check_fen=7k/8/8/8/8/8/2PP4/1RK4q w Q - 0 1
+move=c1b1
+flags=atomic960

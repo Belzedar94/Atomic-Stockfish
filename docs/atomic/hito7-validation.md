@@ -289,10 +289,74 @@ only the isolated codecs. These objects remain outside the playing binary, so
 the Atomic playing signature is the relevant non-regression gate and LOS is not
 triggered by this block.
 
+## H7.3-C1 - Authoritative manifest and dataset reader
+
+Atomic-Stockfish now owns the strict C++ reader used by the later tools and
+trainer integrations. `parse_atomic_bin_v2_manifest` accepts only the exact
+canonical JSON bytes emitted by the frozen renderer, and
+`AtomicBinV2DatasetReader::open` accepts only an
+`.atbin.manifest.json` entrypoint. Legacy Atomic V1 retains its independent
+72-byte loader; there is no format guessing and no raw V2 shard entrypoint.
+
+Opening a dataset resolves portable shard basenames relative to the sidecar,
+rejects duplicate pathnames and captures the manifest without touching shard
+contents. Streaming lazily rejects duplicate file identities and non-regular,
+symlink or reparse-point paths, checks exact size, same-descriptor SHA-256,
+frozen header and record count, audits each record through structural decoding
+and Atomic/Atomic960 legal move generation, requires a byte-exact re-encode, and
+reconciles record/draw totals at EOF. It retains at most one cryptographically
+authenticated private snapshot; a source descriptor exists only during
+staging, so the producer's 100,000-shard upper bound does not become an
+OS-handle limit. Diagnostics carry shard/local/global indexes.
+
+The streaming pass stages one shard at a time in an auto-deleting private file
+under the system temporary directory. The complete staged bytes must match the
+manifest SHA-256 before the first record is exposed; all records for that shard
+then come from the authenticated snapshot. This costs temporary disk equal to
+the largest current shard but removes the remaining same-inode mutation race.
+Source paths are captured absolutely before manifest parsing, preventing a CWD
+change from redirecting a later streaming open.
+
+The public reader invokes the process-wide thread-safe Atomic core initializer
+before its first semantic record, so C2 tools and trainer integrations have no
+hidden Bitboards/Attacks/Position startup precondition. POSIX sidecars and
+shards are opened nonblocking until their regular-file status is established;
+FIFO fixtures prove malformed datasets cannot hang the caller.
+
+Windows creates each snapshot with a cryptographically random `CREATE_NEW`
+basename, no sharing and `FILE_FLAG_DELETE_ON_CLOSE`. POSIX creates it mode
+0600 with `mkstemp` and unlinks it before staging. Both paths are non-inheritable
+and keep only the current shard descriptor alive.
+
+The stationary-king Atomic960 regression is explicit: `c1b1` remains the rook-
+origin move wire in a legal position, while
+`7k/8/8/8/8/8/2PP4/1RK4q w Q - 0 1` rejects the same castle because the king is
+in check. Parser and reader targets cover canonical JSON drift, unsafe paths,
+missing/directory/link/hardlink/replaced shards, header/SHA/size/count failures,
+reserved bytes, illegal moves, aggregate statistics, rewind and streaming.
+This C1 library is not yet advertised as a generator read capability; the C2
+CLI and sibling tools/trainer integrations are the remaining H7.3-C work.
+
+### 2026-07-13 local pre-PR snapshot
+
+The matched BMI2 MinGW release build completed the generator and playing-engine
+links and passed all six native data unit executables: Legacy V1, V2 codec, V2
+sink, V2 manifest, strict manifest reader and authenticated dataset reader. The
+two focused reader targets were also rebuilt and passed independently after the
+Windows native snapshot implementation replaced the unavailable C runtime
+`tmpfile` path. Formatting and `git diff --check` are clean.
+
+This is deliberately not the milestone matrix. The Python generator E2E, Linux
+GCC/Clang, debug, ASan, UBSan and Valgrind lanes remain for CI after the commit
+is pushed. Playing-engine matches, Syzygy A/B and any LOS gate remain deferred
+to the shared OpenBench scheduler; C1 changes only data-library objects and do
+not independently trigger a local Elo run.
+
 ## Remaining Hito 7 work
 
-H7.1, H7.2 and H7.3-A/B are compatibility boundaries, not completion of Hito
-7. H7.3-C adds strict V2 readers and validates every record in tools and trainer.
+H7.1, H7.2 and H7.3-A/B/C1 are compatibility boundaries, not completion of Hito
+7. H7.3-C2 exposes the reader through data-tools and validates every record in
+the tools and trainer.
 Legacy V1 remains a supported fallback throughout the 1.x line.
 
 This project remains isolated in the sibling repositories: every tools or

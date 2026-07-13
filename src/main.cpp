@@ -20,10 +20,8 @@
 #include <memory>
 #include <utility>
 
-#include "attacks.h"
-#include "bitboard.h"
+#include "atomic_init.h"
 #include "misc.h"
-#include "position.h"
 #include "tune.h"
 #include "uci.h"
 
@@ -40,9 +38,7 @@ __attribute__((used)) // keep main alive
 int main(int argc, char* argv[]) {
     std::cout << engine_info() << std::endl;
 
-    Bitboards::init();
-    Attacks::init();
-    Position::init();
+    initialize_atomic_core();
 
     auto cli = CommandLine(argc, argv);
     auto uci = std::make_unique<UCIEngine>(std::move(cli));
