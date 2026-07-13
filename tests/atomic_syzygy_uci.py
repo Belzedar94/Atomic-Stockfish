@@ -16,6 +16,8 @@ Examples::
 from __future__ import annotations
 
 import argparse
+import json
+import os
 import queue
 import re
 import shutil
@@ -24,7 +26,7 @@ import tempfile
 import threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Sequence
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -36,6 +38,12 @@ DEFAULT_TABLES = (
     / "shakmaty-syzygy"
     / "tables"
     / "atomic"
+)
+DEFAULT_ANALYSIS_BOOK = (
+    REPO_ROOT / "tests" / "fixtures" / "atomic-syzygy" / "six-man-endgames.epd"
+)
+DEFAULT_ANALYSIS_MANIFEST = (
+    REPO_ROOT / "tests" / "fixtures" / "atomic-syzygy" / "six-man-fixtures.json"
 )
 
 KBBBVK_FEN = "5BBB/8/8/8/8/8/6k1/7K w - - 0 1"
@@ -52,9 +60,26 @@ CASTLING_FEN = "4k3/8/8/8/8/8/8/4K2R b K - 0 1"
 NO_CASTLING_FEN = "4k3/8/8/8/8/8/8/4K2R b - - 0 1"
 MISSING_BLACK_KING_FEN = "8/8/8/8/8/8/2K5/8 b - - 0 1"
 
+# A six-man position whose legal root moves preserve KPPPPvK material. This
+# lets the public UCI suite prove that SyzygyProbeLimit=5 suppresses the probe
+# while limit 6 reaches the real WDL/DTZ pair, without depending on lower-man
+# tables for captures or promotions.
+KPPPPVK_FEN = "8/8/8/8/8/PPPP4/8/K6k w - - 0 1"
+KPPPPVK_WDL = "KPPPPvK.atbw"
+KPPPPVK_DTZ = "KPPPPvK.atbz"
+KPPPPVK_WDL_VALUE = 2
+KPPPPVK_DTZ_VALUE = 1
+KPPPPVK_ORACLE_MOVES = frozenset(
+    {"a3a4", "b3b4", "c3c4", "d3d4", "a1b1", "a1a2", "a1b2"}
+)
+
 TB_HITS_RE = re.compile(r"(?:^|\s)tbhits\s+(\d+)(?:\s|$)")
 SCORE_RE = re.compile(r"(?:^|\s)score\s+(cp|mate)\s+(-?\d+)(?:\s|$)")
 BESTMOVE_RE = re.compile(r"^bestmove\s+(\S+)")
+DRIVER_PROBE_RE = re.compile(
+    r"^probe wdl=(-?\d+) wdl_state=(-?\d+) dtz=(-?\d+) dtz_state=(-?\d+)$",
+    re.MULTILINE,
+)
 
 
 def require(condition: bool, message: str) -> None:
@@ -198,13 +223,45 @@ def check_uci_contract(uci: list[str]) -> None:
     )
 
 
-def assert_real_tables_loaded(output: list[str], tables: Path) -> None:
+def normalize_table_dirs(table_dirs: Sequence[Path]) -> tuple[Path, ...]:
+    """Resolve a non-empty, duplicate-free Atomic Syzygy search path."""
+
+    resolved = tuple(path.expanduser().resolve() for path in table_dirs)
+    require(bool(resolved), "at least one Atomic table directory is required")
+    require(
+        len(resolved) == len(set(resolved)),
+        f"duplicate Atomic table directories are not allowed: {resolved}",
+    )
+    return resolved
+
+
+def syzygy_path_value(table_dirs: Sequence[Path]) -> str:
+    """Render the platform-native multi-directory SyzygyPath value."""
+
+    normalized = normalize_table_dirs(table_dirs)
+    return os.pathsep.join(str(path) for path in normalized)
+
+
+def find_table_file(table_dirs: Sequence[Path], name: str) -> Path | None:
+    matches = [path / name for path in table_dirs if (path / name).is_file()]
+    require(
+        len(matches) <= 1,
+        f"Atomic table fixture {name} is ambiguous across directories: {matches}",
+    )
+    return matches[0] if matches else None
+
+
+def assert_real_tables_loaded(
+    output: list[str], tables: Sequence[Path]
+) -> tuple[int, int]:
     found = [line for line in output if "tablebase files" in line and "Found" in line]
     require(found, f"SyzygyPath did not report loaded tables from {tables}:\n{output}")
     match = re.search(r"Found\s+(\d+)\s+WDL\s+and\s+(\d+)\s+DTZ", found[-1])
     require(match is not None, f"unrecognized table load report: {found[-1]}")
-    require(int(match.group(1)) > 0, f"no Atomic WDL tables loaded: {found[-1]}")
-    require(int(match.group(2)) > 0, f"no Atomic DTZ tables loaded: {found[-1]}")
+    counts = (int(match.group(1)), int(match.group(2)))
+    require(counts[0] > 0, f"no Atomic WDL tables loaded: {found[-1]}")
+    require(counts[1] > 0, f"no Atomic DTZ tables loaded: {found[-1]}")
+    return counts
 
 
 def assert_root_probe(engine: UciProcess, *, atomic960: bool = False) -> SearchResult:
@@ -281,7 +338,219 @@ def test_castling_eligibility(engine: UciProcess) -> None:
     )
 
 
-def test_recoverable_paths(engine: UciProcess, tables: Path) -> None:
+def test_six_man_probe_limit(engine: UciProcess) -> None:
+    """Prove the public limit boundary with a genuine six-man WDL/DTZ pair."""
+
+    engine.setoption("UCI_Chess960", "false")
+    engine.setoption("SyzygyProbeLimit", "5")
+    engine.setoption("Clear Hash")
+    limited = engine.search(KPPPPVK_FEN, "go depth 1")
+    require(
+        limited.tb_hits == 0,
+        "KPPPPvK was probed despite SyzygyProbeLimit=5:\n" f"{limited.output}",
+    )
+
+    engine.setoption("SyzygyProbeLimit", "6")
+    engine.setoption("Clear Hash")
+    enabled = engine.search(KPPPPVK_FEN, "go depth 1")
+    require(
+        enabled.tb_hits > 0,
+        "KPPPPvK produced no tablebase hit with SyzygyProbeLimit=6:\n"
+        f"{enabled.output}",
+    )
+    require(
+        enabled.bestmove in KPPPPVK_ORACLE_MOVES,
+        f"KPPPPvK returned non-oracle move {enabled.bestmove}:\n{enabled.output}",
+    )
+    require(
+        enabled.score_value is not None and enabled.score_value > 0,
+        f"KPPPPvK six-man probe did not preserve the oracle win:\n{enabled.output}",
+    )
+
+
+def validate_kpppp_driver_output(output: str) -> None:
+    probe = DRIVER_PROBE_RE.search(output)
+    require(probe is not None, f"six-man driver emitted no probe record:\n{output}")
+    actual = tuple(int(value) for value in probe.groups())
+    # A pawn push is a zeroing best move, so the successful DTZ probe reports
+    # ZEROING_BEST_MOVE (2) rather than the generic OK (1) state.
+    expected = (KPPPPVK_WDL_VALUE, 1, KPPPPVK_DTZ_VALUE, 2)
+    require(
+        actual == expected,
+        f"KPPPPvK direct probe is {actual}; expected {expected}:\n{output}",
+    )
+    for label in ("root_no_rule50", "root_rule50", "root_wdl"):
+        require(
+            re.search(rf"^{label} ok=1(?:\s|$)", output, re.MULTILINE) is not None,
+            f"KPPPPvK direct probe did not complete {label}:\n{output}",
+        )
+    require(
+        re.search(
+            # A successfully DTZ-ranked root intentionally disables further
+            # interior probing, leaving Config.cardinality at zero.
+            r"^rank_root root_in_tb=1 cardinality=0 "
+            r"use_rule50=1 probe_depth=1$",
+            output,
+            re.MULTILINE,
+        )
+        is not None,
+        f"KPPPPvK direct root ranking contract failed:\n{output}",
+    )
+
+
+def test_six_man_driver(
+    driver: Path, table_dirs: Sequence[Path], timeout: float
+) -> None:
+    # The direct driver needs exactly one authenticated WDL/DTZ pair. Pointing
+    # it at the production 1,020-file corpus makes its one-time directory scan
+    # dominate this proof (and can exceed a minute on the archive volume).
+    # Stage the two small fixtures in isolation; the UCI half of this script
+    # still loads and verifies the complete corpus afterwards.
+    fixture_paths = {
+        name: find_table_file(table_dirs, name)
+        for name in (KPPPPVK_WDL, KPPPPVK_DTZ)
+    }
+    require(
+        all(path is not None for path in fixture_paths.values()),
+        "six-man driver requires the KPPPPvK WDL/DTZ pair",
+    )
+    with tempfile.TemporaryDirectory(prefix="atomic-syzygy-driver-") as temporary:
+        isolated = Path(temporary)
+        for name, source in fixture_paths.items():
+            assert source is not None
+            shutil.copy2(source, isolated / name)
+
+        try:
+            completed = subprocess.run(
+                [str(driver), str(isolated), KPPPPVK_FEN],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=timeout,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise AssertionError(f"could not run six-man Syzygy driver: {exc}") from exc
+    require(
+        completed.returncode == 0,
+        f"six-man Syzygy driver exited {completed.returncode}:\n{completed.stdout}",
+    )
+    validate_kpppp_driver_output(completed.stdout)
+    print(
+        "Atomic Syzygy KPPPPvK direct probe: PASS "
+        f"wdl={KPPPPVK_WDL_VALUE} dtz={KPPPPVK_DTZ_VALUE} "
+        "pieces=6 root_cardinality=0"
+    )
+
+
+def load_analysis_expectations(manifest: Path) -> dict[str, dict[str, object]]:
+    try:
+        payload = json.loads(manifest.read_text(encoding="utf-8"))
+        positions = payload["challenge_positions"]["positions"]
+    except (OSError, json.JSONDecodeError, KeyError, TypeError) as exc:
+        raise AssertionError(f"invalid six-man analysis manifest {manifest}: {exc}") from exc
+    require(isinstance(positions, list), "analysis manifest positions must be a list")
+    require(
+        all(
+            isinstance(position, dict) and isinstance(position.get("fen"), str)
+            for position in positions
+        ),
+        "analysis manifest positions must contain string FENs",
+    )
+    expectations = {str(position["fen"]): position for position in positions}
+    require(
+        len(expectations) == len(positions),
+        "analysis manifest contains duplicate FENs",
+    )
+    return expectations
+
+
+def analyze_six_man_book(
+    engine: UciProcess,
+    book: Path,
+    expectations: dict[str, dict[str, object]] | None = None,
+) -> list[SearchResult]:
+    """Require observable on/off table use for every frozen endgame position."""
+
+    fens = [line.strip() for line in book.read_text(encoding="utf-8").splitlines()]
+    require(bool(fens), f"six-man analysis book is empty: {book}")
+    require(
+        all(len(fen.split()) == 6 for fen in fens),
+        f"six-man analysis book contains a non-FEN line: {book}",
+    )
+    if expectations is not None:
+        require(
+            set(fens) == set(expectations),
+            "six-man analysis book and oracle manifest FENs differ",
+        )
+
+    engine.setoption("UCI_Chess960", "false")
+    enabled_results: list[SearchResult] = []
+    for index, fen in enumerate(fens, 1):
+        engine.setoption("SyzygyProbeLimit", "6")
+        engine.setoption("Clear Hash")
+        enabled = engine.search(fen, "go depth 1")
+        require(
+            enabled.tb_hits > 0,
+            f"analysis position {index} produced no six-man tbhits:\n"
+            f"fen={fen}\n{enabled.output}",
+        )
+        require(
+            enabled.bestmove not in {"(none)", "0000"}
+            and enabled.score_value is not None,
+            f"analysis position {index} returned no move/score:\n{enabled.output}",
+        )
+        expected = expectations.get(fen) if expectations is not None else None
+        if expected is not None:
+            if expected.get("unique_winning_move") is True:
+                require(
+                    enabled.bestmove == expected.get("best_move"),
+                    f"analysis position {index} selected {enabled.bestmove}; "
+                    f"oracle unique win is {expected.get('best_move')}",
+                )
+            require(
+                expected.get("category") == "win"
+                and enabled.score_value is not None
+                and enabled.score_value > 0,
+                f"analysis position {index} did not preserve the oracle win category",
+            )
+
+        engine.setoption("SyzygyProbeLimit", "0")
+        engine.setoption("Clear Hash")
+        disabled = engine.search(fen, "go depth 1")
+        require(
+            disabled.tb_hits == 0,
+            f"analysis position {index} still probed with limit 0:\n{disabled.output}",
+        )
+        require(
+            disabled.bestmove not in {"(none)", "0000"},
+            f"analysis position {index} failed without tables:\n{disabled.output}",
+        )
+        enabled_results.append(enabled)
+        print(
+            "Atomic Syzygy analysis "
+            f"position={index}/{len(fens)} tbhits={enabled.tb_hits} "
+            f"bestmove={enabled.bestmove} score={enabled.score_kind}:{enabled.score_value}"
+            + (
+                f" oracle_category={expected.get('category')} oracle_dtz={expected.get('dtz')}"
+                if expected is not None
+                else ""
+            )
+        )
+
+    engine.setoption("SyzygyProbeLimit", "6")
+    return enabled_results
+
+
+def test_recoverable_paths(
+    engine: UciProcess,
+    tables: Sequence[Path],
+    *,
+    kbbb_wdl: Path,
+    kbbb_dtz: Path,
+) -> None:
     with tempfile.TemporaryDirectory(prefix="atomic-syzygy-uci-") as temporary:
         root = Path(temporary)
         missing = root / "does-not-exist"
@@ -302,10 +571,10 @@ def test_recoverable_paths(engine: UciProcess, tables: Path) -> None:
 
         corrupt = root / "corrupt"
         corrupt.mkdir()
-        wdl = bytearray((tables / "KBBBvK.atbw").read_bytes())
+        wdl = bytearray(kbbb_wdl.read_bytes())
         wdl[:4] = b"BAD!"
         (corrupt / "KBBBvK.atbw").write_bytes(wdl)
-        shutil.copy2(tables / "KBBBvK.atbz", corrupt / "KBBBvK.atbz")
+        shutil.copy2(kbbb_dtz, corrupt / "KBBBvK.atbz")
 
         corrupt_report = engine.setoption("SyzygyPath", str(corrupt))
         require(
@@ -322,7 +591,7 @@ def test_recoverable_paths(engine: UciProcess, tables: Path) -> None:
             f"corrupt Atomic table killed normal search:\n{corrupt_search.output}",
         )
 
-        restored = engine.setoption("SyzygyPath", str(tables))
+        restored = engine.setoption("SyzygyPath", syzygy_path_value(tables))
         assert_real_tables_loaded(restored, tables)
         engine.setoption("Clear Hash")
         recovered = engine.search(NO_CASTLING_FEN, "go depth 1")
@@ -335,13 +604,38 @@ def test_recoverable_paths(engine: UciProcess, tables: Path) -> None:
 def validate_inputs(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
     if not args.engine.is_file():
         parser.error(f"engine does not exist: {args.engine}")
-    if not args.tables.is_dir():
-        parser.error(f"Atomic table directory does not exist: {args.tables}")
+    for table_dir in args.tables:
+        if not table_dir.is_dir():
+            parser.error(f"Atomic table directory does not exist: {table_dir}")
     for name in ("KBBBvK.atbw", "KBBBvK.atbz", "KRvK.atbw"):
-        if not (args.tables / name).is_file():
-            parser.error(f"required real Atomic fixture is missing: {args.tables / name}")
+        if find_table_file(args.tables, name) is None:
+            parser.error(
+                f"required real Atomic fixture is missing from all --tables: {name}"
+            )
+    six_man = tuple(
+        find_table_file(args.tables, name) for name in (KPPPPVK_WDL, KPPPPVK_DTZ)
+    )
+    if any(path is None for path in six_man) and any(path is not None for path in six_man):
+        parser.error("KPPPPvK six-man fixture must provide both .atbw and .atbz")
+    if args.require_six_man and any(path is None for path in six_man):
+        parser.error(
+            "--require-six-man needs KPPPPvK.atbw and KPPPPvK.atbz across --tables"
+        )
+    args.has_six_man = all(path is not None for path in six_man)
+    if args.require_six_man and (
+        args.syzygy_driver is None or not args.syzygy_driver.is_file()
+    ):
+        parser.error("--require-six-man requires an existing --syzygy-driver")
     if args.eval_file is not None and not args.eval_file.is_file():
         parser.error(f"network does not exist: {args.eval_file}")
+    if args.analysis_book is not None and not args.analysis_book.is_file():
+        parser.error(f"six-man analysis book does not exist: {args.analysis_book}")
+    if args.analysis_book is not None and not args.require_six_man:
+        parser.error("--analysis-book requires --require-six-man")
+    if args.analysis_book is not None and not args.analysis_manifest.is_file():
+        parser.error(
+            f"six-man analysis manifest does not exist: {args.analysis_manifest}"
+        )
 
 
 def main() -> int:
@@ -351,7 +645,44 @@ def main() -> int:
         type=Path,
         default=REPO_ROOT / "src" / "atomic-stockfish.exe",
     )
-    parser.add_argument("--tables", type=Path, default=DEFAULT_TABLES)
+    parser.add_argument(
+        "--tables",
+        type=Path,
+        action="append",
+        help=(
+            "Atomic table directory; repeat for split 3-4-5, 6-wdl and 6-dtz "
+            "trees (default: the historical local fixture directory)"
+        ),
+    )
+    parser.add_argument(
+        "--require-six-man",
+        action="store_true",
+        help="require and exercise the real KPPPPvK six-man WDL/DTZ fixture",
+    )
+    parser.add_argument(
+        "--syzygy-driver",
+        type=Path,
+        help=(
+            "same-checkout atomic-syzygy-driver used to freeze KPPPPvK "
+            "WDL=+2 and DTZ=1"
+        ),
+    )
+    parser.add_argument(
+        "--analysis-book",
+        type=Path,
+        nargs="?",
+        const=DEFAULT_ANALYSIS_BOOK,
+        help=(
+            "also compare limit-6 and limit-0 tbhits for each FEN in a six-man "
+            "book; without a value, use the repository's five-position fixture"
+        ),
+    )
+    parser.add_argument(
+        "--analysis-manifest",
+        type=Path,
+        default=DEFAULT_ANALYSIS_MANIFEST,
+        help="oracle metadata for --analysis-book",
+    )
     parser.add_argument(
         "--eval-file",
         type=Path,
@@ -360,10 +691,19 @@ def main() -> int:
     parser.add_argument("--timeout", type=float, default=30.0)
     args = parser.parse_args()
     args.engine = args.engine.resolve()
-    args.tables = args.tables.resolve()
+    args.tables = normalize_table_dirs(args.tables or (DEFAULT_TABLES,))
     if args.eval_file is not None:
         args.eval_file = args.eval_file.resolve()
+    if args.syzygy_driver is not None:
+        args.syzygy_driver = args.syzygy_driver.expanduser().resolve()
+    if args.analysis_book is not None:
+        args.analysis_book = args.analysis_book.expanduser().resolve()
+    args.analysis_manifest = args.analysis_manifest.expanduser().resolve()
     validate_inputs(parser, args)
+
+    if args.require_six_man:
+        assert args.syzygy_driver is not None
+        test_six_man_driver(args.syzygy_driver, args.tables, args.timeout)
 
     with UciProcess(args.engine, args.timeout) as engine:
         check_uci_contract(engine.uci())
@@ -374,7 +714,7 @@ def main() -> int:
         engine.setoption("Syzygy50MoveRule", "true")
         engine.setoption("Use NNUE", "false")
 
-        loaded = engine.setoption("SyzygyPath", str(args.tables))
+        loaded = engine.setoption("SyzygyPath", syzygy_path_value(args.tables))
         assert_real_tables_loaded(loaded, args.tables)
 
         assert_root_probe(engine)
@@ -382,6 +722,14 @@ def main() -> int:
         test_terminal_without_king(engine)
         test_castling_eligibility(engine)
         assert_root_probe(engine, atomic960=True)
+        if args.require_six_man:
+            test_six_man_probe_limit(engine)
+        if args.analysis_book is not None:
+            analyze_six_man_book(
+                engine,
+                args.analysis_book,
+                load_analysis_expectations(args.analysis_manifest),
+            )
 
         if args.eval_file is not None:
             engine.setoption("EvalFile", str(args.eval_file))
@@ -392,14 +740,32 @@ def main() -> int:
                 f"Use NNUE=true rejected the supplied network:\n{nnue_root.output}",
             )
             test_interior_wdl(engine)
+            if args.require_six_man:
+                test_six_man_probe_limit(engine)
+            if args.analysis_book is not None:
+                analyze_six_man_book(
+                    engine,
+                    args.analysis_book,
+                    load_analysis_expectations(args.analysis_manifest),
+                )
             engine.setoption("Use NNUE", "false")
 
-        test_recoverable_paths(engine, args.tables)
+        kbbb_wdl = find_table_file(args.tables, "KBBBvK.atbw")
+        kbbb_dtz = find_table_file(args.tables, "KBBBvK.atbz")
+        assert kbbb_wdl is not None and kbbb_dtz is not None
+        test_recoverable_paths(
+            engine,
+            args.tables,
+            kbbb_wdl=kbbb_wdl,
+            kbbb_dtz=kbbb_dtz,
+        )
 
     modes = "false/true" if args.eval_file is not None else "false"
     print(
         "Atomic Syzygy UCI tests passed: max6, load, root ranking, interior WDL, "
-        f"terminal, castling, Atomic960, recoverable paths, NNUE={modes}"
+        "terminal, castling, Atomic960, recoverable paths, "
+        f"six-man-limit={args.require_six_man}, analysis={args.analysis_book is not None}, "
+        f"NNUE={modes}"
     )
     return 0
 
