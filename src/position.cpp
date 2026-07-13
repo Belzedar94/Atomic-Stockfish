@@ -29,6 +29,7 @@
 #include <iostream>
 #include <sstream>
 #include <string_view>
+#include <type_traits>
 #include <utility>
 
 #include "bitboard.h"
@@ -46,9 +47,10 @@ namespace Stockfish {
 
 using namespace Attacks;
 
-static_assert(!Eval::NNUE::FeatureSet::UsesThreatDeltas,
-              "Position::do_move skips DirtyThreats; implement threat deltas before enabling a "
-              "feature set that consumes them");
+static_assert(!Eval::NNUE::FeatureSet::UsesThreatDeltas
+                && std::is_same_v<Eval::NNUE::FeatureSet::DiffType, DirtyPiece>,
+              "Atomic Position exposes only DirtyPiece deltas; add an explicit threat-delta "
+              "channel before enabling a feature set that consumes DirtyThreats");
 
 namespace Zobrist {
 
@@ -932,7 +934,6 @@ void Position::do_move(Move                      m,
                        StateInfo&                newSt,
                        [[maybe_unused]] bool     givesCheck,
                        DirtyPiece&               dp,
-                       DirtyThreats& /*dts*/,
                        const TranspositionTable* tt      = nullptr,
                        const SharedHistories*    history = nullptr) {
 
@@ -979,10 +980,7 @@ void Position::do_move(Move                      m,
         assert(captured == make_piece(us, ROOK));
 
         Square rfrom, rto;
-        // LegacyAtomicV1 consumes HalfKAv2Atomic only. The modern FullThreats
-        // delta is not part of this network, so avoid its substantial orthodox
-        // attack bookkeeping on every move.
-        do_castling<true>(us, from, to, rfrom, rto, nullptr, &dp);
+        do_castling<true>(us, from, to, rfrom, rto, &dp);
 
         k ^= Zobrist::psq[captured][rfrom] ^ Zobrist::psq[captured][rto];
         st->nonPawnKey[us] ^= Zobrist::psq[captured][rfrom] ^ Zobrist::psq[captured][rto];
@@ -1520,7 +1518,6 @@ void Position::do_castling(Color               us,
                            Square&             to,
                            Square&             rfrom,
                            Square&             rto,
-                           DirtyThreats* const dts,
                            DirtyPiece* const   dp) {
 
     bool kingSide = to > from;
@@ -1539,10 +1536,10 @@ void Position::do_castling(Color               us,
     }
 
     // Remove both pieces first since squares could overlap in Chess960
-    remove_piece(Do ? from : to, dts);
-    remove_piece(Do ? rfrom : rto, dts);
-    put_piece(make_piece(us, KING), Do ? to : from, dts);
-    put_piece(make_piece(us, ROOK), Do ? rto : rfrom, dts);
+    remove_piece(Do ? from : to);
+    remove_piece(Do ? rfrom : rto);
+    put_piece(make_piece(us, KING), Do ? to : from);
+    put_piece(make_piece(us, ROOK), Do ? rto : rfrom);
 }
 
 

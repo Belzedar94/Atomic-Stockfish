@@ -869,8 +869,8 @@ void Search::Worker::do_move(
     bool capture = pos.capture_stage(move);
     ++nodes;
 
-    auto [dirtyPiece, dirtyThreats] = accumulatorStack.push();
-    pos.do_move(move, st, givesCheck, dirtyPiece, dirtyThreats, &tt, &sharedHistory);
+    DirtyPiece& dirtyPiece = accumulatorStack.push();
+    pos.do_move(move, st, givesCheck, dirtyPiece, &tt, &sharedHistory);
 
 #ifndef NDEBUG
     const bool actualAtomicCheck = pos.atomic_in_check(pos.side_to_move());
