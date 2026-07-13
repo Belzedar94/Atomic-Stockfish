@@ -16,6 +16,7 @@
 #include "data/sha256.h"
 #include "movegen.h"
 #include "position.h"
+#include "tt.h"
 
 #ifndef _WIN32
     #include <signal.h>
@@ -25,6 +26,11 @@
 #endif
 
 using namespace Stockfish;
+
+// Position::do_move() only prefetches through a non-null TT pointer. These
+// standalone reader tests never provide one, so keep the test link isolated
+// from the complete threaded TT subsystem.
+TTEntry* TranspositionTable::first_entry(Key) const { return nullptr; }
 
 namespace {
 

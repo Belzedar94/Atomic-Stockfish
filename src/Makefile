@@ -131,12 +131,12 @@ ATOMIC_BIN_V2_MANIFEST_TEST_OBJS = attacks.o bitboard.o misc.o movegen.o positio
 	atomic_bin_v2_sha256_codec.o atomic_bin_v2_sink_codec.o atomic_bin_v2_manifest_codec.o \
 	atomic_bin_v2_manifest_tests.o
 ATOMIC_BIN_V2_MANIFEST_READER_TEST_EXE  = atomic-bin-v2-manifest-reader-tests$(ATOMIC_TEST_EXE_SUFFIX)
-ATOMIC_BIN_V2_MANIFEST_READER_TEST_OBJS = attacks.o bitboard.o misc.o movegen.o position.o tbprobe.o tt.o \
+ATOMIC_BIN_V2_MANIFEST_READER_TEST_OBJS = attacks.o bitboard.o misc.o movegen.o position.o tbprobe.o \
 	uci_move.o ucioption.o atomic_bin_v2_wire_codec.o atomic_bin_v2_adapter_codec.o \
 	atomic_bin_v2_sha256_codec.o atomic_bin_v2_manifest_codec.o \
 	atomic_bin_v2_manifest_reader_tests.o
 ATOMIC_BIN_V2_READER_TEST_EXE  = atomic-bin-v2-reader-tests$(ATOMIC_TEST_EXE_SUFFIX)
-ATOMIC_BIN_V2_READER_TEST_OBJS = atomic_init.o attacks.o bitboard.o misc.o movegen.o position.o tbprobe.o tt.o \
+ATOMIC_BIN_V2_READER_TEST_OBJS = atomic_init.o attacks.o bitboard.o misc.o movegen.o position.o tbprobe.o \
 	uci_move.o ucioption.o atomic_bin_v2_wire_codec.o atomic_bin_v2_adapter_codec.o \
 	atomic_bin_v2_sha256_codec.o atomic_bin_v2_manifest_codec.o atomic_bin_v2_reader_codec.o \
 	atomic_bin_v2_reader_tests.o

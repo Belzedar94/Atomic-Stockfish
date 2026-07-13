@@ -9,8 +9,14 @@
 
 #include "data/atomic_bin_v2_manifest.h"
 #include "data/atomic_bin_v2_wire.h"
+#include "tt.h"
 
 using namespace Stockfish;
+
+// Position::do_move() only prefetches through a non-null TT pointer. These
+// standalone reader tests never provide one, so keep the test link isolated
+// from the complete threaded TT subsystem.
+TTEntry* TranspositionTable::first_entry(Key) const { return nullptr; }
 
 namespace {
 

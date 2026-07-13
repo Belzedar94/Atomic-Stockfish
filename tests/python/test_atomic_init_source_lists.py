@@ -18,8 +18,9 @@ def test_every_binding_and_wasm_build_links_shared_initialization():
     assert '"src/atomic_init.cpp",' in setup
 
 
-def test_reader_test_links_include_transposition_table_dependency():
+def test_reader_test_links_keep_transposition_table_dependency_isolated():
     makefile = (ROOT / "src" / "Makefile").read_text(encoding="utf-8")
+    gitignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
 
     manifest_objects = makefile.split(
         "ATOMIC_BIN_V2_MANIFEST_READER_TEST_OBJS =", 1
@@ -28,5 +29,15 @@ def test_reader_test_links_include_transposition_table_dependency():
         "ATOMIC_BIN_V2_SRCS", 1
     )[0]
 
-    assert "tt.o" in manifest_objects
-    assert "tt.o" in reader_objects
+    assert "tt.o" not in manifest_objects
+    assert "tt.o" not in reader_objects
+    assert "src/atomic-bin-v2-manifest-reader-tests*" in gitignore
+    assert "src/atomic-bin-v2-reader-tests*" in gitignore
+
+    for source in (
+        ROOT / "tests" / "atomic_bin_v2_manifest_reader.cpp",
+        ROOT / "tests" / "atomic_bin_v2_reader.cpp",
+    ):
+        contents = source.read_text(encoding="utf-8")
+        assert '#include "tt.h"' in contents
+        assert "TranspositionTable::first_entry(Key) const { return nullptr; }" in contents
