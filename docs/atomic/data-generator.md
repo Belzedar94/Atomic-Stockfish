@@ -173,9 +173,29 @@ semantically invalid record. Each decoded record must also re-encode to its
 exact 64 input bytes. Errors report shard, local and global record indexes.
 Network and book entries remain provenance: a reader does not require those
 inputs to be present beside a completed dataset.
-Authentication and the semantic audit process shards sequentially, keeping at
-most one shard descriptor open; one-record sharding therefore does not consume
-one OS handle per shard. Streaming likewise opens only the current shard.
+
+Generator parsing and manifest loading share the exact `keep_draws` validator:
+the input and expanded canonical decimal are capped at 4096 bytes and the value
+must round-trip through the generator's effective `double` without changing.
+Portable basenames are capped at 255 UTF-8 bytes and additionally reject ASCII
+controls and DEL, trailing dot or space, and the Windows device stems `CON`,
+`PRN`, `AUX`, `NUL`, `COM1`-`COM9` and `LPT1`-`LPT9` (including the legacy
+superscript forms 1-3), case-insensitively and even when followed by an
+extension.
+Authentication and the semantic audit process shards sequentially, retaining
+at most one authenticated snapshot; one-record sharding therefore does not
+consume one OS handle per shard. A source descriptor exists only while copying
+the current shard into that snapshot.
+Before streaming any record from that shard, the reader copies its complete
+contents to a private auto-deleting file in the system temporary directory and
+authenticates the snapshot against the manifest SHA-256. Windows creates it
+atomically with a cryptographic name, no sharing and delete-on-close; POSIX uses
+a mode-0600 `mkstemp` file and unlinks it immediately. Records are exposed only
+from the private authenticated descriptor, so a later source mutation cannot
+create a hash-to-read race. Peak temporary disk use is therefore one complete
+shard; snapshot creation or exhaustion of temporary storage fails closed before
+a record is returned. Manifest and shard paths are captured as absolute paths
+during open, so changing the process CWD cannot rebind them.
 
 The focused reader gates can also be run independently from `src`:
 

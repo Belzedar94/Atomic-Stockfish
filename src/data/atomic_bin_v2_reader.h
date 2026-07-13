@@ -31,8 +31,9 @@ struct AtomicBinV2DecodedRecord {
 // A manifest-authoritative streaming reader. open() authenticates every shard,
 // validates every record through the Atomic rules engine, verifies byte-exact
 // re-encoding and checks aggregate statistics before returning the reader.
-// next() then streams from the already authenticated descriptors without
-// loading the dataset into memory.
+// next() then stages and authenticates one private auto-deleting shard snapshot
+// at a time, removing the source hash-to-read race without loading the dataset
+// into memory.
 class AtomicBinV2DatasetReader {
    public:
     ~AtomicBinV2DatasetReader();
@@ -53,7 +54,7 @@ class AtomicBinV2DatasetReader {
 
     AtomicBinV2DatasetReader() = default;
     DataResult open_shard(std::size_t index, bool establishIdentity);
-    DataResult verify_shard(std::size_t index, u64 local, u64 global, bool verifyPath);
+    DataResult verify_shard(std::size_t index, u64 local, u64 global);
     DataResult decode_record(const AtomicBinV2Record&  wire,
                              std::size_t               shard,
                              u64                       local,
@@ -65,6 +66,7 @@ class AtomicBinV2DatasetReader {
     std::size_t                         currentShard  = 0;
     u64                                 currentLocal  = 0;
     u64                                 currentGlobal = 0;
+    u64                                 currentDraws  = 0;
     bool                                failed        = false;
 };
 

@@ -81,6 +81,12 @@ struct AtomicBinV2Manifest {
 // without replacing .atbin: dataset.atbin.manifest.json.
 std::filesystem::path atomic_bin_v2_manifest_path(const std::filesystem::path& firstShard);
 
+// Normalize a generator keep_draws token, require an exact round trip through
+// the effective double and cap both input and canonical decimal at 4096 bytes.
+// The generator and manifest reader share this single acceptance boundary.
+DataResult
+normalize_atomic_keep_draws(std::string_view token, double& effective, std::string& canonical);
+
 // Fail before dataset generation when the destination cannot provide the
 // platform's race-free sidecar publication primitive. The transient private
 // probe never reserves or modifies the final manifest path; orderly cleanup is

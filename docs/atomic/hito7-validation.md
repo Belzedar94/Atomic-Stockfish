@@ -303,11 +303,24 @@ rejects path or file-identity duplicates and opens regular non-link files. It
 then checks exact size, same-descriptor SHA-256, frozen header and record count,
 audits every record through structural decoding and Atomic/Atomic960 legal move
 generation, requires a byte-exact re-encode, and reconciles record/draw totals.
-The returned object streams from those authenticated descriptors and verifies
-that each pathname still names the same file before exposing data. Audit and
-streaming retain at most one shard descriptor at a time, so the producer's
-100,000-shard upper bound does not become an OS-handle limit. Diagnostics carry
-shard/local/global indexes.
+The returned object streams only from a cryptographically authenticated private
+snapshot. Audit and streaming retain at most one snapshot at a time; a source
+descriptor exists only during staging, so the producer's 100,000-shard upper
+bound does not become an OS-handle limit. Diagnostics carry shard/local/global
+indexes.
+
+The streaming pass stages one shard at a time in an auto-deleting private file
+under the system temporary directory. The complete staged bytes must match the
+manifest SHA-256 before the first record is exposed; all records for that shard
+then come from the authenticated snapshot. This costs temporary disk equal to
+the largest current shard but removes the remaining same-inode mutation race.
+Source paths are captured absolutely before manifest parsing, preventing a CWD
+change from redirecting a later streaming open.
+
+Windows creates each snapshot with a cryptographically random `CREATE_NEW`
+basename, no sharing and `FILE_FLAG_DELETE_ON_CLOSE`. POSIX creates it mode
+0600 with `mkstemp` and unlinks it before staging. Both paths are non-inheritable
+and keep only the current shard descriptor alive.
 
 The stationary-king Atomic960 regression is explicit: `c1b1` remains the rook-
 origin move wire in a legal position, while
@@ -317,6 +330,21 @@ missing/directory/link/hardlink/replaced shards, header/SHA/size/count failures,
 reserved bytes, illegal moves, aggregate statistics, rewind and streaming.
 This C1 library is not yet advertised as a generator read capability; the C2
 CLI and sibling tools/trainer integrations are the remaining H7.3-C work.
+
+### 2026-07-13 local pre-PR snapshot
+
+The matched BMI2 MinGW release build completed the generator and playing-engine
+links and passed all six native data unit executables: Legacy V1, V2 codec, V2
+sink, V2 manifest, strict manifest reader and authenticated dataset reader. The
+two focused reader targets were also rebuilt and passed independently after the
+Windows native snapshot implementation replaced the unavailable C runtime
+`tmpfile` path. Formatting and `git diff --check` are clean.
+
+This is deliberately not the milestone matrix. The Python generator E2E, Linux
+GCC/Clang, debug, ASan, UBSan and Valgrind lanes remain for CI after the commit
+is pushed. Playing-engine matches, Syzygy A/B and any LOS gate remain deferred
+to the shared OpenBench scheduler; C1 changes only data-library objects and do
+not independently trigger a local Elo run.
 
 ## Remaining Hito 7 work
 

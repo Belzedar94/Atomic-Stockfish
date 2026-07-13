@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "data/atomic_bin_v2_manifest.h"
+#include "data/atomic_bin_v2_wire.h"
 
 using namespace Stockfish;
 
@@ -79,6 +80,18 @@ void rejects(std::string                  bytes,
 }  // namespace
 
 int main() {
+    double      normalizedEffective = 0.0;
+    std::string normalizedKeepDraws;
+    check(bool(Data::normalize_atomic_keep_draws("5e-1", normalizedEffective, normalizedKeepDraws))
+            && normalizedEffective == 0.5 && normalizedKeepDraws == "0.5",
+          "shared keep_draws normalizer canonicalizes exact exponent input");
+    normalizedEffective = 1.0;
+    normalizedKeepDraws = "stale";
+    check(!Data::normalize_atomic_keep_draws(std::string(4097, '0'), normalizedEffective,
+                                             normalizedKeepDraws)
+            && normalizedEffective == 0.0 && normalizedKeepDraws.empty(),
+          "shared keep_draws normalizer rejects over-4096 input transactionally");
+
     Data::AtomicBinV2Manifest source = fixture();
     std::string               canonical;
     check(bool(Data::render_atomic_bin_v2_manifest(source, canonical)), "render fixture");
@@ -116,6 +129,16 @@ int main() {
     rejects(replace_once(canonical, "\"write_min_ply\":5,\"write_max_ply\":400",
                          "\"write_min_ply\":400,\"write_max_ply\":400"),
             "producer ply ordering");
+    rejects(
+      replace_once(canonical, "\"keep_draws\":\"0.5\"", "\"keep_draws\":\"0.10000000000000001\""),
+      "keep_draws floating-point round-trip mismatch");
+    rejects(replace_once(canonical, "\"keep_draws\":\"0.5\"", "\"keep_draws\":\"1e-4097\""),
+            "keep_draws canonical expansion over 4096 bytes");
+    rejects(replace_once(canonical, "\"keep_draws\":\"0.5\"",
+                         "\"keep_draws\":\"1e" + std::string(4088, '9') + "\""),
+            "keep_draws huge exponent fails without integer overflow");
+    rejects(replace_once(canonical, "\"keep_draws\":\"0.5\"", "\"keep_draws\":\"5e-1\""),
+            "keep_draws noncanonical exponent spelling");
     rejects(replace_once(canonical, "\"resolved_seed\":\"7\"",
                          "\"resolved_seed\":\"18446744073709551616\""),
             "uint64 overflow");
@@ -125,6 +148,28 @@ int main() {
             "absolute path");
     rejects(replace_once(canonical, "\"file\":\"dataset.atbin\"", "\"file\":\"sub/dataset.atbin\""),
             "shard separator");
+    rejects(replace_once(canonical, "\"file\":\"atomic.nnue\"", "\"file\":\"CON.nnue\""),
+            "Windows reserved device basename");
+    rejects(replace_once(canonical, "\"file\":\"dataset.atbin\"", "\"file\":\"LPT9.atbin\""),
+            "Windows reserved shard device basename");
+    const std::string superscriptDevice = std::string("\"file\":\"COM") + "\xC2\xB9" + ".nnue\"";
+    rejects(replace_once(canonical, "\"file\":\"atomic.nnue\"", superscriptDevice),
+            "Windows superscript reserved device basename");
+    rejects(replace_once(canonical, "\"file\":\"atomic.nnue\"",
+                         std::string("\"file\":\"") + std::string(256, 'a') + "\""),
+            "basename longer than 255 UTF-8 bytes");
+    rejects(replace_once(canonical, "\"file\":\"atomic.nnue\"", "\"file\":\"atomic.nnue.\""),
+            "trailing dot basename");
+    rejects(replace_once(canonical, "\"file\":\"atomic.nnue\"", "\"file\":\"atomic.nnue \""),
+            "trailing space basename");
+    rejects(replace_once(canonical, "atomic.nnue", "atomic\\u0001.nnue"),
+            "ASCII control in basename");
+    std::string delBasename = canonical;
+    const auto  networkName = delBasename.find("atomic.nnue");
+    if (networkName != std::string::npos)
+        delBasename.insert(networkName + 6, 1, char(0x7F));
+    rejects(std::move(delBasename), "DEL in basename");
+    rejects(canonical, "reserved manifest basename", "CON.atbin.manifest.json");
     rejects(replace_once(canonical, "atomic.nnue", "atomic\\u002ennue"),
             "noncanonical Unicode escape");
 

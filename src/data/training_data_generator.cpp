@@ -11,9 +11,7 @@
 #include "training_data_generator.h"
 
 #include <algorithm>
-#include <array>
 #include <atomic>
-#include <charconv>
 #include <chrono>
 #include <cmath>
 #include <cctype>
@@ -23,7 +21,6 @@
 #include <iomanip>
 #include <iostream>
 #include <limits>
-#include <locale>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -171,125 +168,6 @@ bool read_u64_value(std::istream& input, u64& value, std::string_view name, std:
     return true;
 }
 
-bool canonicalize_keep_draws_token(std::string_view token,
-                                   std::string&     canonical,
-                                   std::string&     error) {
-    canonical.clear();
-    std::size_t cursor   = 0;
-    bool        negative = false;
-    if (token[cursor] == '+' || token[cursor] == '-')
-    {
-        negative = token[cursor] == '-';
-        ++cursor;
-    }
-    if (negative || cursor == token.size())
-    {
-        error = "keep_draws must be a non-negative decimal value";
-        return false;
-    }
-
-    std::string digits;
-    bool        sawDigit       = false;
-    bool        sawPoint       = false;
-    long long   fractionalSize = 0;
-    while (cursor < token.size() && token[cursor] != 'e' && token[cursor] != 'E')
-    {
-        const unsigned char byte = token[cursor++];
-        if (byte == '.')
-        {
-            if (sawPoint)
-            {
-                error = "keep_draws contains more than one decimal point";
-                return false;
-            }
-            sawPoint = true;
-            continue;
-        }
-        if (byte < '0' || byte > '9')
-        {
-            error = "keep_draws must use decimal notation";
-            return false;
-        }
-        sawDigit = true;
-        digits.push_back(char(byte));
-        if (sawPoint)
-            ++fractionalSize;
-    }
-    if (!sawDigit)
-    {
-        error = "keep_draws must contain decimal digits";
-        return false;
-    }
-
-    long long exponent = 0;
-    if (cursor < token.size())
-    {
-        ++cursor;
-        bool exponentNegative = false;
-        if (cursor < token.size() && (token[cursor] == '+' || token[cursor] == '-'))
-        {
-            exponentNegative = token[cursor] == '-';
-            ++cursor;
-        }
-        if (cursor == token.size())
-        {
-            error = "keep_draws exponent is missing decimal digits";
-            return false;
-        }
-        for (; cursor < token.size(); ++cursor)
-        {
-            const unsigned char byte = token[cursor];
-            if (byte < '0' || byte > '9')
-            {
-                error = "keep_draws exponent must contain decimal digits only";
-                return false;
-            }
-            const int digit = byte - '0';
-            exponent        = std::min(1000000LL, exponent * 10 + digit);
-        }
-        if (exponentNegative)
-            exponent = -exponent;
-    }
-
-    const auto firstNonZero = digits.find_first_not_of('0');
-    if (firstNonZero == std::string::npos)
-    {
-        canonical = "0";
-        return true;
-    }
-    digits.erase(0, firstNonZero);
-    long long trailingZeros = 0;
-    while (digits.size() > 1 && digits.back() == '0')
-    {
-        digits.pop_back();
-        ++trailingZeros;
-    }
-
-    const long long point =
-      static_cast<long long>(digits.size()) + exponent - fractionalSize + trailingZeros;
-    if (point > 1 || (point == 1 && digits != "1"))
-    {
-        error = "keep_draws exact decimal value exceeds 1";
-        return false;
-    }
-
-    if (point == 1)
-        canonical = "1";
-    else
-    {
-        if (point < -4096)
-        {
-            error = "keep_draws exact decimal expansion exceeds 4096 characters";
-            return false;
-        }
-        canonical = "0.";
-        if (point < 0)
-            canonical.append(std::size_t(-point), '0');
-        canonical += digits;
-    }
-    return true;
-}
-
 bool read_keep_draws(std::istream& input,
                      double&       value,
                      std::string&  canonical,
@@ -298,52 +176,16 @@ bool read_keep_draws(std::istream& input,
     canonical.clear();
 
     std::string token;
-    if (!(input >> token) || token.empty() || token.size() > 4096)
+    if (!(input >> token))
     {
         error = "Missing or invalid value for generate_training_data option keep_draws";
         return false;
     }
-
-    std::istringstream numeric(token);
-    numeric.imbue(std::locale::classic());
-    double parsed = 0.0;
-    if (!(numeric >> parsed) || !std::isfinite(parsed) || parsed < 0.0 || parsed > 1.0)
+    if (DataResult normalized = normalize_atomic_keep_draws(token, value, canonical); !normalized)
     {
-        error = "keep_draws must be a finite decimal value between 0 and 1";
+        error = normalized.message;
         return false;
     }
-    char trailing = 0;
-    if (numeric >> trailing)
-    {
-        error = "keep_draws must be a finite decimal value between 0 and 1";
-        return false;
-    }
-    if (!canonicalize_keep_draws_token(token, canonical, error))
-        return false;
-
-    std::array<char, 64> effectiveBuffer{};
-    const auto [effectiveEnd, conversionError] =
-      std::to_chars(effectiveBuffer.data(), effectiveBuffer.data() + effectiveBuffer.size(), parsed,
-                    std::chars_format::general);
-    if (conversionError != std::errc{})
-    {
-        error = "keep_draws effective value cannot be serialized reproducibly";
-        return false;
-    }
-
-    std::string effectiveCanonical;
-    if (!canonicalize_keep_draws_token(
-          std::string_view(effectiveBuffer.data(),
-                           std::size_t(effectiveEnd - effectiveBuffer.data())),
-          effectiveCanonical, error))
-        return false;
-    if (effectiveCanonical != canonical)
-    {
-        error = "keep_draws must round-trip exactly through the generator's floating-point value";
-        return false;
-    }
-
-    value = parsed;
     return true;
 }
 

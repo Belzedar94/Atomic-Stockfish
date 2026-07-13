@@ -12,6 +12,8 @@
 
 #include "data/atomic_bin_v2_reader.h"
 #include "data/sha256.h"
+#include "movegen.h"
+#include "position.h"
 
 using namespace Stockfish;
 
@@ -40,6 +42,54 @@ struct TempDirectory {
         std::filesystem::remove_all(path, error);
     }
 };
+
+struct CurrentDirectoryGuard {
+    std::filesystem::path original = std::filesystem::current_path();
+    ~CurrentDirectoryGuard() {
+        std::error_code error;
+        std::filesystem::current_path(original, error);
+    }
+};
+
+struct StationaryFixture {
+    std::string legalFen;
+    std::string illegalFen;
+    std::string move;
+    std::string flags;
+};
+
+StationaryFixture load_stationary_fixture() {
+    const std::vector<std::filesystem::path> candidates = {
+      "tests/fixtures/atomic-bin-v2/stationary-king-castling.txt",
+      "../tests/fixtures/atomic-bin-v2/stationary-king-castling.txt"};
+    std::ifstream input;
+    for (const auto& candidate : candidates)
+    {
+        input.open(candidate);
+        if (input)
+            break;
+        input.clear();
+    }
+    StationaryFixture fixture;
+    std::string       line;
+    while (std::getline(input, line))
+    {
+        const auto separator = line.find('=');
+        if (separator == std::string::npos)
+            continue;
+        const std::string key   = line.substr(0, separator);
+        const std::string value = line.substr(separator + 1);
+        if (key == "legal_fen")
+            fixture.legalFen = value;
+        else if (key == "illegal_in_check_fen")
+            fixture.illegalFen = value;
+        else if (key == "move")
+            fixture.move = value;
+        else if (key == "flags")
+            fixture.flags = value;
+    }
+    return fixture;
+}
 
 Data::TrainingDataSample ordinary_sample(int result = 1) {
     Data::TrainingDataSample sample;
@@ -136,6 +186,35 @@ Dataset create_dataset(const std::filesystem::path&    directory,
     return dataset;
 }
 
+Dataset create_dataset_records(const std::filesystem::path&                 directory,
+                               std::string_view                             stem,
+                               const std::vector<Data::TrainingDataSample>& samples) {
+    Dataset dataset;
+    dataset.shard    = directory / (std::string(stem) + ".atbin");
+    dataset.manifest = directory / (std::string(stem) + ".atbin.manifest.json");
+    Data::AtomicBinV2Header header{};
+    check(bool(Data::encode_atomic_bin_v2_header(samples.size(), header)),
+          "encode multi-record fixture header");
+    dataset.bytes.insert(dataset.bytes.end(), header.begin(), header.end());
+    u64 draws = 0;
+    for (const auto& sample : samples)
+    {
+        Data::AtomicBinV2Record record{};
+        check(bool(Data::encode_atomic_bin_v2(sample, record)), "encode multi-record fixture");
+        dataset.bytes.insert(dataset.bytes.end(), record.begin(), record.end());
+        draws += sample.result == 0;
+    }
+    check(write_bytes(dataset.shard, dataset.bytes), "write multi-record fixture shard");
+    std::string hash;
+    u64         size = 0;
+    check(bool(Data::sha256_file(dataset.shard, hash, size)), "hash multi-record fixture shard");
+    dataset.metadata = metadata_for(dataset.manifest, dataset.shard, samples.size(), draws, hash);
+    dataset.metadata.atomic960 =
+      !samples.empty() && bool(samples.front().flags & Data::TRAINING_DATA_CHESS960);
+    check(write_manifest(dataset.metadata), "write multi-record fixture manifest");
+    return dataset;
+}
+
 void expect_open_failure(const std::filesystem::path& manifest, std::string_view name) {
     std::unique_ptr<Data::AtomicBinV2DatasetReader> reader;
     const Data::DataResult result = Data::AtomicBinV2DatasetReader::open(manifest, reader);
@@ -154,12 +233,21 @@ void rewrite_authentication(Dataset& dataset) {
 }  // namespace
 
 int main() {
+    Bitboards::init();
+    Attacks::init();
+    Position::init();
+
     {
         TempDirectory temporary("valid");
         Dataset       dataset = create_dataset(temporary.path, "dataset");
         std::unique_ptr<Data::AtomicBinV2DatasetReader> reader;
-        check(bool(Data::AtomicBinV2DatasetReader::open(dataset.manifest, reader)),
-              "open valid authenticated dataset");
+        const Data::DataResult                          openResult =
+          Data::AtomicBinV2DatasetReader::open(dataset.manifest, reader);
+        if (!openResult)
+            std::cerr << "open valid authenticated dataset: " << openResult.message << '\n';
+        check(bool(openResult), "open valid authenticated dataset");
+        if (!reader)
+            return 1;
         Data::AtomicBinV2DecodedRecord decoded;
         bool                           hasRecord = false;
         check(reader && bool(reader->next(decoded, hasRecord)) && hasRecord,
@@ -193,6 +281,65 @@ int main() {
         check(!poisoned && !hasRecord
                 && poisoned.message.find("cannot continue") != std::string::npos,
               "failed stream is permanently poisoned");
+    }
+    {
+        TempDirectory temporary("snapshot");
+        auto          second = ordinary_sample(0);
+        second.score         = 77;
+        Dataset dataset =
+          create_dataset_records(temporary.path, "dataset", {ordinary_sample(1), second});
+        std::unique_ptr<Data::AtomicBinV2DatasetReader> reader;
+        check(bool(Data::AtomicBinV2DatasetReader::open(dataset.manifest, reader)),
+              "open dataset before snapshot isolation test");
+        Data::AtomicBinV2DecodedRecord decoded;
+        bool                           hasRecord = false;
+        check(reader && bool(reader->next(decoded, hasRecord)) && hasRecord
+                && decoded.sample.score == 31,
+              "stage authenticated snapshot and stream first record");
+
+        dataset.bytes[Data::AtomicBinV2HeaderSize + Data::AtomicBinV2RecordSize + 48] ^= 1;
+        check(write_bytes(dataset.shard, dataset.bytes),
+              "mutate source after private snapshot staging");
+        check(bool(reader->next(decoded, hasRecord)) && hasRecord && decoded.sample.score == 77,
+              "staged authenticated bytes survive later source mutation");
+        check(bool(reader->next(decoded, hasRecord)) && !hasRecord,
+              "snapshot stream reaches authenticated EOF");
+    }
+    {
+        TempDirectory temporary("stream-eof");
+        Dataset       dataset = create_dataset(temporary.path, "dataset");
+        std::unique_ptr<Data::AtomicBinV2DatasetReader> reader;
+        check(bool(Data::AtomicBinV2DatasetReader::open(dataset.manifest, reader)),
+              "open dataset for streamed EOF accounting test");
+        // Simulate a post-open consumer metadata bug to exercise the public
+        // EOF guard independently from the identical open-time audit guard.
+        const_cast<Data::AtomicBinV2Manifest&>(reader->manifest()).draws = 1;
+        Data::AtomicBinV2DecodedRecord decoded;
+        bool                           hasRecord = false;
+        check(bool(reader->next(decoded, hasRecord)) && hasRecord,
+              "stream record before indexed EOF mismatch");
+        const Data::DataResult eof = reader->next(decoded, hasRecord);
+        check(!eof && !hasRecord
+                && eof.message.find("shard=0 local=1 global=1") != std::string::npos
+                && eof.message.find("EOF") != std::string::npos,
+              "streamed totals fail at indexed EOF");
+    }
+    {
+        TempDirectory         temporary("cwd");
+        Dataset               dataset = create_dataset(temporary.path, "dataset");
+        CurrentDirectoryGuard cwd;
+        std::filesystem::current_path(temporary.path);
+        std::unique_ptr<Data::AtomicBinV2DatasetReader> reader;
+        check(bool(Data::AtomicBinV2DatasetReader::open(dataset.manifest.filename(), reader)),
+              "open relative sidecar from captured CWD");
+        check(reader && reader->manifest().manifestPath.is_absolute()
+                && reader->manifest().shards.front().path.is_absolute(),
+              "manifest and shard paths captured as absolute");
+        std::filesystem::current_path(cwd.original);
+        Data::AtomicBinV2DecodedRecord decoded;
+        bool                           hasRecord = false;
+        check(reader && bool(reader->next(decoded, hasRecord)) && hasRecord,
+              "CWD change cannot rebind staged shard source");
     }
     {
         TempDirectory temporary("multi");
@@ -309,7 +456,13 @@ int main() {
         Dataset       dataset  = create_dataset(temporary.path, "dataset");
         dataset.metadata.draws = 1;
         check(write_manifest(dataset.metadata), "write incorrect statistics");
-        expect_open_failure(dataset.manifest, "audited draw statistics mismatch rejected");
+        std::unique_ptr<Data::AtomicBinV2DatasetReader> reader;
+        const Data::DataResult                          result =
+          Data::AtomicBinV2DatasetReader::open(dataset.manifest, reader);
+        check(!result && !reader
+                && result.message.find("shard=0 local=1 global=1") != std::string::npos
+                && result.message.find("EOF") != std::string::npos,
+              "audited draw totals fail at indexed EOF");
     }
     {
         TempDirectory temporary("missing");
@@ -359,18 +512,34 @@ int main() {
 #endif
 
     {
+        const StationaryFixture fixture = load_stationary_fixture();
+        const bool fixtureLoaded        = !fixture.legalFen.empty() && !fixture.illegalFen.empty()
+                                && fixture.move == "c1b1" && fixture.flags == "atomic960";
+        check(fixtureLoaded, "load stationary-king Atomic960 fixture file");
+        if (!fixtureLoaded)
+            return 1;
         Data::TrainingDataSample rejected;
-        rejected.fen    = "7k/8/8/8/8/8/2PP4/1RK4q w Q - 0 1";
+        rejected.fen    = fixture.illegalFen;
         rejected.move   = Move::make<CASTLING>(SQ_C1, SQ_B1);
         rejected.result = 1;
         rejected.flags  = Data::TRAINING_DATA_CHESS960;
+        Position  inCheck;
+        StateInfo inCheckState{};
+        check(!inCheck.set(rejected.fen, true, &inCheckState),
+              "archived Atomic960 stationary-king fixture parses");
+        check(!MoveList<LEGAL>(inCheck).contains(rejected.move),
+              "archived Atomic960 stationary-king castling through check is illegal");
+
+        // Atomic BIN V2 requires the canonical file-letter spelling emitted
+        // by Position for Atomic960 castling rights.
+        rejected.fen = inCheck.fen();
         Data::AtomicBinV2Record record{};
         const Data::DataResult  rejection = Data::encode_atomic_bin_v2(rejected, record);
         check(!rejection && rejection.error == Data::DataError::INVALID_MOVE,
               "Atomic960 stationary-king castling through check rejected");
 
         Data::TrainingDataSample accepted = rejected;
-        accepted.fen                      = "7k/8/8/8/8/8/8/1RK5 w B - 0 1";
+        accepted.fen                      = fixture.legalFen;
         check(bool(Data::encode_atomic_bin_v2(accepted, record)),
               "legal Atomic960 stationary-king castling preserved");
         Data::TrainingDataSample roundTrip;

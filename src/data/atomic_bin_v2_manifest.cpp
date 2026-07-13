@@ -15,12 +15,17 @@
 #include "atomic_bin_v2_manifest.h"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cerrno>
+#include <charconv>
+#include <cmath>
 #include <cstddef>
 #include <cstring>
 #include <limits>
+#include <locale>
 #include <optional>
+#include <sstream>
 #include <string>
 #include <system_error>
 #include <utility>
@@ -122,13 +127,199 @@ bool valid_utf8(std::string_view text) {
     return true;
 }
 
-bool valid_decimal(std::string_view text) {
-    if (text == "0" || text == "1")
-        return true;
-    return text.size() >= 3 && text[0] == '0' && text[1] == '.' && text.back() >= '1'
-        && text.back() <= '9' && std::all_of(text.begin() + 2, text.end(), [](unsigned char value) {
-               return value >= '0' && value <= '9';
-           });
+DataResult
+canonicalize_keep_draws(std::string_view token, double& effective, std::string& canonical) {
+    effective = 0.0;
+    canonical.clear();
+    if (token.empty() || token.size() > 4096)
+        return invalid_manifest("keep_draws must contain between 1 and 4096 bytes");
+
+    std::size_t cursor   = 0;
+    bool        negative = false;
+    if (token[cursor] == '+' || token[cursor] == '-')
+    {
+        negative = token[cursor] == '-';
+        ++cursor;
+    }
+    if (negative || cursor == token.size())
+        return invalid_manifest("keep_draws must be a non-negative decimal value");
+
+    std::string digits;
+    bool        sawDigit       = false;
+    bool        sawPoint       = false;
+    long long   fractionalSize = 0;
+    while (cursor < token.size() && token[cursor] != 'e' && token[cursor] != 'E')
+    {
+        const unsigned char byte = token[cursor++];
+        if (byte == '.')
+        {
+            if (sawPoint)
+                return invalid_manifest("keep_draws contains more than one decimal point");
+            sawPoint = true;
+            continue;
+        }
+        if (byte < '0' || byte > '9')
+            return invalid_manifest("keep_draws must use decimal notation");
+        sawDigit = true;
+        digits.push_back(char(byte));
+        if (sawPoint)
+            ++fractionalSize;
+    }
+    if (!sawDigit)
+        return invalid_manifest("keep_draws must contain decimal digits");
+
+    long long exponent = 0;
+    if (cursor < token.size())
+    {
+        ++cursor;
+        bool exponentNegative = false;
+        if (cursor < token.size() && (token[cursor] == '+' || token[cursor] == '-'))
+        {
+            exponentNegative = token[cursor] == '-';
+            ++cursor;
+        }
+        if (cursor == token.size())
+            return invalid_manifest("keep_draws exponent is missing decimal digits");
+        for (; cursor < token.size(); ++cursor)
+        {
+            const unsigned char byte = token[cursor];
+            if (byte < '0' || byte > '9')
+                return invalid_manifest("keep_draws exponent must contain decimal digits only");
+            // The input is deliberately allowed to be thousands of bytes long
+            // so it can be rejected with a domain-specific error. Saturate
+            // before multiplying to avoid signed overflow on such tokens.
+            if (exponent < 1000000LL)
+                exponent = std::min(1000000LL, exponent * 10 + int(byte - '0'));
+        }
+        if (exponentNegative)
+            exponent = -exponent;
+    }
+
+    const auto firstNonZero = digits.find_first_not_of('0');
+    if (firstNonZero == std::string::npos)
+        canonical = "0";
+    else
+    {
+        digits.erase(0, firstNonZero);
+        long long trailingZeros = 0;
+        while (digits.size() > 1 && digits.back() == '0')
+        {
+            digits.pop_back();
+            ++trailingZeros;
+        }
+
+        const long long point =
+          static_cast<long long>(digits.size()) + exponent - fractionalSize + trailingZeros;
+        if (point > 1 || (point == 1 && digits != "1"))
+            return invalid_manifest("keep_draws exact decimal value exceeds 1");
+        if (point == 1)
+            canonical = "1";
+        else
+        {
+            canonical = "0.";
+            if (point < 0)
+            {
+                if (point < -4096)
+                    return invalid_manifest(
+                      "keep_draws exact decimal expansion exceeds 4096 bytes");
+                canonical.append(std::size_t(-point), '0');
+            }
+            canonical += digits;
+        }
+    }
+    if (canonical.size() > 4096)
+        return invalid_manifest("keep_draws exact decimal expansion exceeds 4096 bytes");
+
+    std::istringstream numeric{std::string(token)};
+    numeric.imbue(std::locale::classic());
+    double parsed = 0.0;
+    if (!(numeric >> parsed) || !std::isfinite(parsed) || parsed < 0.0 || parsed > 1.0)
+        return invalid_manifest("keep_draws must be a finite decimal value between 0 and 1");
+    char trailing = 0;
+    if (numeric >> trailing)
+        return invalid_manifest("keep_draws must be a finite decimal value between 0 and 1");
+
+    std::array<char, 64> effectiveBuffer{};
+    const auto [effectiveEnd, conversionError] =
+      std::to_chars(effectiveBuffer.data(), effectiveBuffer.data() + effectiveBuffer.size(), parsed,
+                    std::chars_format::general);
+    if (conversionError != std::errc{})
+        return invalid_manifest("keep_draws effective value cannot be serialized reproducibly");
+
+    std::string effectiveCanonical;
+    // Canonicalize the shortest floating-point spelling without applying the
+    // double round-trip check a second time.
+    const std::string_view effectiveToken(effectiveBuffer.data(),
+                                          std::size_t(effectiveEnd - effectiveBuffer.data()));
+    std::size_t            effectiveCursor = 0;
+    // The effective token is short and already finite. Expand it independently
+    // below so the comparison remains exact rather than numeric.
+    effective = parsed;
+    if (effectiveToken == token)
+        return DataResult::success();
+
+    // A second normalization is safe because to_chars emits at most 64 bytes.
+    // Temporarily compare through a local exact-decimal expansion.
+    std::string effectiveDigits;
+    bool        effectivePoint    = false;
+    long long   effectiveFraction = 0;
+    long long   effectiveExponent = 0;
+    if (effectiveToken[effectiveCursor] == '-')
+        return invalid_manifest("keep_draws effective value became negative");
+    while (effectiveCursor < effectiveToken.size() && effectiveToken[effectiveCursor] != 'e')
+    {
+        const char byte = effectiveToken[effectiveCursor++];
+        if (byte == '.')
+            effectivePoint = true;
+        else
+        {
+            effectiveDigits.push_back(byte);
+            if (effectivePoint)
+                ++effectiveFraction;
+        }
+    }
+    if (effectiveCursor < effectiveToken.size())
+    {
+        ++effectiveCursor;
+        bool negativeExponent = false;
+        if (effectiveToken[effectiveCursor] == '+' || effectiveToken[effectiveCursor] == '-')
+        {
+            negativeExponent = effectiveToken[effectiveCursor] == '-';
+            ++effectiveCursor;
+        }
+        for (; effectiveCursor < effectiveToken.size(); ++effectiveCursor)
+            effectiveExponent = effectiveExponent * 10 + (effectiveToken[effectiveCursor] - '0');
+        if (negativeExponent)
+            effectiveExponent = -effectiveExponent;
+    }
+    const auto effectiveFirst = effectiveDigits.find_first_not_of('0');
+    if (effectiveFirst == std::string::npos)
+        effectiveCanonical = "0";
+    else
+    {
+        effectiveDigits.erase(0, effectiveFirst);
+        long long trailingZeros = 0;
+        while (effectiveDigits.size() > 1 && effectiveDigits.back() == '0')
+        {
+            effectiveDigits.pop_back();
+            ++trailingZeros;
+        }
+        const long long point = static_cast<long long>(effectiveDigits.size()) + effectiveExponent
+                              - effectiveFraction + trailingZeros;
+        if (point == 1)
+            effectiveCanonical = "1";
+        else
+        {
+            effectiveCanonical = "0.";
+            if (point < 0)
+                effectiveCanonical.append(std::size_t(-point), '0');
+            effectiveCanonical += effectiveDigits;
+        }
+    }
+    if (effectiveCanonical != canonical)
+        return invalid_manifest(
+          "keep_draws must round-trip exactly through the generator's floating-point value");
+    return DataResult::success();
 }
 
 std::string path_filename_utf8(const std::filesystem::path& path) {
@@ -157,10 +348,28 @@ std::string path_filename_utf8(const std::filesystem::path& path) {
 bool valid_filename(const std::filesystem::path& path, std::string_view suffix = {}) {
     const std::string          filename  = path_filename_utf8(path);
     constexpr std::string_view Forbidden = "/\\:<>\"|?*";
-    return !filename.empty() && valid_utf8(filename) && filename != "." && filename != ".."
-        && filename.find('\0') == std::string::npos
-        && filename.find_first_of(Forbidden) == std::string::npos
-        && (suffix.empty() || (filename.size() > suffix.size() && ends_with(filename, suffix)));
+    if (filename.empty() || filename.size() > 255 || !valid_utf8(filename) || filename == "."
+        || filename == ".." || filename.find_first_of(Forbidden) != std::string::npos
+        || filename.back() == '.' || filename.back() == ' '
+        || std::any_of(filename.begin(), filename.end(),
+                       [](unsigned char byte) { return byte < 0x20 || byte == 0x7F; })
+        || (!suffix.empty() && (filename.size() <= suffix.size() || !ends_with(filename, suffix))))
+        return false;
+
+    std::string device = filename.substr(0, filename.find('.'));
+    std::transform(device.begin(), device.end(), device.begin(), [](unsigned char byte) {
+        return byte >= 'A' && byte <= 'Z' ? char(byte - 'A' + 'a') : char(byte);
+    });
+    if (device == "con" || device == "prn" || device == "aux" || device == "nul")
+        return false;
+    if (device.size() == 4 && (device.substr(0, 3) == "com" || device.substr(0, 3) == "lpt")
+        && device[3] >= '1' && device[3] <= '9')
+        return false;
+    if ((device.substr(0, 3) == "com" || device.substr(0, 3) == "lpt")
+        && (device.substr(3) == "\xC2\xB9" || device.substr(3) == "\xC2\xB2"
+            || device.substr(3) == "\xC2\xB3"))
+        return false;
+    return true;
 }
 
 void append_quoted(std::string& output, std::string_view value) {
@@ -255,8 +464,13 @@ DataResult validate_manifest(const AtomicBinV2Manifest& manifest) {
         return invalid_manifest("Atomic BIN V2 built-in book metadata must use null fields");
     if (manifest.threads == 0 || manifest.hashMb == 0)
         return invalid_manifest("Atomic BIN V2 UCI options are outside their domain");
-    if (!valid_decimal(manifest.options.keepDraws))
-        return invalid_manifest("Atomic BIN V2 keep_draws is not a canonical decimal string");
+    double      keepDrawsEffective = 0.0;
+    std::string keepDrawsCanonical;
+    if (DataResult keepDraws = normalize_atomic_keep_draws(manifest.options.keepDraws,
+                                                           keepDrawsEffective, keepDrawsCanonical);
+        !keepDraws || keepDrawsCanonical != manifest.options.keepDraws)
+        return invalid_manifest(
+          "Atomic BIN V2 keep_draws is not an exact canonical generator value");
     const auto& options = manifest.options;
     if (options.searchDepthMin <= 0 || options.searchDepthMax < options.searchDepthMin
         || options.searchDepthMax >= MAX_PLY || options.evalLimit <= 0
@@ -358,6 +572,19 @@ DataResult write_all(int descriptor, const std::string& bytes) {
 #endif
 
 }  // namespace
+
+DataResult
+normalize_atomic_keep_draws(std::string_view token, double& effective, std::string& canonical) {
+    effective = 0.0;
+    canonical.clear();
+    double      parsed = 0.0;
+    std::string normalized;
+    if (DataResult result = canonicalize_keep_draws(token, parsed, normalized); !result)
+        return result;
+    effective = parsed;
+    canonical = std::move(normalized);
+    return DataResult::success();
+}
 
 std::filesystem::path atomic_bin_v2_manifest_path(const std::filesystem::path& firstShard) {
     std::filesystem::path path = firstShard;
@@ -1030,10 +1257,17 @@ DataResult load_atomic_bin_v2_manifest(const std::filesystem::path& manifestPath
         || !ends_with(path_filename_utf8(manifestPath), ".atbin.manifest.json"))
         return invalid_manifest(
           "Atomic BIN V2 datasets must be opened through an .atbin.manifest.json sidecar");
+    std::error_code       pathError;
+    std::filesystem::path capturedPath = std::filesystem::absolute(manifestPath, pathError);
+    if (pathError || capturedPath.empty())
+        return DataResult::failure(DataError::OPEN_FAILED,
+                                   "Cannot capture an absolute Atomic BIN V2 manifest path: "
+                                     + pathError.message());
+    capturedPath = capturedPath.lexically_normal();
     std::string bytes;
-    if (DataResult read = read_manifest_file(manifestPath, bytes); !read)
+    if (DataResult read = read_manifest_file(capturedPath, bytes); !read)
         return read;
-    return parse_atomic_bin_v2_manifest(bytes, manifestPath, output);
+    return parse_atomic_bin_v2_manifest(bytes, capturedPath, output);
 }
 
 DataResult render_atomic_bin_v2_manifest(const AtomicBinV2Manifest& manifest, std::string& json) {
