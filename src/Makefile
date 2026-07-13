@@ -176,7 +176,7 @@ else
 	ATOMIC_DATA_TOOLS_ENTRY_LDFLAGS =
 endif
 
-# The production V2 reader is a standalone manifest validator. Keep this
+# The production V2 reader is a standalone manifest validator/decoder. Keep this
 # object list explicit: no playing main/search/thread/TT object and no data
 # generator writer object may enter the data-tools binary.
 ATOMIC_DATA_TOOLS_SRCS = data/atomic_data_tools.cpp data/atomic_data_tools_json.cpp \
@@ -1124,8 +1124,8 @@ help:
 	echo "build                   > skip profile-guided optimization" && \
 	echo "data-generator          > build the isolated Atomic training-data generator" && \
 	echo "data-generator-tests    > build/test generator with ATOMIC_NNUE_TEST_NET" && \
-	echo "data-tools              > build the manifest-only Atomic BIN V2 validator" && \
-	echo "data-tools-tests        > build/test the production V2 validation CLI" && \
+	echo "data-tools              > build the manifest-only Atomic BIN V2 validator/decoder" && \
+	echo "data-tools-tests        > build/test the production V2 validation/decode CLI" && \
 	echo "atomic-data-tools-json-tests > run lossless validation-response unit tests" && \
 	echo "atomic-unit-tests       > build and run Atomic C++ unit tests" && \
 	echo "atomic-api-tests        > build and run Atomic shared-API unit tests" && \

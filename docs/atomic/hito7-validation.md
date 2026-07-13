@@ -356,8 +356,9 @@ not independently trigger a local Elo run.
 
 Atomic-Stockfish now exposes the C1 dataset reader through a standalone
 `atomic-stockfish-data-tools` artifact and `make data-tools` target. Its frozen
-version-1 contract has only `capabilities` and
-`validate --format atomic-bin-v2 --manifest <sidecar>`. Both the format and the
+version-1 contract initially exposed `capabilities` and
+`validate --format atomic-bin-v2 --manifest <sidecar>`; H7.5 adds the bounded
+`decode` operation below. Both the format and the
 manifest entrypoint are explicit: positional input, format guessing and a raw
 `.atbin` shard are rejected. Full details and the exact canonical JSON are in
 `docs/atomic/data-tools.md`.
@@ -372,6 +373,24 @@ authoritative parse, authentication and semantic failures exit 3. Failures
 write one canonical JSON line to stderr and preserve the C1 diagnostic text,
 including `shard/local/global` indexes. Rewind remains available and tested at
 the C++ library layer but is intentionally absent from this one-pass CLI.
+
+## H7.5 - Lossless bounded decode CLI
+
+The same standalone artifact adds
+`decode --format atomic-bin-v2 --manifest <sidecar> [--offset UINT64]
+--limit UINT32`. Limit is mandatory and bounded to `1..4096`; offset defaults
+to zero and the complete slice must fit. The versioned JSONL schema is frozen
+at `schemas/atomic-data-tools-decode-v1.json` with SHA-256
+`5e3f8d7c6db6ee955b71747ee063859e15609adb557a3754228a606f3df2caad`,
+and capabilities now advertise operations `validate,decode` plus that digest.
+
+Decode buffers the selected records but exhausts `AtomicBinV2DatasetReader`
+before exposing stdout. A corrupt record or shard anywhere in the dataset,
+including after the slice, preserves the existing exit-3/error-JSON class and
+leaves stdout byte-empty. Success is one provenance header, exactly `limit`
+lossless records and one full-validation footer. Tests pin exact bytes, every
+move type, castling-to-rook-origin semantics, Atomic960 Shredder-FEN, uint32-max ply,
+second-shard indexes, Unicode, bounds, raw rejection and no output files.
 
 The executable uses an explicit reader-only object list. It excludes playing
 `main`, search, threads and TT, and excludes the V2 sink and generator writer.

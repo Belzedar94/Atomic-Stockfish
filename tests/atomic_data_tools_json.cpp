@@ -42,6 +42,38 @@ int main() {
     check(rendered.find(R"("shards":"100000")") == std::string::npos,
           "manifest-bounded shard count became a string");
     check(rendered.find('\r') == std::string::npos, "canonical response contains CR");
+
+    Stockfish::Data::AtomicBinV2DecodedRecord record{};
+    record.globalIndex = Uint64Max;
+    record.shardIndex  = AboveJsSafeInteger;
+    record.localIndex  = Uint64Max;
+    record.sample.fen  = "7k/8/8/8/8/8/4P3/K7 w - - 0 1";
+    record.fields.position.castlingRookOrigins.fill(Stockfish::Data::AtomicBinV2NoSquare);
+    record.fields.position.enPassantSquare = Stockfish::Data::AtomicBinV2NoSquare;
+    record.fields.position.fullmove        = 1;
+    record.fields.move.from                = Stockfish::u8(Stockfish::SQ_E2);
+    record.fields.move.to                  = Stockfish::u8(Stockfish::SQ_E3);
+    record.fields.ply                      = std::numeric_limits<Stockfish::u32>::max();
+    const std::string decoded = Stockfish::Data::render_atomic_data_tools_decode_record(record);
+    check(decoded.find(R"("global_index":"18446744073709551615")") != std::string::npos,
+          "decode global index is not a lossless decimal string");
+    check(decoded.find(R"("shard_index":"9007199254740993")") != std::string::npos,
+          "decode shard index is not a lossless decimal string");
+    check(decoded.find(R"("local_index":"18446744073709551615")") != std::string::npos,
+          "decode local index is not a lossless decimal string");
+    check(decoded.find(R"("ply":"4294967295")") != std::string::npos,
+          "decode UINT32_MAX ply is not a lossless decimal string");
+    check(decoded.find(R"("wire":"1292")") != std::string::npos,
+          "decode move wire is not a lossless decimal string");
+    check(decoded.find('\r') == std::string::npos && decoded.back() == '\n',
+          "decode record is not canonical LF JSONL");
+
+    const std::string footer =
+      Stockfish::Data::render_atomic_data_tools_decode_footer(stats, Uint64Max, 4096);
+    check(footer.find(R"("offset":"18446744073709551615")") != std::string::npos,
+          "decode footer offset is not a lossless decimal string");
+    check(footer.find(R"("limit":4096,"records":"4096")") != std::string::npos,
+          "decode footer slice summary changed");
     std::cout << "Atomic data-tools JSON tests passed\n";
     return EXIT_SUCCESS;
 }

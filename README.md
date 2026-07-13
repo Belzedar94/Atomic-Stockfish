@@ -89,10 +89,14 @@ reader executable:
 make -j data-tools ARCH=x86-64-bmi2
 ./atomic-stockfish-data-tools validate --format atomic-bin-v2 \
   --manifest training_data.atbin.manifest.json
+./atomic-stockfish-data-tools decode --format atomic-bin-v2 \
+  --manifest training_data.atbin.manifest.json --offset 0 --limit 128
 ```
 
-Its canonical JSON/exit-code contract and the future pinned tools-wrapper
-delegation boundary are frozen in
+Its validation and bounded lossless JSONL decode authenticate the complete
+dataset before stdout, including corruption beyond a requested slice. The
+canonical JSON/exit-code/schema contract and pinned tools-wrapper delegation
+boundary are frozen in
 [`docs/atomic/data-tools.md`](docs/atomic/data-tools.md).
 
 ## Bindings and WebAssembly

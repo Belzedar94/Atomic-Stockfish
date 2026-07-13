@@ -1,3 +1,5 @@
+import hashlib
+import json
 from pathlib import Path
 
 
@@ -76,6 +78,26 @@ def test_data_tools_supplies_its_own_prefetch_stub() -> None:
     assert "int wmain(int argc, wchar_t* argv[])" in source
     assert "configure_binary_output();" in source
     assert "std::filesystem::u8path(*manifest)" in source
+    assert 'command == "decode"' in source
+    assert 'operations\":[\"validate\",\"decode\"]' in source
+
+
+def test_decode_jsonl_schema_is_frozen_and_capability_pinned() -> None:
+    schema_path = ROOT / "schemas" / "atomic-data-tools-decode-v1.json"
+    payload = schema_path.read_bytes()
+    assert payload.endswith(b"\n") and b"\r" not in payload
+    assert not payload.startswith(b"\xef\xbb\xbf")
+    document = json.loads(payload.decode("utf-8", errors="strict"))
+    assert document["schema_version"] == 1
+    assert document["status"] == "frozen"
+    digest = hashlib.sha256(payload).hexdigest()
+    assert digest == "5e3f8d7c6db6ee955b71747ee063859e15609adb557a3754228a606f3df2caad"
+    header = (ROOT / "src" / "data" / "atomic_data_tools_json.h").read_text(
+        encoding="utf-8"
+    )
+    assert digest in header
+    attributes = (ROOT / ".gitattributes").read_text(encoding="utf-8")
+    assert "schemas/atomic-data-tools-decode-v1.json text eol=lf" in attributes
 
 
 def test_generator_capability_remains_writer_only() -> None:
