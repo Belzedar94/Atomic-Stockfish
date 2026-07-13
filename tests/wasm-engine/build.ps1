@@ -55,9 +55,7 @@ $relativeSources = @(
     'nnue/nnue_accumulator.cpp',
     'nnue/nnue_misc.cpp',
     'nnue/network.cpp',
-    'nnue/features/full_threats.cpp',
-    'nnue/features/half_ka_v2_atomic.cpp',
-    'nnue/features/half_ka_v2_hm.cpp'
+    'nnue/features/half_ka_v2_atomic.cpp'
 )
 $sources = $relativeSources | ForEach-Object {
     $source = Join-Path $sourceRoot $_

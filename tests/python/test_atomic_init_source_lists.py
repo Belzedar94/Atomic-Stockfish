@@ -18,6 +18,28 @@ def test_every_binding_and_wasm_build_links_shared_initialization():
     assert '"src/atomic_init.cpp",' in setup
 
 
+def test_native_and_nnue_wasm_build_only_the_atomic_feature_extractor():
+    makefile = (ROOT / "src" / "Makefile").read_text(encoding="utf-8")
+    wasm_build = (ROOT / "tests" / "wasm-engine" / "build.ps1").read_text(
+        encoding="utf-8"
+    )
+
+    assert "nnue/features/half_ka_v2_atomic.cpp" in makefile
+    assert "nnue/features/half_ka_v2_atomic.h" in makefile
+    assert "'nnue/features/half_ka_v2_atomic.cpp'" in wasm_build
+
+    removed = (
+        "nnue/features/half_ka_v2_hm.cpp",
+        "nnue/features/half_ka_v2_hm.h",
+        "nnue/features/full_threats.cpp",
+        "nnue/features/full_threats.h",
+    )
+    for relative in removed:
+        assert relative not in makefile
+        assert relative not in wasm_build
+        assert not (ROOT / "src" / relative).exists()
+
+
 def test_reader_test_links_keep_transposition_table_dependency_isolated():
     makefile = (ROOT / "src" / "Makefile").read_text(encoding="utf-8")
     gitignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
