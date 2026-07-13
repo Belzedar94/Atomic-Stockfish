@@ -46,7 +46,8 @@ std::string_view atomic_data_schema_json() noexcept;
 
 // Additive capability envelope for clients that understand more than one
 // schema. The singular command above remains byte-exact for the pinned V1
-// tools/trainer handshake. V2 is codec-only until its sink is introduced.
+// tools/trainer handshake. This generator reports V2 write capability only;
+// the separate atomic-stockfish-data-tools artifact reports V2 read capability.
 std::string_view atomic_data_schemas_json() noexcept;
 
 // Encode one historical headerless record. The output is zero-filled even on

@@ -352,11 +352,74 @@ is pushed. Playing-engine matches, Syzygy A/B and any LOS gate remain deferred
 to the shared OpenBench scheduler; C1 changes only data-library objects and do
 not independently trigger a local Elo run.
 
+## H7.3-C2 - Production data-tools validation CLI
+
+Atomic-Stockfish now exposes the C1 dataset reader through a standalone
+`atomic-stockfish-data-tools` artifact and `make data-tools` target. Its frozen
+version-1 contract has only `capabilities` and
+`validate --format atomic-bin-v2 --manifest <sidecar>`. Both the format and the
+manifest entrypoint are explicit: positional input, format guessing and a raw
+`.atbin` shard are rejected. Full details and the exact canonical JSON are in
+`docs/atomic/data-tools.md`.
+
+Validation consumes `AtomicBinV2DatasetReader::next` until EOF rather than
+merely accepting the sidecar. The success object reports shard/record counts,
+side-to-move result totals and Atomic960 records. Every potentially `uint64`
+record counter is a decimal string so JavaScript and other IEEE-754 JSON
+consumers retain exact values above `2^53`; the bounded shard count remains a
+number. Contract failures exit 2;
+authoritative parse, authentication and semantic failures exit 3. Failures
+write one canonical JSON line to stderr and preserve the C1 diagnostic text,
+including `shard/local/global` indexes. Rewind remains available and tested at
+the C++ library layer but is intentionally absent from this one-pass CLI.
+
+The executable uses an explicit reader-only object list. It excludes playing
+`main`, search, threads and TT, and excludes the V2 sink and generator writer.
+Conversely the normal playing `SRCS` do not include the CLI or reader. The
+generator's capability therefore remains honestly
+`atomic-bin-v2 read:false,write:true`; only data-tools advertises
+`read:true,write:false`. Legacy V1 behavior and its byte-exact handshakes are
+unchanged.
+
+The black-box contract gate creates two authenticated shards, validates every
+record, exercises checksum corruption and a semantically corrupt record in the
+second shard with a recomputed manifest SHA, and locks manifest-only behavior,
+canonical raw-LF output, Unicode paths/arguments, error codes and argument
+handling. A C++ unit calls the same production success-response renderer with
+`2^53 + 1` and `UINT64_MAX`, proving the five record counters remain strings
+while the bounded shard count remains numeric. GCC/Clang release, debug/assert,
+MinGW and memory-sanitized CI lanes build and run both the endpoint and this
+unit.
+Because this block changes only separately linked data objects, its playing
+non-regression gate is the unchanged Atomic NNUE signature `338376`; it does
+not trigger the three-TC strength gate.
+
+The expected next wrapper change is also frozen without modifying the sibling
+repository here: `variant-nnue-tools` must authenticate its Atomic-Stockfish
+gitlink, build this target, verify the exact capabilities response, and
+delegate V2 validation with the explicit format and sidecar arguments while
+preserving the child JSON and exit class. It must never infer or rewrite a raw
+shard path. The trainer remains a separate manifest-only integration.
+
+### 2026-07-13 local pre-review snapshot
+
+The focused MinGW x86-64 release build passed the production data-tools
+black-box contract, the canonical manifest reader, the authenticated streaming
+reader and the frozen Legacy V1 suite. The source/CI isolation tests passed
+`4/4`; raw-byte output remained LF-only for capabilities, success and errors;
+non-ASCII commands and a valid manifest directory round-tripped as UTF-8; and
+`objclean` removed the executable and its LTO residues. The workflow parsed as
+YAML, formatting/diff checks were clean, and a fresh playing-engine link with
+the external network retained signature `338376`. No local strength match was
+run because this separately linked data surface cannot affect play. Linux
+GCC/Clang, debug/assert and sanitizer runs remain assigned to CI after review.
+
 ## Remaining Hito 7 work
 
-H7.1, H7.2 and H7.3-A/B/C1 are compatibility boundaries, not completion of Hito
-7. H7.3-C2 exposes the reader through data-tools and validates every record in
-the tools and trainer.
+H7.1, H7.2 and H7.3-A/B/C1/C2 are compatibility boundaries, not completion of
+Hito 7. The Atomic-owned V2 validation endpoint is now defined; the pinned
+`variant-nnue-tools` `atomic` branch must adopt that delegation contract, and
+the trainer still needs its manifest-only V2 loader and end-to-end validation.
 Legacy V1 remains a supported fallback throughout the 1.x line.
 
 This project remains isolated in the sibling repositories: every tools or

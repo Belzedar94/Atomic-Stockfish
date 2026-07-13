@@ -48,6 +48,7 @@ jobs:
           make -j2 ARCH=x86-64 COMP=${{ matrix.comp }} COMPCXX=${{ matrix.cxx }} atomic-bin-v2-manifest-tests
           make -j2 ARCH=x86-64 COMP=${{ matrix.comp }} COMPCXX=${{ matrix.cxx }} atomic-bin-v2-manifest-reader-tests
           make -j2 ARCH=x86-64 COMP=${{ matrix.comp }} COMPCXX=${{ matrix.cxx }} atomic-bin-v2-reader-tests
+          make -j2 ARCH=x86-64 COMP=${{ matrix.comp }} COMPCXX=${{ matrix.cxx }} data-tools-tests
           make -j2 ARCH=x86-64 COMP=${{ matrix.comp }} COMPCXX=${{ matrix.cxx }} data-generator
       - name: Functional data-generator gate (full on GCC, smoke on Clang)
         run: |
@@ -89,6 +90,7 @@ jobs:
           make -C src -j2 ARCH=x86-64 debug=yes optimize=no atomic-bin-v2-manifest-tests
           make -C src -j2 ARCH=x86-64 debug=yes optimize=no atomic-bin-v2-manifest-reader-tests
           make -C src -j2 ARCH=x86-64 debug=yes optimize=no atomic-bin-v2-reader-tests
+          make -C src -j2 ARCH=x86-64 debug=yes optimize=no data-tools-tests
           make -C src -j2 ARCH=x86-64 debug=yes optimize=no data-generator
           bash tests/perft.sh src/atomic-stockfish
           python3 tests/atomic_search.py --candidate src/atomic-stockfish --use-nnue false
@@ -130,6 +132,7 @@ jobs:
           make -C src -j2 ARCH=x86-64 COMP=mingw atomic-bin-v2-manifest-tests
           make -C src -j2 ARCH=x86-64 COMP=mingw atomic-bin-v2-manifest-reader-tests
           make -C src -j2 ARCH=x86-64 COMP=mingw atomic-bin-v2-reader-tests
+          make -C src -j2 ARCH=x86-64 COMP=mingw data-tools-tests
           printf 'atomic_data_schema\natomic_data_schemas\nquit\n' | src/atomic-stockfish-data-generator.exe > schema.txt
           grep -F '"schema_sha256":"acca0f551f1c012c31a6c727dedccaebb7b5ebbc46810edb87e31bb208d5abe1"' schema.txt
           grep -F '"schema_sha256":"0352b036f2a140c609e3eb9c9d635dc553e8d77253d8faa92437390f5cf93cb6"' schema.txt
@@ -170,6 +173,7 @@ jobs:
         run: |
           make -j2 ARCH=x86-64-sse41-popcnt sanitize=${{ matrix.sanitizer }} debug=yes optimize=no build
           make -j2 ARCH=x86-64-sse41-popcnt sanitize=${{ matrix.sanitizer }} debug=yes optimize=no data-generator
+          make -j2 ARCH=x86-64-sse41-popcnt sanitize=${{ matrix.sanitizer }} debug=yes optimize=no data-tools
       - name: Memory-sanitized units
         if: matrix.mode == 'memory'
         env:
@@ -184,6 +188,7 @@ jobs:
           CXXFLAGS=-O1 make -C src -j2 ARCH=x86-64-sse41-popcnt sanitize=${{ matrix.sanitizer }} debug=yes optimize=no atomic-bin-v2-manifest-tests
           CXXFLAGS=-O1 make -C src -j2 ARCH=x86-64-sse41-popcnt sanitize=${{ matrix.sanitizer }} debug=yes optimize=no atomic-bin-v2-manifest-reader-tests
           CXXFLAGS=-O1 make -C src -j2 ARCH=x86-64-sse41-popcnt sanitize=${{ matrix.sanitizer }} debug=yes optimize=no atomic-bin-v2-reader-tests
+          CXXFLAGS=-O1 make -C src -j2 ARCH=x86-64-sse41-popcnt sanitize=${{ matrix.sanitizer }} debug=yes optimize=no data-tools-tests
           bash tests/perft.sh src/atomic-stockfish
       - name: Instrumented data-generator smoke (Threads=2)
         env:
@@ -294,6 +299,7 @@ jobs:
           tests/python/test_atomic_training_data_schema.py
           tests/python/test_atomic_bin_v2_schema.py
           tests/python/test_atomic_bin_v2_manifest_schema.py
+          tests/python/test_atomic_data_tools_source_lists.py
           tests/python/test_atomic_init_source_lists.py
           tests/python/test_atomic_nnue_differential.py
           tests/python/test_legacy_pipeline_lock.py

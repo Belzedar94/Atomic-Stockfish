@@ -21,6 +21,7 @@ src/atomic-bin-v2-sink-tests*
 src/atomic-bin-v2-manifest-tests*
 src/atomic-bin-v2-manifest-reader-tests*
 src/atomic-bin-v2-reader-tests*
+src/atomic-data-tools-json-tests*
 src/-lstdc++.res
 
 # Neural network for the NNUE evaluation
