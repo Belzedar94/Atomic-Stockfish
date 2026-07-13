@@ -150,3 +150,62 @@ feature family as a separately reviewable build-graph change, including native,
 bindings, WASM, and data-generator compilation gates. Later Hito 8 blocks will
 profile make/undo, move generation, accumulator caching, and NNUE-trained PGO
 before proposing further changes.
+
+## H8.2a - Remove inactive NNUE feature extractors
+
+H8.2a deletes the `FullThreats` and `HalfKAv2_hm` implementations and removes
+them from the native and NNUE-WASM build graphs. The active legacy backend is
+still exactly `HalfKAv2Atomic`; its version, feature hash, 45,056 inputs,
+transformer dimensions, network architecture, quantization, and serialized
+format do not change. A structural test now requires native and NNUE-WASM to
+compile only the Atomic extractor.
+
+The measured source commit is
+`1288bef27dc4344d69b182c929118a07cacf82fc`, based on the H8.1 squash merge
+`2d85e90603825069bdb7aaf16b2115424323f603`. The exact clean BMI2 artifact
+embeds that source SHA.
+
+### Source, artifact, and functional evidence
+
+- Four inactive extractor files removed: 640 deleted lines versus 25 lines of
+  source-inventory test coverage.
+- Native executable: 4,263,264 B to 4,262,279 B, a further 985-byte reduction.
+- Candidate SHA-256:
+  `DD789CC09190E50DED9A5DC59076774CEF67BE6026B851CCC48782381DF00379`.
+- C++ Atomic unit tests: 63/63.
+- Shared board API tests: 34/34.
+- All eight Atomic/Atomic960 perft vectors and 19/19 focused rule transitions.
+- Fixed search corpus: 16/16 with classical evaluation and 16/16 with
+  `Use NNUE=true` and the frozen net.
+- NNUE mode contract: `false`, `true`, `pure`, and invalid-net handling.
+- Reprosearch: 12/12.
+- One million deterministic incremental make/undo operations, including 18,761
+  captures, zero capture-forced refreshes, 241,087 full-refresh comparisons,
+  and state signature `0x8742E39B793C46AB`.
+- A 10,000-position differential against frozen Fairy passed 10,000/10,000,
+  with maximum final `Use NNUE=true` delta 0 and maximum pure trace delta
+  0.005.
+- GitHub CI on the exact source SHA passed all 14 jobs, including GCC, Clang,
+  debug/assert, sanitizers, Windows MinGW data generator, Python 3.9/3.12,
+  CommonJS/ES-module WASM, and the pinned legacy pipeline.
+
+### Clean-machine commit A/B
+
+OpenBench was paused for the serialized benchmark and restored before further
+project work. Both artifacts were clean MinGW g++ 15.2 BMI2 release builds with
+`-Wl,--no-insert-timestamp`. The runner authenticated the executables, frozen
+net, corpus, and pinned dependency before and after the run.
+
+| Side | NPS samples | Median NPS |
+| --- | --- | ---: |
+| H8.2a candidate | 1,420,139; 1,417,045; 1,426,367; 1,398,760; 1,412,429 | 1,417,045 |
+| H8.1 control | 1,412,429; 1,400,266; 1,383,880; 1,394,263; 1,424,805 | 1,400,266 |
+
+The commit A/B gate passed with ratio `1.0120` (+1.20%) and the 985-byte size
+reduction. Complete output and the machine-readable manifest are retained in
+[`evidence/hito8-dead-feature-extractors`](evidence/hito8-dead-feature-extractors/README.md).
+
+The playing signature remains exactly `338376`, so H8.2a is a
+no-functional-change specialization and does not require an Elo test. H8.2b
+removes the now-orphaned threat-update plumbing and attack tables as a separate
+attributable block.
