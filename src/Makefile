@@ -1742,3 +1742,43 @@ $(UNIVERSAL_EXE): $(UNIVERSAL_ENTRY_OBJ) $(NNUE_EMBED_OBJ) $(ARCH_OBJS)
 	@echo "Universal binary built: $@"
 
 endif  # UNIVERSAL_BUILD
+
+### ==========================================================================
+### Section 12. OpenBench build shim
+### ==========================================================================
+# OpenBench builds public engines with a bare
+#
+#   make -j EXE=<output> [CC/CXX=<compiler>] EVALFILE=<network>
+#
+# and does not provide a target, ARCH or COMP. Keep ordinary Stockfish targets
+# unchanged, but make that exact invocation produce the matched BMI2 binary
+# used by the Atomic baseline gates. The worker already authenticates EVALFILE
+# by its OpenBench network SHA. Copy it to the canonical short name inside the
+# ephemeral build checkout, then embed it so the moved executable has no
+# dependency on a temporary source path.
+
+OPENBENCH_NET = atomic_run3b_e202_l05.nnue
+
+ifeq ($(OS),Windows_NT)
+    OPENBENCH_COMP = mingw
+else
+    OPENBENCH_COMP = gcc
+endif
+
+.PHONY: openbench
+openbench:
+ifndef EVALFILE
+	@echo "ERROR: OpenBench Atomic builds require EVALFILE=<Legacy Atomic V1 network>." >&2
+	@exit 2
+else
+	@test -f "$(EVALFILE)" || { echo "ERROR: OpenBench EVALFILE does not exist: $(EVALFILE)" >&2; exit 2; }
+	@cp "$(EVALFILE)" "$(OPENBENCH_NET).tmp"
+	@mv "$(OPENBENCH_NET).tmp" "$(OPENBENCH_NET)"
+	+$(MAKE) build EXE="$(EXE)" CXX="$(CXX)" \
+		ARCH=x86-64-bmi2 COMP=$(OPENBENCH_COMP) \
+		EXTRACXXFLAGS='$(EXTRACXXFLAGS) -DATOMIC_NNUE_EMBEDDING'
+endif
+
+ifneq ($(strip $(EVALFILE)),)
+.DEFAULT_GOAL := openbench
+endif
