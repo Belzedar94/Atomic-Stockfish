@@ -4,8 +4,10 @@
 
 #include <chrono>
 #include <array>
+#include <cstdint>
 #include <filesystem>
 #include <iostream>
+#include <limits>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -180,6 +182,19 @@ void test_raw_move_wire() {
 
 void test_rejections() {
     Data::LegacyAtomicV1Record record{};
+
+    auto maximumPly = sample();
+    maximumPly.ply  = std::numeric_limits<u16>::max();
+    expect(bool(Data::encode_legacy_atomic_v1(maximumPly, record)),
+           "Legacy V1 accepts UINT16_MAX ply");
+    expect(record[68] == 0xFF && record[69] == 0xFF,
+           "Legacy V1 writes UINT16_MAX ply byte exactly");
+
+    auto aboveMaximumPly = sample();
+    aboveMaximumPly.ply  = std::int64_t(std::numeric_limits<u16>::max()) + 1;
+    expect(Data::encode_legacy_atomic_v1(aboveMaximumPly, record).error
+             == Data::DataError::PLY_OUT_OF_RANGE,
+           "Legacy V1 still rejects ply above UINT16_MAX");
 
     auto invalidMove = sample(Move::none());
     expect(Data::encode_legacy_atomic_v1(invalidMove, record).error

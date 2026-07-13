@@ -223,6 +223,38 @@ void test_start_record_golden_and_round_trip() {
            "legacy int16 minimum converts losslessly");
 }
 
+void test_uint32_ply_round_trip() {
+    constexpr auto MaximumPly = std::numeric_limits<u32>::max();
+
+    auto maximumPly = sample();
+    maximumPly.ply  = MaximumPly;
+
+    Data::AtomicBinV2Record record{};
+    expect(bool(Data::encode_atomic_bin_v2(maximumPly, record)),
+           "UINT32_MAX ply encodes through the sample adapter");
+    expect(read_u32(record, 56) == MaximumPly, "UINT32_MAX ply uses all wire bits");
+
+    Data::TrainingDataSample decoded;
+    expect(bool(Data::decode_atomic_bin_v2(record, decoded)), "UINT32_MAX ply decodes");
+    expect(decoded.ply == std::int64_t(MaximumPly), "UINT32_MAX ply survives adapter round trip");
+
+    Data::AtomicBinV2Record reencoded{};
+    expect(bool(Data::encode_atomic_bin_v2(decoded, reencoded)) && reencoded == record,
+           "UINT32_MAX decoded sample re-encodes byte exactly");
+
+    auto aboveMaximum = sample();
+    aboveMaximum.ply  = std::int64_t(MaximumPly) + 1;
+    expect(Data::encode_atomic_bin_v2(aboveMaximum, record).error
+             == Data::DataError::PLY_OUT_OF_RANGE,
+           "ply above UINT32_MAX remains rejected");
+
+    auto negativePly = sample();
+    negativePly.ply  = -1;
+    expect(Data::encode_atomic_bin_v2(negativePly, record).error
+             == Data::DataError::PLY_OUT_OF_RANGE,
+           "negative ply remains rejected");
+}
+
 void test_special_move_vectors() {
     auto ep       = sample(Move::make<EN_PASSANT>(SQ_E5, SQ_D6));
     ep.fen        = "7k/8/8/3pP3/8/8/8/K7 w - d6 0 1";
@@ -513,6 +545,7 @@ int main() {
     test_layout_and_header_golden();
     test_generator_fullmove_eligibility();
     test_start_record_golden_and_round_trip();
+    test_uint32_ply_round_trip();
     test_special_move_vectors();
     test_atomic960_and_no_rights_mode();
     test_corrupt_position_rejections();

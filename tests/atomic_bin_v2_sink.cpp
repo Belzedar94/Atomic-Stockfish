@@ -4,6 +4,7 @@
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -304,6 +305,32 @@ void test_finalize_header_size_and_hash() {
     remove_ignored(output);
 }
 
+void test_uint32_max_ply_writer() {
+    const auto output = temporary_path("-uint32-max-ply.atbin");
+    remove_ignored(output);
+
+    auto maximumPly = sample();
+    maximumPly.ply  = std::numeric_limits<u32>::max();
+    {
+        Data::AtomicBinV2Sink sink(output);
+        expect(bool(sink.append(maximumPly)), "V2 sink appends UINT32_MAX ply");
+        expect(bool(sink.finalize()), "V2 sink finalizes UINT32_MAX ply");
+    }
+
+    Data::AtomicBinV2Record record{};
+    expect(read_record(output, record), "read UINT32_MAX ply from finalized V2 shard");
+    Data::AtomicBinV2RecordFields fields{};
+    expect(bool(Data::decode_atomic_bin_v2_record_structural(record, fields))
+             && fields.ply == std::numeric_limits<u32>::max(),
+           "V2 sink preserves all 32 ply bits");
+    Data::TrainingDataSample decoded;
+    expect(bool(Data::decode_atomic_bin_v2(record, decoded))
+             && decoded.ply == std::int64_t(std::numeric_limits<u32>::max()),
+           "finalized V2 shard semantically decodes UINT32_MAX ply");
+
+    remove_ignored(output);
+}
+
 void test_abort_destructor_and_open_error() {
     const auto partial           = temporary_path("-partial.atbin");
     const auto scoped            = temporary_path("-scoped.atbin");
@@ -423,6 +450,7 @@ int main() {
     test_sha256_vectors_and_file();
     test_empty_and_invalid_create_nothing();
     test_finalize_header_size_and_hash();
+    test_uint32_max_ply_writer();
     test_abort_destructor_and_open_error();
 
     if (failures != 0)
