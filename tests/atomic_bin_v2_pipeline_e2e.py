@@ -66,6 +66,9 @@ SHA1_RE = re.compile(r"^[0-9a-f]{40}$")
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 PORTABLE_BASENAME_RE = re.compile(r"^[^/\\\x00]+$")
 SQUARE_RE = re.compile(r"^[a-h][1-8]$")
+FILE_URI_HOST_PATH_RE = re.compile(
+    r"(?i)\bfile:(?:(?:/{1,4})|(?:\\{1,4}))[^\s\r\n\"'<>\x00,;)\]}]+"
+)
 WINDOWS_HOST_PATH_RE = re.compile(
     r"(?i)(?<![A-Za-z0-9_])(?:[A-Z]:(?:\\{1,2}|/)"
     r"(?:[^\\/\r\n\"<>|:*?]+(?:\\{1,2}|/))*[^\\/\r\n\"<>|:*?,;)\]}]+|"
@@ -242,6 +245,7 @@ def canonical_json_preserving_order(value: object) -> bytes:
 
 
 def redact_host_paths(value: str) -> str:
+    value = FILE_URI_HOST_PATH_RE.sub("<HOST_PATH>", value)
     value = WINDOWS_HOST_PATH_RE.sub("<HOST_PATH>", value)
     return POSIX_HOST_PATH_RE.sub("<HOST_PATH>", value)
 
@@ -2039,7 +2043,9 @@ def verify_public_text_redaction(archive: Archive) -> None:
             if source.casefold() in folded:
                 raise GateError(f"public evidence retains a host-local path: {path.name}")
         require(
-            WINDOWS_HOST_PATH_RE.search(text) is None and POSIX_HOST_PATH_RE.search(text) is None,
+            FILE_URI_HOST_PATH_RE.search(text) is None
+            and WINDOWS_HOST_PATH_RE.search(text) is None
+            and POSIX_HOST_PATH_RE.search(text) is None,
             f"public evidence contains an unredacted absolute path: {path.name}",
         )
 
@@ -2059,7 +2065,7 @@ def discard_public_text_evidence(archive: Archive) -> tuple[str, ...]:
     return tuple(removed)
 
 
-def archive_failure(archive: Archive, error: Exception) -> None:
+def archive_failure(archive: Archive, error: BaseException) -> None:
     cleanup_error: str | None = None
     try:
         archive.cleanup_private()
@@ -2293,7 +2299,7 @@ def run_gate(config: GateConfig) -> Mapping[str, object]:
         archive.write_json("hashes.json", inventory)
         verify_public_text_redaction(archive)
         return result
-    except Exception as error:
+    except BaseException as error:
         try:
             archive_failure(archive, error)
         except Exception:
@@ -2503,6 +2509,13 @@ def main(
         else:
             config = _config_loader(argv)
         result = _runner(config)
+    except KeyboardInterrupt as error:
+        safe = redact_host_paths(str(error))
+        stderr.write(
+            f"H7 FINAL E2E INTERRUPTED [KeyboardInterrupt]: {safe}\n".encode("utf-8")
+        )
+        stderr.flush()
+        return 130
     except Exception as error:
         safe = redact_host_paths(str(error))
         stderr.write(

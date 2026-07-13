@@ -1057,13 +1057,18 @@ def test_public_archive_sanitizes_unknown_windows_posix_and_root_paths(tmp_path:
             + "\n"
             "cache=/root/.cache/pytorch/model.bin\n"
             "temp=/workspace/build/output.txt\n"
+            "uri=file:///root/.cache/private.bin\n"
+            + json.dumps({"windows_uri": "file:///C:/Users/me/private.bin"})
+            + "\n"
             "url=https://github.com/Belzedar94/Atomic-Stockfish\n"
+            "fen=rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1\n"
         ).encode("utf-8")
     )
     assert archive.sanitize_public_text() == ("logs/unknown.log",)
     payload = unknown.read_text(encoding="utf-8")
-    assert payload.count("<HOST_PATH>") == 4
+    assert payload.count("<HOST_PATH>") == 6
     assert "https://github.com/Belzedar94/Atomic-Stockfish" in payload
+    assert "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR" in payload
     gate.verify_public_text_redaction(archive)
     archive.cleanup_private()
 
@@ -1104,6 +1109,31 @@ def test_run_gate_failure_archive_is_sanitized_and_inventoried(
     )
 
 
+def test_run_gate_keyboard_interrupt_cleans_private_and_archives_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = config(tmp_path)
+    state = gate.Preflight({}, {})
+    monkeypatch.setattr(
+        gate, "preflight", lambda unused, allow_output=False: state
+    )
+    monkeypatch.setattr(gate, "capture_gate_python_environment", lambda: object())
+
+    def interrupt(unused: gate.GateConfig, archive: gate.Archive) -> Mapping[str, object]:
+        archive.private_path("partial.bin").write_bytes(b"private")
+        raise KeyboardInterrupt("stopped at file:///root/.cache/private.bin")
+
+    monkeypatch.setattr(gate, "verify_capabilities", interrupt)
+    with pytest.raises(KeyboardInterrupt, match="stopped"):
+        gate.run_gate(cfg)
+    assert not gate.private_work_path(cfg.output_dir).exists()
+    failure_bytes = (cfg.output_dir / "failure.json").read_bytes()
+    assert b'"error_type":"KeyboardInterrupt"' in failure_bytes
+    assert b"<HOST_PATH>" in failure_bytes
+    assert b"Traceback" not in failure_bytes and b"/root/" not in failure_bytes
+    assert (cfg.output_dir / "failure-hashes.json").is_file()
+
+
 def test_main_emits_only_lf_and_no_host_traceback(tmp_path: Path) -> None:
     cfg = config(tmp_path)
     stdout = io.BytesIO()
@@ -1141,6 +1171,37 @@ def test_main_success_is_one_canonical_lf_json_line(tmp_path: Path) -> None:
     assert stdout.getvalue() == gate.canonical_json(expected)
     assert stdout.getvalue().count(b"\n") == 1 and b"\r" not in stdout.getvalue()
     assert stderr.getvalue() == b""
+
+
+def test_main_keyboard_interrupt_is_redacted_lf_exit_130_and_system_exit_propagates(
+    tmp_path: Path,
+) -> None:
+    cfg = config(tmp_path)
+    stdout = io.BytesIO()
+    stderr = io.BytesIO()
+
+    def interrupt(unused: gate.GateConfig) -> Mapping[str, object]:
+        raise KeyboardInterrupt("file:///root/.cache/private.bin")
+
+    assert gate.main(
+        (),
+        _config_loader=lambda unused: cfg,
+        _runner=interrupt,
+        _stdout=stdout,
+        _stderr=stderr,
+    ) == 130
+    assert stdout.getvalue() == b""
+    assert stderr.getvalue().endswith(b"\n") and b"\r" not in stderr.getvalue()
+    assert b"<HOST_PATH>" in stderr.getvalue() and b"Traceback" not in stderr.getvalue()
+
+    with pytest.raises(SystemExit):
+        gate.main(
+            (),
+            _config_loader=lambda unused: cfg,
+            _runner=lambda unused: (_ for _ in ()).throw(SystemExit(7)),
+            _stdout=io.BytesIO(),
+            _stderr=io.BytesIO(),
+        )
 
 
 def test_python_environment_wrappers_capture_verify_and_reject_path_overrides(
