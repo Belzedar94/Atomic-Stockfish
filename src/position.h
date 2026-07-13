@@ -111,11 +111,10 @@ class Position {
     Bitboard pieces(PieceTypes... pts) const;
     Bitboard pieces(Color c) const;
     template<typename... PieceTypes>
-    Bitboard                            pieces(Color c, PieceTypes... pts) const;
-    Piece                               piece_on(Square s) const;
-    const std::array<Piece, SQUARE_NB>& piece_array() const;
-    Square                              ep_square() const;
-    bool                                empty(Square s) const;
+    Bitboard pieces(Color c, PieceTypes... pts) const;
+    Piece    piece_on(Square s) const;
+    Square   ep_square() const;
+    bool     empty(Square s) const;
     template<PieceType Pt>
     int count(Color c) const;
     template<PieceType Pt>
@@ -211,12 +210,6 @@ class Position {
     void set_check_info() const;
 
     // Other helpers
-    template<bool ComputeRay = true>
-    void update_piece_threats(Piece               pc,
-                              bool                putPiece,
-                              Square              s,
-                              DirtyThreats* const dts,
-                              Bitboard            noRaysContaining = -1ULL) const;
     void move_piece(Square from, Square to);
     template<bool Do>
     void do_castling(Color             us,
@@ -252,8 +245,6 @@ inline Piece Position::piece_on(Square s) const {
     assert(is_ok(s));
     return board[s];
 }
-
-inline const std::array<Piece, SQUARE_NB>& Position::piece_array() const { return board; }
 
 inline bool Position::empty(Square s) const { return piece_on(s) == NO_PIECE; }
 

@@ -40,6 +40,39 @@ def test_native_and_nnue_wasm_build_only_the_atomic_feature_extractor():
         assert not (ROOT / "src" / relative).exists()
 
 
+def test_legacy_threat_delta_plumbing_is_not_reintroduced():
+    sources = {
+        relative: (ROOT / "src" / relative).read_text(encoding="utf-8")
+        for relative in (
+            "types.h",
+            "position.h",
+            "position.cpp",
+            "attacks.h",
+            "attacks.cpp",
+            "misc.h",
+            "nnue/nnue_common.h",
+            "nnue/features/half_ka_v2_atomic.h",
+        )
+    }
+
+    for token in ("DirtyThreat", "UsesThreatDeltas", "ThreatWeightType"):
+        assert all(token not in contents for contents in sources.values())
+
+    for token in (
+        "piece_array()",
+        "line_bb(",
+        "ray_pass_bb(",
+        "PawnPushOrAttacks",
+        "make_space(",
+    ):
+        assert all(token not in contents for contents in sources.values())
+
+    accumulator = (ROOT / "src" / "nnue" / "nnue_accumulator.cpp").read_text(
+        encoding="utf-8"
+    )
+    assert "std::is_same_v<FeatureSet::DiffType, DirtyPiece>" in accumulator
+
+
 def test_reader_test_links_keep_transposition_table_dependency_isolated():
     makefile = (ROOT / "src" / "Makefile").read_text(encoding="utf-8")
     gitignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
