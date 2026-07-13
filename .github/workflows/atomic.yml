@@ -306,6 +306,7 @@ jobs:
           tests/python/test_legacy_pipeline_build_manifest.py
           tests/python/test_data_generator_build_manifest.py
           tests/python/test_legacy_pipeline_e2e.py
+          tests/python/test_atomic_bin_v2_pipeline_e2e.py
       - run: python setup.py sdist --dist-dir dist/sdist
       - run: python tests/python/build_wheel_from_sdist.py dist/sdist dist/wheel
       - run: python tests/python/test_wheel_layout.py dist/wheel
