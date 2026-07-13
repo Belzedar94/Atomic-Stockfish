@@ -7,7 +7,10 @@ import io
 import json
 import os
 from pathlib import Path
+import shutil
+import stat as stat_module
 import struct
+import subprocess
 import sys
 from types import SimpleNamespace
 from typing import Any, Mapping
@@ -28,6 +31,68 @@ TOOLS_COMMIT = gate.NORMATIVE_TOOLS_COMMIT
 TRAINER_COMMIT = gate.NORMATIVE_TRAINER_COMMIT
 SHA256 = "c" * 64
 DELETE = object()
+
+
+class FakeScandir:
+    def __init__(self, entries: list[object]):
+        self.entries = entries
+
+    def __enter__(self) -> object:
+        return iter(self.entries)
+
+    def __exit__(self, *unused: object) -> None:
+        return None
+
+
+class FakeDirEntry:
+    def __init__(self, name: str, stat_result: object | BaseException):
+        self.name = name
+        self.stat_result = stat_result
+        self.is_dir_calls = 0
+
+    def stat(self, *, follow_symlinks: bool = True) -> object:
+        assert follow_symlinks is False
+        if isinstance(self.stat_result, BaseException):
+            raise self.stat_result
+        return self.stat_result
+
+    def is_dir(self, *, follow_symlinks: bool = True) -> bool:
+        self.is_dir_calls += 1
+        raise AssertionError("safe walker must classify the lstat result, not call is_dir")
+
+
+def invoke_public_tree_consumer(operation: str, archive: gate.Archive) -> object:
+    if operation == "sanitize":
+        return archive.sanitize_public_text()
+    if operation == "verify":
+        return gate.verify_public_text_redaction(archive)
+    if operation == "discard":
+        return gate.discard_public_text_evidence(archive)
+    if operation == "inventory":
+        return gate.inventory_archive(archive)
+    raise AssertionError(f"unknown public tree consumer {operation}")
+
+
+def create_directory_link(link: Path, target: Path) -> None:
+    if os.name == "nt":
+        subprocess.run(
+            ("cmd.exe", "/d", "/c", "mklink", "/J", str(link), str(target)),
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        assert not link.is_symlink()
+        assert gate.is_reparse_point(link)
+        return
+    link.symlink_to(target, target_is_directory=True)
+    assert link.is_symlink()
+
+
+def remove_directory_link(link: Path) -> None:
+    if os.name == "nt":
+        os.rmdir(link)
+    else:
+        link.unlink()
 
 
 def config(tmp_path: Path, **overrides: object) -> gate.GateConfig:
@@ -1050,6 +1115,12 @@ def test_public_archive_scan_rejects_unknown_absolute_host_path(tmp_path: Path) 
 def test_public_archive_sanitizes_unknown_windows_posix_and_root_paths(tmp_path: Path) -> None:
     archive = gate.Archive(tmp_path / "audit")
     unknown = archive.root / "logs" / "unknown.log"
+    json_escaped_uri = json.dumps(
+        {"windows_uri_with_space": "file:///C:/Users/Jane Doe/private model.bin"}
+    )
+    json_escaped_windows_uri = json.dumps(
+        {"escaped_windows_uri": r"file:\\C:\Users\Jane Doe\private model.bin"}
+    )
     unknown.write_bytes(
         (
             "win=C:\\Python\\Lib\\site-packages\\torch.py\n"
@@ -1060,13 +1131,22 @@ def test_public_archive_sanitizes_unknown_windows_posix_and_root_paths(tmp_path:
             "uri=file:///root/.cache/private.bin\n"
             + json.dumps({"windows_uri": "file:///C:/Users/me/private.bin"})
             + "\n"
+            "windows_space=file:///C:/Users/Jane Doe/private model.bin\n"
+            "posix_space=file:///home/jane doe/private model.bin\n"
+            + json_escaped_uri
+            + "\n"
+            + json_escaped_windows_uri
+            + "\n"
             "url=https://github.com/Belzedar94/Atomic-Stockfish\n"
             "fen=rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1\n"
         ).encode("utf-8")
     )
     assert archive.sanitize_public_text() == ("logs/unknown.log",)
     payload = unknown.read_text(encoding="utf-8")
-    assert payload.count("<HOST_PATH>") == 6
+    assert payload.count("<HOST_PATH>") == 10
+    assert "Jane Doe" not in payload
+    assert "jane doe" not in payload
+    assert "private model.bin" not in payload
     assert "https://github.com/Belzedar94/Atomic-Stockfish" in payload
     assert "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR" in payload
     gate.verify_public_text_redaction(archive)
@@ -1247,6 +1327,309 @@ def test_inventory_reconciles_candidate_and_roundtrip_hashes(tmp_path: Path) -> 
             inventory, {roundtrip.relative_to(archive.root).as_posix(): "0" * 64}
         )
     archive.cleanup_private()
+
+
+@pytest.mark.parametrize("operation", ("sanitize", "verify", "discard", "inventory"))
+def test_public_tree_consumers_reject_linked_directories_without_touching_outside(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, operation: str
+) -> None:
+    archive = gate.Archive(tmp_path / "audit")
+    target = tmp_path / "external"
+    target.mkdir()
+    outside = target / "secret.log"
+    original = b"outside C:\\Users\\someone\\secret.nnue\n"
+    outside.write_bytes(original)
+    linked = archive.root / "linked-directory"
+    create_directory_link(linked, target)
+
+    real_scandir = gate.os.scandir
+    scanned: list[Path] = []
+
+    def tracked_scandir(path: object) -> object:
+        scanned.append(Path(path))  # type: ignore[arg-type]
+        return real_scandir(path)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(gate.os, "scandir", tracked_scandir)
+    try:
+        with pytest.raises(gate.GateError, match="(symlink|reparse point)"):
+            invoke_public_tree_consumer(operation, archive)
+
+        assert outside.read_bytes() == original
+        assert linked not in scanned
+        assert target not in scanned
+    finally:
+        remove_directory_link(linked)
+
+
+@pytest.mark.parametrize("operation", ("sanitize", "verify", "discard", "inventory"))
+def test_public_tree_consumers_reject_parent_swap_before_touching_external_leaf(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, operation: str
+) -> None:
+    archive = gate.Archive(tmp_path / "audit")
+    trigger = archive.root / "a-trigger.log"
+    trigger.write_bytes(b"safe trigger\n")
+    nested = archive.root / "z-nested"
+    nested.mkdir()
+    inside = nested / "secret.log"
+    inside.write_bytes(b"authenticated inside\n")
+    external = tmp_path / "external"
+    external.mkdir()
+    external_secret = external / "secret.log"
+    external_payload = b"EXTERNAL LEAF MUST NOT BE TOUCHED\n"
+    external_secret.write_bytes(external_payload)
+    swapped = False
+    external_leaf_operations: list[str] = []
+
+    def swap_parent_once() -> None:
+        nonlocal swapped
+        if swapped:
+            return
+        shutil.rmtree(nested)
+        create_directory_link(nested, external)
+        swapped = True
+
+    real_read_bytes = Path.read_bytes
+
+    def tracked_read_bytes(path: Path) -> bytes:
+        if path == inside:
+            external_leaf_operations.append("read_bytes")
+        return real_read_bytes(path)
+
+    monkeypatch.setattr(Path, "read_bytes", tracked_read_bytes)
+
+    if operation == "sanitize":
+        original_redact = archive.redact_text
+
+        def redact_and_swap(value: str) -> str:
+            redacted = original_redact(value)
+            swap_parent_once()
+            return redacted
+
+        monkeypatch.setattr(archive, "redact_text", redact_and_swap)
+    elif operation == "verify":
+        real_read_text = Path.read_text
+
+        def read_text_and_swap(path: Path, *args: object, **kwargs: object) -> str:
+            if path == inside:
+                external_leaf_operations.append("read_text")
+            text = real_read_text(path, *args, **kwargs)  # type: ignore[arg-type]
+            if path == trigger:
+                swap_parent_once()
+            return text
+
+        monkeypatch.setattr(Path, "read_text", read_text_and_swap)
+    elif operation == "inventory":
+        real_sha256_file = gate.sha256_file
+
+        def hash_and_swap(path: Path) -> str:
+            if path == inside:
+                external_leaf_operations.append("hash")
+            digest = real_sha256_file(path)
+            if path == trigger:
+                swap_parent_once()
+            return digest
+
+        monkeypatch.setattr(gate, "sha256_file", hash_and_swap)
+    else:
+        real_unlink = Path.unlink
+
+        def unlink_and_swap(path: Path, *args: object, **kwargs: object) -> None:
+            if path == inside:
+                external_leaf_operations.append("unlink")
+            real_unlink(path, *args, **kwargs)  # type: ignore[arg-type]
+            if path == trigger:
+                swap_parent_once()
+
+        monkeypatch.setattr(Path, "unlink", unlink_and_swap)
+
+    try:
+        with pytest.raises(gate.GateError, match="(parent|symlink|reparse point)"):
+            invoke_public_tree_consumer(operation, archive)
+
+        assert swapped
+        assert external_leaf_operations == []
+        assert external_secret.read_bytes() == external_payload
+    finally:
+        if swapped:
+            remove_directory_link(nested)
+
+
+def test_require_directory_rejects_symlink_before_resolution(tmp_path: Path) -> None:
+    target = tmp_path / "external"
+    target.mkdir()
+    linked = tmp_path / "linked-directory"
+    linked.symlink_to(target, target_is_directory=True)
+
+    with pytest.raises(gate.GateError, match="must not be a symlink"):
+        gate.require_directory(linked, "atomic root")
+
+
+def test_safe_tree_rejects_reparse_metadata_before_directory_classification(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    archive = gate.Archive(tmp_path / "audit")
+    reparse_flag = 0x400
+    monkeypatch.setattr(
+        gate.stat_module, "FILE_ATTRIBUTE_REPARSE_POINT", reparse_flag, raising=False
+    )
+    junction = FakeDirEntry(
+        "junction",
+        SimpleNamespace(
+            st_mode=stat_module.S_IFDIR,
+            st_file_attributes=reparse_flag,
+            st_nlink=1,
+        ),
+    )
+    real_scandir = gate.os.scandir
+    scanned: list[Path] = []
+
+    def fake_scandir(path: object) -> object:
+        inspected = Path(path)  # type: ignore[arg-type]
+        scanned.append(inspected)
+        if inspected == archive.root:
+            return FakeScandir([junction])
+        return real_scandir(path)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(gate.os, "scandir", fake_scandir)
+    with pytest.raises(gate.GateError, match="contains a reparse point"):
+        gate.safe_tree_entries(archive.root, "archive")
+
+    assert junction.is_dir_calls == 0
+    assert scanned == [archive.root]
+
+
+def test_safe_tree_fails_closed_when_scandir_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "archive"
+    root.mkdir()
+
+    def denied_scandir(unused: object) -> object:
+        raise PermissionError("denied")
+
+    monkeypatch.setattr(gate.os, "scandir", denied_scandir)
+    with pytest.raises(gate.GateError, match="cannot inspect archive directory"):
+        gate.safe_tree_entries(root, "archive")
+
+
+def test_safe_tree_fails_closed_when_entry_lstat_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "archive"
+    root.mkdir()
+    broken = FakeDirEntry("broken.log", PermissionError("denied"))
+    monkeypatch.setattr(gate.os, "scandir", lambda unused: FakeScandir([broken]))
+
+    with pytest.raises(gate.GateError, match="cannot lstat archive entry"):
+        gate.safe_tree_entries(root, "archive")
+
+
+def test_is_reparse_point_fails_closed_on_lstat_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    broken = tmp_path / "broken"
+    real_lstat = Path.lstat
+
+    def denied_lstat(path: Path) -> os.stat_result:
+        if path == broken:
+            raise PermissionError("denied")
+        return real_lstat(path)
+
+    monkeypatch.setattr(Path, "lstat", denied_lstat)
+    with pytest.raises(gate.GateError, match="cannot inspect path for reparse points"):
+        gate.is_reparse_point(broken)
+
+
+def test_safe_tree_rejects_unknown_node_types(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "archive"
+    root.mkdir()
+    unknown = FakeDirEntry(
+        "pipe",
+        SimpleNamespace(
+            st_mode=stat_module.S_IFIFO,
+            st_file_attributes=0,
+            st_nlink=1,
+        ),
+    )
+    monkeypatch.setattr(gate.os, "scandir", lambda unused: FakeScandir([unknown]))
+
+    with pytest.raises(gate.GateError, match="contains a non-regular entry"):
+        gate.safe_tree_entries(root, "archive")
+
+
+def test_safe_tree_normal_flow_is_deterministic(tmp_path: Path) -> None:
+    root = tmp_path / "archive"
+    (root / "a").mkdir(parents=True)
+    (root / "a" / "nested.log").write_bytes(b"nested\n")
+    (root / "z.json").write_bytes(b"{}\n")
+
+    entries = gate.safe_tree_entries(root, "archive")
+
+    assert tuple(entry.relative for entry in entries) == (
+        "a",
+        "a/nested.log",
+        "z.json",
+    )
+    assert entries[0].is_directory
+    assert entries[1].is_regular_file
+    assert entries[2].is_regular_file
+
+
+def test_sanitizer_rejects_hardlink_without_overwriting_external_file(
+    tmp_path: Path,
+) -> None:
+    archive = gate.Archive(tmp_path / "audit")
+    outside = tmp_path / "outside.log"
+    original = b"C:\\Users\\someone\\secret.nnue\n"
+    outside.write_bytes(original)
+    os.link(outside, archive.root / "linked.log")
+
+    with pytest.raises(gate.GateError, match="multiply-linked regular file"):
+        archive.sanitize_public_text()
+
+    assert outside.read_bytes() == original
+
+
+def test_sanitizer_hardlink_swap_during_redaction_never_truncates_external_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    archive = gate.Archive(tmp_path / "audit")
+    target = archive.root / "logs" / "evidence.log"
+    target.write_bytes(b"C:\\Users\\inside\\private.nnue\n")
+    outside = tmp_path / "outside.log"
+    outside_payload = b"EXTERNAL BYTES MUST REMAIN UNCHANGED\n"
+    outside.write_bytes(outside_payload)
+    original_redact = archive.redact_text
+    swapped = False
+
+    def swap_target_for_hardlink(value: str) -> str:
+        nonlocal swapped
+        redacted = original_redact(value)
+        target.unlink()
+        os.link(outside, target)
+        swapped = True
+        return redacted
+
+    monkeypatch.setattr(archive, "redact_text", swap_target_for_hardlink)
+    with pytest.raises(gate.GateError, match="(multiply-linked|changed)"):
+        archive.sanitize_public_text()
+
+    assert swapped
+    assert outside.read_bytes() == outside_payload
+    assert target.read_bytes() == outside_payload
+    assert not tuple(target.parent.glob(f".{target.name}.rewrite-*"))
+
+
+def test_require_regular_file_rejects_symlink_before_resolution(tmp_path: Path) -> None:
+    target = tmp_path / "engine-target"
+    target.write_bytes(b"authenticated bytes")
+    linked = tmp_path / "engine-link"
+    linked.symlink_to(target)
+
+    with pytest.raises(gate.GateError, match="must not be a symlink"):
+        gate.require_regular_file(linked, "engine")
 
 
 def namespace(tmp_path: Path, **overrides: object) -> SimpleNamespace:

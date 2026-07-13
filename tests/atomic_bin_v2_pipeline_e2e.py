@@ -17,9 +17,11 @@ import os
 from pathlib import Path
 import re
 import shutil
+import stat as stat_module
 import struct
 import subprocess
 import sys
+import tempfile
 from typing import Any, BinaryIO, Callable, Mapping, Sequence
 
 from legacy_pipeline_e2e import (
@@ -67,7 +69,10 @@ SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 PORTABLE_BASENAME_RE = re.compile(r"^[^/\\\x00]+$")
 SQUARE_RE = re.compile(r"^[a-h][1-8]$")
 FILE_URI_HOST_PATH_RE = re.compile(
-    r"(?i)\bfile:(?:(?:/{1,4})|(?:\\{1,4}))[^\s\r\n\"'<>\x00,;)\]}]+"
+    # Local file URIs are sometimes emitted without percent-encoding spaces.
+    # Consume through the enclosing quote or line boundary so redaction cannot
+    # stop at the first space and expose the remaining host-local path.
+    r"(?i)\bfile:(?:(?:/{1,4})|(?:\\{1,4}))[^\r\n\"'<>\x00]+"
 )
 WINDOWS_HOST_PATH_RE = re.compile(
     r"(?i)(?<![A-Za-z0-9_])(?:[A-Z]:(?:\\{1,2}|/)"
@@ -114,6 +119,22 @@ class Fingerprint:
     path: str
     bytes: int
     sha256: str
+
+
+@dataclass(frozen=True)
+class SafeTreeEntry:
+    path: Path
+    relative: str
+    stat_result: os.stat_result
+    parent_stat_result: os.stat_result
+
+    @property
+    def is_directory(self) -> bool:
+        return stat_module.S_ISDIR(self.stat_result.st_mode)
+
+    @property
+    def is_regular_file(self) -> bool:
+        return stat_module.S_ISREG(self.stat_result.st_mode)
 
 
 @dataclass(frozen=True)
@@ -283,22 +304,263 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def require_regular_file(path: Path, label: str) -> Path:
-    resolved = path.expanduser().resolve()
-    require(resolved.is_file(), f"{label} is not a regular file: {resolved}")
-    require(not resolved.is_symlink(), f"{label} must not be a symlink: {resolved}")
-    stat = resolved.stat()
-    reparse = getattr(stat, "st_file_attributes", 0) & getattr(
-        os, "FILE_ATTRIBUTE_REPARSE_POINT", 0
+def stat_is_reparse_point(stat_result: os.stat_result) -> bool:
+    return bool(
+        getattr(stat_result, "st_file_attributes", 0)
+        & getattr(stat_module, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
     )
-    require(not reparse, f"{label} must not be a reparse point: {resolved}")
+
+
+def is_reparse_point(path: Path) -> bool:
+    try:
+        stat_result = path.lstat()
+    except FileNotFoundError:
+        return False
+    except OSError as error:
+        raise GateError(f"cannot inspect path for reparse points: {path}: {error}") from error
+    return stat_is_reparse_point(stat_result)
+
+
+def require_safe_tree_node(
+    stat_result: os.stat_result,
+    path: Path,
+    label: str,
+    *,
+    check_hardlinks: bool = True,
+) -> tuple[bool, bool]:
+    require(
+        not stat_module.S_ISLNK(stat_result.st_mode),
+        f"{label} contains a symlink: {path}",
+    )
+    require(
+        not stat_is_reparse_point(stat_result),
+        f"{label} contains a reparse point: {path}",
+    )
+    is_directory = stat_module.S_ISDIR(stat_result.st_mode)
+    is_regular_file = stat_module.S_ISREG(stat_result.st_mode)
+    require(
+        is_directory or is_regular_file,
+        f"{label} contains a non-regular entry: {path}",
+    )
+    if is_regular_file and check_hardlinks:
+        require(
+            stat_result.st_nlink == 1,
+            f"{label} contains a multiply-linked regular file: {path}",
+        )
+    return is_directory, is_regular_file
+
+
+def safe_tree_entries(root: Path, label: str) -> tuple[SafeTreeEntry, ...]:
+    """Return a deterministic tree snapshot without following link-like entries.
+
+    The complete tree is authenticated before the caller can read, hash, rewrite,
+    or remove any entry. In particular, a Windows junction is rejected from its
+    lstat metadata before it can be treated as a directory and recursed into.
+    """
+
+    try:
+        root_stat = root.lstat()
+    except OSError as error:
+        raise GateError(f"cannot inspect {label} root {root}: {error}") from error
+    require(
+        not stat_module.S_ISLNK(root_stat.st_mode),
+        f"{label} root is a symlink: {root}",
+    )
+    require(
+        not stat_is_reparse_point(root_stat),
+        f"{label} root is a reparse point: {root}",
+    )
+    require(
+        stat_module.S_ISDIR(root_stat.st_mode),
+        f"{label} root is not a directory: {root}",
+    )
+
+    collected: list[SafeTreeEntry] = []
+
+    def inspect_directory(directory: Path, directory_stat: os.stat_result) -> None:
+        try:
+            with os.scandir(directory) as iterator:
+                directory_entries = sorted(iterator, key=lambda entry: entry.name)
+        except OSError as error:
+            raise GateError(f"cannot inspect {label} directory {directory}: {error}") from error
+
+        for directory_entry in directory_entries:
+            path = directory / directory_entry.name
+            try:
+                directory_entry_stat = directory_entry.stat(follow_symlinks=False)
+            except OSError as error:
+                raise GateError(f"cannot lstat {label} entry {path}: {error}") from error
+
+            # DirEntry.stat() is the first classification step because on Windows
+            # it exposes the reparse attribute without following a junction. Its
+            # st_nlink is nevertheless reported as zero by CPython, so authenticate
+            # the same name again with lstat() before enforcing the hard-link gate.
+            directory_entry_is_directory, directory_entry_is_regular = (
+                require_safe_tree_node(
+                    directory_entry_stat, path, label, check_hardlinks=False
+                )
+            )
+            try:
+                stat_result = path.lstat()
+            except OSError as error:
+                raise GateError(f"cannot lstat {label} entry {path}: {error}") from error
+            is_directory, is_regular = require_safe_tree_node(stat_result, path, label)
+            require(
+                (is_directory, is_regular)
+                == (directory_entry_is_directory, directory_entry_is_regular),
+                f"{label} entry changed while authenticating the tree: {path}",
+            )
+            relative = path.relative_to(root).as_posix()
+            collected.append(
+                SafeTreeEntry(path, relative, stat_result, directory_stat)
+            )
+            if is_directory:
+                inspect_directory(path, stat_result)
+
+    inspect_directory(root, root_stat)
+    return tuple(collected)
+
+
+def revalidate_safe_tree_entry(entry: SafeTreeEntry, label: str) -> os.stat_result:
+    try:
+        current = entry.path.lstat()
+    except OSError as error:
+        raise GateError(f"cannot re-inspect {label} entry {entry.path}: {error}") from error
+    require_safe_tree_node(current, entry.path, label)
+    before_identity = (
+        entry.stat_result.st_dev,
+        entry.stat_result.st_ino,
+        entry.stat_result.st_mode,
+        entry.stat_result.st_nlink,
+    )
+    current_identity = (current.st_dev, current.st_ino, current.st_mode, current.st_nlink)
+    require(
+        current_identity == before_identity,
+        f"{label} entry changed after tree authentication: {entry.path}",
+    )
+    return current
+
+
+def revalidate_safe_tree_parent(entry: SafeTreeEntry, label: str) -> os.stat_result:
+    parent = entry.path.parent
+    try:
+        current = parent.lstat()
+    except OSError as error:
+        raise GateError(f"cannot re-inspect {label} parent {parent}: {error}") from error
+    is_directory, unused_is_regular = require_safe_tree_node(current, parent, label)
+    require(is_directory, f"{label} parent is not a directory: {parent}")
+    before_identity = (
+        entry.parent_stat_result.st_dev,
+        entry.parent_stat_result.st_ino,
+        entry.parent_stat_result.st_mode,
+    )
+    current_identity = (current.st_dev, current.st_ino, current.st_mode)
+    require(
+        current_identity == before_identity,
+        f"{label} parent changed after tree authentication: {parent}",
+    )
+    return current
+
+
+def revalidate_safe_tree_leaf(entry: SafeTreeEntry, label: str) -> os.stat_result:
+    # Parent first: lstat() of a leaf necessarily traverses its parents.
+    revalidate_safe_tree_parent(entry, label)
+    return revalidate_safe_tree_entry(entry, label)
+
+
+def rewrite_safe_tree_file(entry: SafeTreeEntry, label: str, payload: bytes) -> None:
+    """Publish replacement bytes without ever truncating the authenticated inode."""
+
+    require(entry.is_regular_file, f"{label} rewrite target is not a file: {entry.path}")
+    revalidate_safe_tree_parent(entry, label)
+    descriptor: int | None = None
+    temporary: Path | None = None
+    try:
+        try:
+            descriptor, temporary_name = tempfile.mkstemp(
+                prefix=f".{entry.path.name}.rewrite-", dir=entry.path.parent
+            )
+            temporary = Path(temporary_name)
+            temporary_identity = os.fstat(descriptor)
+            output = os.fdopen(descriptor, "wb")
+            descriptor = None
+            with output:
+                output.write(payload)
+                output.flush()
+                os.fsync(output.fileno())
+        except OSError as error:
+            raise GateError(f"cannot stage rewritten {label} file {entry.path}: {error}") from error
+
+        # Both authenticated names are checked immediately before publication.
+        # A target swapped to a hardlink is rejected, while a swap after this
+        # point is still safe because replace() never truncates the destination.
+        revalidate_safe_tree_leaf(entry, label)
+        require(temporary is not None, "rewrite temporary path was not created")
+        try:
+            staged_stat = temporary.lstat()
+        except OSError as error:
+            raise GateError(f"cannot re-inspect rewritten {label} staging file: {error}") from error
+        require_safe_tree_node(staged_stat, temporary, f"{label} rewrite staging")
+        require(
+            (staged_stat.st_dev, staged_stat.st_ino, staged_stat.st_mode)
+            == (
+                temporary_identity.st_dev,
+                temporary_identity.st_ino,
+                temporary_identity.st_mode,
+            ),
+            f"{label} rewrite staging file changed before publication: {temporary}",
+        )
+        try:
+            os.replace(temporary, entry.path)
+        except OSError as error:
+            raise GateError(f"cannot publish rewritten {label} file {entry.path}: {error}") from error
+        temporary = None
+    finally:
+        cleanup_error: OSError | None = None
+        if descriptor is not None:
+            try:
+                os.close(descriptor)
+            except OSError as error:
+                cleanup_error = error
+        if temporary is not None:
+            try:
+                temporary.unlink()
+            except FileNotFoundError:
+                pass
+            except OSError as error:
+                cleanup_error = error
+        if cleanup_error is not None:
+            raise GateError(
+                f"cannot clean rewritten {label} staging file: {cleanup_error}"
+            ) from cleanup_error
+
+
+def require_regular_file(path: Path, label: str) -> Path:
+    expanded = path.expanduser()
+    require(not expanded.is_symlink(), f"{label} must not be a symlink: {expanded}")
+    require(
+        not is_reparse_point(expanded),
+        f"{label} must not be a reparse point: {expanded}",
+    )
+    resolved = expanded.resolve()
+    require(resolved.is_file(), f"{label} is not a regular file: {resolved}")
+    stat_result = resolved.stat()
+    require(
+        not stat_is_reparse_point(stat_result),
+        f"{label} must not be a reparse point: {resolved}",
+    )
     return resolved
 
 
 def require_directory(path: Path, label: str) -> Path:
-    resolved = path.expanduser().resolve()
+    expanded = path.expanduser()
+    require(not expanded.is_symlink(), f"{label} must not be a symlink: {expanded}")
+    require(
+        not is_reparse_point(expanded),
+        f"{label} must not be a reparse point: {expanded}",
+    )
+    resolved = expanded.resolve()
     require(resolved.is_dir(), f"{label} is not a directory: {resolved}")
-    require(not resolved.is_symlink(), f"{label} must not be a symlink: {resolved}")
     return resolved
 
 
@@ -587,16 +849,16 @@ class Archive:
 
     def sanitize_public_text(self) -> tuple[str, ...]:
         changed: list[str] = []
-        for path in sorted(self.root.rglob("*")):
-            if not path.is_file() or path.suffix.lower() not in PUBLIC_TEXT_SUFFIXES:
+        for entry in safe_tree_entries(self.root, "public evidence archive"):
+            path = entry.path
+            if not entry.is_regular_file or path.suffix.lower() not in PUBLIC_TEXT_SUFFIXES:
                 continue
-            require(not path.is_symlink(), f"public text evidence is a symlink: {path.name}")
+            revalidate_safe_tree_leaf(entry, "public evidence archive")
             original = path.read_bytes()
             text = original.decode("utf-8", errors="replace")
             sanitized = self.redact_text(text).encode("utf-8")
             if sanitized != original:
-                with path.open("wb") as output:
-                    output.write(sanitized)
+                rewrite_safe_tree_file(entry, "public evidence archive", sanitized)
                 changed.append(path.relative_to(self.root).as_posix())
         return tuple(changed)
 
@@ -1674,7 +1936,7 @@ def run_training(
     archive: Archive,
     train_manifest: Path,
     validation_manifest: Path,
-) -> tuple[Path, Mapping[str, Any]]:
+) -> tuple[SafeTreeEntry, Mapping[str, Any]]:
     trainer_output = archive.private_path("trainer")
     trainer_output.mkdir(exist_ok=False)
     command = training_command(config, train_manifest, validation_manifest, trainer_output)
@@ -1692,12 +1954,18 @@ def run_training(
         "trainer did not report V2 smart-filter bypass for both datasets",
     )
     validate_trainer_policy_output(combined)
-    checkpoints = tuple(trainer_output.rglob("last.ckpt"))
+    checkpoints = tuple(
+        entry
+        for entry in safe_tree_entries(trainer_output, "trainer output")
+        if entry.is_regular_file and entry.path.name == "last.ckpt"
+    )
     require(
         len(checkpoints) == 1,
         f"trainer must produce exactly one last.ckpt, found {len(checkpoints)}",
     )
-    checkpoint = require_regular_file(checkpoints[0], "trainer last checkpoint")
+    checkpoint_entry = checkpoints[0]
+    revalidate_safe_tree_leaf(checkpoint_entry, "trainer last checkpoint")
+    checkpoint = checkpoint_entry.path
 
     metadata_probe = (
         "import json,sys,torch;"
@@ -1714,7 +1982,8 @@ def run_training(
     )
     metadata_bytes = require_clean_success(metadata_result, "checkpoint metadata")
     metadata = parse_checkpoint_metadata(metadata_bytes)
-    return checkpoint, metadata
+    revalidate_safe_tree_leaf(checkpoint_entry, "trainer last checkpoint")
+    return checkpoint_entry, metadata
 
 
 def validate_trainer_policy_output(output: str) -> None:
@@ -1739,8 +2008,15 @@ def verify_nnue_header(path: Path) -> tuple[int, int]:
 def serialize_and_reimport(
     config: GateConfig,
     archive: Archive,
-    checkpoint: Path,
+    checkpoint_entry: SafeTreeEntry | Path,
 ) -> tuple[Path, str, Path]:
+    if isinstance(checkpoint_entry, SafeTreeEntry):
+        revalidate_safe_tree_leaf(checkpoint_entry, "trainer last checkpoint")
+        checkpoint = checkpoint_entry.path
+    else:
+        # Backwards-compatible direct helper use; the normative gate always
+        # supplies the parent-authenticated SafeTreeEntry selected above.
+        checkpoint = require_regular_file(checkpoint_entry, "trainer last checkpoint")
     work_dir = archive.private_path("network-serialization")
     work_dir.mkdir(exist_ok=False)
     candidate_work = work_dir / "candidate.nnue"
@@ -1995,16 +2271,17 @@ def inventory_archive(
     archive: Archive, *, excluded: frozenset[str] = frozenset()
 ) -> Mapping[str, object]:
     entries: dict[str, object] = {}
-    for path in sorted(archive.root.rglob("*")):
-        if path.is_dir():
+    for entry in safe_tree_entries(archive.root, "archive"):
+        if entry.is_directory:
             continue
-        require(not path.is_symlink(), f"archive contains a symlink: {path}")
-        relative = path.relative_to(archive.root).as_posix()
+        path = entry.path
+        current = revalidate_safe_tree_leaf(entry, "archive")
+        relative = entry.relative
         if relative in excluded:
             continue
         require(relative != "hashes.json", "hashes.json already exists")
         entries[relative] = {
-            "bytes": path.stat().st_size,
+            "bytes": current.st_size,
             "sha256": sha256_file(path),
         }
     return {"schema_version": 1, "files": entries}
@@ -2031,9 +2308,11 @@ def verify_inventory_artifacts(
 
 
 def verify_public_text_redaction(archive: Archive) -> None:
-    for path in sorted(archive.root.rglob("*")):
-        if not path.is_file() or path.suffix.lower() not in PUBLIC_TEXT_SUFFIXES:
+    for entry in safe_tree_entries(archive.root, "public evidence archive"):
+        path = entry.path
+        if not entry.is_regular_file or path.suffix.lower() not in PUBLIC_TEXT_SUFFIXES:
             continue
+        revalidate_safe_tree_leaf(entry, "public evidence archive")
         try:
             text = path.read_text(encoding="utf-8", errors="strict")
         except UnicodeError as error:
@@ -2054,12 +2333,13 @@ def discard_public_text_evidence(archive: Archive) -> tuple[str, ...]:
     """Fail closed if a public text sweep itself cannot be authenticated."""
 
     removed: list[str] = []
-    for path in sorted(archive.root.rglob("*")):
+    for entry in safe_tree_entries(archive.root, "public evidence archive"):
+        path = entry.path
         if path.suffix.lower() not in PUBLIC_TEXT_SUFFIXES:
             continue
-        require_within(path.parent.resolve(), archive.root, "public text evidence parent")
-        if path.is_file() or path.is_symlink():
-            relative = path.relative_to(archive.root).as_posix()
+        if entry.is_regular_file:
+            revalidate_safe_tree_leaf(entry, "public evidence archive")
+            relative = entry.relative
             path.unlink()
             removed.append(relative)
     return tuple(removed)
@@ -2150,22 +2430,25 @@ def run_gate(config: GateConfig) -> Mapping[str, object]:
         )
         authenticate_datasets(frozen_datasets, "after decode")
         authenticate_datasets(frozen_datasets, "before trainer")
-        checkpoint, checkpoint_metadata = run_training(
+        checkpoint_entry, checkpoint_metadata = run_training(
             config,
             archive,
             train_manifest,
             validation_manifest,
         )
         authenticate_datasets(frozen_datasets, "after trainer")
+        checkpoint_stat = revalidate_safe_tree_leaf(
+            checkpoint_entry, "trainer last checkpoint"
+        )
         checkpoint_evidence = {
-            "sha256": sha256_file(checkpoint),
-            "bytes": checkpoint.stat().st_size,
+            "sha256": sha256_file(checkpoint_entry.path),
+            "bytes": checkpoint_stat.st_size,
             **checkpoint_metadata,
             "retained": False,
             "retention_reason": "private trainer artifact may contain host-local paths",
         }
         candidate, candidate_hash, roundtrip = serialize_and_reimport(
-            config, archive, checkpoint
+            config, archive, checkpoint_entry
         )
         authenticate_datasets(frozen_datasets, "after serialization")
         fingerprint(candidate, "published candidate after serialization", candidate_hash)
