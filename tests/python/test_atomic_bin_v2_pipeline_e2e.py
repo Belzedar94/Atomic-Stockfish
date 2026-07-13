@@ -1050,15 +1050,15 @@ def test_public_archive_scan_rejects_unknown_absolute_host_path(tmp_path: Path) 
 def test_public_archive_sanitizes_unknown_windows_posix_and_root_paths(tmp_path: Path) -> None:
     archive = gate.Archive(tmp_path / "audit")
     unknown = archive.root / "logs" / "unknown.log"
-    unknown.write_text(
-        "win=C:\\Python\\Lib\\site-packages\\torch.py\n"
-        + json.dumps({"cache": r"C:\Users\me\x"})
-        + "\n"
-        "cache=/root/.cache/pytorch/model.bin\n"
-        "temp=/workspace/build/output.txt\n"
-        "url=https://github.com/Belzedar94/Atomic-Stockfish\n",
-        encoding="utf-8",
-        newline="\n",
+    unknown.write_bytes(
+        (
+            "win=C:\\Python\\Lib\\site-packages\\torch.py\n"
+            + json.dumps({"cache": r"C:\Users\me\x"})
+            + "\n"
+            "cache=/root/.cache/pytorch/model.bin\n"
+            "temp=/workspace/build/output.txt\n"
+            "url=https://github.com/Belzedar94/Atomic-Stockfish\n"
+        ).encode("utf-8")
     )
     assert archive.sanitize_public_text() == ("logs/unknown.log",)
     payload = unknown.read_text(encoding="utf-8")
@@ -1079,10 +1079,8 @@ def test_run_gate_failure_archive_is_sanitized_and_inventoried(
     monkeypatch.setattr(gate, "capture_gate_python_environment", lambda: object())
 
     def fail_capabilities(unused: gate.GateConfig, archive: gate.Archive) -> Mapping[str, object]:
-        (archive.root / "logs" / "external.log").write_text(
-            "C:\\Unknown\\site-packages\\shadow.py /root/.cache/private.bin\n",
-            encoding="utf-8",
-            newline="\n",
+        (archive.root / "logs" / "external.log").write_bytes(
+            b"C:\\Unknown\\site-packages\\shadow.py /root/.cache/private.bin\n"
         )
         raise RuntimeError("loader failed at /root/.cache/private.bin")
 
