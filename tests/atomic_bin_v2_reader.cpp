@@ -3,9 +3,11 @@
 #include <algorithm>
 #include <cerrno>
 #include <chrono>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -419,6 +421,24 @@ int main(int argc, char* argv[]) {
         check(bool(reader->rewind()), "rewind remains manifest-only after pathname replacement");
         check(!reader->next(decoded, hasRecord) && !hasRecord,
               "replaced shard pathname rejected before another record");
+    }
+    {
+        TempDirectory            temporary("uint32-max-ply");
+        Data::TrainingDataSample maximumPly = ordinary_sample();
+        maximumPly.ply                      = std::numeric_limits<u32>::max();
+        Dataset dataset = create_dataset(temporary.path, "dataset", maximumPly);
+
+        std::unique_ptr<Data::AtomicBinV2DatasetReader> reader;
+        check(bool(Data::AtomicBinV2DatasetReader::open(dataset.manifest, reader)) && bool(reader),
+              "open dataset containing UINT32_MAX ply");
+        Data::AtomicBinV2DecodedRecord decoded;
+        bool                           hasRecord = false;
+        check(reader && bool(reader->next(decoded, hasRecord)) && hasRecord
+                && decoded.fields.ply == std::numeric_limits<u32>::max()
+                && decoded.sample.ply == std::int64_t(std::numeric_limits<u32>::max()),
+              "authenticated reader preserves UINT32_MAX structural and semantic ply");
+        check(reader && bool(reader->next(decoded, hasRecord)) && !hasRecord,
+              "UINT32_MAX ply dataset reaches clean EOF");
     }
     {
         TempDirectory temporary("in-place");

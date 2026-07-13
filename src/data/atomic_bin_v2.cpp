@@ -24,8 +24,9 @@
 namespace Stockfish::Data {
 namespace {
 
-static_assert(std::numeric_limits<int>::digits >= 31,
-              "Atomic BIN V2 TrainingDataSample adapter requires an int of at least 32 bits");
+static_assert(std::numeric_limits<decltype(TrainingDataSample::ply)>::is_signed
+                && std::numeric_limits<decltype(TrainingDataSample::ply)>::digits >= 32,
+              "Atomic BIN V2 TrainingDataSample ply must represent -1 through UINT32_MAX");
 
 bool split_fen_fields(const std::string& fen, std::array<std::string, 6>& fields) {
     std::istringstream input(fen);
@@ -360,9 +361,6 @@ DataResult decode_atomic_bin_v2(const AtomicBinV2Record& record, TrainingDataSam
     AtomicBinV2RecordFields fields{};
     if (DataResult decoded = decode_atomic_bin_v2_record_structural(record, fields); !decoded)
         return decoded;
-    if (std::uintmax_t(fields.ply) > std::uintmax_t(std::numeric_limits<int>::max()))
-        return DataResult::failure(DataError::PLY_OUT_OF_RANGE,
-                                   "Atomic BIN V2 ply does not fit TrainingDataSample");
 
     const bool        atomic960 = bool(fields.flags & ATOMIC_BIN_V2_ATOMIC960);
     const std::string fen       = fields_to_fen(fields.position, atomic960);
@@ -383,7 +381,7 @@ DataResult decode_atomic_bin_v2(const AtomicBinV2Record& record, TrainingDataSam
     sample.fen    = fen;
     sample.score  = int(fields.score);
     sample.move   = move;
-    sample.ply    = int(fields.ply);
+    sample.ply    = std::int64_t(fields.ply);
     sample.result = int(fields.result);
     sample.flags  = atomic960 ? TRAINING_DATA_CHESS960 : NO_TRAINING_DATA_FLAGS;
     return DataResult::success();

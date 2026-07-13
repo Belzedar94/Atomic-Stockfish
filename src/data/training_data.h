@@ -41,7 +41,7 @@ struct TrainingDataSample {
     std::string fen;
     int         score  = 0;
     Move        move   = Move::none();
-    int         ply    = 0;
+    std::int64_t ply    = 0;
     int         result = 0;
     u32         flags  = NO_TRAINING_DATA_FLAGS;
 };
