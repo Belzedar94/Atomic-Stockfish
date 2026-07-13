@@ -209,3 +209,56 @@ The playing signature remains exactly `338376`, so H8.2a is a
 no-functional-change specialization and does not require an Elo test. H8.2b
 removes the now-orphaned threat-update plumbing and attack tables as a separate
 attributable block.
+
+## H8.2b - Remove legacy threat-update plumbing
+
+H8.2b removes the unreachable `DirtyThreat` representation, updater, and
+AVX-512 writer after the active LegacyAtomicV1 accumulator was proven to use
+only `DirtyPiece`. It also removes `LineBB`, `RayPassBB`,
+`PawnPushOrAttacks`, the unused board-array accessor, and the orphaned
+`ValueList::make_space()` helper. The accumulator now owns a compile-time
+assertion that its feature-set delta type remains `DirtyPiece`.
+
+The measured source commit is
+`20b3bd6c191636599ecad3e09aea7b78eb762d77`, based on the H8.2a squash merge
+`8113cab087e03b668623a8fbab8bf9508cf6bd68`. The exact clean BMI2 artifact
+embeds that source SHA.
+
+### Source, artifact, and functional evidence
+
+- Patch size: 45 insertions and 296 deletions across ten files.
+- Removed process-static attack storage: 65,536 bytes from the two 64 by 64
+  bitboard matrices.
+- Candidate executable: 4,266,467 bytes, SHA-256
+  `78AAE3D35C3D76F3EDCA2E4CA7600F52A2BF7793283E158B835197C3C0D9EDB9`.
+- C++ Atomic unit tests: 63/63.
+- Shared board API tests: 34/34.
+- All eight Atomic/Atomic960 perft vectors and 19/19 focused rule transitions.
+- Fixed search corpus: 16/16 classical and 16/16 with LegacyAtomicV1.
+- NNUE modes: `false`, `true`, `pure`, and invalid-net handling.
+- Reprosearch: 12/12.
+- One million deterministic incremental operations: 500,000 makes, 500,000
+  undos, 18,761 captures, zero capture-forced refreshes, 241,087 full-refresh
+  comparisons, and state signature `0x8742E39B793C46AB`.
+- Frozen-Fairy differential: 10,000/10,000; maximum final NNUE delta 0,
+  maximum pure trace delta 0.005, corpus SHA-256
+  `46C96F405BC15D468D94BC1E2186B577CE55128832E1108066581D35037FA2DE`.
+
+### Clean-machine commit A/B
+
+The OpenBench worker was paused and restored inside a `finally` block. Both
+artifacts were clean MinGW g++ 15.2 BMI2 release builds, and the runner
+authenticated all eight inputs before and after the measurement.
+
+| Side | NPS samples | Median NPS |
+| --- | --- | ---: |
+| H8.2b candidate | 1,429,502; 1,427,933; 1,421,691; 1,316,647; 1,424,805 | 1,424,805 |
+| H8.2a control | 1,412,429; 1,400,266; 1,412,429; 1,413,964; 1,409,368 | 1,412,429 |
+
+The strict gate passed with ratio `1.0088` (+0.88%). The PE grew by 4,188
+bytes after code/LTO layout changed; this is tracked separately from the
+65,536 bytes of deleted runtime-static matrices. Complete evidence is in
+[`evidence/hito8-threat-plumbing`](evidence/hito8-threat-plumbing/README.md).
+
+The playing signature remains exactly `338376`; H8.2b is therefore a
+no-functional-change specialization and does not require an Elo test.
