@@ -81,10 +81,6 @@ using vec_uint_t = __m512i;
     #define vec_sub_psqt_32(a, b) _mm256_sub_epi32(a, b)
     #define vec_zero_psqt() _mm256_setzero_si256()
 
-    #ifdef USE_SSSE3
-        #define vec_nnz(a) _mm512_cmpgt_epi32_mask(a, _mm512_setzero_si512())
-    #endif
-
     #define vec128_zero _mm_setzero_si128()
     #define vec128_set_16(a) _mm_set1_epi16(a)
     #define vec128_load(a) _mm_load_si128(a)
@@ -118,16 +114,6 @@ using vec_uint_t = __m256i;
     #define vec_sub_psqt_32(a, b) _mm256_sub_epi32(a, b)
     #define vec_zero_psqt() _mm256_setzero_si256()
 
-    #ifdef USE_SSSE3
-        #if defined(USE_VNNI) && !defined(USE_AVXVNNI)
-            #define vec_nnz(a) _mm256_cmpgt_epi32_mask(a, _mm256_setzero_si256())
-        #else
-            #define vec_nnz(a) \
-                _mm256_movemask_ps( \
-                  _mm256_castsi256_ps(_mm256_cmpgt_epi32(a, _mm256_setzero_si256())))
-        #endif
-    #endif
-
     #define vec128_zero _mm_setzero_si128()
     #define vec128_set_16(a) _mm_set1_epi16(a)
     #define vec128_load(a) _mm_load_si128(a)
@@ -159,11 +145,6 @@ using vec_uint_t = __m128i;
     #define vec_add_psqt_32(a, b) _mm_add_epi32(a, b)
     #define vec_sub_psqt_32(a, b) _mm_sub_epi32(a, b)
     #define vec_zero_psqt() _mm_setzero_si128()
-
-    #ifdef USE_SSSE3
-        #define vec_nnz(a) \
-            _mm_movemask_ps(_mm_castsi128_ps(_mm_cmpgt_epi32(a, _mm_setzero_si128())))
-    #endif
 
     #ifdef __i386__
 inline __m128i _mm_cvtsi64_si128(i64 val) {
@@ -224,9 +205,6 @@ using vec_uint_t __attribute__((may_alias)) = uint32x4_t;
     #define vec_sub_psqt_32(a, b) vsubq_s32(a, b)
     #define vec_zero_psqt() psqt_vec_t{0}
 
-static constexpr u32 Mask[4] = {1, 2, 4, 8};
-    #define vec_nnz(a) \
-        vaddvq_u32(vandq_u32(vtstq_u32((uint32x4_t) a, (uint32x4_t) a), vld1q_u32(Mask)))
     #define vec128_zero vdupq_n_u16(0)
     #define vec128_set_16(a) vdupq_n_u16(a)
     #define vec128_load(a) vld1q_u16(reinterpret_cast<const u16*>(a))
@@ -288,7 +266,6 @@ inline __m256i lasx_packus_32(__m256i a, __m256i b) {
     #define vec_add_psqt_32(a, b) __lasx_xvadd_w(a, b)
     #define vec_sub_psqt_32(a, b) __lasx_xvsub_w(a, b)
     #define vec_zero_psqt() __lasx_xvldi(0)
-    #define vec_nnz(a) lasx_vec_nnz(a)
     #define vec_convert_8_16(a) lasx_cvtepi8_epi16(a)
     #define vec_mulhi_8 __lasx_xvmuh_bu
     #define vec_srli_8 __lasx_xvsrli_b
@@ -317,12 +294,6 @@ inline __m256i lasx_cvtepi8_epi16(__m128i a) {
     v          = __lasx_xvinsgr2vr_d(v, hi, 2);
     return __lasx_xvsllwil_h_b(v, 0);
     #endif
-}
-
-inline int lasx_vec_nnz(__m256i a) {
-    const __m256i cmp = __lasx_xvslt_w(__lasx_xvldi(0), a);
-    const __m256i msk = __lasx_xvmskltz_w(cmp);
-    return ((int) __lasx_xvpickve2gr_w(msk, 0)) | (((int) __lasx_xvpickve2gr_w(msk, 4)) << 4);
 }
 
 #elif USE_LSX
@@ -365,13 +336,6 @@ inline __m128i lsx_packus_32(__m128i a, __m128i b) {
     #define vec_add_psqt_32(a, b) __lsx_vadd_w(a, b)
     #define vec_sub_psqt_32(a, b) __lsx_vsub_w(a, b)
     #define vec_zero_psqt() __lsx_vldi(0)
-
-inline int lsx_vec_nnz(__m128i a) {
-    const __m128i cmp = __lsx_vslt_w(__lsx_vldi(0), a);
-    const __m128i msk = __lsx_vmskltz_w(cmp);
-    return ((int) __lsx_vpickve2gr_w(msk, 0));
-}
-    #define vec_nnz(a) lsx_vec_nnz(a)
 
 inline __m128i vec_convert_8_16(u64 x) {
     __m128i v = __lsx_vldrepl_d(reinterpret_cast<const void*>(&x), 0);

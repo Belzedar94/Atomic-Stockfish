@@ -73,6 +73,27 @@ def test_legacy_threat_delta_plumbing_is_not_reintroduced():
     assert "std::is_same_v<FeatureSet::DiffType, DirtyPiece>" in accumulator
 
 
+def test_legacy_atomic_v1_inventory_omits_unselected_modern_nnue_layers():
+    # AtomicNNUEV2 may legitimately add modern layers in H9. Its build graph
+    # must then split this LegacyAtomicV1 inventory guard by backend.
+    makefile = (ROOT / "src" / "Makefile").read_text(encoding="utf-8")
+    common = (ROOT / "src" / "nnue" / "nnue_common.h").read_text(encoding="utf-8")
+    simd = (ROOT / "src" / "nnue" / "simd.h").read_text(encoding="utf-8")
+
+    removed = (
+        "nnue/layers/affine_transform_sparse_input.h",
+        "nnue/layers/sqr_clipped_relu.h",
+        "nnue/nnz_helper.h",
+    )
+    for relative in removed:
+        assert relative not in makefile
+        assert not (ROOT / "src" / relative).exists()
+
+    for token in ("FtMaxVal", "HiddenOneVal"):
+        assert token not in common
+    assert "vec_nnz" not in simd
+
+
 def test_reader_test_links_keep_transposition_table_dependency_isolated():
     makefile = (ROOT / "src" / "Makefile").read_text(encoding="utf-8")
     gitignore = (ROOT / ".gitignore").read_text(encoding="utf-8")

@@ -67,9 +67,6 @@ constexpr u32 Version = 0x7AF32F20u;
 // Constant used in evaluation value calculation
 constexpr int OutputScale     = 16;
 constexpr int WeightScaleBits = 6;
-constexpr int FtMaxVal        = 255;
-constexpr int HiddenOneVal    = 128;
-
 // Size of cache line (in bytes)
 constexpr usize CacheLineSize = 64;
 
