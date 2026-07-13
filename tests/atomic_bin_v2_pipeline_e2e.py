@@ -50,6 +50,7 @@ TRAINER_REPOSITORY = "Belzedar94/variant-nnue-pytorch"
 SHA1_RE = re.compile(r"^[0-9a-f]{40}$")
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 PORTABLE_BASENAME_RE = re.compile(r"^[^/\\\x00]+$")
+SQUARE_RE = re.compile(r"^[a-h][1-8]$")
 
 
 class GateError(RuntimeError):
@@ -188,6 +189,14 @@ def canonical_json(value: object) -> bytes:
 def canonical_json_preserving_order(value: object) -> bytes:
     return (json.dumps(value, ensure_ascii=False, separators=(",", ":")) + "\n").encode(
         "utf-8"
+    )
+
+
+def python_json_line_statement(expression: str) -> str:
+    return (
+        "sys.stdout.buffer.write((json.dumps("
+        + expression
+        + ",separators=(',',':'))+'\\n').encode('utf-8'))"
     )
 
 
@@ -695,10 +704,9 @@ def verify_capabilities(config: GateConfig, archive: Archive) -> Mapping[str, ob
     require(wrapper_bytes == expected, "wrapper data-tools capabilities changed")
     require(wrapper_bytes == direct_bytes, "wrapper capabilities are not byte-exact")
 
-    capability_probe = (
-        "import json,nnue_dataset;"
-        "print(json.dumps({'dll':nnue_dataset.dllpath,'capability':"
-        "nnue_dataset.atomic_training_data_schemas()},separators=(',',':')))"
+    capability_probe = "import json,nnue_dataset,sys;" + python_json_line_statement(
+        "{'dll':nnue_dataset.dllpath,'capability':"
+        "nnue_dataset.atomic_training_data_schemas()}"
     )
     trainer = archive.run(
         "trainer capabilities",
@@ -814,6 +822,12 @@ def require_exact_keys(value: object, keys: Sequence[str], label: str) -> Mappin
     require(isinstance(value, dict), f"{label} must be an object")
     require(set(value) == set(keys), f"{label} has missing or unknown fields")
     return value
+
+
+def require_ordered_keys(value: object, keys: Sequence[str], label: str) -> Mapping[str, Any]:
+    checked = require_exact_keys(value, keys, label)
+    require(tuple(checked) == tuple(keys), f"{label} key order changed")
+    return checked
 
 
 def validate_manifest(
@@ -1041,6 +1055,204 @@ def validate_success_json(payload: bytes, label: str) -> Mapping[str, Any]:
     return value
 
 
+def require_bounded_int(value: object, minimum: int, maximum: int, label: str) -> int:
+    require(
+        type(value) is int and minimum <= value <= maximum,
+        f"{label} is outside [{minimum}, {maximum}]",
+    )
+    return value
+
+
+def require_uint32_string(value: object, label: str, *, allow_zero: bool = True) -> int:
+    require(
+        isinstance(value, str) and re.fullmatch(r"0|[1-9][0-9]{0,9}", value) is not None,
+        f"{label} is not a canonical uint32 string",
+    )
+    parsed = int(value)
+    require(parsed <= 0xFFFFFFFF, f"{label} exceeds uint32")
+    require(allow_zero or parsed != 0, f"{label} cannot be zero")
+    return parsed
+
+
+def require_square(value: object, label: str, *, nullable: bool = False) -> str | None:
+    if nullable and value is None:
+        return None
+    require(
+        isinstance(value, str) and SQUARE_RE.fullmatch(value) is not None,
+        f"{label} is invalid",
+    )
+    return value
+
+
+def square_index(square: str) -> int:
+    return ord(square[0]) - ord("a") + 8 * (ord(square[1]) - ord("1"))
+
+
+def validate_decoded_position(value: object, *, atomic960: bool, label: str) -> None:
+    position = require_ordered_keys(
+        value,
+        (
+            "fen",
+            "fen_notation",
+            "side_to_move",
+            "rule50",
+            "fullmove",
+            "castling_rights",
+            "castling_rook_origins",
+            "en_passant",
+        ),
+        label,
+    )
+    fen = position["fen"]
+    require(isinstance(fen, str) and fen, f"{label}.fen is empty")
+    fields = fen.split(" ")
+    require(len(fields) == 6 and all(fields), f"{label}.fen has no six canonical fields")
+    board, side, castling_fen, ep_fen, rule50_fen, fullmove_fen = fields
+    ranks = board.split("/")
+    require(len(ranks) == 8, f"{label}.fen board has no eight ranks")
+    pieces: list[str] = []
+    for rank_index, rank in enumerate(ranks):
+        require(re.search(r"[1-8][1-8]", rank) is None, f"{label}.fen rank is noncanonical")
+        files = 0
+        for token in rank:
+            if token in "12345678":
+                files += int(token)
+            else:
+                require(token in "pnbrqkPNBRQK", f"{label}.fen has an invalid piece")
+                pieces.append(token)
+                files += 1
+        require(files == 8, f"{label}.fen rank {8 - rank_index} does not span eight files")
+    require(pieces.count("K") == 1 and pieces.count("k") == 1, f"{label}.fen king count changed")
+
+    require(side in {"w", "b"}, f"{label}.fen side-to-move is invalid")
+    expected_side = "white" if side == "w" else "black"
+    require(position["side_to_move"] == expected_side, f"{label}.side_to_move differs from FEN")
+    expected_notation = "shredder-fen" if atomic960 else "fen"
+    require(position["fen_notation"] == expected_notation, f"{label}.fen_notation changed")
+    rule50 = require_bounded_int(position["rule50"], 0, 32767, f"{label}.rule50")
+    fullmove = require_bounded_int(position["fullmove"], 1, 100000, f"{label}.fullmove")
+    require(rule50_fen == str(rule50), f"{label}.rule50 differs from FEN")
+    require(fullmove_fen == str(fullmove), f"{label}.fullmove differs from FEN")
+
+    rights = require_ordered_keys(
+        position["castling_rights"], ("wire", "fen"), f"{label}.castling_rights"
+    )
+    rights_wire = require_bounded_int(
+        rights["wire"], 0, 15, f"{label}.castling_rights.wire"
+    )
+    require(
+        isinstance(rights["fen"], str) and 1 <= len(rights["fen"]) <= 4,
+        f"{label}.castling_rights.fen is invalid",
+    )
+    require(rights["fen"] == castling_fen, f"{label}.castling rights differ from FEN")
+    origins = require_ordered_keys(
+        position["castling_rook_origins"],
+        ("white_kingside", "white_queenside", "black_kingside", "black_queenside"),
+        f"{label}.castling_rook_origins",
+    )
+    origin_names = tuple(origins)
+    for bit, name in enumerate(origin_names):
+        origin = require_square(
+            origins[name], f"{label}.castling_rook_origins.{name}", nullable=True
+        )
+        require(
+            (origin is not None) == bool(rights_wire & (1 << bit)),
+            f"{label}.{name} presence changed",
+        )
+    if not atomic960:
+        expected_origins = ("h1", "a1", "h8", "a8")
+        for bit, (name, expected) in enumerate(zip(origin_names, expected_origins)):
+            if rights_wire & (1 << bit):
+                require(origins[name] == expected, f"{label}.{name} is not orthodox")
+        expected_castling = "".join(
+            token for bit, token in enumerate("KQkq") if rights_wire & (1 << bit)
+        ) or "-"
+        require(castling_fen == expected_castling, f"{label}.castling FEN is noncanonical")
+
+    en_passant = require_square(position["en_passant"], f"{label}.en_passant", nullable=True)
+    require(ep_fen == (en_passant or "-"), f"{label}.en_passant differs from FEN")
+    if en_passant is not None:
+        expected_rank = "6" if side == "w" else "3"
+        require(en_passant[1] == expected_rank, f"{label}.en_passant rank is noncanonical")
+
+
+def validate_decoded_move(value: object, label: str) -> None:
+    move = require_ordered_keys(
+        value, ("wire", "from", "to", "type", "promotion"), label
+    )
+    wire = require_uint32_string(move["wire"], f"{label}.wire", allow_zero=False)
+    from_square = require_square(move["from"], f"{label}.from")
+    to_square = require_square(move["to"], f"{label}.to")
+    require(from_square != to_square, f"{label} has equal from/to squares")
+    move_types = {"normal": 0, "promotion": 1, "en-passant": 2, "castling": 3}
+    promotions = {"none": 0, "knight": 1, "bishop": 2, "rook": 3, "queen": 4}
+    require(
+        isinstance(move["type"], str) and move["type"] in move_types,
+        f"{label}.type is invalid",
+    )
+    require(
+        isinstance(move["promotion"], str) and move["promotion"] in promotions,
+        f"{label}.promotion is invalid",
+    )
+    promotion_code = promotions[str(move["promotion"])]
+    require(
+        (move["type"] == "promotion") == (promotion_code != 0),
+        f"{label} promotion/type coupling changed",
+    )
+    expected_wire = (
+        square_index(str(from_square))
+        | (square_index(str(to_square)) << 6)
+        | (move_types[str(move["type"])] << 12)
+        | (promotion_code << 16)
+    )
+    require(wire == expected_wire, f"{label}.wire differs from decoded move fields")
+
+
+def validate_decoded_record(value: object, *, index: int, atomic960: bool) -> int:
+    label = f"record {index}"
+    record = require_ordered_keys(
+        value,
+        (
+            "type",
+            "contract_version",
+            "global_index",
+            "shard_index",
+            "local_index",
+            "position",
+            "score_stm",
+            "ply",
+            "result_stm",
+            "flags",
+            "atomic960",
+            "move",
+        ),
+        label,
+    )
+    require(record["type"] == "atomic-data-tools-decode-record", f"{label} type changed")
+    require(
+        type(record["contract_version"]) is int and record["contract_version"] == 1,
+        f"{label} contract changed",
+    )
+    require(record["global_index"] == str(index), f"{label} global index changed")
+    expected_shard = index // RECORDS_PER_SHARD
+    expected_local = index % RECORDS_PER_SHARD
+    require(record["shard_index"] == str(expected_shard), f"{label} shard index changed")
+    require(record["local_index"] == str(expected_local), f"{label} local index changed")
+    validate_decoded_position(record["position"], atomic960=atomic960, label=f"{label}.position")
+    require_bounded_int(record["score_stm"], -2147483647, 2147483647, f"{label}.score_stm")
+    require_uint32_string(record["ply"], f"{label}.ply")
+    require(
+        type(record["result_stm"]) is int and record["result_stm"] in {-1, 0, 1},
+        f"{label}.result_stm is invalid",
+    )
+    flags = require_bounded_int(record["flags"], 0, 1, f"{label}.flags")
+    require(type(record["atomic960"]) is bool, f"{label}.atomic960 is not boolean")
+    require(record["atomic960"] is atomic960, f"{label}.atomic960 differs from header")
+    require(flags == int(atomic960), f"{label}.flags differs from Atomic960 mode")
+    validate_decoded_move(record["move"], f"{label}.move")
+    return int(record["result_stm"])
+
+
 def validate_decode_jsonl(
     payload: bytes,
     *,
@@ -1080,30 +1292,12 @@ def validate_decode_jsonl(
             "generation": manifest["generation"],
         },
     }
+    require_ordered_keys(header, tuple(expected_header), "decode header")
     require(header == expected_header, "decode provenance header changed")
+    result_counts = {-1: 0, 0: 0, 1: 0}
     for index, record in enumerate(values[1:-1]):
-        require(
-            record.get("type") == "atomic-data-tools-decode-record",
-            f"record {index} type changed",
-        )
-        require(record.get("contract_version") == 1, f"record {index} contract changed")
-        require(record.get("global_index") == str(index), f"record {index} global index changed")
-        expected_shard = index // RECORDS_PER_SHARD
-        expected_local = index % RECORDS_PER_SHARD
-        require(
-            record.get("shard_index") == str(expected_shard),
-            f"record {index} shard index changed",
-        )
-        require(
-            record.get("local_index") == str(expected_local),
-            f"record {index} local index changed",
-        )
-        require(
-            record.get("atomic960") is False and record.get("flags") == 0,
-            f"record {index} flags changed",
-        )
-        require(isinstance(record.get("position"), dict), f"record {index} has no position")
-        require(isinstance(record.get("move"), dict), f"record {index} has no move")
+        result = validate_decoded_record(record, index=index, atomic960=False)
+        result_counts[result] += 1
 
     footer = values[-1]
     expected_footer = {
@@ -1122,7 +1316,17 @@ def validate_decode_jsonl(
             "atomic960_records": validation["atomic960_records"],
         },
     }
+    require_ordered_keys(footer, tuple(expected_footer), "decode footer")
     require(footer == expected_footer, "decode validation footer changed")
+    expected_counts = {
+        1: int(validation["side_to_move_wins"]),
+        0: int(validation["draws"]),
+        -1: int(validation["side_to_move_losses"]),
+    }
+    require(
+        result_counts == expected_counts,
+        f"decoded result_stm WDL {result_counts} differs from validation {expected_counts}",
+    )
 
 
 def validate_and_decode(
@@ -1266,8 +1470,9 @@ def run_training(
     metadata_probe = (
         "import json,sys,torch;"
         "c=torch.load(sys.argv[1],map_location='cpu',weights_only=False);"
-        "print(json.dumps({'global_step':c.get('global_step'),'epoch':c.get('epoch')},"
-        "separators=(',',':')))"
+        + python_json_line_statement(
+            "{'global_step':c.get('global_step'),'epoch':c.get('epoch')}"
+        )
     )
     metadata_result = archive.run(
         "checkpoint metadata",
@@ -1405,12 +1610,14 @@ def load_candidate_in_engine(config: GateConfig, archive: Archive, candidate: Pa
 def python_environment(config: GateConfig, archive: Archive) -> Mapping[str, object]:
     probe = (
         "import json,platform,sys,numpy,torch,pytorch_lightning;"
-        "print(json.dumps({'python':platform.python_version(),"
-        "'implementation':platform.python_implementation(),"
-        "'platform':platform.platform(),"
-        "'numpy':numpy.__version__,'torch':torch.__version__,"
-        "'pytorch_lightning':pytorch_lightning.__version__,"
-        "'executable':sys.executable},separators=(',',':')))"
+        + python_json_line_statement(
+            "{'python':platform.python_version(),"
+            "'implementation':platform.python_implementation(),"
+            "'platform':platform.platform(),"
+            "'numpy':numpy.__version__,'torch':torch.__version__,"
+            "'pytorch_lightning':pytorch_lightning.__version__,"
+            "'executable':sys.executable}"
+        )
     )
     result = archive.run(
         "python environment",

@@ -24,6 +24,7 @@ import atomic_bin_v2_pipeline_e2e as gate
 COMMIT = "a" * 40
 CONTRACT_COMMIT = "b" * 40
 SHA256 = "c" * 64
+DELETE = object()
 
 
 def config(tmp_path: Path, **overrides: object) -> gate.GateConfig:
@@ -182,6 +183,12 @@ def decode_fixture(manifest: Mapping[str, Any], validation: Mapping[str, Any]) -
         }
     ]
     for index in range(gate.RECORDS):
+        if index < 40:
+            result_stm = 1
+        elif index < 60:
+            result_stm = 0
+        else:
+            result_stm = -1
         values.append(
             {
                 "type": "atomic-data-tools-decode-record",
@@ -189,10 +196,33 @@ def decode_fixture(manifest: Mapping[str, Any], validation: Mapping[str, Any]) -
                 "global_index": str(index),
                 "shard_index": str(index // gate.RECORDS_PER_SHARD),
                 "local_index": str(index % gate.RECORDS_PER_SHARD),
-                "atomic960": False,
+                "position": {
+                    "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+                    "fen_notation": "fen",
+                    "side_to_move": "white",
+                    "rule50": 0,
+                    "fullmove": 1,
+                    "castling_rights": {"wire": 15, "fen": "KQkq"},
+                    "castling_rook_origins": {
+                        "white_kingside": "h1",
+                        "white_queenside": "a1",
+                        "black_kingside": "h8",
+                        "black_queenside": "a8",
+                    },
+                    "en_passant": None,
+                },
+                "score_stm": 0,
+                "ply": str(index),
+                "result_stm": result_stm,
                 "flags": 0,
-                "position": {"side_to_move": "white", "pieces": []},
-                "move": {"from": "a2", "to": "a3", "type": "normal"},
+                "atomic960": False,
+                "move": {
+                    "wire": str(0x70C),
+                    "from": "e2",
+                    "to": "e4",
+                    "type": "normal",
+                    "promotion": "none",
+                },
             }
         )
     values.append(
@@ -214,6 +244,26 @@ def decode_fixture(manifest: Mapping[str, Any], validation: Mapping[str, Any]) -
         }
     )
     return b"".join(gate.canonical_json_preserving_order(value) for value in values)
+
+
+def mutate_decode_record(
+    payload: bytes,
+    path: tuple[str, ...],
+    value: object,
+    *,
+    record_index: int = 0,
+) -> bytes:
+    lines = payload.splitlines()
+    record = json.loads(lines[record_index + 1])
+    target = record
+    for key in path[:-1]:
+        target = target[key]
+    if value is DELETE:
+        del target[path[-1]]
+    else:
+        target[path[-1]] = value
+    lines[record_index + 1] = gate.canonical_json_preserving_order(record).rstrip(b"\n")
+    return b"\n".join(lines) + b"\n"
 
 
 @pytest.mark.parametrize("value", ("0", "1", str(2**64 - 1)))
@@ -247,6 +297,17 @@ def test_run_raw_supports_binary_stdin_without_conflicting_stdin_argument() -> N
     assert completed.returncode == 0
     assert completed.stdout == b"atomic\x00dataset\n"
     assert completed.stderr == b""
+
+
+def test_owned_python_json_probe_emits_frozen_lf_bytes_on_windows() -> None:
+    probe = "import json,sys;" + gate.python_json_line_statement("{'value':'atomic'}")
+    completed = gate.run_raw((sys.executable, "-B", "-c", probe))
+    assert completed.returncode == 0
+    assert completed.stdout == b'{"value":"atomic"}\n'
+    assert b"\r" not in completed.stdout
+    result = gate.CommandResult("probe", (), str(Path.cwd()), 0, b'{}\r\n', b"")
+    with pytest.raises(gate.GateError, match="CR bytes"):
+        gate.require_clean_success(result, "probe")
 
 
 def test_archive_is_exclusive_and_rejects_whitespace(tmp_path: Path) -> None:
@@ -383,6 +444,71 @@ def test_decode_gate_authenticates_provenance_indexes_and_footer(tmp_path: Path)
     record["global_index"] = "1"
     lines[1] = gate.canonical_json_preserving_order(record).rstrip(b"\n")
     with pytest.raises(gate.GateError, match="global index"):
+        gate.validate_decode_jsonl(
+            b"\n".join(lines) + b"\n", manifest=manifest, validation=validation
+        )
+
+
+@pytest.mark.parametrize(
+    ("path", "value", "message"),
+    (
+        (("score_stm",), DELETE, "missing or unknown"),
+        (("score_stm",), True, "score_stm"),
+        (("score_stm",), -2147483648, "score_stm"),
+        (("ply",), "00", "canonical uint32"),
+        (("ply",), "4294967296", "exceeds uint32"),
+        (("result_stm",), 2, "result_stm"),
+        (("position", "fen"), "8/8/8/8/8/8/8/8 w - - 0 1", "king count"),
+        (("position", "fen_notation"), "shredder-fen", "fen_notation"),
+        (("position", "side_to_move"), "black", "differs from FEN"),
+        (("position", "rule50"), -1, "rule50"),
+        (("position", "fullmove"), 0, "fullmove"),
+        (("position", "castling_rights", "wire"), 14, "presence changed"),
+        (
+            ("position", "castling_rook_origins", "white_kingside"),
+            None,
+            "presence changed",
+        ),
+        (("position", "en_passant"), "e3", "differs from FEN"),
+        (("move", "wire"), str(0x70D), "differs from decoded move"),
+        (("move", "from"), "z9", "move.from is invalid"),
+        (("move", "to"), "e2", "equal from/to"),
+        (("move", "type"), "promotion", "promotion/type coupling"),
+        (("move", "promotion"), "queen", "promotion/type coupling"),
+        (("move", "future"), 1, "missing or unknown"),
+    ),
+)
+def test_decode_gate_rejects_every_record_field_family_mutation(
+    tmp_path: Path, path: tuple[str, ...], value: object, message: str
+) -> None:
+    cfg = config(tmp_path)
+    _, manifest = manifest_fixture(tmp_path / "dataset", cfg)
+    validation = validation_fixture()
+    payload = mutate_decode_record(decode_fixture(manifest, validation), path, value)
+    with pytest.raises(gate.GateError, match=message):
+        gate.validate_decode_jsonl(payload, manifest=manifest, validation=validation)
+
+
+def test_decode_gate_reconciles_record_results_with_validation_wdl(tmp_path: Path) -> None:
+    cfg = config(tmp_path)
+    _, manifest = manifest_fixture(tmp_path / "dataset", cfg)
+    validation = validation_fixture()
+    payload = mutate_decode_record(
+        decode_fixture(manifest, validation), ("result_stm",), 1, record_index=100
+    )
+    with pytest.raises(gate.GateError, match="differs from validation"):
+        gate.validate_decode_jsonl(payload, manifest=manifest, validation=validation)
+
+
+def test_decode_gate_rejects_record_key_order_drift(tmp_path: Path) -> None:
+    cfg = config(tmp_path)
+    _, manifest = manifest_fixture(tmp_path / "dataset", cfg)
+    validation = validation_fixture()
+    lines = decode_fixture(manifest, validation).splitlines()
+    record = json.loads(lines[1])
+    reordered = {"contract_version": record.pop("contract_version"), **record}
+    lines[1] = gate.canonical_json_preserving_order(reordered).rstrip(b"\n")
+    with pytest.raises(gate.GateError, match="key order"):
         gate.validate_decode_jsonl(
             b"\n".join(lines) + b"\n", manifest=manifest, validation=validation
         )

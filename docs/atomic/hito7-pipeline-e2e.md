@@ -39,8 +39,11 @@ The run has no tuning switches. It performs all of the following:
    filtering disabled. Every other data-affecting generator option is explicit
    on the UCI wire and verified again in the manifest.
 6. Validates and decodes both manifests through the direct binary and wrapper.
-   The gate checks all 128 global/shard/local indexes, provenance and WDL
-   reconciliation, and requires byte-identical JSON/JSONL from both entrypoints.
+   The gate checks all 128 global/shard/local indexes, complete ordered record,
+   position and move schemas, FEN/clocks/castling/en-passant consistency,
+   score/ply/result domains, lossless 32-bit move decomposition, provenance and
+   record-to-footer WDL reconciliation. It requires byte-identical JSON/JSONL
+   from both entrypoints.
 7. Runs `train.py` on CPU with batch size, epoch size and validation size all
    fixed to 96. Smart filtering and random FEN skipping are disabled. Exactly
    one optimizer update and a checkpoint with `global_step=1`, `epoch=0` are
@@ -152,7 +155,8 @@ python -B -m pytest -q tests/python/test_atomic_bin_v2_pipeline_e2e.py
 ```
 
 It covers CLI domains, exact generation/training policies, strict manifests,
-WDL reconciliation, all decode indexes and provenance, capability byte parity,
+WDL reconciliation, all decode fields/indexes/provenance and adversarial field
+mutations, capability byte parity, Windows-safe explicit-LF Python probes,
 checkpoint step count, NNUE header validation, exclusive archives, canonical
 wrapper-child authentication, public-path redaction and pre/post artifact
 immutability.
