@@ -22,6 +22,7 @@
 #include <system_error>
 #include <utility>
 
+#include "../atomic_init.h"
 #include "sha256.h"
 
 #ifdef _WIN32
@@ -304,7 +305,14 @@ int open_regular(const std::filesystem::path& path, FileIdentity& identity, Chan
     #ifdef O_NOFOLLOW
     flags |= O_NOFOLLOW;
     #endif
-    const int descriptor = ::open(path.c_str(), flags);
+    #ifdef O_NONBLOCK
+    flags |= O_NONBLOCK;
+    #endif
+    int descriptor;
+    do
+    {
+        descriptor = ::open(path.c_str(), flags);
+    } while (descriptor == -1 && errno == EINTR);
     if (descriptor == -1)
         return -1;
     struct stat status{};
@@ -314,6 +322,26 @@ int open_regular(const std::filesystem::path& path, FileIdentity& identity, Chan
         errno = EINVAL;
         return -1;
     }
+    #ifdef O_NONBLOCK
+    int descriptorFlags;
+    do
+    {
+        descriptorFlags = ::fcntl(descriptor, F_GETFL);
+    } while (descriptorFlags == -1 && errno == EINTR);
+    int clearResult = 0;
+    if (descriptorFlags != -1 && (descriptorFlags & O_NONBLOCK))
+        do
+        {
+            clearResult = ::fcntl(descriptor, F_SETFL, descriptorFlags & ~O_NONBLOCK);
+        } while (clearResult == -1 && errno == EINTR);
+    if (descriptorFlags == -1 || clearResult == -1)
+    {
+        const int error = errno;
+        ::close(descriptor);
+        errno = error;
+        return -1;
+    }
+    #endif
     return descriptor;
 }
 
@@ -425,6 +453,7 @@ struct AtomicBinV2DatasetReader::Shard {
     std::filesystem::path path;
     int                   descriptor = -1;
     FileIdentity          sourceIdentity;
+    bool                  sourceIdentityEstablished = false;
     FileIdentity          snapshotIdentity;
     ChangeToken           snapshotToken;
 
@@ -437,6 +466,10 @@ struct AtomicBinV2DatasetReader::Shard {
             descriptor = -1;
         }
     }
+};
+
+struct AtomicBinV2DatasetReader::IdentitySet {
+    std::set<FileIdentity> values;
 };
 
 AtomicBinV2DatasetReader::~AtomicBinV2DatasetReader() = default;
@@ -467,7 +500,14 @@ DataResult AtomicBinV2DatasetReader::open_shard(std::size_t index, bool establis
         return indexed(DataError::FILE_SIZE_MISMATCH,
                        "shard exceeds the SHA-256 message-length domain", index, 0, global);
     }
-    if (!establishIdentity && sourceIdentity != shard.sourceIdentity)
+    if (establishIdentity && sourceIdentities->values.count(sourceIdentity))
+    {
+        close_descriptor(sourceDescriptor);
+        return indexed(DataError::FILE_IDENTITY_MISMATCH, "manifest repeats a shard file identity",
+                       index, 0, global);
+    }
+    if (!establishIdentity
+        && (!shard.sourceIdentityEstablished || sourceIdentity != shard.sourceIdentity))
     {
         close_descriptor(sourceDescriptor);
         return indexed(DataError::FILE_IDENTITY_MISMATCH,
@@ -568,8 +608,6 @@ DataResult AtomicBinV2DatasetReader::open_shard(std::size_t index, bool establis
     shard.descriptor       = snapshotDescriptor;
     shard.snapshotIdentity = snapshotIdentity;
     shard.snapshotToken    = snapshotToken;
-    if (establishIdentity)
-        shard.sourceIdentity = sourceIdentity;
 
     if (!seek_absolute(shard.descriptor, 0))
         return indexed(DataError::READ_FAILED, "cannot seek to shard header", index, 0, global);
@@ -582,7 +620,18 @@ DataResult AtomicBinV2DatasetReader::open_shard(std::size_t index, bool establis
     if (headerCount != expected.records)
         return indexed(DataError::RECORD_COUNT_OUT_OF_RANGE,
                        "header record count differs from manifest", index, 0, global);
-    return verify_shard(index, 0, global);
+    if (DataResult stable = verify_shard(index, 0, global); !stable)
+        return stable;
+    if (establishIdentity)
+    {
+        const bool inserted = sourceIdentities->values.insert(sourceIdentity).second;
+        if (!inserted)
+            return indexed(DataError::FILE_IDENTITY_MISMATCH,
+                           "manifest repeats a shard file identity", index, 0, global);
+        shard.sourceIdentity            = sourceIdentity;
+        shard.sourceIdentityEstablished = true;
+    }
+    return DataResult::success();
 }
 
 DataResult AtomicBinV2DatasetReader::verify_shard(std::size_t index, u64 local, u64 global) {
@@ -610,6 +659,7 @@ DataResult AtomicBinV2DatasetReader::decode_record(const AtomicBinV2Record&  wir
         return indexed(DataError::INVALID_RECORD,
                        "record Atomic960 flag differs from manifest generation mode", shard, local,
                        global);
+    initialize_atomic_core();
     if (DataResult semantic = decode_atomic_bin_v2(wire, decoded.sample); !semantic)
         return indexed(semantic.error, semantic.message, shard, local, global);
     AtomicBinV2Record roundTrip{};
@@ -634,8 +684,8 @@ DataResult AtomicBinV2DatasetReader::open(const std::filesystem::path&          
         return loaded;
 
     std::set<std::filesystem::path> namedPaths;
-    std::set<FileIdentity>          identities;
-    u64                             auditedDraws = 0;
+    reader->sourceIdentities = std::make_unique<IdentitySet>();
+    reader->shards.reserve(reader->metadata.shards.size());
     for (std::size_t index = 0; index < reader->metadata.shards.size(); ++index)
     {
         const auto& expected = reader->metadata.shards[index];
@@ -646,62 +696,8 @@ DataResult AtomicBinV2DatasetReader::open(const std::filesystem::path&          
         auto shard  = std::make_unique<Shard>();
         shard->path = expected.path;
         reader->shards.push_back(std::move(shard));
-        if (DataResult opened = reader->open_shard(index, true); !opened)
-            return opened;
-        if (!identities.insert(reader->shards[index]->sourceIdentity).second)
-            return indexed(DataError::FILE_IDENTITY_MISMATCH,
-                           "manifest repeats a shard file identity", index, 0,
-                           reader->currentGlobal);
-
-        for (u64 local = 0; local < expected.records; ++local)
-        {
-            if (DataResult stable = reader->verify_shard(index, local, reader->currentGlobal);
-                !stable)
-                return stable;
-            AtomicBinV2Record wire{};
-            if (DataResult read =
-                  read_exact(reader->shards[index]->descriptor, wire.data(), wire.size());
-                !read)
-                return indexed(read.error, read.message, index, local, reader->currentGlobal);
-            if (DataResult stable = reader->verify_shard(index, local, reader->currentGlobal);
-                !stable)
-                return stable;
-            AtomicBinV2DecodedRecord decoded;
-            if (DataResult valid =
-                  reader->decode_record(wire, index, local, reader->currentGlobal, decoded);
-                !valid)
-                return valid;
-            auditedDraws += decoded.sample.result == 0;
-            ++reader->currentGlobal;
-        }
-
-        // Close the hash-to-audit race with a second same-descriptor digest.
-        std::string finalHash;
-        if (DataResult hashed =
-              sha256_file_descriptor(reader->shards[index]->descriptor, expected.bytes, finalHash);
-            !hashed)
-            return indexed(hashed.error, hashed.message, index, expected.records,
-                           reader->currentGlobal);
-        if (finalHash != expected.sha256)
-            return indexed(DataError::FILE_IDENTITY_MISMATCH, "shard changed during semantic audit",
-                           index, expected.records, reader->currentGlobal);
-        if (DataResult stable =
-              reader->verify_shard(index, expected.records, reader->currentGlobal);
-            !stable)
-            return stable;
-        reader->shards[index]->close();
     }
-    if (reader->currentGlobal != reader->metadata.records || auditedDraws != reader->metadata.draws)
-    {
-        const std::size_t last  = reader->metadata.shards.size() - 1;
-        const u64         local = reader->metadata.shards[last].records;
-        return indexed(DataError::INVALID_MANIFEST,
-                       "EOF audited record/draw totals differ from manifest", last, local,
-                       reader->currentGlobal);
-    }
-    reader->currentShard = 0;
-    reader->currentLocal = reader->currentGlobal = reader->currentDraws = 0;
-    output                                                              = std::move(reader);
+    output = std::move(reader);
     return DataResult::success();
 }
 
@@ -709,32 +705,13 @@ DataResult AtomicBinV2DatasetReader::rewind() {
     if (failed)
         return DataResult::failure(DataError::READ_FAILED,
                                    "Atomic BIN V2 reader cannot rewind after a failed read");
-    for (auto& shard : shards)
-        shard->close();
+    // At most the current shard owns a live snapshot; completed shards are
+    // closed as they advance. Keep rewind constant-time even for the frozen
+    // 100,000-shard manifest limit.
+    if (currentShard < shards.size())
+        shards[currentShard]->close();
     currentShard = 0;
     currentLocal = currentGlobal = currentDraws = 0;
-
-    u64 global = 0;
-    for (std::size_t index = 0; index < shards.size(); ++index)
-    {
-        FileIdentity identity;
-        ChangeToken  token;
-        const int    check = open_regular(shards[index]->path, identity, token);
-        if (check < 0)
-        {
-            failed = true;
-            return indexed(DataError::FILE_IDENTITY_MISMATCH,
-                           "shard pathname cannot be re-authenticated", index, 0, global);
-        }
-        close_descriptor(check);
-        if (identity != shards[index]->sourceIdentity)
-        {
-            failed = true;
-            return indexed(DataError::FILE_IDENTITY_MISMATCH,
-                           "shard pathname was replaced or changed", index, 0, global);
-        }
-        global += metadata.shards[index].records;
-    }
     return DataResult::success();
 }
 
@@ -752,13 +729,13 @@ DataResult AtomicBinV2DatasetReader::next(AtomicBinV2DecodedRecord& output, bool
     };
     if (currentGlobal == metadata.records)
     {
-        if (currentDraws != metadata.draws)
+        if (currentShard != shards.size() || currentLocal != 0 || currentDraws != metadata.draws)
         {
             const std::size_t last  = metadata.shards.size() - 1;
             const u64         local = metadata.shards[last].records;
             return poison(indexed(DataError::INVALID_MANIFEST,
-                                  "EOF streamed record/draw totals differ from manifest", last,
-                                  local, currentGlobal));
+                                  "EOF streamed shard/record/draw totals differ from manifest",
+                                  last, local, currentGlobal));
         }
         return DataResult::success();
     }
@@ -766,8 +743,14 @@ DataResult AtomicBinV2DatasetReader::next(AtomicBinV2DecodedRecord& output, bool
         return poison(indexed(DataError::RECORD_COUNT_OUT_OF_RANGE,
                               "reader exhausted shards before aggregate record count", currentShard,
                               currentLocal, currentGlobal));
+    if (currentLocal >= metadata.shards[currentShard].records)
+        return poison(indexed(DataError::RECORD_COUNT_OUT_OF_RANGE,
+                              "reader shard state exceeds its manifest record count", currentShard,
+                              currentLocal, currentGlobal));
     if (shards[currentShard]->descriptor < 0)
-        if (DataResult opened = open_shard(currentShard, false); !opened)
+        if (DataResult opened =
+              open_shard(currentShard, !shards[currentShard]->sourceIdentityEstablished);
+            !opened)
             return poison(std::move(opened));
     if (DataResult stable = verify_shard(currentShard, currentLocal, currentGlobal); !stable)
         return poison(std::move(stable));

@@ -293,6 +293,7 @@ jobs:
           tests/python/test_atomic_training_data_schema.py
           tests/python/test_atomic_bin_v2_schema.py
           tests/python/test_atomic_bin_v2_manifest_schema.py
+          tests/python/test_atomic_init_source_lists.py
           tests/python/test_atomic_nnue_differential.py
           tests/python/test_legacy_pipeline_lock.py
           tests/python/test_legacy_pipeline_build_manifest.py

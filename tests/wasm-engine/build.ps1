@@ -30,6 +30,7 @@ $empp = Get-Command em++ -ErrorAction Stop
 [System.IO.Directory]::CreateDirectory($OutDir) | Out-Null
 
 $relativeSources = @(
+    'atomic_init.cpp',
     'attacks.cpp',
     'benchmark.cpp',
     'bitboard.cpp',

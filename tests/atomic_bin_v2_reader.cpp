@@ -1,8 +1,10 @@
 /* End-to-end tests for the authenticated streaming Atomic BIN V2 reader. */
 
 #include <algorithm>
+#include <cerrno>
 #include <chrono>
 #include <filesystem>
+#include <functional>
 #include <fstream>
 #include <iostream>
 #include <memory>
@@ -14,6 +16,13 @@
 #include "data/sha256.h"
 #include "movegen.h"
 #include "position.h"
+
+#ifndef _WIN32
+    #include <signal.h>
+    #include <sys/stat.h>
+    #include <sys/wait.h>
+    #include <unistd.h>
+#endif
 
 using namespace Stockfish;
 
@@ -27,6 +36,31 @@ void check(bool condition, std::string_view name) {
         ++failures;
         std::cerr << "FAIL: " << name << '\n';
     }
+}
+
+std::vector<u8> decode_hex(std::string_view value) {
+    const auto nibble = [](char byte) -> int {
+        if (byte >= '0' && byte <= '9')
+            return byte - '0';
+        if (byte >= 'a' && byte <= 'f')
+            return byte - 'a' + 10;
+        if (byte >= 'A' && byte <= 'F')
+            return byte - 'A' + 10;
+        return -1;
+    };
+    std::vector<u8> bytes;
+    if (value.size() % 2)
+        return bytes;
+    bytes.reserve(value.size() / 2);
+    for (std::size_t index = 0; index < value.size(); index += 2)
+    {
+        const int high = nibble(value[index]);
+        const int low  = nibble(value[index + 1]);
+        if (high < 0 || low < 0)
+            return {};
+        bytes.push_back(u8((high << 4) | low));
+    }
+    return bytes;
 }
 
 struct TempDirectory {
@@ -222,6 +256,60 @@ void expect_open_failure(const std::filesystem::path& manifest, std::string_view
     check(!reader, std::string(name) + " resets output");
 }
 
+Data::DataResult
+stream_dataset(const std::filesystem::path& manifest, u64& delivered, std::string_view name) {
+    delivered = 0;
+    std::unique_ptr<Data::AtomicBinV2DatasetReader> reader;
+    Data::DataResult result = Data::AtomicBinV2DatasetReader::open(manifest, reader);
+    check(bool(result) && bool(reader), std::string(name) + " opens manifest lazily");
+    if (!result || !reader)
+        return result;
+    for (;;)
+    {
+        Data::AtomicBinV2DecodedRecord decoded;
+        bool                           hasRecord = false;
+        result                                   = reader->next(decoded, hasRecord);
+        if (!result || !hasRecord)
+            return result;
+        ++delivered;
+    }
+}
+
+void expect_stream_failure(const std::filesystem::path& manifest, std::string_view name) {
+    u64                    delivered = 0;
+    const Data::DataResult result    = stream_dataset(manifest, delivered, name);
+    check(!result, name);
+}
+
+#ifndef _WIN32
+bool child_completes(std::function<bool()> action) {
+    const pid_t child = ::fork();
+    if (child == 0)
+        ::_exit(action() ? 0 : 1);
+    if (child < 0)
+        return false;
+    for (int attempt = 0; attempt < 200; ++attempt)
+    {
+        int   status = 0;
+        pid_t waited;
+        do
+        {
+            waited = ::waitpid(child, &status, WNOHANG);
+        } while (waited < 0 && errno == EINTR);
+        if (waited == child)
+            return WIFEXITED(status) && WEXITSTATUS(status) == 0;
+        if (waited < 0)
+            return false;
+        ::usleep(10000);
+    }
+    ::kill(child, SIGKILL);
+    int status = 0;
+    while (::waitpid(child, &status, 0) < 0 && errno == EINTR)
+    {}
+    return false;
+}
+#endif
+
 void rewrite_authentication(Dataset& dataset) {
     std::string hash;
     u64         size = 0;
@@ -233,9 +321,39 @@ void rewrite_authentication(Dataset& dataset) {
 }  // namespace
 
 int main() {
-    Bitboards::init();
-    Attacks::init();
-    Position::init();
+    // This fixture is pure frozen wire data: constructing it does not touch
+    // Position. The first public reader call must initialize the Atomic core
+    // itself before performing semantic validation.
+    {
+        TempDirectory temporary("standalone-init");
+        Dataset       dataset;
+        dataset.shard    = temporary.path / "dataset.atbin";
+        dataset.manifest = temporary.path / "dataset.atbin.manifest.json";
+        Data::AtomicBinV2Header header{};
+        check(bool(Data::encode_atomic_bin_v2_header(1, header)),
+              "encode standalone reader header");
+        const std::vector<u8> record =
+          decode_hex("245336421111111100000000000000000000000000000000777777778AB99CA8"
+                     "000F07003F38FF00000001000000000085FFFFFF0C0700002A000000FF000000");
+        check(record.size() == Data::AtomicBinV2RecordSize, "load standalone reader frozen record");
+        dataset.bytes.insert(dataset.bytes.end(), header.begin(), header.end());
+        dataset.bytes.insert(dataset.bytes.end(), record.begin(), record.end());
+        check(write_bytes(dataset.shard, dataset.bytes), "write standalone reader shard");
+        std::string hash;
+        u64         size = 0;
+        check(bool(Data::sha256_file(dataset.shard, hash, size)), "hash standalone reader shard");
+        dataset.metadata = metadata_for(dataset.manifest, dataset.shard, 1, 0, hash);
+        check(write_manifest(dataset.metadata), "write standalone reader manifest");
+
+        std::unique_ptr<Data::AtomicBinV2DatasetReader> reader;
+        check(bool(Data::AtomicBinV2DatasetReader::open(dataset.manifest, reader)) && bool(reader),
+              "standalone reader opens before Atomic core initialization");
+        Data::AtomicBinV2DecodedRecord decoded;
+        bool                           hasRecord = false;
+        check(reader && bool(reader->next(decoded, hasRecord)) && hasRecord
+                && decoded.sample.fen == "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+              "standalone reader initializes Atomic core on first semantic record");
+    }
 
     {
         TempDirectory temporary("valid");
@@ -244,8 +362,8 @@ int main() {
         const Data::DataResult                          openResult =
           Data::AtomicBinV2DatasetReader::open(dataset.manifest, reader);
         if (!openResult)
-            std::cerr << "open valid authenticated dataset: " << openResult.message << '\n';
-        check(bool(openResult), "open valid authenticated dataset");
+            std::cerr << "open valid manifest lazily: " << openResult.message << '\n';
+        check(bool(openResult), "open valid manifest lazily");
         if (!reader)
             return 1;
         Data::AtomicBinV2DecodedRecord decoded;
@@ -263,7 +381,9 @@ int main() {
         const auto old = temporary.path / "old.atbin";
         std::filesystem::rename(dataset.shard, old);
         std::filesystem::copy_file(old, dataset.shard);
-        check(!reader->rewind(), "replaced shard pathname rejected");
+        check(bool(reader->rewind()), "rewind remains manifest-only after pathname replacement");
+        check(!reader->next(decoded, hasRecord) && !hasRecord,
+              "replaced shard pathname rejected before another record");
     }
     {
         TempDirectory temporary("in-place");
@@ -381,11 +501,12 @@ int main() {
               "hash second-shard corruption");
         first.metadata.shards[1].sha256 = secondHash;
         check(write_manifest(first.metadata), "write authenticated second-shard corruption");
+        u64                    delivered = 0;
         const Data::DataResult indexedFailure =
-          Data::AtomicBinV2DatasetReader::open(first.manifest, reader);
-        check(!indexedFailure
+          stream_dataset(first.manifest, delivered, "late second-shard corruption");
+        check(!indexedFailure && delivered == 1
                 && indexedFailure.message.find("shard=1 local=0 global=1") != std::string::npos,
-              "second-shard failure reports shard/local/global indexes");
+              "late second-shard failure preserves first-record latency and indexed diagnostics");
     }
 
     {
@@ -394,7 +515,7 @@ int main() {
         dataset.bytes[Data::AtomicBinV2HeaderSize + 62] = 1;
         check(write_bytes(dataset.shard, dataset.bytes), "write reserved-byte corruption");
         rewrite_authentication(dataset);
-        expect_open_failure(dataset.manifest, "reserved record bytes rejected");
+        expect_stream_failure(dataset.manifest, "reserved record bytes rejected");
     }
     {
         TempDirectory temporary("position");
@@ -403,7 +524,7 @@ int main() {
           u8((dataset.bytes[Data::AtomicBinV2HeaderSize] & 0xF0) | 0x0F);
         check(write_bytes(dataset.shard, dataset.bytes), "write reserved piece corruption");
         rewrite_authentication(dataset);
-        expect_open_failure(dataset.manifest, "invalid position piece code rejected");
+        expect_stream_failure(dataset.manifest, "invalid position piece code rejected");
     }
     {
         TempDirectory temporary("illegal");
@@ -413,7 +534,7 @@ int main() {
         dataset.bytes[offset + 1] = 0x02;
         check(write_bytes(dataset.shard, dataset.bytes), "write illegal move corruption");
         rewrite_authentication(dataset);
-        expect_open_failure(dataset.manifest, "Atomic-illegal move rejected");
+        expect_stream_failure(dataset.manifest, "Atomic-illegal move rejected");
     }
     {
         TempDirectory temporary("header");
@@ -421,7 +542,7 @@ int main() {
         dataset.bytes[0] ^= 1;
         check(write_bytes(dataset.shard, dataset.bytes), "write header corruption");
         rewrite_authentication(dataset);
-        expect_open_failure(dataset.manifest, "invalid header rejected");
+        expect_stream_failure(dataset.manifest, "invalid header rejected");
     }
     {
         TempDirectory           temporary("count");
@@ -431,25 +552,25 @@ int main() {
         std::copy(header.begin(), header.end(), dataset.bytes.begin());
         check(write_bytes(dataset.shard, dataset.bytes), "write count mismatch");
         rewrite_authentication(dataset);
-        expect_open_failure(dataset.manifest, "header/manifest count mismatch rejected");
+        expect_stream_failure(dataset.manifest, "header/manifest count mismatch rejected");
     }
     {
         TempDirectory temporary("size");
         Dataset       dataset = create_dataset(temporary.path, "dataset");
         dataset.bytes.pop_back();
         check(write_bytes(dataset.shard, dataset.bytes), "write truncated shard");
-        expect_open_failure(dataset.manifest, "truncated shard rejected");
+        expect_stream_failure(dataset.manifest, "truncated shard rejected");
         dataset.bytes.push_back(0);
         dataset.bytes.push_back(0);
         check(write_bytes(dataset.shard, dataset.bytes), "write trailing-byte shard");
-        expect_open_failure(dataset.manifest, "trailing shard bytes rejected");
+        expect_stream_failure(dataset.manifest, "trailing shard bytes rejected");
     }
     {
         TempDirectory temporary("sha");
         Dataset       dataset = create_dataset(temporary.path, "dataset");
         dataset.bytes.back() ^= 1;
         check(write_bytes(dataset.shard, dataset.bytes), "write SHA mismatch");
-        expect_open_failure(dataset.manifest, "shard SHA mismatch rejected");
+        expect_stream_failure(dataset.manifest, "shard SHA mismatch rejected");
     }
     {
         TempDirectory temporary("stats");
@@ -457,12 +578,17 @@ int main() {
         dataset.metadata.draws = 1;
         check(write_manifest(dataset.metadata), "write incorrect statistics");
         std::unique_ptr<Data::AtomicBinV2DatasetReader> reader;
-        const Data::DataResult                          result =
-          Data::AtomicBinV2DatasetReader::open(dataset.manifest, reader);
-        check(!result && !reader
+        check(bool(Data::AtomicBinV2DatasetReader::open(dataset.manifest, reader)) && bool(reader),
+              "incorrect statistics remain lazy until EOF");
+        Data::AtomicBinV2DecodedRecord decoded;
+        bool                           hasRecord = false;
+        check(reader && bool(reader->next(decoded, hasRecord)) && hasRecord,
+              "record streams before aggregate EOF statistics check");
+        const Data::DataResult result = reader->next(decoded, hasRecord);
+        check(!result && !hasRecord
                 && result.message.find("shard=0 local=1 global=1") != std::string::npos
                 && result.message.find("EOF") != std::string::npos,
-              "audited draw totals fail at indexed EOF");
+              "streamed draw totals fail at indexed EOF");
     }
     {
         TempDirectory temporary("missing");
@@ -470,9 +596,9 @@ int main() {
         const auto    manifest = temporary.path / "missing.atbin.manifest.json";
         auto          metadata = metadata_for(manifest, shard, 1, 0, std::string(64, '3'));
         check(write_manifest(metadata), "write missing-shard manifest");
-        expect_open_failure(manifest, "missing shard rejected");
+        expect_stream_failure(manifest, "missing shard rejected lazily");
         std::filesystem::create_directory(shard);
-        expect_open_failure(manifest, "directory shard rejected");
+        expect_stream_failure(manifest, "directory shard rejected lazily");
     }
     {
         TempDirectory   temporary("hardlink");
@@ -491,7 +617,11 @@ int main() {
             second.path                               = alias;
             dataset.metadata.shards.push_back(second);
             check(write_manifest(dataset.metadata), "write hardlink duplicate manifest");
-            expect_open_failure(dataset.manifest, "hardlink duplicate shard identity rejected");
+            u64                    delivered = 0;
+            const Data::DataResult result =
+              stream_dataset(dataset.manifest, delivered, "hardlink duplicate shard identity");
+            check(!result && delivered == 1,
+                  "hardlink duplicate shard identity rejected at second shard");
         }
     }
 #ifndef _WIN32
@@ -504,10 +634,39 @@ int main() {
         auto metadata =
           metadata_for(linkManifest, linkShard, 1, 0, dataset.metadata.shards.front().sha256);
         check(write_manifest(metadata), "write symlink shard manifest");
-        expect_open_failure(linkManifest, "symlink shard rejected");
+        expect_stream_failure(linkManifest, "symlink shard rejected lazily");
         const auto manifestLink = temporary.path / "sidecar.atbin.manifest.json";
         std::filesystem::create_symlink(dataset.manifest.filename(), manifestLink);
         expect_open_failure(manifestLink, "symlink manifest rejected");
+    }
+    {
+        TempDirectory temporary("fifo-manifest");
+        const auto    manifest = temporary.path / "fifo.atbin.manifest.json";
+        check(::mkfifo(manifest.c_str(), 0600) == 0, "create FIFO sidecar fixture");
+        check(child_completes([&] {
+                  std::unique_ptr<Data::AtomicBinV2DatasetReader> reader;
+                  const Data::DataResult                          result =
+                    Data::AtomicBinV2DatasetReader::open(manifest, reader);
+                  return !result && !reader;
+              }),
+              "FIFO sidecar is rejected without blocking before regular-file inspection");
+    }
+    {
+        TempDirectory temporary("fifo-shard");
+        const auto    shard    = temporary.path / "fifo.atbin";
+        const auto    manifest = temporary.path / "fifo.atbin.manifest.json";
+        check(::mkfifo(shard.c_str(), 0600) == 0, "create FIFO shard fixture");
+        auto metadata = metadata_for(manifest, shard, 1, 0, std::string(64, '3'));
+        check(write_manifest(metadata), "write FIFO shard manifest");
+        check(child_completes([&] {
+                  std::unique_ptr<Data::AtomicBinV2DatasetReader> reader;
+                  if (!Data::AtomicBinV2DatasetReader::open(manifest, reader) || !reader)
+                      return false;
+                  Data::AtomicBinV2DecodedRecord decoded;
+                  bool                           hasRecord = false;
+                  return !reader->next(decoded, hasRecord) && !hasRecord;
+              }),
+              "FIFO shard is rejected lazily without blocking before regular-file inspection");
     }
 #endif
 

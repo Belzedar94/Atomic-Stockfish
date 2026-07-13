@@ -28,12 +28,12 @@ struct AtomicBinV2DecodedRecord {
     u64                     globalIndex = 0;
 };
 
-// A manifest-authoritative streaming reader. open() authenticates every shard,
-// validates every record through the Atomic rules engine, verifies byte-exact
-// re-encoding and checks aggregate statistics before returning the reader.
-// next() then stages and authenticates one private auto-deleting shard snapshot
-// at a time, removing the source hash-to-read race without loading the dataset
-// into memory.
+// A manifest-authoritative streaming reader. open() strictly parses the
+// sidecar and captures absolute paths without touching shard contents. next()
+// stages and authenticates one private auto-deleting shard snapshot at a time,
+// validates each record through the Atomic rules engine, verifies byte-exact
+// re-encoding and reconciles aggregate statistics at EOF. No record is exposed
+// before its complete shard snapshot matches the manifest SHA-256.
 class AtomicBinV2DatasetReader {
    public:
     ~AtomicBinV2DatasetReader();
@@ -51,6 +51,7 @@ class AtomicBinV2DatasetReader {
 
    private:
     struct Shard;
+    struct IdentitySet;
 
     AtomicBinV2DatasetReader() = default;
     DataResult open_shard(std::size_t index, bool establishIdentity);
@@ -63,6 +64,7 @@ class AtomicBinV2DatasetReader {
 
     AtomicBinV2Manifest                 metadata;
     std::vector<std::unique_ptr<Shard>> shards;
+    std::unique_ptr<IdentitySet>        sourceIdentities;
     std::size_t                         currentShard  = 0;
     u64                                 currentLocal  = 0;
     u64                                 currentGlobal = 0;

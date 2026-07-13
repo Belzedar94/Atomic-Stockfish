@@ -29,6 +29,7 @@ class BuildExtWithStub(build_ext):
 
 SOURCES = [
     "src/pyffish.cpp",
+    "src/atomic_init.cpp",
     "src/attacks.cpp",
     "src/bitboard.cpp",
     "src/misc.cpp",

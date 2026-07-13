@@ -299,15 +299,15 @@ canonical JSON bytes emitted by the frozen renderer, and
 72-byte loader; there is no format guessing and no raw V2 shard entrypoint.
 
 Opening a dataset resolves portable shard basenames relative to the sidecar,
-rejects path or file-identity duplicates and opens regular non-link files. It
-then checks exact size, same-descriptor SHA-256, frozen header and record count,
-audits every record through structural decoding and Atomic/Atomic960 legal move
-generation, requires a byte-exact re-encode, and reconciles record/draw totals.
-The returned object streams only from a cryptographically authenticated private
-snapshot. Audit and streaming retain at most one snapshot at a time; a source
-descriptor exists only during staging, so the producer's 100,000-shard upper
-bound does not become an OS-handle limit. Diagnostics carry shard/local/global
-indexes.
+rejects duplicate pathnames and captures the manifest without touching shard
+contents. Streaming lazily rejects duplicate file identities and non-regular,
+symlink or reparse-point paths, checks exact size, same-descriptor SHA-256,
+frozen header and record count, audits each record through structural decoding
+and Atomic/Atomic960 legal move generation, requires a byte-exact re-encode, and
+reconciles record/draw totals at EOF. It retains at most one cryptographically
+authenticated private snapshot; a source descriptor exists only during
+staging, so the producer's 100,000-shard upper bound does not become an
+OS-handle limit. Diagnostics carry shard/local/global indexes.
 
 The streaming pass stages one shard at a time in an auto-deleting private file
 under the system temporary directory. The complete staged bytes must match the
@@ -316,6 +316,12 @@ then come from the authenticated snapshot. This costs temporary disk equal to
 the largest current shard but removes the remaining same-inode mutation race.
 Source paths are captured absolutely before manifest parsing, preventing a CWD
 change from redirecting a later streaming open.
+
+The public reader invokes the process-wide thread-safe Atomic core initializer
+before its first semantic record, so C2 tools and trainer integrations have no
+hidden Bitboards/Attacks/Position startup precondition. POSIX sidecars and
+shards are opened nonblocking until their regular-file status is established;
+FIFO fixtures prove malformed datasets cannot hang the caller.
 
 Windows creates each snapshot with a cryptographically random `CREATE_NEW`
 basename, no sharing and `FILE_FLAG_DELETE_ON_CLOSE`. POSIX creates it mode

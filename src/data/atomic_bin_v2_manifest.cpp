@@ -348,28 +348,13 @@ std::string path_filename_utf8(const std::filesystem::path& path) {
 bool valid_filename(const std::filesystem::path& path, std::string_view suffix = {}) {
     const std::string          filename  = path_filename_utf8(path);
     constexpr std::string_view Forbidden = "/\\:<>\"|?*";
-    if (filename.empty() || filename.size() > 255 || !valid_utf8(filename) || filename == "."
-        || filename == ".." || filename.find_first_of(Forbidden) != std::string::npos
-        || filename.back() == '.' || filename.back() == ' '
-        || std::any_of(filename.begin(), filename.end(),
-                       [](unsigned char byte) { return byte < 0x20 || byte == 0x7F; })
-        || (!suffix.empty() && (filename.size() <= suffix.size() || !ends_with(filename, suffix))))
-        return false;
-
-    std::string device = filename.substr(0, filename.find('.'));
-    std::transform(device.begin(), device.end(), device.begin(), [](unsigned char byte) {
-        return byte >= 'A' && byte <= 'Z' ? char(byte - 'A' + 'a') : char(byte);
-    });
-    if (device == "con" || device == "prn" || device == "aux" || device == "nul")
-        return false;
-    if (device.size() == 4 && (device.substr(0, 3) == "com" || device.substr(0, 3) == "lpt")
-        && device[3] >= '1' && device[3] <= '9')
-        return false;
-    if ((device.substr(0, 3) == "com" || device.substr(0, 3) == "lpt")
-        && (device.substr(3) == "\xC2\xB9" || device.substr(3) == "\xC2\xB2"
-            || device.substr(3) == "\xC2\xB3"))
-        return false;
-    return true;
+    // This is the exact frozen portable-basename contract. Host filesystems
+    // may reject additional names when accessed, but the manifest reader must
+    // not silently narrow the schema shared by other implementations.
+    return !filename.empty() && valid_utf8(filename) && filename != "." && filename != ".."
+        && filename.find('\0') == std::string::npos
+        && filename.find_first_of(Forbidden) == std::string::npos
+        && (suffix.empty() || (filename.size() > suffix.size() && ends_with(filename, suffix)));
 }
 
 void append_quoted(std::string& output, std::string_view value) {
@@ -1175,7 +1160,14 @@ DataResult read_manifest_file(const std::filesystem::path& path, std::string& by
     #ifdef O_NOFOLLOW
     flags |= O_NOFOLLOW;
     #endif
-    const int descriptor = ::open(path.c_str(), flags);
+    #ifdef O_NONBLOCK
+    flags |= O_NONBLOCK;
+    #endif
+    int descriptor;
+    do
+    {
+        descriptor = ::open(path.c_str(), flags);
+    } while (descriptor == -1 && errno == EINTR);
     if (descriptor == -1)
         return DataResult::failure(DataError::OPEN_FAILED, "Cannot open Atomic BIN V2 manifest: "
                                                              + system_error_message(errno));
@@ -1188,6 +1180,27 @@ DataResult read_manifest_file(const std::filesystem::path& path, std::string& by
           DataError::OPEN_FAILED,
           "Atomic BIN V2 manifest must be a small regular non-symlink file");
     }
+    #ifdef O_NONBLOCK
+    int descriptorFlags;
+    do
+    {
+        descriptorFlags = ::fcntl(descriptor, F_GETFL);
+    } while (descriptorFlags == -1 && errno == EINTR);
+    int clearResult = 0;
+    if (descriptorFlags != -1 && (descriptorFlags & O_NONBLOCK))
+        do
+        {
+            clearResult = ::fcntl(descriptor, F_SETFL, descriptorFlags & ~O_NONBLOCK);
+        } while (clearResult == -1 && errno == EINTR);
+    if (descriptorFlags == -1 || clearResult == -1)
+    {
+        const int error = errno;
+        ::close(descriptor);
+        return DataResult::failure(
+          DataError::OPEN_FAILED, "Cannot configure the regular Atomic BIN V2 manifest descriptor: "
+                                    + system_error_message(error));
+    }
+    #endif
     bytes.resize(std::size_t(before.st_size));
     std::size_t offset = 0;
     while (offset < bytes.size())

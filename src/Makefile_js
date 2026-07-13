@@ -12,6 +12,7 @@ ESM_OUT := $(ESM_DIR)/ffish.mjs
 
 SOURCES := \
 	ffishjs.cpp \
+	atomic_init.cpp \
 	attacks.cpp \
 	bitboard.cpp \
 	misc.cpp \

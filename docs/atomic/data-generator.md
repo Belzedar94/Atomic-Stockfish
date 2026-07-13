@@ -177,15 +177,16 @@ inputs to be present beside a completed dataset.
 Generator parsing and manifest loading share the exact `keep_draws` validator:
 the input and expanded canonical decimal are capped at 4096 bytes and the value
 must round-trip through the generator's effective `double` without changing.
-Portable basenames are capped at 255 UTF-8 bytes and additionally reject ASCII
-controls and DEL, trailing dot or space, and the Windows device stems `CON`,
-`PRN`, `AUX`, `NUL`, `COM1`-`COM9` and `LPT1`-`LPT9` (including the legacy
-superscript forms 1-3), case-insensitively and even when followed by an
-extension.
-Authentication and the semantic audit process shards sequentially, retaining
-at most one authenticated snapshot; one-record sharding therefore does not
-consume one OS handle per shard. A source descriptor exists only while copying
-the current shard into that snapshot.
+Basenames retain the already-frozen manifest-schema contract exactly; the C++
+reader does not add platform-specific device-name, length or trailing-character
+rules under an unchanged schema SHA. A host filesystem can still reject a name
+when the corresponding file is actually accessed.
+
+Opening a dataset parses the authoritative manifest and captures absolute paths
+without reading any shard. Authentication and semantic validation are lazy and
+process shards sequentially, retaining at most one authenticated snapshot;
+one-record sharding therefore does not consume one OS handle per shard. A source
+descriptor exists only while copying the current shard into that snapshot.
 Before streaming any record from that shard, the reader copies its complete
 contents to a private auto-deleting file in the system temporary directory and
 authenticates the snapshot against the manifest SHA-256. Windows creates it
@@ -196,6 +197,8 @@ create a hash-to-read race. Peak temporary disk use is therefore one complete
 shard; snapshot creation or exhaustion of temporary storage fails closed before
 a record is returned. Manifest and shard paths are captured as absolute paths
 during open, so changing the process CWD cannot rebind them.
+POSIX opens candidate sidecars and shards nonblocking until `fstat` proves they
+are regular files, so a FIFO or other special file cannot hang validation.
 
 The focused reader gates can also be run independently from `src`:
 

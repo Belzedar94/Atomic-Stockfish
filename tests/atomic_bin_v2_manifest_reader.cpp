@@ -77,6 +77,14 @@ void rejects(std::string                  bytes,
     check(output.shards.empty(), std::string(name) + " resets output");
 }
 
+void accepts(std::string                  bytes,
+             std::string_view             name,
+             const std::filesystem::path& path = "dataset.atbin.manifest.json") {
+    Data::AtomicBinV2Manifest output;
+    check(bool(Data::parse_atomic_bin_v2_manifest(bytes, path, output)), name);
+    check(output.shards.size() == 1, std::string(name) + " preserves shard metadata");
+}
+
 }  // namespace
 
 int main() {
@@ -148,28 +156,31 @@ int main() {
             "absolute path");
     rejects(replace_once(canonical, "\"file\":\"dataset.atbin\"", "\"file\":\"sub/dataset.atbin\""),
             "shard separator");
-    rejects(replace_once(canonical, "\"file\":\"atomic.nnue\"", "\"file\":\"CON.nnue\""),
-            "Windows reserved device basename");
-    rejects(replace_once(canonical, "\"file\":\"dataset.atbin\"", "\"file\":\"LPT9.atbin\""),
-            "Windows reserved shard device basename");
+    accepts(replace_once(canonical, "\"file\":\"atomic.nnue\"", "\"file\":\"CON.nnue\""),
+            "schema-declared Windows device-like network basename");
+    accepts(replace_once(canonical, "\"file\":\"dataset.atbin\"", "\"file\":\"LPT9.atbin\""),
+            "schema-declared Windows device-like shard basename", "LPT9.atbin.manifest.json");
     const std::string superscriptDevice = std::string("\"file\":\"COM") + "\xC2\xB9" + ".nnue\"";
-    rejects(replace_once(canonical, "\"file\":\"atomic.nnue\"", superscriptDevice),
-            "Windows superscript reserved device basename");
-    rejects(replace_once(canonical, "\"file\":\"atomic.nnue\"",
+    accepts(replace_once(canonical, "\"file\":\"atomic.nnue\"", superscriptDevice),
+            "schema-declared superscript device-like basename");
+    accepts(replace_once(canonical, "\"file\":\"atomic.nnue\"",
                          std::string("\"file\":\"") + std::string(256, 'a') + "\""),
-            "basename longer than 255 UTF-8 bytes");
-    rejects(replace_once(canonical, "\"file\":\"atomic.nnue\"", "\"file\":\"atomic.nnue.\""),
-            "trailing dot basename");
-    rejects(replace_once(canonical, "\"file\":\"atomic.nnue\"", "\"file\":\"atomic.nnue \""),
-            "trailing space basename");
-    rejects(replace_once(canonical, "atomic.nnue", "atomic\\u0001.nnue"),
-            "ASCII control in basename");
+            "schema has no undeclared 255-byte basename cap");
+    accepts(replace_once(canonical, "\"file\":\"atomic.nnue\"", "\"file\":\"atomic.nnue.\""),
+            "schema-declared trailing dot basename");
+    accepts(replace_once(canonical, "\"file\":\"atomic.nnue\"", "\"file\":\"atomic.nnue \""),
+            "schema-declared trailing space basename");
+    accepts(replace_once(canonical, "atomic.nnue", "atomic\\u0001.nnue"),
+            "schema-declared non-NUL ASCII control in basename");
+    rejects(replace_once(canonical, "atomic.nnue", "atomic\\u0000.nnue"),
+            "schema-forbidden NUL in basename");
     std::string delBasename = canonical;
     const auto  networkName = delBasename.find("atomic.nnue");
     if (networkName != std::string::npos)
         delBasename.insert(networkName + 6, 1, char(0x7F));
-    rejects(std::move(delBasename), "DEL in basename");
-    rejects(canonical, "reserved manifest basename", "CON.atbin.manifest.json");
+    accepts(std::move(delBasename), "schema-declared DEL in basename");
+    accepts(replace_once(canonical, "\"file\":\"dataset.atbin\"", "\"file\":\"CON.atbin\""),
+            "schema-declared device-like manifest/shard basename", "CON.atbin.manifest.json");
     rejects(replace_once(canonical, "atomic.nnue", "atomic\\u002ennue"),
             "noncanonical Unicode escape");
 

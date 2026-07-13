@@ -295,9 +295,7 @@ void test_board_fen_validation_is_transactional() {
 }  // namespace
 
 int main() {
-    Bitboards::init();
-    Attacks::init();
-    Position::init();
+    Atomic::initialize();
 
     test_notation_fixtures();
     test_disambiguation_and_suffixes();

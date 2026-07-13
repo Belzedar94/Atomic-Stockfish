@@ -12,13 +12,11 @@
 
 #include <algorithm>
 #include <cctype>
-#include <mutex>
 #include <sstream>
 #include <stdexcept>
 #include <utility>
 
-#include "../attacks.h"
-#include "../bitboard.h"
+#include "../atomic_init.h"
 #include "../movegen.h"
 #include "../position.h"
 #include "../uci_move.h"
@@ -72,14 +70,7 @@ std::vector<std::string> split_words(std::string_view text) {
 
 }  // namespace
 
-void initialize() {
-    static std::once_flag initialized;
-    std::call_once(initialized, [] {
-        Bitboards::init();
-        Attacks::init();
-        Position::init();
-    });
-}
+void initialize() { initialize_atomic_core(); }
 
 Board::Board(std::string variant, std::string fen, bool isChess960) :
     variantName(normalize_variant(variant)),
