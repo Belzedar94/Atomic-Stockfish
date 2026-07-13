@@ -23,29 +23,37 @@ format are unchanged.
 
 The functional code commit is
 `6153609c8b454e13bb3941789b9184f9b4825dad`, based on Hito 7 merge
-`281bcc382eb4449886d0ee930ef7e23cb12b4dba`.
+`281bcc382eb4449886d0ee930ef7e23cb12b4dba`. The measured release artifact was
+then rebuilt from the clean committed tree
+`85b2c909a5fa48c02c83104498567d32a454347d`; the commits after that build only
+add the reusable A/B runner and this corrected evidence record.
 
 ### Layout and artifact evidence
 
-Both artifacts below were rebuilt with the same MinGW g++ 15.2 toolchain and
-the exact normative `ARCH=x86-64-bmi2` release target.
+Both artifacts below were rebuilt from clean, commit-bound trees with the same
+MinGW g++ 15.2 toolchain, the exact normative `ARCH=x86-64-bmi2` release target,
+and `-Wl,--no-insert-timestamp`. The candidate embeds `85b2c909` and its
+`.build_full_sha.txt` records the full source commit above.
 
 | Item | Hito 7 control | H8.1 candidate | Change |
 | --- | ---: | ---: | ---: |
 | `AccumulatorState` | 2,560 B | 2,176 B | -384 B |
 | `AccumulatorStack` | 632,384 B | 537,536 B | -94,848 B (-15.0%) |
 | `Position` | 1,056 B | 664 B | -392 B (-37.1%) |
-| Native executable | 4,269,764 B | 4,268,408 B | -1,356 B |
+| Native executable | 4,269,764 B | 4,263,264 B | -6,500 B |
 
 | Artifact | SHA-256 |
 | --- | --- |
 | Hito 7 control executable | `92E9C3C254741B628996D2F6617FF871EA1C06DAEEFB8AC749BF755FAAAC2323` |
-| H8.1 candidate executable | `0CCAD79A60D8E0C20F9168464C5A0921BC5CA58F4D39685C526C5019573BE8D7` |
+| H8.1 candidate executable | `B2F750FEE129D04ECAA9360E6AE6BE94F525A4453E085F03B02F2200AE56EB2C` |
 | Frozen Legacy Atomic V1 net | `99DC67EABF26A64FAEECA3A88B4C38597A840B8D4A874B9F2CF658C6F92A04A6` |
+
+The machine-readable manifest and complete benchmark output are retained in
+[`evidence/hito8-dirty-threats`](evidence/hito8-dirty-threats/README.md).
 
 ### Functional validation
 
-The release BMI2 candidate passed:
+The source-equivalent release BMI2 candidate passed:
 
 - C++ Atomic unit tests: 63/63.
 - Shared board API tests: 34/34.
@@ -68,6 +76,16 @@ all perft and 19 focused rule cases, both 16/16 search corpora, and an
 incremental 4,096-operation smoke with 4,104 full-refresh comparisons and state
 signature `0xDDB8196C6A0BE4A8`.
 
+After the clean commit-bound rebuild, the exact measured artifact loaded the
+frozen network and reproduced the playing signature `338376`. GitHub CI on the
+same `85b2c909` source commit passed all 14 jobs: native GCC and Clang,
+debug/assert, ASan+UBSan, TSan, Valgrind, MinGW data generator, both Windows and
+Linux Python 3.9/3.12 jobs, CommonJS/ES-module WASM, format, and the pinned
+Legacy Atomic V1 pipeline. The strong-network million-operation and 10,000-
+position local gates above exercise the identical engine source; their first
+artifact was precommit and is not used for the performance or reproducibility
+claim.
+
 CI now compiles the modified incremental NNUE test executable under native GCC,
 Clang, debug/assert, Windows MinGW, ASan+UBSan, and TSan. CI does not execute the
 strong-network gate because that network is deliberately external; the full
@@ -81,31 +99,35 @@ serialized repetitions, and the frozen net. The corpus SHA-256 was
 `2738065A8A70D61DA46FA3C75F95D645E50E601B43792DF0E7B3CC97B1D891A1`.
 The compiler preflight identified both sides as g++ 15.2, 64-bit BMI2 release
 builds, and the artifact postflight re-authenticated every binary, the net, and
-the pinned process-affinity dependency.
+the pinned process-affinity dependency. The commit comparison uses the tracked
+`tests/atomic_bench_ab.py`; the frozen-Fairy comparison continues to use the
+normative `tests/atomic_bench_compare.py`.
 
 Against the exact Hito 7 control:
 
 | Side | NPS samples | Median NPS |
 | --- | --- | ---: |
-| H8.1 candidate | 764,754; 864,925; 803,488; 806,477; 772,933 | 803,488 |
-| Hito 7 control | 775,699; 679,293; 718,303; 793,199; 683,577 | 718,303 |
+| H8.1 candidate | 828,565; 762,513; 840,884; 867,231; 869,550 | 840,884 |
+| Hito 7 control | 861,488; 869,550; 824,364; 777,553; 801,014 | 824,364 |
 
-The observed candidate/control ratio was `1.1186` (+11.86%).
+The commit A/B gate passed with ratio `1.0200` (+2.00%) and a 6,500-byte
+smaller executable.
 
 Against the frozen Fairy-Stockfish BMI2 baseline
 `4EACAAB40DCA84F5A255EA57231F2795D43B5DDA85CE50EBBA1A1B2937B46331`:
 
 | Side | NPS samples | Median NPS |
 | --- | --- | ---: |
-| H8.1 candidate | 790,788; 717,907; 824,364; 836,558; 794,653 | 794,653 |
-| Frozen Fairy baseline | 747,621; 759,405; 695,648; 664,722; 717,518 | 717,518 |
+| H8.1 candidate | 859,780; 781,289; 679,293; 779,417; 912,875 | 781,289 |
+| Frozen Fairy baseline | 756,755; 635,186; 748,482; 736,614; 803,001 | 748,482 |
 
-The normative performance gate passed with ratio `1.1075` (+10.75%) and a
-13,463-byte smaller executable. These percentages are observations from a
+The normative performance gate passed with ratio `1.0438` (+4.38%) and an
+18,607-byte smaller executable. These percentages are observations from a
 machine with one concurrent assigned workload, not universal speed promises;
 the alternating order and median reduce but do not eliminate shared-load noise.
-The gate-relevant facts are that both comparisons are matched, reproducible,
-authenticated, and positive.
+The gate-relevant facts are that both comparisons use versioned runners and
+clean commit-bound artifacts, authenticate every input before and after the
+workload, and are positive.
 
 ### Playing-strength gate
 

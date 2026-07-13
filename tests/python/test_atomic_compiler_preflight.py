@@ -15,6 +15,7 @@ if str(TESTS_DIR) not in sys.path:
     sys.path.insert(0, str(TESTS_DIR))
 
 import atomic_bench_compare as bench_compare
+import atomic_bench_ab as bench_ab
 import atomic_compiler_preflight as compiler_preflight
 
 
@@ -543,6 +544,15 @@ def test_bench_nnue_output_requires_exact_enabled_nnue_path(tmp_path):
         net,
         [f"info string NNUE evaluation using {net} enabled", "readyok"],
     )
+    bench_compare.require_nnue_output(
+        "control",
+        net,
+        [
+            "info string NNUE evaluation using "
+            f"{net} {bench_compare.CANDIDATE_NNUE_ARCHITECTURE_MARKER}",
+            "readyok",
+        ],
+    )
     with pytest.raises(RuntimeError, match="did not confirm selected NNUE"):
         bench_compare.require_nnue_output(
             "candidate",
@@ -555,6 +565,42 @@ def test_bench_nnue_output_requires_exact_enabled_nnue_path(tmp_path):
             net,
             ["info string ERROR: incompatible net", "readyok"],
         )
+
+
+@pytest.mark.parametrize(
+    ("argument", "value", "message"),
+    (
+        ("--nodes", "99999", "--nodes must be exactly"),
+        ("--hash", "32", "--hash must be exactly"),
+    ),
+)
+def test_commit_ab_requires_normative_workload_before_preflight(
+    tmp_path, capsys, argument, value, message
+):
+    candidate = tmp_path / "candidate.exe"
+    control = tmp_path / "control.exe"
+    net = tmp_path / "atomic.nnue"
+    candidate.write_bytes(b"candidate")
+    control.write_bytes(b"control")
+    net.write_bytes(b"net")
+
+    with pytest.raises(SystemExit) as exit_info:
+        bench_ab.main(
+            [
+                "--candidate",
+                str(candidate),
+                "--control",
+                str(control),
+                "--eval-file",
+                str(net),
+                "--affinity",
+                "0",
+                argument,
+                value,
+            ]
+        )
+    assert exit_info.value.code == 2
+    assert message in capsys.readouterr().err
 
 
 def test_bench_nnue_preflight_accepts_candidate_marker_emitted_on_go(tmp_path):
@@ -681,5 +727,6 @@ def test_scoped_gate_scripts_parse_as_python_39():
         TESTS_DIR / "atomic_compiler_preflight.py",
         TESTS_DIR / "atomic_los_gate.py",
         TESTS_DIR / "atomic_bench_compare.py",
+        TESTS_DIR / "atomic_bench_ab.py",
     ):
         ast.parse(script.read_text(encoding="utf-8"), filename=str(script), feature_version=(3, 9))

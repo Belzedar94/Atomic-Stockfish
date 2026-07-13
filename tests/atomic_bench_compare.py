@@ -144,7 +144,7 @@ def require_nnue_output(label: str, net: Path, output: list[str]) -> None:
     ]
     marker_ok = (
         any(CANDIDATE_NNUE_ARCHITECTURE_MARKER in line for line in net_lines)
-        if label == "candidate"
+        if label in {"candidate", "control"}
         else any("enabled" in line for line in net_lines)
     )
     if not marker_ok:
