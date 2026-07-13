@@ -12,6 +12,7 @@ import argparse
 from dataclasses import asdict, dataclass
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -19,10 +20,14 @@ import shutil
 import struct
 import subprocess
 import sys
-import traceback
-from typing import Any, Mapping, Sequence
+from typing import Any, BinaryIO, Callable, Mapping, Sequence
 
-from legacy_pipeline_e2e import UciProcess
+from legacy_pipeline_e2e import (
+    PythonEnvironmentProvenance,
+    UciProcess,
+    capture_python_environment_provenance,
+    verify_python_environment_provenance,
+)
 
 
 DATA_SCHEMA_SHA256 = "0352b036f2a140c609e3eb9c9d635dc553e8d77253d8faa92437390f5cf93cb6"
@@ -31,6 +36,12 @@ DECODE_SCHEMA_SHA256 = "5e3f8d7c6db6ee955b71747ee063859e15609adb557a3754228a606f
 LEGACY_SCHEMA_SHA256 = "acca0f551f1c012c31a6c727dedccaebb7b5ebbc46810edb87e31bb208d5abe1"
 LEGACY_NNUE_VERSION = 0x7AF32F20
 LEGACY_NNUE_ARCHITECTURE = 0x3C103E72
+LEGACY_NNUE_LOAD_SUFFIX = " (45MiB, (45056, 1024, 16, 32, 1))"
+
+NORMATIVE_CONTRACT_ENGINE_COMMIT = "76764c3c01ce5965a793a65e4580dd5c95cd2916"
+NORMATIVE_TOOLS_COMMIT = "40d2db224ef890f76b346ff4687e18fb33c98e23"
+NORMATIVE_TRAINER_COMMIT = "3e5651a977eca1351d7ef101acb8ff5c45588b12"
+NORMATIVE_SOURCE_NET_SHA256 = "99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f92a04a6"
 
 RECORDS = 128
 RECORDS_PER_SHARD = 64
@@ -42,6 +53,10 @@ GENERATOR_DEPTH = 3
 GENERATOR_HASH_MB = 512
 GENERATOR_EVAL_LIMIT = 32000
 DEFAULT_TIMEOUT_SECONDS = 1800.0
+TRAINER_POLICY_MARKER = (
+    "Atomic BIN V2 manifest policy: eval_limit=32000 "
+    "filter_captures=true filter_promotions=true filter_checks=false"
+)
 
 ATOMIC_REPOSITORY = "Belzedar94/Atomic-Stockfish"
 TOOLS_REPOSITORY = "Belzedar94/variant-nnue-tools"
@@ -51,6 +66,17 @@ SHA1_RE = re.compile(r"^[0-9a-f]{40}$")
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 PORTABLE_BASENAME_RE = re.compile(r"^[^/\\\x00]+$")
 SQUARE_RE = re.compile(r"^[a-h][1-8]$")
+WINDOWS_HOST_PATH_RE = re.compile(
+    r"(?i)(?<![A-Za-z0-9_])(?:[A-Z]:(?:\\{1,2}|/)"
+    r"(?:[^\\/\r\n\"<>|:*?]+(?:\\{1,2}|/))*[^\\/\r\n\"<>|:*?,;)\]}]+|"
+    r"\\{2,4}[^\\/\s]+(?:\\{1,2}|/)[^\\/\s]+"
+    r"(?:(?:\\{1,2}|/)[^\\/\r\n\"<>|:*?,;)\]}]+)*)"
+)
+POSIX_HOST_PATH_RE = re.compile(
+    r"(?<![A-Za-z0-9_:/>])/(?!/)(?:[^/\s\r\n\"'<>\x00,;:)]+/)*"
+    r"[^/\s\r\n\"'<>\x00,;:)]+"
+)
+PUBLIC_TEXT_SUFFIXES = frozenset({".json", ".log", ".jsonl", ".txt"})
 
 
 class GateError(RuntimeError):
@@ -106,6 +132,15 @@ class DatasetResult:
     shard_sha256: tuple[str, ...]
     validation: Mapping[str, Any]
     decode_sha256: str
+
+
+@dataclass(frozen=True)
+class FrozenDataset:
+    label: str
+    manifest: Path
+    manifest_sha256: str
+    shards: tuple[Path, ...]
+    shard_sha256: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -169,6 +204,20 @@ def parse_uint64(value: str) -> int:
     return parsed
 
 
+def parse_generator_seed(value: str) -> int:
+    parsed = parse_uint64(value)
+    if parsed == 0:
+        raise argparse.ArgumentTypeError("must be nonzero; generator seed 0 is normalized")
+    return parsed
+
+
+def parse_training_seed(value: str) -> int:
+    parsed = parse_generator_seed(value)
+    if parsed > 0xFFFFFFFF:
+        raise argparse.ArgumentTypeError("must fit the trainer uint32 seed domain")
+    return parsed
+
+
 def parse_positive_float(value: str) -> float:
     try:
         parsed = float(value)
@@ -190,6 +239,11 @@ def canonical_json_preserving_order(value: object) -> bytes:
     return (json.dumps(value, ensure_ascii=False, separators=(",", ":")) + "\n").encode(
         "utf-8"
     )
+
+
+def redact_host_paths(value: str) -> str:
+    value = WINDOWS_HOST_PATH_RE.sub("<HOST_PATH>", value)
+    return POSIX_HOST_PATH_RE.sub("<HOST_PATH>", value)
 
 
 def python_json_line_statement(expression: str) -> str:
@@ -490,7 +544,7 @@ class Archive:
             redacted = re.sub(
                 re.escape(source), lambda unused: token, redacted, flags=re.IGNORECASE
             )
-        return redacted
+        return redact_host_paths(redacted)
 
     def redact_value(self, value: object) -> object:
         if isinstance(value, str):
@@ -526,6 +580,21 @@ class Archive:
             shutil.rmtree(self.private_root)
         except OSError as error:
             raise GateError(f"cannot remove private work directory: {error}") from error
+
+    def sanitize_public_text(self) -> tuple[str, ...]:
+        changed: list[str] = []
+        for path in sorted(self.root.rglob("*")):
+            if not path.is_file() or path.suffix.lower() not in PUBLIC_TEXT_SUFFIXES:
+                continue
+            require(not path.is_symlink(), f"public text evidence is a symlink: {path.name}")
+            original = path.read_bytes()
+            text = original.decode("utf-8", errors="replace")
+            sanitized = self.redact_text(text).encode("utf-8")
+            if sanitized != original:
+                with path.open("wb") as output:
+                    output.write(sanitized)
+                changed.append(path.relative_to(self.root).as_posix())
+        return tuple(changed)
 
     def run(
         self,
@@ -580,8 +649,32 @@ def preflight(config: GateConfig, *, allow_output: bool = False) -> Preflight:
         not any(character.isspace() for character in str(config.output_dir.resolve())),
         "output directory cannot contain whitespace",
     )
+    require(
+        1 <= config.train_seed <= 0xFFFFFFFF,
+        "train seed must be nonzero and fit the trainer uint32 domain",
+    )
+    require(
+        1 <= config.validation_seed <= 0xFFFFFFFFFFFFFFFF,
+        "validation seed must be nonzero and fit uint64",
+    )
     require(config.train_seed != config.validation_seed, "train and validation seeds must differ")
     contract_commit = require_sha1(config.contract_engine_commit, "contract engine commit")
+    require(
+        contract_commit == NORMATIVE_CONTRACT_ENGINE_COMMIT,
+        "contract engine commit differs from the normative H7 pin",
+    )
+    require(
+        config.tools.commit == NORMATIVE_TOOLS_COMMIT,
+        "tools commit differs from the normative H7 atomic merge",
+    )
+    require(
+        config.trainer.commit == NORMATIVE_TRAINER_COMMIT,
+        "trainer commit differs from the normative H7 atomic merge",
+    )
+    require(
+        config.source_net_sha256 == NORMATIVE_SOURCE_NET_SHA256,
+        "source network differs from the normative H7 playing network",
+    )
 
     states = {
         "atomic": verify_checkout(config.atomic),
@@ -636,6 +729,20 @@ def preflight(config: GateConfig, *, allow_output: bool = False) -> Preflight:
         "wrapper_data_tools": (config.wrapper_data_tools, tools_engine),
         "trainer_loader": (config.trainer_loader, config.trainer.root),
     }
+    library_suffix = ".dll" if sys.platform == "win32" else (
+        ".dylib" if sys.platform == "darwin" else ".so"
+    )
+    native_loaders = tuple(
+        sorted(config.trainer.root.resolve().glob(f"*training_data_loader*{library_suffix}"))
+    )
+    require(
+        len(native_loaders) == 1,
+        "trainer checkout must contain exactly one root-level platform native loader",
+    )
+    require(
+        config.trainer_loader.resolve() == native_loaders[0].resolve(),
+        "trainer_loader must be the sole root-level loader imported by nnue_dataset",
+    )
     wrapper_artifact_name = (
         "atomic-stockfish-data-tools.exe" if os.name == "nt" else "atomic-stockfish-data-tools"
     )
@@ -671,6 +778,12 @@ def preflight(config: GateConfig, *, allow_output: bool = False) -> Preflight:
             "python": fingerprint(config.python, "python", config.python_sha256),
         }
     )
+    require(
+        Path(sys.executable).resolve() == config.python.resolve(),
+        "the gate must be launched by the exact --python interpreter",
+    )
+    require(not os.environ.get("PYTHONPATH"), "PYTHONPATH must be unset for the final gate")
+    require(not os.environ.get("PYTHONHOME"), "PYTHONHOME must be unset for the final gate")
     verify_nnue_header(config.source_net)
     return Preflight(states, fingerprints)
 
@@ -853,7 +966,10 @@ def validate_manifest(
         ),
         "manifest",
     )
-    require(manifest["manifest_version"] == 1, "manifest version changed")
+    require(
+        type(manifest["manifest_version"]) is int and manifest["manifest_version"] == 1,
+        "manifest version changed",
+    )
     require(
         manifest["manifest_schema_sha256"] == MANIFEST_SCHEMA_SHA256,
         "manifest schema digest changed",
@@ -881,7 +997,10 @@ def validate_manifest(
     )
     require(generation["resolved_seed"] == str(seed), "resolved generator seed mismatch")
     require(generation["atomic960"] is False, "final H7 dataset unexpectedly uses Atomic960")
-    require(generation["threads"] == 1, "generator threads changed")
+    require(
+        type(generation["threads"]) is int and generation["threads"] == 1,
+        "generator threads changed",
+    )
     require(generation["hash_mb"] == str(GENERATOR_HASH_MB), "generator hash changed")
     require(generation["use_nnue"] == "pure", "generator did not record Use NNUE=pure")
     options = require_exact_keys(
@@ -941,7 +1060,10 @@ def validate_manifest(
         "set_recommended_uci_options_seen": False,
     }
     for key, expected in required_options.items():
-        require(options[key] == expected, f"generator policy {key} is {options[key]!r}")
+        require(
+            type(options[key]) is type(expected) and options[key] == expected,
+            f"generator policy {key} is {options[key]!r}",
+        )
 
     statistics = require_exact_keys(manifest["statistics"], ("records", "draws"), "statistics")
     require(statistics["records"] == str(RECORDS), "manifest record total changed")
@@ -958,7 +1080,10 @@ def validate_manifest(
     shard_hashes: list[str] = []
     for index, raw in enumerate(shards):
         shard = require_exact_keys(raw, ("index", "file", "records", "bytes", "sha256"), "shard")
-        require(shard["index"] == index, f"shard {index} index changed")
+        require(
+            type(shard["index"]) is int and shard["index"] == index,
+            f"shard {index} index changed",
+        )
         require(shard["records"] == str(RECORDS_PER_SHARD), f"shard {index} record count changed")
         expected_bytes = 96 + 64 * RECORDS_PER_SHARD
         require(shard["bytes"] == str(expected_bytes), f"shard {index} byte count changed")
@@ -1019,6 +1144,44 @@ def generate_dataset(
     return manifest_path, manifest, shards, hashes
 
 
+def freeze_dataset(
+    label: str,
+    manifest: Path,
+    shards: tuple[Path, ...],
+    shard_sha256: tuple[str, ...],
+) -> FrozenDataset:
+    require(len(shards) == SHARDS and len(shard_sha256) == SHARDS, f"{label} shard set changed")
+    frozen = FrozenDataset(
+        label,
+        manifest.resolve(),
+        sha256_file(manifest),
+        tuple(path.resolve() for path in shards),
+        shard_sha256,
+    )
+    authenticate_dataset(frozen, "generation")
+    return frozen
+
+
+def authenticate_dataset(dataset: FrozenDataset, stage: str) -> None:
+    fingerprint(
+        dataset.manifest,
+        f"{dataset.label} manifest at {stage}",
+        dataset.manifest_sha256,
+    )
+    require(
+        len(dataset.shards) == SHARDS and len(dataset.shard_sha256) == SHARDS,
+        f"{dataset.label} frozen shard count changed at {stage}",
+    )
+    for index, (path, digest) in enumerate(zip(dataset.shards, dataset.shard_sha256)):
+        fingerprint(path, f"{dataset.label} shard {index} at {stage}", digest)
+
+
+def authenticate_datasets(datasets: Sequence[FrozenDataset], stage: str) -> None:
+    require(len(datasets) == 2, f"pipeline dataset count changed at {stage}")
+    for dataset in datasets:
+        authenticate_dataset(dataset, stage)
+
+
 def validate_success_json(payload: bytes, label: str) -> Mapping[str, Any]:
     require(payload.count(b"\n") == 1, f"{label} must emit exactly one line")
     value = parse_strict_json(payload, label)
@@ -1039,19 +1202,31 @@ def validate_success_json(payload: bytes, label: str) -> Mapping[str, Any]:
     )
     require_exact_keys(value, expected_keys, label)
     require(value["type"] == "atomic-data-tools-validation", f"{label} type changed")
-    require(value["contract_version"] == 1 and value["status"] == "ok", f"{label} failed")
+    require(
+        type(value["contract_version"]) is int
+        and value["contract_version"] == 1
+        and value["status"] == "ok",
+        f"{label} failed",
+    )
     require(value["format"] == "atomic-bin-v2", f"{label} format changed")
     require(value["entrypoint"] == "manifest", f"{label} entrypoint changed")
-    require(
-        value["shards"] == SHARDS and value["records"] == str(RECORDS),
-        f"{label} totals changed",
-    )
+    require(type(value["shards"]) is int and value["shards"] == SHARDS, f"{label} shards changed")
+    require_uint64_string(value["records"], f"{label}.records")
+    require(value["records"] == str(RECORDS), f"{label} records changed")
+    counts = {
+        field: require_uint64_string(value[field], f"{label}.{field}")
+        for field in (
+            "side_to_move_wins",
+            "draws",
+            "side_to_move_losses",
+            "atomic960_records",
+        )
+    }
     totals = sum(
-        int(value[field])
-        for field in ("side_to_move_wins", "draws", "side_to_move_losses")
+        counts[field] for field in ("side_to_move_wins", "draws", "side_to_move_losses")
     )
     require(totals == RECORDS, f"{label} WDL totals do not reconcile")
-    require(value["atomic960_records"] == "0", f"{label} unexpectedly contains Atomic960")
+    require(counts["atomic960_records"] == 0, f"{label} unexpectedly contains Atomic960")
     return value
 
 
@@ -1071,6 +1246,16 @@ def require_uint32_string(value: object, label: str, *, allow_zero: bool = True)
     parsed = int(value)
     require(parsed <= 0xFFFFFFFF, f"{label} exceeds uint32")
     require(allow_zero or parsed != 0, f"{label} cannot be zero")
+    return parsed
+
+
+def require_uint64_string(value: object, label: str) -> int:
+    require(
+        isinstance(value, str) and re.fullmatch(r"0|[1-9][0-9]{0,19}", value) is not None,
+        f"{label} is not a canonical uint64 string",
+    )
+    parsed = int(value)
+    require(parsed <= 0xFFFFFFFFFFFFFFFF, f"{label} exceeds uint64")
     return parsed
 
 
@@ -1176,7 +1361,7 @@ def validate_decoded_position(value: object, *, atomic960: bool, label: str) -> 
         require(en_passant[1] == expected_rank, f"{label}.en_passant rank is noncanonical")
 
 
-def validate_decoded_move(value: object, label: str) -> None:
+def validate_decoded_move(value: object, label: str) -> int:
     move = require_ordered_keys(
         value, ("wire", "from", "to", "type", "promotion"), label
     )
@@ -1206,9 +1391,12 @@ def validate_decoded_move(value: object, label: str) -> None:
         | (promotion_code << 16)
     )
     require(wire == expected_wire, f"{label}.wire differs from decoded move fields")
+    return wire
 
 
-def validate_decoded_record(value: object, *, index: int, atomic960: bool) -> int:
+def validate_decoded_record(
+    value: object, *, index: int, atomic960: bool, expected_move_wire: int
+) -> int:
     label = f"record {index}"
     record = require_ordered_keys(
         value,
@@ -1249,8 +1437,23 @@ def validate_decoded_record(value: object, *, index: int, atomic960: bool) -> in
     require(type(record["atomic960"]) is bool, f"{label}.atomic960 is not boolean")
     require(record["atomic960"] is atomic960, f"{label}.atomic960 differs from header")
     require(flags == int(atomic960), f"{label}.flags differs from Atomic960 mode")
-    validate_decoded_move(record["move"], f"{label}.move")
+    decoded_wire = validate_decoded_move(record["move"], f"{label}.move")
+    require(decoded_wire == expected_move_wire, f"{label}.move differs from raw shard word")
     return int(record["result_stm"])
+
+
+def read_raw_move_wires(shard_paths: Sequence[Path]) -> tuple[int, ...]:
+    require(len(shard_paths) == SHARDS, "raw move authentication requires exactly two shards")
+    wires: list[int] = []
+    expected_bytes = 96 + 64 * RECORDS_PER_SHARD
+    for shard_index, path in enumerate(shard_paths):
+        payload = require_regular_file(path, f"raw move shard {shard_index}").read_bytes()
+        require(len(payload) == expected_bytes, f"raw move shard {shard_index} size changed")
+        for local_index in range(RECORDS_PER_SHARD):
+            offset = 96 + local_index * 64 + 52
+            wires.append(struct.unpack_from("<I", payload, offset)[0])
+    require(len(wires) == RECORDS, "raw move word total changed")
+    return tuple(wires)
 
 
 def validate_decode_jsonl(
@@ -1258,6 +1461,7 @@ def validate_decode_jsonl(
     *,
     manifest: Mapping[str, Any],
     validation: Mapping[str, Any],
+    raw_move_wires: Sequence[int],
 ) -> None:
     require(payload.endswith(b"\n") and b"\r" not in payload, "decode output is not raw LF JSONL")
     require(not payload.startswith(b"\xef\xbb\xbf"), "decode output has a BOM")
@@ -1293,10 +1497,20 @@ def validate_decode_jsonl(
         },
     }
     require_ordered_keys(header, tuple(expected_header), "decode header")
-    require(header == expected_header, "decode provenance header changed")
+    require(
+        canonical_json_preserving_order(header)
+        == canonical_json_preserving_order(expected_header),
+        "decode provenance header changed",
+    )
+    require(len(raw_move_wires) == RECORDS, "raw move word total differs from decode records")
     result_counts = {-1: 0, 0: 0, 1: 0}
     for index, record in enumerate(values[1:-1]):
-        result = validate_decoded_record(record, index=index, atomic960=False)
+        result = validate_decoded_record(
+            record,
+            index=index,
+            atomic960=False,
+            expected_move_wire=raw_move_wires[index],
+        )
         result_counts[result] += 1
 
     footer = values[-1]
@@ -1317,7 +1531,11 @@ def validate_decode_jsonl(
         },
     }
     require_ordered_keys(footer, tuple(expected_footer), "decode footer")
-    require(footer == expected_footer, "decode validation footer changed")
+    require(
+        canonical_json_preserving_order(footer)
+        == canonical_json_preserving_order(expected_footer),
+        "decode validation footer changed",
+    )
     expected_counts = {
         1: int(validation["side_to_move_wins"]),
         0: int(validation["draws"]),
@@ -1390,7 +1608,16 @@ def validate_and_decode(
         direct_decode_bytes == wrapper_decode_bytes,
         f"{label} wrapper decode is not byte-exact",
     )
-    validate_decode_jsonl(direct_decode_bytes, manifest=manifest, validation=validation)
+    shard_paths = tuple(
+        (manifest_path.parent / str(shard["file"])).resolve()
+        for shard in manifest["shards"]
+    )
+    validate_decode_jsonl(
+        direct_decode_bytes,
+        manifest=manifest,
+        validation=validation,
+        raw_move_wires=read_raw_move_wires(shard_paths),
+    )
     return validation, hashlib.sha256(direct_decode_bytes).hexdigest()
 
 
@@ -1460,6 +1687,7 @@ def run_training(
         "bypassed for Atomic BIN V2 train and validation" in combined,
         "trainer did not report V2 smart-filter bypass for both datasets",
     )
+    validate_trainer_policy_output(combined)
     checkpoints = tuple(trainer_output.rglob("last.ckpt"))
     require(
         len(checkpoints) == 1,
@@ -1485,6 +1713,13 @@ def run_training(
     return checkpoint, metadata
 
 
+def validate_trainer_policy_output(output: str) -> None:
+    require(
+        output.splitlines().count(TRAINER_POLICY_MARKER) == 2,
+        "trainer did not authenticate the exact train and validation manifest policy",
+    )
+
+
 def verify_nnue_header(path: Path) -> tuple[int, int]:
     payload = require_regular_file(path, "serialized NNUE").read_bytes()
     require(len(payload) >= 12, "serialized NNUE is truncated")
@@ -1501,14 +1736,15 @@ def serialize_and_reimport(
     config: GateConfig,
     archive: Archive,
     checkpoint: Path,
-) -> tuple[Path, str]:
-    network_dir = archive.path("networks")
-    network_dir.mkdir(exist_ok=False)
-    candidate = network_dir / "candidate.nnue"
-    imported = network_dir / "reimported.pt"
-    roundtrip = network_dir / "roundtrip.nnue"
+) -> tuple[Path, str, Path]:
+    work_dir = archive.private_path("network-serialization")
+    work_dir.mkdir(exist_ok=False)
+    candidate_work = work_dir / "candidate.nnue"
+    imported_work = work_dir / "reimported.pt"
+    roundtrip_work = work_dir / "roundtrip.nnue"
     description = "Atomic-Stockfish Atomic BIN V2 H7 pipeline E2E"
 
+    require(not candidate_work.exists(), "private candidate target was precreated")
     archive.run(
         "serialize checkpoint",
         (
@@ -1516,48 +1752,90 @@ def serialize_and_reimport(
             "-B",
             str(config.serialize_script),
             str(checkpoint),
-            str(candidate),
+            str(candidate_work),
             "--features=HalfKAv2^",
             f"--description={description}",
         ),
         cwd=config.trainer.root,
         timeout=config.timeout_seconds,
     )
-    verify_nnue_header(candidate)
+    verify_nnue_header(candidate_work)
+    require(not imported_work.exists(), "private reimport target was precreated")
     archive.run(
         "reimport candidate",
         (
             str(config.python),
             "-B",
             str(config.serialize_script),
-            str(candidate),
-            str(imported),
+            str(candidate_work),
+            str(imported_work),
             "--features=HalfKAv2",
         ),
         cwd=config.trainer.root,
         timeout=config.timeout_seconds,
     )
+    imported_fingerprint = fingerprint(imported_work, "private reimported model")
+    require(not roundtrip_work.exists(), "private roundtrip target was precreated")
     archive.run(
         "reserialize candidate",
         (
             str(config.python),
             "-B",
             str(config.serialize_script),
-            str(imported),
-            str(roundtrip),
+            str(imported_work),
+            str(roundtrip_work),
             f"--description={description}",
         ),
         cwd=config.trainer.root,
         timeout=config.timeout_seconds,
     )
-    candidate_bytes = candidate.read_bytes()
-    roundtrip_bytes = roundtrip.read_bytes()
+    verify_nnue_header(roundtrip_work)
+    candidate_bytes = candidate_work.read_bytes()
+    roundtrip_bytes = roundtrip_work.read_bytes()
     require(candidate_bytes == roundtrip_bytes, "NNUE reimport/reserialization is not byte-exact")
-    return candidate, hashlib.sha256(candidate_bytes).hexdigest()
+    candidate_hash = hashlib.sha256(candidate_bytes).hexdigest()
+    candidate = archive.write("networks/candidate.nnue", candidate_bytes)
+    roundtrip = archive.write("networks/roundtrip.nnue", roundtrip_bytes)
+    archive.write_json(
+        "networks/serialization-evidence.json",
+        {
+            "candidate_sha256": candidate_hash,
+            "roundtrip_sha256": candidate_hash,
+            "reimported_model_sha256": imported_fingerprint.sha256,
+            "reimported_model_bytes": imported_fingerprint.bytes,
+            "byte_exact": True,
+        },
+    )
+    return candidate, candidate_hash, roundtrip
 
 
-def load_candidate_in_engine(config: GateConfig, archive: Archive, candidate: Path) -> str:
+def validate_engine_evaluation(lines: Sequence[str], candidate: Path) -> float:
+    expected_marker = (
+        f"info string NNUE evaluation using {candidate.resolve()}" + LEGACY_NNUE_LOAD_SUFFIX
+    )
+    markers = [line for line in lines if line.startswith("info string NNUE evaluation using ")]
+    require(markers == [expected_marker], "engine NNUE load marker is not exact")
+    finals = [line for line in lines if line.startswith("Final evaluation")]
+    require(len(finals) == 1, "engine did not emit exactly one final evaluation")
+    match = re.fullmatch(
+        r"Final evaluation\s+([+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)) "
+        r"\(white side\) \[Use NNUE=true\]",
+        finals[0],
+    )
+    require(match is not None, "engine final evaluation is not finite Use NNUE=true output")
+    value = float(match.group(1))
+    require(math.isfinite(value), "engine final evaluation is not finite")
+    return value
+
+
+def load_candidate_in_engine(
+    config: GateConfig,
+    archive: Archive,
+    candidate: Path,
+    expected_sha256: str,
+) -> str:
     resolved = candidate.resolve()
+    fingerprint(resolved, "candidate before UCI", expected_sha256)
     transcript: list[str] = []
     with UciProcess(config.engine, timeout=min(config.timeout_seconds, 120.0)) as uci:
         uci.send("uci")
@@ -1580,13 +1858,7 @@ def load_candidate_in_engine(config: GateConfig, archive: Archive, candidate: Pa
         uci.send("position startpos")
         uci.send("eval")
         evaluation = uci.read_until(lambda line: line.startswith("Final evaluation"))
-        load_markers = [
-            line
-            for line in evaluation
-            if line.startswith("info string NNUE evaluation using ")
-        ]
-        require(len(load_markers) == 1, "engine did not report exactly one NNUE load marker")
-        require(str(resolved) in load_markers[0], "engine loaded a different NNUE path")
+        validate_engine_evaluation((*ready, *evaluation), resolved)
         require(
             not any("ERROR" in line.upper() for line in evaluation),
             "engine eval reported error",
@@ -1604,6 +1876,7 @@ def load_candidate_in_engine(config: GateConfig, archive: Archive, candidate: Pa
         "logs/engine-candidate-uci.log",
         ("\n".join(transcript) + "\n").encode("utf-8"),
     )
+    fingerprint(resolved, "candidate after UCI", expected_sha256)
     return bestmove[1]
 
 
@@ -1636,18 +1909,95 @@ def python_environment(config: GateConfig, archive: Archive) -> Mapping[str, obj
     return value
 
 
+def capture_gate_python_environment() -> PythonEnvironmentProvenance:
+    try:
+        return capture_python_environment_provenance()
+    except Exception as error:
+        raise GateError(f"cannot authenticate Python dependency environment: {error}") from error
+
+
+def verify_gate_python_environment(expected: PythonEnvironmentProvenance) -> None:
+    require(not os.environ.get("PYTHONPATH"), "PYTHONPATH appeared during the gate")
+    require(not os.environ.get("PYTHONHOME"), "PYTHONHOME appeared during the gate")
+    try:
+        verify_python_environment_provenance(expected, emit=lambda unused: None)
+    except Exception as error:
+        raise GateError(f"Python dependency environment changed: {error}") from error
+
+
+def python_environment_provenance_json(
+    provenance: PythonEnvironmentProvenance,
+) -> Mapping[str, object]:
+    def path_identity(path: Path) -> str:
+        return hashlib.sha256(str(path.resolve()).encode("utf-8")).hexdigest()
+
+    def artifact_sha256(dependency: object, path: Path) -> str:
+        fingerprints = getattr(dependency, "fingerprints")
+        matches = [item.sha256.lower() for item in fingerprints if item.path == path]
+        require(len(matches) == 1, f"Python dependency origin is not uniquely fingerprinted")
+        return matches[0]
+
+    return {
+        "implementation": provenance.implementation,
+        "version": provenance.version,
+        "version_info": list(provenance.version_info),
+        "cache_tag": provenance.cache_tag,
+        "hexversion": provenance.hexversion,
+        "executable_basename": provenance.executable.name,
+        "executable_origin_identity_sha256": path_identity(provenance.executable),
+        "runtime_files": len(provenance.runtime_fingerprints),
+        "runtime_manifest_sha256": hashlib.sha256(
+            "\n".join(
+                f"{item.label}:{item.size}:{item.sha256}"
+                for item in provenance.runtime_fingerprints
+            ).encode("utf-8")
+        ).hexdigest(),
+        "environment_manifest_sha256": provenance.manifest_sha256.lower(),
+        "dependencies": [
+            {
+                "module": dependency.module_name,
+                "distribution": dependency.distribution_name,
+                "version": dependency.version,
+                "module_basename": dependency.module_origin.name,
+                "module_origin_identity_sha256": path_identity(dependency.module_origin),
+                "module_origin_sha256": artifact_sha256(
+                    dependency, dependency.module_origin
+                ),
+                "metadata_directory_basename": dependency.metadata_origin.parent.name,
+                "metadata_origin_identity_sha256": path_identity(
+                    dependency.metadata_origin
+                ),
+                "metadata_origin_sha256": artifact_sha256(
+                    dependency, dependency.metadata_origin
+                ),
+                "installed_files": dependency.installed_files,
+                "installed_files_sha256": dependency.installed_files_sha256.lower(),
+                "imported_files": len(dependency.fingerprints),
+                "imported_manifest_sha256": dependency.manifest_sha256.lower(),
+            }
+            for dependency in provenance.dependencies
+        ],
+        "pythonpath": None,
+        "pythonhome": None,
+    }
+
+
 def fingerprints_equal(before: Preflight, after: Preflight) -> None:
     require(before.checkouts == after.checkouts, "checkout state changed during the gate")
     require(before.fingerprints == after.fingerprints, "input artifact changed during the gate")
 
 
-def inventory_archive(archive: Archive) -> Mapping[str, object]:
+def inventory_archive(
+    archive: Archive, *, excluded: frozenset[str] = frozenset()
+) -> Mapping[str, object]:
     entries: dict[str, object] = {}
     for path in sorted(archive.root.rglob("*")):
         if path.is_dir():
             continue
         require(not path.is_symlink(), f"archive contains a symlink: {path}")
         relative = path.relative_to(archive.root).as_posix()
+        if relative in excluded:
+            continue
         require(relative != "hashes.json", "hashes.json already exists")
         entries[relative] = {
             "bytes": path.stat().st_size,
@@ -1656,16 +2006,29 @@ def inventory_archive(archive: Archive) -> Mapping[str, object]:
     return {"schema_version": 1, "files": entries}
 
 
+def verify_inventory_artifacts(
+    inventory: Mapping[str, object], expected_sha256: Mapping[str, str]
+) -> None:
+    require(inventory.get("schema_version") == 1, "archive inventory schema changed")
+    files = inventory.get("files")
+    require(isinstance(files, dict), "archive inventory has no files object")
+    for relative, expected in expected_sha256.items():
+        item = files.get(relative)
+        require(isinstance(item, dict), f"archive inventory omits {relative}")
+        require_exact_keys(item, ("bytes", "sha256"), f"archive inventory {relative}")
+        require(
+            type(item["bytes"]) is int and item["bytes"] >= 0,
+            f"archive inventory {relative} byte count is invalid",
+        )
+        require(
+            item["sha256"] == expected,
+            f"archive inventory hash for {relative} does not reconcile",
+        )
+
+
 def verify_public_text_redaction(archive: Archive) -> None:
-    windows_absolute = re.compile(r"(?:^|[\"'\s])(?:[A-Za-z]:[\\/]|\\\\)")
-    posix_private = re.compile(r"(?:^|[\"'\s])/(?:home|Users|tmp|private|var/tmp)/")
     for path in sorted(archive.root.rglob("*")):
-        if not path.is_file() or path.suffix.lower() not in {
-            ".json",
-            ".log",
-            ".jsonl",
-            ".txt",
-        }:
+        if not path.is_file() or path.suffix.lower() not in PUBLIC_TEXT_SUFFIXES:
             continue
         try:
             text = path.read_text(encoding="utf-8", errors="strict")
@@ -1676,15 +2039,69 @@ def verify_public_text_redaction(archive: Archive) -> None:
             if source.casefold() in folded:
                 raise GateError(f"public evidence retains a host-local path: {path.name}")
         require(
-            windows_absolute.search(text) is None and posix_private.search(text) is None,
+            WINDOWS_HOST_PATH_RE.search(text) is None and POSIX_HOST_PATH_RE.search(text) is None,
             f"public evidence contains an unredacted absolute path: {path.name}",
         )
+
+
+def discard_public_text_evidence(archive: Archive) -> tuple[str, ...]:
+    """Fail closed if a public text sweep itself cannot be authenticated."""
+
+    removed: list[str] = []
+    for path in sorted(archive.root.rglob("*")):
+        if path.suffix.lower() not in PUBLIC_TEXT_SUFFIXES:
+            continue
+        require_within(path.parent.resolve(), archive.root, "public text evidence parent")
+        if path.is_file() or path.is_symlink():
+            relative = path.relative_to(archive.root).as_posix()
+            path.unlink()
+            removed.append(relative)
+    return tuple(removed)
+
+
+def archive_failure(archive: Archive, error: Exception) -> None:
+    cleanup_error: str | None = None
+    try:
+        archive.cleanup_private()
+    except Exception as cleanup:
+        cleanup_error = archive.redact_text(str(cleanup))
+
+    swept: tuple[str, ...] = ()
+    discarded: tuple[str, ...] = ()
+    sweep_error: str | None = None
+    try:
+        swept = archive.sanitize_public_text()
+    except Exception as sanitation:
+        sweep_error = archive.redact_text(str(sanitation))
+        discarded = discard_public_text_evidence(archive)
+
+    failure = {
+        "schema_version": 1,
+        "status": "failed",
+        "error_type": type(error).__name__,
+        "message": archive.redact_text(str(error)),
+        "cleanup_error": cleanup_error,
+        "sanitization": {
+            "rewritten_files": list(swept),
+            "discarded_text_files": list(discarded),
+            "sweep_error": sweep_error,
+        },
+    }
+    archive.write_json("failure.json", failure)
+    archive.sanitize_public_text()
+    verify_public_text_redaction(archive)
+    failure_inventory = inventory_archive(
+        archive, excluded=frozenset({"hashes.json", "failure-hashes.json"})
+    )
+    archive.write_json("failure-hashes.json", failure_inventory)
+    verify_public_text_redaction(archive)
 
 
 def run_gate(config: GateConfig) -> Mapping[str, object]:
     before = preflight(config)
     archive = Archive(config.output_dir, archive_redactions(config))
     try:
+        python_provenance = capture_gate_python_environment()
         capabilities = verify_capabilities(config, archive)
         environment = python_environment(config, archive)
         train_manifest, train_json, train_shards, train_hashes = generate_dataset(
@@ -1693,6 +2110,7 @@ def run_gate(config: GateConfig) -> Mapping[str, object]:
             label="train",
             seed=config.train_seed,
         )
+        train_frozen = freeze_dataset("train", train_manifest, train_shards, train_hashes)
         (
             validation_manifest,
             validation_json,
@@ -1701,10 +2119,15 @@ def run_gate(config: GateConfig) -> Mapping[str, object]:
         ) = generate_dataset(
             config, archive, label="validation", seed=config.validation_seed
         )
+        validation_frozen = freeze_dataset(
+            "validation", validation_manifest, validation_shards, validation_hashes
+        )
+        frozen_datasets = (train_frozen, validation_frozen)
         require(
             set(train_hashes).isdisjoint(validation_hashes),
             "training and validation datasets share shard bytes",
         )
+        authenticate_datasets(frozen_datasets, "before decode")
         train_validation, train_decode_hash = validate_and_decode(
             config,
             archive,
@@ -1719,12 +2142,15 @@ def run_gate(config: GateConfig) -> Mapping[str, object]:
             manifest_path=validation_manifest,
             manifest=validation_json,
         )
+        authenticate_datasets(frozen_datasets, "after decode")
+        authenticate_datasets(frozen_datasets, "before trainer")
         checkpoint, checkpoint_metadata = run_training(
             config,
             archive,
             train_manifest,
             validation_manifest,
         )
+        authenticate_datasets(frozen_datasets, "after trainer")
         checkpoint_evidence = {
             "sha256": sha256_file(checkpoint),
             "bytes": checkpoint.stat().st_size,
@@ -1732,9 +2158,20 @@ def run_gate(config: GateConfig) -> Mapping[str, object]:
             "retained": False,
             "retention_reason": "private trainer artifact may contain host-local paths",
         }
-        candidate, candidate_hash = serialize_and_reimport(config, archive, checkpoint)
+        candidate, candidate_hash, roundtrip = serialize_and_reimport(
+            config, archive, checkpoint
+        )
+        authenticate_datasets(frozen_datasets, "after serialization")
+        fingerprint(candidate, "published candidate after serialization", candidate_hash)
+        fingerprint(roundtrip, "published roundtrip after serialization", candidate_hash)
         archive.cleanup_private()
-        bestmove = load_candidate_in_engine(config, archive, candidate)
+        bestmove = load_candidate_in_engine(
+            config, archive, candidate, expected_sha256=candidate_hash
+        )
+        authenticate_datasets(frozen_datasets, "after UCI")
+        fingerprint(candidate, "published candidate after UCI", candidate_hash)
+        fingerprint(roundtrip, "published roundtrip after UCI", candidate_hash)
+        verify_gate_python_environment(python_provenance)
 
         after = preflight(config, allow_output=True)
         fingerprints_equal(before, after)
@@ -1743,9 +2180,9 @@ def run_gate(config: GateConfig) -> Mapping[str, object]:
                 DatasetResult(
                     "train",
                     train_manifest,
-                    sha256_file(train_manifest),
+                    train_frozen.manifest_sha256,
                     train_shards,
-                    train_hashes,
+                    train_frozen.shard_sha256,
                     train_validation,
                     train_decode_hash,
                 )
@@ -1754,9 +2191,9 @@ def run_gate(config: GateConfig) -> Mapping[str, object]:
                 DatasetResult(
                     "validation",
                     validation_manifest,
-                    sha256_file(validation_manifest),
+                    validation_frozen.manifest_sha256,
                     validation_shards,
-                    validation_hashes,
+                    validation_frozen.shard_sha256,
                     validation_validation,
                     validation_decode_hash,
                 )
@@ -1796,6 +2233,9 @@ def run_gate(config: GateConfig) -> Mapping[str, object]:
             "seeds": {"train": str(config.train_seed), "validation": str(config.validation_seed)},
             "capabilities": capabilities,
             "python_environment": environment,
+            "python_environment_provenance": python_environment_provenance_json(
+                python_provenance
+            ),
             "datasets": datasets,
             "checkpoint": checkpoint_evidence,
             "candidate": {
@@ -1803,6 +2243,11 @@ def run_gate(config: GateConfig) -> Mapping[str, object]:
                 "sha256": candidate_hash,
                 "version": f"0x{LEGACY_NNUE_VERSION:08X}",
                 "architecture": f"0x{LEGACY_NNUE_ARCHITECTURE:08X}",
+            },
+            "roundtrip": {
+                "path": roundtrip.relative_to(archive.root).as_posix(),
+                "sha256": candidate_hash,
+                "byte_exact": True,
             },
             "engine": {"bestmove_nodes_1": bestmove},
         }
@@ -1821,24 +2266,37 @@ def run_gate(config: GateConfig) -> Mapping[str, object]:
             "bestmove_nodes_1": bestmove,
         }
         archive.write_json("result.json", result)
+        authenticate_datasets(frozen_datasets, "before inventory")
+        fingerprint(candidate, "published candidate before inventory", candidate_hash)
+        fingerprint(roundtrip, "published roundtrip before inventory", candidate_hash)
+        verify_gate_python_environment(python_provenance)
+        archive.sanitize_public_text()
         verify_public_text_redaction(archive)
-        archive.write_json("hashes.json", inventory_archive(archive))
-        return result
-    except BaseException as error:
-        failure = {
-            "schema_version": 1,
-            "status": "failed",
-            "error_type": type(error).__name__,
-            "message": str(error),
-            "traceback": traceback.format_exc(),
+        inventory = inventory_archive(archive)
+        expected_inventory = {
+            datasets[label]["manifest"]: datasets[label]["manifest_sha256"]
+            for label in ("train", "validation")
         }
+        for label in ("train", "validation"):
+            expected_inventory.update(
+                zip(datasets[label]["shard_paths"], datasets[label]["shard_sha256"])
+            )
+        expected_inventory.update(
+            {
+                candidate.relative_to(archive.root).as_posix(): candidate_hash,
+                roundtrip.relative_to(archive.root).as_posix(): candidate_hash,
+                "provenance.json": sha256_file(archive.path("provenance.json")),
+                "result.json": sha256_file(archive.path("result.json")),
+            }
+        )
+        verify_inventory_artifacts(inventory, expected_inventory)
+        archive.write_json("hashes.json", inventory)
+        verify_public_text_redaction(archive)
+        return result
+    except Exception as error:
         try:
-            archive.cleanup_private()
-        except BaseException:
-            pass
-        try:
-            archive.write_json("failure.json", failure)
-        except BaseException:
+            archive_failure(archive, error)
+        except Exception:
             pass
         raise
 
@@ -1931,8 +2389,8 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
         help="new audit archive outside all three checkouts, with no whitespace in its path",
     )
-    execution.add_argument("--train-seed", type=parse_uint64, required=True)
-    execution.add_argument("--validation-seed", type=parse_uint64, required=True)
+    execution.add_argument("--train-seed", type=parse_training_seed, required=True)
+    execution.add_argument("--validation-seed", type=parse_generator_seed, required=True)
     execution.add_argument(
         "--timeout-seconds",
         type=parse_positive_float,
@@ -1962,6 +2420,21 @@ def config_from_args(arguments: argparse.Namespace) -> GateConfig:
             "source_net_sha256",
         )
     }
+    require(contract_commit == NORMATIVE_CONTRACT_ENGINE_COMMIT, "contract engine pin changed")
+    require(tools_commit == NORMATIVE_TOOLS_COMMIT, "tools atomic merge pin changed")
+    require(trainer_commit == NORMATIVE_TRAINER_COMMIT, "trainer atomic merge pin changed")
+    require(
+        hashes["source_net_sha256"] == NORMATIVE_SOURCE_NET_SHA256,
+        "source network pin changed",
+    )
+    require(
+        1 <= arguments.train_seed <= 0xFFFFFFFF,
+        "train seed must be nonzero and fit uint32",
+    )
+    require(
+        1 <= arguments.validation_seed <= 0xFFFFFFFFFFFFFFFF,
+        "validation seed must be nonzero and fit uint64",
+    )
     require(
         arguments.train_seed != arguments.validation_seed,
         "train and validation seeds must differ",
@@ -2013,16 +2486,32 @@ def config_from_args(arguments: argparse.Namespace) -> GateConfig:
     )
 
 
-def main(argv: Sequence[str] | None = None) -> int:
-    parser = build_parser()
-    arguments = parser.parse_args(argv)
+def main(
+    argv: Sequence[str] | None = None,
+    *,
+    _config_loader: Callable[[Sequence[str] | None], GateConfig] | None = None,
+    _runner: Callable[[GateConfig], Mapping[str, object]] = run_gate,
+    _stdout: BinaryIO | None = None,
+    _stderr: BinaryIO | None = None,
+) -> int:
+    stdout = _stdout or sys.stdout.buffer
+    stderr = _stderr or sys.stderr.buffer
     try:
-        config = config_from_args(arguments)
-        result = run_gate(config)
-    except GateError as error:
-        print(f"H7 FINAL E2E FAILED: {error}", file=sys.stderr, flush=True)
+        if _config_loader is None:
+            arguments = build_parser().parse_args(argv)
+            config = config_from_args(arguments)
+        else:
+            config = _config_loader(argv)
+        result = _runner(config)
+    except Exception as error:
+        safe = redact_host_paths(str(error))
+        stderr.write(
+            f"H7 FINAL E2E FAILED [{type(error).__name__}]: {safe}\n".encode("utf-8")
+        )
+        stderr.flush()
         return 1
-    print(canonical_json(result).decode("utf-8"), end="", flush=True)
+    stdout.write(canonical_json(result))
+    stdout.flush()
     return 0
 
 

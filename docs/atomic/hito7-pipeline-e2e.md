@@ -29,7 +29,10 @@ The run has no tuning switches. It performs all of the following:
    commits and exact refs. The tools and trainer gitlinks must both point to the
    requested contract-engine commit.
 2. Authenticates all three schema hashes, the tools lock, every executed binary,
-   the Python executable, the trainer loader and the source network.
+   the Python executable, the sole root-level trainer loader and the source
+   network. CPython plus the imported NumPy, PyTorch, PyTorch Lightning and
+   TorchMetrics origins/files are hashed before the workload and re-imported
+   and rehashed afterwards; `PYTHONPATH` and `PYTHONHOME` must be unset.
 3. Requires both direct data-tools and the thin tools wrapper to expose the
    exact validate/decode capability contract. Their output must be byte-exact.
 4. Generates independent train and validation datasets with distinct explicit
@@ -41,21 +44,30 @@ The run has no tuning switches. It performs all of the following:
 6. Validates and decodes both manifests through the direct binary and wrapper.
    The gate checks all 128 global/shard/local indexes, complete ordered record,
    position and move schemas, FEN/clocks/castling/en-passant consistency,
-   score/ply/result domains, lossless 32-bit move decomposition, provenance and
-   record-to-footer WDL reconciliation. It requires byte-identical JSON/JSONL
-   from both entrypoints.
+   score/ply/result domains, lossless 32-bit move decomposition, and each JSON
+   move word against the independent little-endian 32-bit word at record offset
+   52 in its authenticated shard. It also checks provenance and record-to-footer
+   WDL reconciliation. It requires byte-identical JSON/JSONL from both
+   entrypoints.
 7. Runs `train.py` on CPU with batch size, epoch size and validation size all
    fixed to 96. Smart filtering and random FEN skipping are disabled. Exactly
    one optimizer update and a checkpoint with `global_step=1`, `epoch=0` are
    required.
 8. Serializes the checkpoint as Legacy Atomic HalfKAv2, imports it again and
    reserializes it. The two `.nnue` files must be byte-identical and the reader
-   verifies version `0x7AF32F20` and architecture `0x3C103E72`.
+   verifies version `0x7AF32F20` and architecture `0x3C103E72`. Serializer
+   targets live in a fresh private staging directory; only authenticated bytes
+   are then published to new, exclusive archive paths.
 9. Loads that candidate in the current playing engine with `Use NNUE=true`,
    runs `eval`, and requires a legal result from `go nodes 1`.
-10. Deletes the private Lightning work tree, repeats checkout and artifact
-    authentication after the workload, then writes canonical provenance,
-    result and whole-archive checksum indexes.
+10. Freezes both manifests and all four shards immediately after generation and
+    rehashes them after decode, training, serialization, UCI and immediately
+    before inventory. The candidate is checked before/after UCI and the
+    candidate plus round-trip are reconciled with provenance, result and the
+    whole-archive checksum index.
+11. Deletes the private work tree, repeats checkout, input-artifact and Python
+    dependency authentication, then writes canonical provenance and result
+    evidence followed by the reconciled archive inventory.
 
 `pure` is confined to data generation. The final engine-load probe uses
 `Use NNUE=true`.
@@ -78,20 +90,21 @@ of the generator command wire, which deliberately does not implement shell
 quoting. A path such as `C:\AtomicH7\run-20260713` is suitable; a directory
 under this workspace is not.
 
-Run from the Atomic-Stockfish checkout:
+Run from the Atomic-Stockfish checkout with the exact same interpreter passed
+to `--python` (the gate rejects a launcher/interpreter mismatch):
 
 ```powershell
-python -B tests/atomic_bin_v2_pipeline_e2e.py `
+C:\AtomicH7\venv\Scripts\python.exe -B tests/atomic_bin_v2_pipeline_e2e.py `
   --atomic-root C:\AtomicH7\Atomic-Stockfish `
   --atomic-commit <atomic-gate-commit> `
-  --atomic-ref refs/remotes/origin/main `
+  --atomic-ref <atomic-gate-ref-resolving-to-that-commit> `
   --tools-root C:\AtomicH7\variant-nnue-tools `
-  --tools-commit <merged-tools-atomic-commit> `
+  --tools-commit 40d2db224ef890f76b346ff4687e18fb33c98e23 `
   --tools-ref refs/remotes/origin/atomic `
   --trainer-root C:\AtomicH7\variant-nnue-pytorch `
-  --trainer-commit <merged-trainer-atomic-commit> `
+  --trainer-commit 3e5651a977eca1351d7ef101acb8ff5c45588b12 `
   --trainer-ref refs/remotes/origin/atomic `
-  --contract-engine-commit <shared-engine-pin> `
+  --contract-engine-commit 76764c3c01ce5965a793a65e4580dd5c95cd2916 `
   --engine C:\AtomicH7\Atomic-Stockfish\src\atomic-stockfish.exe `
   --engine-sha256 <sha256> `
   --data-generator C:\AtomicH7\Atomic-Stockfish\src\atomic-stockfish-data-generator.exe `
@@ -101,18 +114,25 @@ python -B tests/atomic_bin_v2_pipeline_e2e.py `
   --tools-wrapper C:\AtomicH7\variant-nnue-tools\script\atomic_bin_v2_tools.py `
   --wrapper-data-tools C:\AtomicH7\variant-nnue-tools\engine\Atomic-Stockfish\src\atomic-stockfish-data-tools.exe `
   --wrapper-data-tools-sha256 <sha256> `
-  --trainer-loader C:\AtomicH7\variant-nnue-pytorch\<build-path>\nnue_dataset.dll `
+  --trainer-loader C:\AtomicH7\variant-nnue-pytorch\training_data_loader.dll `
   --trainer-loader-sha256 <sha256> `
   --train-script C:\AtomicH7\variant-nnue-pytorch\train.py `
   --serialize-script C:\AtomicH7\variant-nnue-pytorch\serialize.py `
   --python C:\AtomicH7\venv\Scripts\python.exe `
   --python-sha256 <sha256> `
   --source-net C:\AtomicH7\nets\source.nnue `
-  --source-net-sha256 <sha256> `
+  --source-net-sha256 99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f92a04a6 `
   --output-dir C:\AtomicH7\run-20260713 `
   --train-seed 2026071301 `
   --validation-seed 2026071302
 ```
+
+Only the Atomic gate HEAD is dynamic. The contract engine, tools, trainer and
+source-network digests above are normative constants. On Linux the loader is
+the sole trainer-root `*training_data_loader*.so`; on macOS it is the sole
+trainer-root `*training_data_loader*.dylib`. The training seed domain is
+`1..4294967295`; the validation/generator seed domain is
+`1..18446744073709551615`. Zero is rejected because the generator normalizes it.
 
 The wrapper artifact is supplied separately because the wrapper executes the
 binary inside its pinned Atomic-Stockfish submodule. The gate enforces that
@@ -122,9 +142,10 @@ direct data-tools build.
 Every public command, stdin, stdout, stderr, failure and provenance field is
 redacted to stable labels such as `<ATOMIC_ROOT>`, `<SOURCE_NET>` and
 `<PYTHON>`. A final scan rejects known or otherwise recognizable private
-Windows/user/temp absolute paths. The Lightning work directory is a private
-sibling of the public archive and is deleted before postflight; its checkpoint
-is represented publicly only by byte count, SHA-256, epoch and global step.
+Windows and POSIX absolute paths, including JSON-escaped paths and Linux root
+caches. The Lightning work directory is a private sibling of the public archive
+and is deleted before postflight; its checkpoint is represented publicly only
+by byte count, SHA-256, epoch and global step.
 
 ## Evidence archive
 
@@ -135,15 +156,19 @@ On success the archive contains:
 - the direct/wrapper decode streams' SHA-256 values;
 - the trainer checkpoint digest, byte count and checkpoint metadata (not the
   potentially host-bearing checkpoint file);
-- the candidate, imported model and byte-exact round-trip network;
+- the candidate, byte-exact round-trip network and compact serialization
+  evidence (the imported model remains private);
 - `provenance.json`, `result.json` and `hashes.json`.
 
-On any failure after archive creation, `failure.json` records the redacted
-exception and traceback and the existing public evidence is retained. The
-private trainer work tree is removed on both success and handled failure. Files
-are created exclusively; the gate never overwrites an archive or appends
-implicitly. A preflight failure creates no archive because the destination and
-authenticated roots have not yet been trusted.
+On any failure after archive creation, the private work tree is removed first,
+all existing public text is swept, and `failure.json` records only a stable,
+redacted exception summary. `failure-hashes.json` inventories the retained safe
+evidence. If the sweep itself cannot authenticate a text file, public text
+evidence is discarded rather than leaked. Public result/network publication is
+exclusive and never appends or overwrites; the emergency privacy sweep may
+rewrite already-created text evidence solely to remove host paths. A preflight
+failure creates no archive because the destination and authenticated roots have
+not yet been trusted.
 
 ## Lightweight validation
 

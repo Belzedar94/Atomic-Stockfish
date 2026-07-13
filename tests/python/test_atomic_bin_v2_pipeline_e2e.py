@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import copy
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
@@ -22,7 +23,9 @@ import atomic_bin_v2_pipeline_e2e as gate
 
 
 COMMIT = "a" * 40
-CONTRACT_COMMIT = "b" * 40
+CONTRACT_COMMIT = gate.NORMATIVE_CONTRACT_ENGINE_COMMIT
+TOOLS_COMMIT = gate.NORMATIVE_TOOLS_COMMIT
+TRAINER_COMMIT = gate.NORMATIVE_TRAINER_COMMIT
 SHA256 = "c" * 64
 DELETE = object()
 
@@ -33,10 +36,14 @@ def config(tmp_path: Path, **overrides: object) -> gate.GateConfig:
             "Atomic", tmp_path / "atomic", COMMIT, "refs/heads/gate", gate.ATOMIC_REPOSITORY
         ),
         "tools": gate.CheckoutSpec(
-            "tools", tmp_path / "tools", "d" * 40, "refs/heads/atomic", gate.TOOLS_REPOSITORY
+            "tools", tmp_path / "tools", TOOLS_COMMIT, "refs/heads/atomic", gate.TOOLS_REPOSITORY
         ),
         "trainer": gate.CheckoutSpec(
-            "trainer", tmp_path / "trainer", "e" * 40, "refs/heads/atomic", gate.TRAINER_REPOSITORY
+            "trainer",
+            tmp_path / "trainer",
+            TRAINER_COMMIT,
+            "refs/heads/atomic",
+            gate.TRAINER_REPOSITORY,
         ),
         "contract_engine_commit": CONTRACT_COMMIT,
         "engine": tmp_path / "atomic" / "src" / "engine.exe",
@@ -59,14 +66,26 @@ def config(tmp_path: Path, **overrides: object) -> gate.GateConfig:
             )
         ),
         "wrapper_data_tools_sha256": SHA256,
-        "trainer_loader": tmp_path / "trainer" / "build" / "nnue_dataset.dll",
+        "trainer_loader": (
+            tmp_path
+            / "trainer"
+            / (
+                "training_data_loader.dll"
+                if sys.platform == "win32"
+                else (
+                    "libtraining_data_loader.dylib"
+                    if sys.platform == "darwin"
+                    else "libtraining_data_loader.so"
+                )
+            )
+        ),
         "trainer_loader_sha256": SHA256,
         "train_script": tmp_path / "trainer" / "train.py",
         "serialize_script": tmp_path / "trainer" / "serialize.py",
         "python": Path(sys.executable),
         "python_sha256": gate.sha256_file(Path(sys.executable)),
         "source_net": tmp_path / "networks" / "arbitrary-compatible-name.nnue",
-        "source_net_sha256": "f" * 64,
+        "source_net_sha256": gate.NORMATIVE_SOURCE_NET_SHA256,
         "output_dir": tmp_path / "audit",
         "train_seed": 2026071301,
         "validation_seed": 2026071302,
@@ -109,7 +128,9 @@ def manifest_fixture(root: Path, cfg: gate.GateConfig) -> tuple[Path, dict[str, 
     root.mkdir(parents=True)
     shards: list[dict[str, object]] = []
     for index, name in enumerate(("train.atbin", "train_1.atbin")):
-        payload = bytes([index + 1]) * (96 + 64 * gate.RECORDS_PER_SHARD)
+        payload = bytearray(bytes([index + 1]) * (96 + 64 * gate.RECORDS_PER_SHARD))
+        for local_index in range(gate.RECORDS_PER_SHARD):
+            struct.pack_into("<I", payload, 96 + local_index * 64 + 52, 0x70C)
         path = root / name
         path.write_bytes(payload)
         shards.append(
@@ -143,6 +164,10 @@ def manifest_fixture(root: Path, cfg: gate.GateConfig) -> tuple[Path, dict[str, 
     path = root / "train.atbin.manifest.json"
     path.write_bytes(gate.canonical_json_preserving_order(value))
     return path, value
+
+
+def raw_move_wires() -> tuple[int, ...]:
+    return (0x70C,) * gate.RECORDS
 
 
 def validation_fixture() -> dict[str, object]:
@@ -277,6 +302,28 @@ def test_uint64_parser_rejects_noncanonical_or_out_of_range(value: str) -> None:
         gate.parse_uint64(value)
 
 
+@pytest.mark.parametrize("value", ("1", str(2**64 - 1)))
+def test_generator_seed_parser_accepts_nonzero_uint64(value: str) -> None:
+    assert gate.parse_generator_seed(value) == int(value)
+
+
+@pytest.mark.parametrize("value", ("0", str(2**64)))
+def test_generator_seed_parser_rejects_zero_or_overflow(value: str) -> None:
+    with pytest.raises(argparse.ArgumentTypeError):
+        gate.parse_generator_seed(value)
+
+
+@pytest.mark.parametrize("value", ("1", str(2**32 - 1)))
+def test_training_seed_parser_accepts_nonzero_uint32(value: str) -> None:
+    assert gate.parse_training_seed(value) == int(value)
+
+
+@pytest.mark.parametrize("value", ("0", str(2**32)))
+def test_training_seed_parser_rejects_zero_or_overflow(value: str) -> None:
+    with pytest.raises(argparse.ArgumentTypeError):
+        gate.parse_training_seed(value)
+
+
 @pytest.mark.parametrize(
     ("url", "repository"),
     (
@@ -319,6 +366,44 @@ def test_archive_is_exclusive_and_rejects_whitespace(tmp_path: Path) -> None:
         gate.Archive(tmp_path / "contains space" / "audit")
 
 
+def test_serializer_stages_privately_and_refuses_precreated_public_candidate(
+    tmp_path: Path,
+) -> None:
+    cfg = config(tmp_path)
+
+    class SerializationArchive(gate.Archive):
+        def run(
+            self,
+            label: str,
+            argv: object,
+            *,
+            cwd: Path,
+            timeout: float,
+            **unused: object,
+        ) -> gate.CommandResult:
+            del timeout, unused
+            command = tuple(argv)  # type: ignore[arg-type]
+            target = Path(command[4])
+            if label == "reimport candidate":
+                target.write_bytes(b"private imported model")
+            else:
+                target.write_bytes(
+                    struct.pack(
+                        "<III", gate.LEGACY_NNUE_VERSION, gate.LEGACY_NNUE_ARCHITECTURE, 0
+                    )
+                )
+            return gate.CommandResult(label, command, str(cwd), 0, b"", b"")
+
+    archive = SerializationArchive(cfg.output_dir)
+    archive.write("networks/candidate.nnue", b"occupied")
+    checkpoint = tmp_path / "checkpoint.ckpt"
+    checkpoint.write_bytes(b"checkpoint")
+    with pytest.raises(gate.GateError, match="refuses overwrite"):
+        gate.serialize_and_reimport(cfg, archive, checkpoint)
+    assert (archive.root / "networks" / "candidate.nnue").read_bytes() == b"occupied"
+    archive.cleanup_private()
+
+
 def test_generation_wire_freezes_all_data_affecting_options_and_accepts_arbitrary_net_name(
     tmp_path: Path,
 ) -> None:
@@ -358,6 +443,16 @@ def test_training_command_is_exactly_one_cpu_update_without_skipping(tmp_path: P
     assert f"--resume-from-model={cfg.source_net.resolve()}" in command
 
 
+@pytest.mark.parametrize("count", (0, 1, 3))
+def test_trainer_policy_requires_exactly_two_authenticated_manifest_lines(count: int) -> None:
+    output = "\n".join([gate.TRAINER_POLICY_MARKER] * count)
+    with pytest.raises(gate.GateError, match="train and validation manifest policy"):
+        gate.validate_trainer_policy_output(output)
+    gate.validate_trainer_policy_output(
+        f"prefix\n{gate.TRAINER_POLICY_MARKER}\n{gate.TRAINER_POLICY_MARKER}\nsuffix\n"
+    )
+
+
 def test_manifest_gate_accepts_nonstandard_network_filename_and_two_exact_shards(
     tmp_path: Path,
 ) -> None:
@@ -367,6 +462,22 @@ def test_manifest_gate_accepts_nonstandard_network_filename_and_two_exact_shards
     assert actual == expected
     assert tuple(item.name for item in shards) == ("train.atbin", "train_1.atbin")
     assert len(set(digests)) == 2
+
+
+@pytest.mark.parametrize("target", ("manifest", "shard"))
+def test_frozen_dataset_rejects_manifest_or_shard_mutation(
+    tmp_path: Path, target: str
+) -> None:
+    cfg = config(tmp_path)
+    manifest_path, _ = manifest_fixture(tmp_path / "dataset", cfg)
+    _, shards, digests = gate.validate_manifest(
+        manifest_path, config=cfg, seed=cfg.train_seed
+    )
+    frozen = gate.freeze_dataset("train", manifest_path, shards, digests)
+    path = manifest_path if target == "manifest" else shards[1]
+    path.write_bytes(path.read_bytes() + b"mutation")
+    with pytest.raises(gate.GateError, match="SHA-256 mismatch"):
+        gate.authenticate_dataset(frozen, "regression")
 
 
 @pytest.mark.parametrize(
@@ -388,6 +499,33 @@ def test_manifest_gate_rejects_policy_drift(
     for key in path[:-1]:
         target = target[key]
     target[path[-1]] = value
+    manifest_path.write_bytes(gate.canonical_json_preserving_order(manifest))
+    with pytest.raises(gate.GateError, match=message):
+        gate.validate_manifest(manifest_path, config=cfg, seed=cfg.train_seed)
+
+
+@pytest.mark.parametrize(
+    ("path", "value", "message"),
+    (
+        (("manifest_version",), True, "manifest version"),
+        (("generation", "threads"), True, "threads"),
+        (("generation", "options", "search_depth_min"), True, "search_depth_min"),
+        (("shards", "0", "index"), False, "index"),
+    ),
+)
+def test_manifest_gate_rejects_bool_for_integer_fields(
+    tmp_path: Path, path: tuple[str, ...], value: object, message: str
+) -> None:
+    cfg = config(tmp_path)
+    manifest_path, manifest = manifest_fixture(tmp_path / "dataset", cfg)
+    target: Any = manifest
+    for key in path[:-1]:
+        target = target[int(key)] if isinstance(target, list) else target[key]
+    final = path[-1]
+    if isinstance(target, list):
+        target[int(final)] = value
+    else:
+        target[final] = value
     manifest_path.write_bytes(gate.canonical_json_preserving_order(manifest))
     with pytest.raises(gate.GateError, match=message):
         gate.validate_manifest(manifest_path, config=cfg, seed=cfg.train_seed)
@@ -432,12 +570,41 @@ def test_validation_summary_reconciles_wdl_and_rejects_drift() -> None:
         gate.validate_success_json(gate.canonical_json_preserving_order(bad), "fixture")
 
 
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    (
+        ("contract_version", True, "failed"),
+        ("shards", True, "shards"),
+        ("records", 128, "canonical uint64"),
+        ("side_to_move_wins", "+40", "canonical uint64"),
+        ("side_to_move_wins", "040", "canonical uint64"),
+        ("side_to_move_wins", "-1", "canonical uint64"),
+        ("side_to_move_wins", str(2**64), "exceeds uint64"),
+        ("atomic960_records", "00", "canonical uint64"),
+    ),
+)
+def test_validation_summary_rejects_type_and_canonical_counter_drift(
+    field: str, value: object, message: str
+) -> None:
+    validation = validation_fixture()
+    validation[field] = value
+    with pytest.raises(gate.GateError, match=message):
+        gate.validate_success_json(
+            gate.canonical_json_preserving_order(validation), "fixture"
+        )
+
+
 def test_decode_gate_authenticates_provenance_indexes_and_footer(tmp_path: Path) -> None:
     cfg = config(tmp_path)
     _, manifest = manifest_fixture(tmp_path / "dataset", cfg)
     validation = validation_fixture()
     payload = decode_fixture(manifest, validation)
-    gate.validate_decode_jsonl(payload, manifest=manifest, validation=validation)
+    gate.validate_decode_jsonl(
+        payload,
+        manifest=manifest,
+        validation=validation,
+        raw_move_wires=raw_move_wires(),
+    )
 
     lines = payload.splitlines()
     record = json.loads(lines[1])
@@ -445,7 +612,58 @@ def test_decode_gate_authenticates_provenance_indexes_and_footer(tmp_path: Path)
     lines[1] = gate.canonical_json_preserving_order(record).rstrip(b"\n")
     with pytest.raises(gate.GateError, match="global index"):
         gate.validate_decode_jsonl(
-            b"\n".join(lines) + b"\n", manifest=manifest, validation=validation
+            b"\n".join(lines) + b"\n",
+            manifest=manifest,
+            validation=validation,
+            raw_move_wires=raw_move_wires(),
+        )
+
+
+def test_decode_gate_authenticates_json_move_against_raw_shard_word(tmp_path: Path) -> None:
+    cfg = config(tmp_path)
+    manifest_path, manifest = manifest_fixture(tmp_path / "dataset", cfg)
+    shard_paths = tuple(
+        manifest_path.parent / str(item["file"]) for item in manifest["shards"]
+    )
+    assert gate.read_raw_move_wires(shard_paths) == raw_move_wires()
+    mismatched = list(raw_move_wires())
+    mismatched[gate.RECORDS_PER_SHARD] = 0x70D
+    with pytest.raises(gate.GateError, match="raw shard word"):
+        gate.validate_decode_jsonl(
+            decode_fixture(manifest, validation_fixture()),
+            manifest=manifest,
+            validation=validation_fixture(),
+            raw_move_wires=mismatched,
+        )
+
+
+@pytest.mark.parametrize(
+    ("location", "value"),
+    (
+        (("contract_version",), True),
+        (("slice", "limit"), True),
+        (("dataset", "shards"), True),
+    ),
+)
+def test_decode_gate_rejects_bool_for_header_integer_fields(
+    tmp_path: Path, location: tuple[str, ...], value: object
+) -> None:
+    cfg = config(tmp_path)
+    _, manifest = manifest_fixture(tmp_path / "dataset", cfg)
+    validation = validation_fixture()
+    lines = decode_fixture(manifest, validation).splitlines()
+    header = json.loads(lines[0])
+    target = header
+    for key in location[:-1]:
+        target = target[key]
+    target[location[-1]] = value
+    lines[0] = gate.canonical_json_preserving_order(header).rstrip(b"\n")
+    with pytest.raises(gate.GateError, match="header changed"):
+        gate.validate_decode_jsonl(
+            b"\n".join(lines) + b"\n",
+            manifest=manifest,
+            validation=validation,
+            raw_move_wires=raw_move_wires(),
         )
 
 
@@ -486,7 +704,12 @@ def test_decode_gate_rejects_every_record_field_family_mutation(
     validation = validation_fixture()
     payload = mutate_decode_record(decode_fixture(manifest, validation), path, value)
     with pytest.raises(gate.GateError, match=message):
-        gate.validate_decode_jsonl(payload, manifest=manifest, validation=validation)
+        gate.validate_decode_jsonl(
+            payload,
+            manifest=manifest,
+            validation=validation,
+            raw_move_wires=raw_move_wires(),
+        )
 
 
 def test_decode_gate_reconciles_record_results_with_validation_wdl(tmp_path: Path) -> None:
@@ -497,7 +720,12 @@ def test_decode_gate_reconciles_record_results_with_validation_wdl(tmp_path: Pat
         decode_fixture(manifest, validation), ("result_stm",), 1, record_index=100
     )
     with pytest.raises(gate.GateError, match="differs from validation"):
-        gate.validate_decode_jsonl(payload, manifest=manifest, validation=validation)
+        gate.validate_decode_jsonl(
+            payload,
+            manifest=manifest,
+            validation=validation,
+            raw_move_wires=raw_move_wires(),
+        )
 
 
 def test_decode_gate_rejects_record_key_order_drift(tmp_path: Path) -> None:
@@ -510,7 +738,10 @@ def test_decode_gate_rejects_record_key_order_drift(tmp_path: Path) -> None:
     lines[1] = gate.canonical_json_preserving_order(reordered).rstrip(b"\n")
     with pytest.raises(gate.GateError, match="key order"):
         gate.validate_decode_jsonl(
-            b"\n".join(lines) + b"\n", manifest=manifest, validation=validation
+            b"\n".join(lines) + b"\n",
+            manifest=manifest,
+            validation=validation,
+            raw_move_wires=raw_move_wires(),
         )
 
 
@@ -537,6 +768,99 @@ def test_nnue_header_checks_version_and_architecture_not_filename(tmp_path: Path
     path.write_bytes(struct.pack("<III", gate.LEGACY_NNUE_VERSION, 0, 0))
     with pytest.raises(gate.GateError, match="architecture"):
         gate.verify_nnue_header(path)
+
+
+@pytest.mark.parametrize("score", ("0", "+0.00", "-1.5", ".25", "3."))
+def test_engine_evaluation_requires_exact_loaded_candidate_and_true_mode(
+    tmp_path: Path, score: str
+) -> None:
+    candidate = (tmp_path / "candidate.nnue").resolve()
+    marker = (
+        f"info string NNUE evaluation using {candidate}" + gate.LEGACY_NNUE_LOAD_SUFFIX
+    )
+    assert gate.validate_engine_evaluation(
+        (marker, f"Final evaluation {score} (white side) [Use NNUE=true]"), candidate
+    ) == float(score)
+
+
+@pytest.mark.parametrize(
+    "final",
+    (
+        "Final evaluation nan (white side) [Use NNUE=true]",
+        "Final evaluation inf (white side) [Use NNUE=true]",
+        "Final evaluation 0.0 (white side) [Use NNUE=pure]",
+        "Final evaluation 0.0 (white side) [Use NNUE=false]",
+    ),
+)
+def test_engine_evaluation_rejects_nonfinite_or_wrong_nnue_mode(
+    tmp_path: Path, final: str
+) -> None:
+    candidate = (tmp_path / "candidate.nnue").resolve()
+    marker = (
+        f"info string NNUE evaluation using {candidate}" + gate.LEGACY_NNUE_LOAD_SUFFIX
+    )
+    with pytest.raises(gate.GateError, match="finite Use NNUE=true"):
+        gate.validate_engine_evaluation((marker, final), candidate)
+
+
+def test_engine_evaluation_rejects_candidate_path_suffix(tmp_path: Path) -> None:
+    candidate = (tmp_path / "candidate.nnue").resolve()
+    marker = (
+        f"info string NNUE evaluation using {candidate}.backup"
+        + gate.LEGACY_NNUE_LOAD_SUFFIX
+    )
+    with pytest.raises(gate.GateError, match="load marker"):
+        gate.validate_engine_evaluation(
+            (marker, "Final evaluation 0 (white side) [Use NNUE=true]"), candidate
+        )
+
+
+def test_engine_load_rechecks_candidate_after_uci(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = config(tmp_path)
+    archive = gate.Archive(cfg.output_dir)
+    candidate = archive.write("networks/candidate.nnue", b"original")
+    expected = hashlib.sha256(b"original").hexdigest()
+
+    class MutatingUci:
+        def __init__(self, engine: Path, timeout: float) -> None:
+            del engine, timeout
+            self.index = 0
+            self.transcript: list[str] = []
+
+        def __enter__(self) -> "MutatingUci":
+            return self
+
+        def __exit__(self, *unused: object) -> None:
+            return None
+
+        def send(self, command: str) -> None:
+            self.transcript.append(f"> {command}")
+
+        def read_until(self, unused: object) -> list[str]:
+            del unused
+            responses = (
+                ["uciok"],
+                [
+                    f"info string NNUE evaluation using {candidate.resolve()}"
+                    + gate.LEGACY_NNUE_LOAD_SUFFIX,
+                    "readyok",
+                ],
+                ["Final evaluation 0 (white side) [Use NNUE=true]"],
+                ["bestmove e2e4"],
+            )
+            response = responses[self.index]
+            self.index += 1
+            self.transcript.extend(response)
+            if self.index == len(responses):
+                candidate.write_bytes(b"mutated")
+            return response
+
+    monkeypatch.setattr(gate, "UciProcess", MutatingUci)
+    with pytest.raises(gate.GateError, match="candidate after UCI SHA-256 mismatch"):
+        gate.load_candidate_in_engine(cfg, archive, candidate, expected)
+    archive.cleanup_private()
 
 
 def trainer_capability() -> dict[str, object]:
@@ -629,6 +953,7 @@ def test_preflight_authenticates_every_executed_artifact_and_canonical_wrapper_c
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     cfg = preflight_fixture(tmp_path)
+    monkeypatch.setattr(gate, "NORMATIVE_SOURCE_NET_SHA256", cfg.source_net_sha256)
 
     def checkout(spec: gate.CheckoutSpec) -> gate.CheckoutState:
         return gate.CheckoutState(
@@ -714,9 +1039,154 @@ def test_public_archive_redacts_checkout_artifact_network_and_python_paths(tmp_p
 
 def test_public_archive_scan_rejects_unknown_absolute_host_path(tmp_path: Path) -> None:
     archive = gate.Archive(tmp_path / "audit")
-    archive.write_log("logs/leak.log", b'leak "C:\\Users\\example\\secret.nnue"\n')
+    (archive.root / "logs" / "leak.log").write_bytes(
+        b'leak "C:\\Users\\example\\secret.nnue"\n'
+    )
     with pytest.raises(gate.GateError, match="unredacted absolute path"):
         gate.verify_public_text_redaction(archive)
+    archive.cleanup_private()
+
+
+def test_public_archive_sanitizes_unknown_windows_posix_and_root_paths(tmp_path: Path) -> None:
+    archive = gate.Archive(tmp_path / "audit")
+    unknown = archive.root / "logs" / "unknown.log"
+    unknown.write_text(
+        "win=C:\\Python\\Lib\\site-packages\\torch.py\n"
+        + json.dumps({"cache": r"C:\Users\me\x"})
+        + "\n"
+        "cache=/root/.cache/pytorch/model.bin\n"
+        "temp=/workspace/build/output.txt\n"
+        "url=https://github.com/Belzedar94/Atomic-Stockfish\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    assert archive.sanitize_public_text() == ("logs/unknown.log",)
+    payload = unknown.read_text(encoding="utf-8")
+    assert payload.count("<HOST_PATH>") == 4
+    assert "https://github.com/Belzedar94/Atomic-Stockfish" in payload
+    gate.verify_public_text_redaction(archive)
+    archive.cleanup_private()
+
+
+def test_run_gate_failure_archive_is_sanitized_and_inventoried(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cfg = config(tmp_path)
+    state = gate.Preflight({}, {})
+    monkeypatch.setattr(
+        gate, "preflight", lambda unused, allow_output=False: state
+    )
+    monkeypatch.setattr(gate, "capture_gate_python_environment", lambda: object())
+
+    def fail_capabilities(unused: gate.GateConfig, archive: gate.Archive) -> Mapping[str, object]:
+        (archive.root / "logs" / "external.log").write_text(
+            "C:\\Unknown\\site-packages\\shadow.py /root/.cache/private.bin\n",
+            encoding="utf-8",
+            newline="\n",
+        )
+        raise RuntimeError("loader failed at /root/.cache/private.bin")
+
+    monkeypatch.setattr(gate, "verify_capabilities", fail_capabilities)
+    with pytest.raises(RuntimeError, match="loader failed"):
+        gate.run_gate(cfg)
+
+    assert not gate.private_work_path(cfg.output_dir).exists()
+    failure = json.loads((cfg.output_dir / "failure.json").read_text(encoding="utf-8"))
+    assert failure["message"] == "loader failed at <HOST_PATH>"
+    assert (cfg.output_dir / "failure-hashes.json").is_file()
+    combined = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in cfg.output_dir.rglob("*")
+        if path.is_file() and path.suffix in {".json", ".log"}
+    )
+    assert "C:\\Unknown" not in combined
+    assert "/root/" not in combined
+    gate.verify_public_text_redaction(
+        SimpleNamespace(root=cfg.output_dir, redactions=())  # type: ignore[arg-type]
+    )
+
+
+def test_main_emits_only_lf_and_no_host_traceback(tmp_path: Path) -> None:
+    cfg = config(tmp_path)
+    stdout = io.BytesIO()
+    stderr = io.BytesIO()
+
+    def fail(unused: gate.GateConfig) -> Mapping[str, object]:
+        raise RuntimeError("failed in C:\\Python\\Lib\\site-packages\\shadow.py")
+
+    result = gate.main(
+        (),
+        _config_loader=lambda unused: cfg,
+        _runner=fail,
+        _stdout=stdout,
+        _stderr=stderr,
+    )
+    assert result == 1 and stdout.getvalue() == b""
+    assert stderr.getvalue().endswith(b"\n") and b"\r" not in stderr.getvalue()
+    assert b"<HOST_PATH>" in stderr.getvalue()
+    assert b"Traceback" not in stderr.getvalue()
+
+
+def test_main_success_is_one_canonical_lf_json_line(tmp_path: Path) -> None:
+    cfg = config(tmp_path)
+    stdout = io.BytesIO()
+    stderr = io.BytesIO()
+    expected = {"status": "passed", "schema_version": 1}
+    result = gate.main(
+        (),
+        _config_loader=lambda unused: cfg,
+        _runner=lambda unused: expected,
+        _stdout=stdout,
+        _stderr=stderr,
+    )
+    assert result == 0
+    assert stdout.getvalue() == gate.canonical_json(expected)
+    assert stdout.getvalue().count(b"\n") == 1 and b"\r" not in stdout.getvalue()
+    assert stderr.getvalue() == b""
+
+
+def test_python_environment_wrappers_capture_verify_and_reject_path_overrides(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    expected = object()
+    verified: list[object] = []
+    monkeypatch.setattr(
+        gate, "capture_python_environment_provenance", lambda: expected
+    )
+    monkeypatch.setattr(
+        gate,
+        "verify_python_environment_provenance",
+        lambda actual, emit: verified.append(actual),
+    )
+    assert gate.capture_gate_python_environment() is expected
+    gate.verify_gate_python_environment(expected)  # type: ignore[arg-type]
+    assert verified == [expected]
+
+    monkeypatch.setenv("PYTHONPATH", "shadow")
+    with pytest.raises(gate.GateError, match="PYTHONPATH"):
+        gate.verify_gate_python_environment(expected)  # type: ignore[arg-type]
+    monkeypatch.delenv("PYTHONPATH")
+    monkeypatch.setenv("PYTHONHOME", "shadow")
+    with pytest.raises(gate.GateError, match="PYTHONHOME"):
+        gate.verify_gate_python_environment(expected)  # type: ignore[arg-type]
+
+
+def test_inventory_reconciles_candidate_and_roundtrip_hashes(tmp_path: Path) -> None:
+    archive = gate.Archive(tmp_path / "audit")
+    payload = b"same network bytes"
+    candidate = archive.write("networks/candidate.nnue", payload)
+    roundtrip = archive.write("networks/roundtrip.nnue", payload)
+    digest = hashlib.sha256(payload).hexdigest()
+    inventory = gate.inventory_archive(archive)
+    expected = {
+        candidate.relative_to(archive.root).as_posix(): digest,
+        roundtrip.relative_to(archive.root).as_posix(): digest,
+    }
+    gate.verify_inventory_artifacts(inventory, expected)
+    with pytest.raises(gate.GateError, match="does not reconcile"):
+        gate.verify_inventory_artifacts(
+            inventory, {roundtrip.relative_to(archive.root).as_posix(): "0" * 64}
+        )
     archive.cleanup_private()
 
 
@@ -726,10 +1196,10 @@ def namespace(tmp_path: Path, **overrides: object) -> SimpleNamespace:
         "atomic_commit": COMMIT,
         "atomic_ref": "refs/heads/gate",
         "tools_root": tmp_path / "tools",
-        "tools_commit": "d" * 40,
+        "tools_commit": TOOLS_COMMIT,
         "tools_ref": "refs/heads/atomic",
         "trainer_root": tmp_path / "trainer",
-        "trainer_commit": "e" * 40,
+        "trainer_commit": TRAINER_COMMIT,
         "trainer_ref": "refs/heads/atomic",
         "contract_engine_commit": CONTRACT_COMMIT,
         "engine": tmp_path / "engine",
@@ -748,7 +1218,7 @@ def namespace(tmp_path: Path, **overrides: object) -> SimpleNamespace:
         "python": Path(sys.executable),
         "python_sha256": gate.sha256_file(Path(sys.executable)),
         "source_net": tmp_path / "network.nnue",
-        "source_net_sha256": SHA256,
+        "source_net_sha256": gate.NORMATIVE_SOURCE_NET_SHA256,
         "output_dir": tmp_path / "output",
         "train_seed": 1,
         "validation_seed": 2,
@@ -770,6 +1240,26 @@ def test_cli_config_requires_exact_hashes_commits_and_distinct_seeds(tmp_path: P
         gate.config_from_args(namespace(tmp_path, atomic_commit="A" * 40))
     with pytest.raises(gate.GateError, match="lowercase SHA-256"):
         gate.config_from_args(namespace(tmp_path, python_sha256="C" * 64))
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    (
+        ("contract_engine_commit", "d" * 40, "contract engine pin"),
+        ("tools_commit", "d" * 40, "tools atomic merge pin"),
+        ("trainer_commit", "d" * 40, "trainer atomic merge pin"),
+        ("source_net_sha256", "d" * 64, "source network pin"),
+        ("train_seed", 0, "train seed"),
+        ("train_seed", 2**32, "train seed"),
+        ("validation_seed", 0, "validation seed"),
+        ("validation_seed", 2**64, "validation seed"),
+    ),
+)
+def test_cli_config_rejects_non_normative_pins_and_seed_domains(
+    tmp_path: Path, field: str, value: object, message: str
+) -> None:
+    with pytest.raises(gate.GateError, match=message):
+        gate.config_from_args(namespace(tmp_path, **{field: value}))
 
 
 def test_fingerprints_must_remain_identical_after_gate() -> None:
