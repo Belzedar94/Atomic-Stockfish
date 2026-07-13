@@ -59,7 +59,7 @@ Thread: `1260924156526985307`, “Atomic NNUE next gen coordination”.
 | 2024-07-11 | aiorla `1261022480680616037` | [thread:45](https://discord.com/channels/779317816897699850/1260924156526985307/1261022480680616037): posible que algunas sean fortalezas no ganables | El complemento requiere pruebas de seguridad/ciclos, no cp |
 | 2024-07-11 | lesha2002 `1261025565222375474` | [thread:50](https://discord.com/channels/779317816897699850/1260924156526985307/1261025565222375474): demasiadas sidelines incluso en mainlines malas | Medir pendiente neta del frontier |
 | 2024-07-11 | lesha2002 `1261035971915415735` | [thread:57](https://discord.com/channels/779317816897699850/1260924156526985307/1261035971915415735): `Nf3-e3` alcanza finales que Fairy vs Fairy convierte mal | No priorizar esa ruta solo por score histórico |
-| 2024-07-11 | aiorla `1261038217612759122` | [thread:58](https://discord.com/channels/779317816897699850/1260924156526985307/1261038217612759122): FEN adversarial `2r1B3/r1P5/8/3pp1pp/1B1PP1PP/8/7K/2N2bkR w - - 19` | Golden fixture para fortaleza/eval/TB |
+| 2024-07-11 | aiorla `1261038217612759122` | [thread:58](https://discord.com/channels/779317816897699850/1260924156526985307/1261038217612759122): FEN adversarial `2r1B3/r1P5/8/3pp1pp/1B1PP1PP/8/7K/2N2bkR w - - 19 1`; el mensaje original omite el fullmove y el `1` es la normalización documentada | Golden fixture para fortaleza/eval/TB |
 
 El script, árbol y logs prometidos no aparecen entre los adjuntos del vault. Deben solicitarse a aiorla y preservarse con licencia/procedencia/checksum; no se deben reconstruir silenciosamente como si fueran el original.
 
@@ -79,7 +79,7 @@ WDL/DTZ no incorporan por sí solos historial de repetición, derechos de enroqu
 ### 2.5 Dos precedentes negativos que cambian gates
 
 1. **Atomic-crazyhouse:** ubdip dijo primero que estaba «básicamente resuelto» ([general:122](https://discord.com/channels/779317816897699850/779317816897699854/782349069372096582), message `782349069372096582`, 2020-11-28), pero explicó que no lo incluyó en la wiki porque el código no reflejaba todas las reglas y el double-check fue manual ([general:129](https://discord.com/channels/779317816897699850/779317816897699854/782352310314860544), `782352310314860544`). El lesson learned es publicar “analysis/practical solve”, no “weakly solved”, hasta tener certificado reproducible.
-2. **6×6 histórico:** el borrador inicial heredó de `atomic` ([help:793](https://discord.com/channels/779317816897699850/791247944463417374/816735608231821352), `816735608231821352`), pero la configuración usada pasó a `[6x6atomic:nocheckatomic]` con `extinctionPseudoRoyal` y sin double-step ([help:817](https://discord.com/channels/779317816897699850/791247944463417374/816738779313733694), `816738779313733694`). El source local lo confirma en [variants.ini:712](https://github.com/fairy-stockfish/Fairy-Stockfish/blob/fb78cb561aa01708338e35b3dc3b65a42149a3c4/src/variants.ini#L712). Por ello el piloto normativo debe usar Atomic 8×8 exacto; 6×6 solo puede ser una campaña lab separada.
+2. **6×6 histórico:** el borrador inicial heredó de `atomic` ([help:793](https://discord.com/channels/779317816897699850/791247944463417374/816735608231821352), `816735608231821352`), pero el snippet posterior se encabezó `[6x6atomic:nocheckatomic]`, con `extinctionPseudoRoyal` y sin double-step ([help:817](https://discord.com/channels/779317816897699850/791247944463417374/816738779313733694), `816738779313733694`). Ese encabezado histórico no es el token vigente: Fairy-Stockfish expone `6x6atom` y lo declara como [`[6x6atom:nocheckatomic]`](https://github.com/fairy-stockfish/Fairy-Stockfish/blob/fb78cb561aa01708338e35b3dc3b65a42149a3c4/src/variants.ini#L712). Toda campaña lab debe usar `6x6atom`; el piloto normativo debe usar Atomic 8×8 exacto.
 
 ## 3. Artefactos localizados o recuperables
 
@@ -190,51 +190,72 @@ El resultado de este deep dive no cambia la meta, pero endurece tres puntos crí
 
 ## Apéndice A: índice completo de citas Discord
 
-Cada identificador enlaza directamente al mensaje. Autor y fecha UTC proceden de la exportación deduplicada; la columna Referencia conserva la etiqueta usada en el texto.
+Cada identificador enlaza directamente al mensaje. Autor y fecha UTC proceden de la exportación deduplicada; Referencia indica si la cita aparece en el roadmap, en este ledger o en ambos.
 
 | Fecha UTC | Autor | Message ID | Referencia |
 |---|---|---|---|
-| 2020-11-28 | `ubdip` | [`782349069372096582`](https://discord.com/channels/779317816897699850/779317816897699854/782349069372096582) | general:122 |
-| 2020-11-28 | `ubdip` | [`782352310314860544`](https://discord.com/channels/779317816897699850/779317816897699854/782352310314860544) | general:129 |
-| 2021-01-19 | `bianca5` | [`800946306209546260`](https://discord.com/channels/779317816897699850/779317816897699854/800946306209546260) | general:1346 |
-| 2021-01-26 | `ubdip` | [`803658203891630150`](https://discord.com/channels/779317816897699850/784418118503235625/803658203891630150) | nnue-general:338 |
-| 2021-02-27 | `Deleted User` | [`815323198496440371`](https://discord.com/channels/779317816897699850/812407482369441813/815323198496440371) | analysis:53 |
-| 2021-03-03 | `belzedar_` | [`816735608231821352`](https://discord.com/channels/779317816897699850/791247944463417374/816735608231821352) | help:793 |
-| 2021-03-03 | `belzedar_` | [`816738779313733694`](https://discord.com/channels/779317816897699850/791247944463417374/816738779313733694) | help:817 |
-| 2021-03-08 | `ubdip` | [`818442571582930979`](https://discord.com/channels/779317816897699850/812407482369441813/818442571582930979) | analysis:94 |
-| 2021-03-08 | `ubdip` | [`818443628808372225`](https://discord.com/channels/779317816897699850/812407482369441813/818443628808372225) | analysis:99 |
-| 2021-03-08 | `ubdip` | [`818447247464464394`](https://discord.com/channels/779317816897699850/812407482369441813/818447247464464394) | analysis:101 |
-| 2021-03-08 | `Deleted User` | [`818580012122505236`](https://discord.com/channels/779317816897699850/791249497090686987/818580012122505236) | Mega tournament |
-| 2021-03-15 | `mtaktikos` | [`821137971121487922`](https://discord.com/channels/779317816897699850/812407482369441813/821137971121487922) | analysis:193 |
-| 2021-03-15 | `ubdip` | [`821139366024839188`](https://discord.com/channels/779317816897699850/812407482369441813/821139366024839188) | analysis:196 |
-| 2021-03-15 | `mtaktikos` | [`821147959730503680`](https://discord.com/channels/779317816897699850/812407482369441813/821147959730503680) | analysis:212 |
-| 2021-03-15 | `ijhy` | [`821148061454696498`](https://discord.com/channels/779317816897699850/812407482369441813/821148061454696498) | analysis:213 |
-| 2021-04-04 | `Deleted User` | [`828155766950068244`](https://discord.com/channels/779317816897699850/812407482369441813/828155766950068244) | analysis:228 |
-| 2021-04-04 | `Deleted User` | [`828155909749604352`](https://discord.com/channels/779317816897699850/812407482369441813/828155909749604352) | analysis:229 |
-| 2021-04-04 | `Deleted User` | [`828156028532162600`](https://discord.com/channels/779317816897699850/812407482369441813/828156028532162600) | analysis:230 |
-| 2021-04-04 | `Deleted User` | [`828241989203001385`](https://discord.com/channels/779317816897699850/812407482369441813/828241989203001385) | analysis:241 |
-| 2021-04-05 | `Deleted User` | [`828685113981534228`](https://discord.com/channels/779317816897699850/812407482369441813/828685113981534228) | analysis:244 |
-| 2021-07-22 | `ubdip` | [`867659752875491388`](https://discord.com/channels/779317816897699850/793813826436464640/867659752875491388) | off-topic:151 |
-| 2021-08-03 | `ijhy` | [`872034529555148801`](https://discord.com/channels/779317816897699850/791249497090686987/872034529555148801) | v2.1 selfplay |
-| 2021-09-02 | `belzedar_` | [`882882082248986665`](https://discord.com/channels/779317816897699850/791249497090686987/882882082248986665) | metadata Discord |
-| 2021-11-15 | `ubdip` | [`909859570552279082`](https://discord.com/channels/779317816897699850/779317816897699854/909859570552279082) | general:3425 |
-| 2022-06-13 | `ubdip` | [`985992353372307516`](https://discord.com/channels/779317816897699850/779317816897699854/985992353372307516) | general:5468 |
-| 2023-12-24 | `ubdip` | [`1188576876676005898`](https://discord.com/channels/779317816897699850/779317816897699854/1188576876676005898) | general:7471 |
-| 2023-12-24 | `ubdip` | [`1188579786935763055`](https://discord.com/channels/779317816897699850/779317816897699854/1188579786935763055) | general:7476 |
-| 2023-12-24 | `ubdip` | [`1188601494501609612`](https://discord.com/channels/779317816897699850/779317816897699854/1188601494501609612) | general:7487 |
-| 2024-04-22 | `ubdip` | [`1232073153480622211`](https://discord.com/channels/779317816897699850/779319972614242354/1232073153480622211) | development:2820 |
-| 2024-06-06 | `ubdip` | [`1248179697561370655`](https://discord.com/channels/779317816897699850/812407482369441813/1248179697561370655) | analysis:1776 |
-| 2024-06-06 | `ubdip` | [`1248180040638922866`](https://discord.com/channels/779317816897699850/812407482369441813/1248180040638922866) | analysis:1777 |
-| 2024-06-06 | `ubdip` | [`1248232765540008066`](https://discord.com/channels/779317816897699850/812407482369441813/1248232765540008066) | analysis:1784 |
-| 2024-06-06 | `ubdip` | [`1248233853378760709`](https://discord.com/channels/779317816897699850/812407482369441813/1248233853378760709) | analysis:1786 |
-| 2024-06-06 | `dpldgr` | [`1248234583200108625`](https://discord.com/channels/779317816897699850/812407482369441813/1248234583200108625) | analysis:1787 |
-| 2024-07-11 | `aiorla` | [`1260945389259849758`](https://discord.com/channels/779317816897699850/1260924156526985307/1260945389259849758) | thread:34 |
-| 2024-07-11 | `aiorla` | [`1260952273060626462`](https://discord.com/channels/779317816897699850/1260924156526985307/1260952273060626462) | thread:36 |
-| 2024-07-11 | `aiorla` | [`1260958073351307354`](https://discord.com/channels/779317816897699850/1260924156526985307/1260958073351307354) | thread:41 |
-| 2024-07-11 | `aiorla` | [`1261022480680616037`](https://discord.com/channels/779317816897699850/1260924156526985307/1261022480680616037) | thread:45 |
-| 2024-07-11 | `lesha2002` | [`1261025565222375474`](https://discord.com/channels/779317816897699850/1260924156526985307/1261025565222375474) | thread:50 |
-| 2024-07-11 | `lesha2002` | [`1261035971915415735`](https://discord.com/channels/779317816897699850/1260924156526985307/1261035971915415735) | thread:57 |
-| 2024-07-11 | `aiorla` | [`1261038217612759122`](https://discord.com/channels/779317816897699850/1260924156526985307/1261038217612759122) | thread:58 |
-| 2025-09-07 | `stoiksismic` | [`1414231825374511215`](https://discord.com/channels/779317816897699850/1260924156526985307/1414231825374511215) | thread:86 |
-| 2025-09-08 | `ijhy` | [`1414448796783607830`](https://discord.com/channels/779317816897699850/1260924156526985307/1414448796783607830) | thread:89 |
-| 2025-09-22 | `ubdip` | [`1419719405935530146`](https://discord.com/channels/779317816897699850/966610323987660830/1419719405935530146) | nnue-training:5079 |
+| 2020-11-28 | `ubdip` | [`782349069372096582`](https://discord.com/channels/779317816897699850/779317816897699854/782349069372096582) | roadmap — mensaje; ledger — general:122 |
+| 2020-11-28 | `ubdip` | [`782352310314860544`](https://discord.com/channels/779317816897699850/779317816897699854/782352310314860544) | roadmap — matiz decisivo; ledger — general:129 |
+| 2020-12-22 | `baera1733` | [`790904512407011348`](https://discord.com/channels/779317816897699850/779317816897699854/790904512407011348) | roadmap — Discord: FEN alcanzable |
+| 2020-12-27 | `ubdip` | [`792903316614545438`](https://discord.com/channels/779317816897699850/779319972614242354/792903316614545438) | roadmap — Discord: divergencia de reglas |
+| 2021-01-15 | `ubdip` | [`799645341489430568`](https://discord.com/channels/779317816897699850/779319972614242354/799645341489430568) | roadmap — Discord: rama sin jaque |
+| 2021-01-19 | `bianca5` | [`800946306209546260`](https://discord.com/channels/779317816897699850/779317816897699854/800946306209546260) | ledger — general:1346 |
+| 2021-01-26 | `ubdip` | [`803658203891630150`](https://discord.com/channels/779317816897699850/784418118503235625/803658203891630150) | ledger — nnue-general:338 |
+| 2021-02-27 | `Deleted User` | [`815323198496440371`](https://discord.com/channels/779317816897699850/812407482369441813/815323198496440371) | ledger — analysis:53 |
+| 2021-03-03 | `belzedar_` | [`816735608231821352`](https://discord.com/channels/779317816897699850/791247944463417374/816735608231821352) | roadmap — mensaje; ledger — help:793 |
+| 2021-03-03 | `belzedar_` | [`816738779313733694`](https://discord.com/channels/779317816897699850/791247944463417374/816738779313733694) | roadmap — configuración del hilo; ledger — help:817 |
+| 2021-03-07 | `ijhy` | [`818228191319556126`](https://discord.com/channels/779317816897699850/791249497090686987/818228191319556126) | roadmap — discusión |
+| 2021-03-07 | `ijhy` | [`818228245291860018`](https://discord.com/channels/779317816897699850/791249497090686987/818228245291860018) | roadmap — matiz |
+| 2021-03-07 | `belzedar_` | [`818230283455168523`](https://discord.com/channels/779317816897699850/791249497090686987/818230283455168523) | roadmap — Discord: servidores |
+| 2021-03-08 | `ubdip` | [`818442571582930979`](https://discord.com/channels/779317816897699850/812407482369441813/818442571582930979) | roadmap — Discord 2021: oráculo; ledger — analysis:94 |
+| 2021-03-08 | `ubdip` | [`818443628808372225`](https://discord.com/channels/779317816897699850/812407482369441813/818443628808372225) | roadmap — Discord 2021: PNS; ledger — analysis:99 |
+| 2021-03-08 | `ubdip` | [`818447247464464394`](https://discord.com/channels/779317816897699850/812407482369441813/818447247464464394) | ledger — analysis:101 |
+| 2021-03-08 | `Deleted User` | [`818580012122505236`](https://discord.com/channels/779317816897699850/791249497090686987/818580012122505236) | ledger — Mega tournament |
+| 2021-03-15 | `Deleted User` | [`821083552073908245`](https://discord.com/channels/779317816897699850/812407482369441813/821083552073908245) | roadmap — Discord: alternativas |
+| 2021-03-15 | `Deleted User` | [`821084418436628491`](https://discord.com/channels/779317816897699850/812407482369441813/821084418436628491) | roadmap — Discord: defensas tardías |
+| 2021-03-15 | `Deleted User` | [`821102431571148821`](https://discord.com/channels/779317816897699850/812407482369441813/821102431571148821) | roadmap — pawnitization 1 |
+| 2021-03-15 | `Deleted User` | [`821112401410654270`](https://discord.com/channels/779317816897699850/812407482369441813/821112401410654270) | roadmap — pawnitization 2 |
+| 2021-03-15 | `mtaktikos` | [`821137971121487922`](https://discord.com/channels/779317816897699850/812407482369441813/821137971121487922) | ledger — analysis:193 |
+| 2021-03-15 | `ubdip` | [`821139366024839188`](https://discord.com/channels/779317816897699850/812407482369441813/821139366024839188) | ledger — analysis:196 |
+| 2021-03-15 | `mtaktikos` | [`821147959730503680`](https://discord.com/channels/779317816897699850/812407482369441813/821147959730503680) | roadmap — mensaje; ledger — analysis:212 |
+| 2021-03-15 | `ijhy` | [`821148061454696498`](https://discord.com/channels/779317816897699850/812407482369441813/821148061454696498) | roadmap — discusión; ledger — analysis:213 |
+| 2021-04-04 | `Deleted User` | [`828155766950068244`](https://discord.com/channels/779317816897699850/812407482369441813/828155766950068244) | roadmap — mensaje; ledger — analysis:228 |
+| 2021-04-04 | `Deleted User` | [`828155909749604352`](https://discord.com/channels/779317816897699850/812407482369441813/828155909749604352) | roadmap — primer grupo; ledger — analysis:229 |
+| 2021-04-04 | `Deleted User` | [`828156028532162600`](https://discord.com/channels/779317816897699850/812407482369441813/828156028532162600) | roadmap — segundo grupo; ledger — analysis:230 |
+| 2021-04-04 | `Deleted User` | [`828157064018395177`](https://discord.com/channels/779317816897699850/812407482369441813/828157064018395177) | roadmap — mensaje |
+| 2021-04-04 | `Deleted User` | [`828241989203001385`](https://discord.com/channels/779317816897699850/812407482369441813/828241989203001385) | roadmap — Discord: comparación de defensas; ledger — analysis:241 |
+| 2021-04-05 | `Deleted User` | [`828685113981534228`](https://discord.com/channels/779317816897699850/812407482369441813/828685113981534228) | ledger — analysis:244 |
+| 2021-07-22 | `ubdip` | [`867659752875491388`](https://discord.com/channels/779317816897699850/793813826436464640/867659752875491388) | roadmap — mensaje; ledger — off-topic:151 |
+| 2021-08-03 | `ijhy` | [`872034529555148801`](https://discord.com/channels/779317816897699850/791249497090686987/872034529555148801) | ledger — v2.1 selfplay |
+| 2021-08-26 | `belzedar_` | [`880354111046942730`](https://discord.com/channels/779317816897699850/812407482369441813/880354111046942730) | roadmap — Discord: ramificación c6 |
+| 2021-09-02 | `belzedar_` | [`882882082248986665`](https://discord.com/channels/779317816897699850/791249497090686987/882882082248986665) | roadmap — el adjunto histórico; ledger — metadata Discord |
+| 2021-11-15 | `ubdip` | [`909859570552279082`](https://discord.com/channels/779317816897699850/779317816897699854/909859570552279082) | roadmap — mensaje; ledger — general:3425 |
+| 2022-06-13 | `ubdip` | [`985992353372307516`](https://discord.com/channels/779317816897699850/779317816897699854/985992353372307516) | roadmap — Discord: tres niveles; ledger — general:5468 |
+| 2023-02-17 | `occyroexanthub` | [`1076262003099828325`](https://discord.com/channels/779317816897699850/812407482369441813/1076262003099828325) | roadmap — regresión NNUE/tablebase |
+| 2023-03-29 | `ubdip` | [`1090559239740719144`](https://discord.com/channels/779317816897699850/793813826436464640/1090559239740719144) | roadmap — Discord: verificación independiente |
+| 2023-04-02 | `ubdip` | [`1092084211797721108`](https://discord.com/channels/779317816897699850/779319972614242354/1092084211797721108) | roadmap — Discord: reyes adyacentes |
+| 2023-06-08 | `ubdip` | [`1116257675894857799`](https://discord.com/channels/779317816897699850/966610323987660830/1116257675894857799) | roadmap — Discord: presión de RAM |
+| 2023-12-24 | `ubdip` | [`1188576876676005898`](https://discord.com/channels/779317816897699850/779317816897699854/1188576876676005898) | roadmap — soporte 6-men; ledger — general:7471 |
+| 2023-12-24 | `ubdip` | [`1188579786935763055`](https://discord.com/channels/779317816897699850/779317816897699854/1188579786935763055) | roadmap — probing interno; ledger — general:7476 |
+| 2023-12-24 | `ubdip` | [`1188601494501609612`](https://discord.com/channels/779317816897699850/779317816897699854/1188601494501609612) | roadmap — mensaje; ledger — general:7487 |
+| 2024-04-22 | `ubdip` | [`1232073153480622211`](https://discord.com/channels/779317816897699850/779319972614242354/1232073153480622211) | roadmap — mensaje; ledger — development:2820 |
+| 2024-06-06 | `ubdip` | [`1248179697561370655`](https://discord.com/channels/779317816897699850/812407482369441813/1248179697561370655) | roadmap — mensaje; ledger — analysis:1776 |
+| 2024-06-06 | `ubdip` | [`1248180040638922866`](https://discord.com/channels/779317816897699850/812407482369441813/1248180040638922866) | roadmap — mensaje; ledger — analysis:1777 |
+| 2024-06-06 | `ubdip` | [`1248232765540008066`](https://discord.com/channels/779317816897699850/812407482369441813/1248232765540008066) | roadmap — mensaje; ledger — analysis:1784 |
+| 2024-06-06 | `ubdip` | [`1248233853378760709`](https://discord.com/channels/779317816897699850/812407482369441813/1248233853378760709) | roadmap — mensaje; ledger — analysis:1786 |
+| 2024-06-06 | `dpldgr` | [`1248234583200108625`](https://discord.com/channels/779317816897699850/812407482369441813/1248234583200108625) | roadmap — mensaje; ledger — analysis:1787 |
+| 2024-07-07 | `aiorla` | [`1259607759968796764`](https://discord.com/channels/779317816897699850/812407482369441813/1259607759968796764) | roadmap — caso |
+| 2024-07-07 | `aiorla` | [`1259620577098993665`](https://discord.com/channels/779317816897699850/812407482369441813/1259620577098993665) | roadmap — diagnóstico |
+| 2024-07-11 | `aiorla` | [`1260945389259849758`](https://discord.com/channels/779317816897699850/1260924156526985307/1260945389259849758) | roadmap — mensaje; ledger — thread:34 |
+| 2024-07-11 | `aiorla` | [`1260952273060626462`](https://discord.com/channels/779317816897699850/1260924156526985307/1260952273060626462) | roadmap — método; ledger — thread:36 |
+| 2024-07-11 | `aiorla` | [`1260958073351307354`](https://discord.com/channels/779317816897699850/1260924156526985307/1260958073351307354) | roadmap — pozos; ledger — thread:41 |
+| 2024-07-11 | `aiorla` | [`1261022480680616037`](https://discord.com/channels/779317816897699850/1260924156526985307/1261022480680616037) | roadmap — fortalezas; ledger — thread:45 |
+| 2024-07-11 | `lesha2002` | [`1261025565222375474`](https://discord.com/channels/779317816897699850/1260924156526985307/1261025565222375474) | roadmap — sidelines; ledger — thread:50 |
+| 2024-07-11 | `lesha2002` | [`1261035971915415735`](https://discord.com/channels/779317816897699850/1260924156526985307/1261035971915415735) | roadmap — Discord: endgames difíciles; ledger — thread:57 |
+| 2024-07-11 | `aiorla` | [`1261038217612759122`](https://discord.com/channels/779317816897699850/1260924156526985307/1261038217612759122) | roadmap — posición difícil de aiorla; ledger — thread:58 |
+| 2025-07-27 | `ijhy` | [`1398851298438414448`](https://discord.com/channels/779317816897699850/779317816897699854/1398851298438414448) | roadmap — Discord: limitaciones de atomiktest |
+| 2025-09-07 | `stoiksismic` | [`1414231825374511215`](https://discord.com/channels/779317816897699850/1260924156526985307/1414231825374511215) | roadmap — adjuntos; ledger — thread:86 |
+| 2025-09-08 | `ijhy` | [`1414448796783607830`](https://discord.com/channels/779317816897699850/1260924156526985307/1414448796783607830) | roadmap — adjuntos; ledger — thread:89 |
+| 2025-09-22 | `ubdip` | [`1419719405935530146`](https://discord.com/channels/779317816897699850/966610323987660830/1419719405935530146) | roadmap — mensaje; ledger — nnue-training:5079 |
+| 2026-01-17 | `ubdip` | [`1462051281387524128`](https://discord.com/channels/779317816897699850/779319972614242354/1462051281387524128) | roadmap — Discord: worker pull |
+| 2026-01-17 | `ubdip` | [`1462052988838219874`](https://discord.com/channels/779317816897699850/779319972614242354/1462052988838219874) | roadmap — Discord: OpenBench moderno |
