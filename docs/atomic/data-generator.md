@@ -30,13 +30,17 @@ Clients that support version negotiation may issue `atomic_data_schemas`.
 Its `capability_version: 2` envelope preserves the same Legacy V1 write
 capability and reports the frozen `atomic-bin-v2` schema hash
 `0352b036...f93cb6`. From H7.3-B the V2 entry reports
-`read:false,write:true`; readers arrive separately in H7.3-C. The historical
+`read:false,write:true`; readers are exposed by a separate H7.3-C data-tools
+artifact. The historical
 singular response above remains byte-exact for pinned Legacy clients.
 
-H7.3-C1 provides the authoritative C++ reader in Atomic-Stockfish. A V2
-dataset is opened only through its `.atbin.manifest.json` sidecar; passing a
-raw `.atbin` shard is an error. The generator capability remains `read:false`
-until the H7.3-C2 data-tools CLI exposes that library contract.
+H7.3-C1 provides the authoritative C++ reader in Atomic-Stockfish and H7.3-C2
+exposes it as `atomic-stockfish-data-tools`. A V2 dataset is opened only
+through its `.atbin.manifest.json` sidecar; passing a raw `.atbin` shard is an
+error. The generator capability remains `read:false,write:true` because it
+describes this writer binary, while the separate validator advertises
+`read:true,write:false`. See [data-tools.md](data-tools.md) for its frozen CLI
+and delegation contract.
 
 ## Generate Legacy Atomic V1 data
 
@@ -205,4 +209,5 @@ The focused reader gates can also be run independently from `src`:
 ```sh
 make -j atomic-bin-v2-manifest-reader-tests ARCH=x86-64
 make -j atomic-bin-v2-reader-tests ARCH=x86-64
+make -j data-tools-tests ARCH=x86-64
 ```

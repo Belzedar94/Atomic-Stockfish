@@ -82,6 +82,19 @@ format appends to or overwrites an existing output. See
 [`docs/atomic/data-generator.md`](docs/atomic/data-generator.md) for the command
 contract, reproducibility rules and integration tests.
 
+Completed Atomic BIN V2 datasets are validated by the separate manifest-only
+reader executable:
+
+```sh
+make -j data-tools ARCH=x86-64-bmi2
+./atomic-stockfish-data-tools validate --format atomic-bin-v2 \
+  --manifest training_data.atbin.manifest.json
+```
+
+Its canonical JSON/exit-code contract and the future pinned tools-wrapper
+delegation boundary are frozen in
+[`docs/atomic/data-tools.md`](docs/atomic/data-tools.md).
+
 ## Bindings and WebAssembly
 
 Build the Python extension or wheel from the repository root:

@@ -140,6 +140,8 @@ ATOMIC_BIN_V2_READER_TEST_OBJS = atomic_init.o attacks.o bitboard.o misc.o moveg
 	uci_move.o ucioption.o atomic_bin_v2_wire_codec.o atomic_bin_v2_adapter_codec.o \
 	atomic_bin_v2_sha256_codec.o atomic_bin_v2_manifest_codec.o atomic_bin_v2_reader_codec.o \
 	atomic_bin_v2_reader_tests.o
+ATOMIC_DATA_TOOLS_JSON_TEST_EXE  = atomic-data-tools-json-tests$(ATOMIC_TEST_EXE_SUFFIX)
+ATOMIC_DATA_TOOLS_JSON_TEST_OBJS = atomic_data_tools_json.o atomic_data_tools_json_tests.o
 
 ATOMIC_BIN_V2_SRCS = data/atomic_bin_v2_wire.cpp data/atomic_bin_v2.cpp data/sha256.cpp \
 	data/atomic_bin_v2_sink.cpp data/atomic_bin_v2_manifest.cpp data/atomic_bin_v2_reader.cpp
@@ -165,6 +167,28 @@ ATOMIC_DATA_GENERATOR_DATA_OBJS = \
 ATOMIC_DATA_GENERATOR_OBJS = $(filter-out uci.o search.o,$(OBJS)) \
 	atomic_data_generator_uci.o atomic_data_generator_search.o \
 	$(ATOMIC_DATA_GENERATOR_DATA_OBJS)
+
+ifeq ($(target_windows),yes)
+	ATOMIC_DATA_TOOLS_EXE = atomic-stockfish-data-tools.exe
+	ATOMIC_DATA_TOOLS_ENTRY_LDFLAGS = -municode
+else
+	ATOMIC_DATA_TOOLS_EXE = atomic-stockfish-data-tools
+	ATOMIC_DATA_TOOLS_ENTRY_LDFLAGS =
+endif
+
+# The production V2 reader is a standalone manifest validator. Keep this
+# object list explicit: no playing main/search/thread/TT object and no data
+# generator writer object may enter the data-tools binary.
+ATOMIC_DATA_TOOLS_SRCS = data/atomic_data_tools.cpp data/atomic_data_tools_json.cpp \
+	data/atomic_bin_v2_wire.cpp data/atomic_bin_v2.cpp data/sha256.cpp \
+	data/atomic_bin_v2_manifest.cpp data/atomic_bin_v2_reader.cpp
+ATOMIC_DATA_TOOLS_HEADERS = data/atomic_data_tools_json.h data/training_data.h \
+	data/atomic_bin_v2_wire.h data/atomic_bin_v2.h data/sha256.h \
+	data/atomic_bin_v2_manifest.h data/atomic_bin_v2_reader.h
+ATOMIC_DATA_TOOLS_OBJS = atomic_init.o attacks.o bitboard.o misc.o movegen.o position.o tbprobe.o \
+	uci_move.o ucioption.o atomic_bin_v2_wire_codec.o atomic_bin_v2_adapter_codec.o \
+	atomic_bin_v2_sha256_codec.o atomic_bin_v2_manifest_codec.o atomic_bin_v2_reader_codec.o \
+	atomic_data_tools_json.o atomic_data_tools.o
 
 ifeq ($(target_windows),yes)
 	PYTHON ?= python
@@ -1100,6 +1124,9 @@ help:
 	echo "build                   > skip profile-guided optimization" && \
 	echo "data-generator          > build the isolated Atomic training-data generator" && \
 	echo "data-generator-tests    > build/test generator with ATOMIC_NNUE_TEST_NET" && \
+	echo "data-tools              > build the manifest-only Atomic BIN V2 validator" && \
+	echo "data-tools-tests        > build/test the production V2 validation CLI" && \
+	echo "atomic-data-tools-json-tests > run lossless validation-response unit tests" && \
 	echo "atomic-unit-tests       > build and run Atomic C++ unit tests" && \
 	echo "atomic-api-tests        > build and run Atomic shared-API unit tests" && \
 	echo "atomic-syzygy-driver    > build the standalone Atomic Syzygy probe driver" && \
@@ -1181,7 +1208,7 @@ ifneq ($(SUPPORTED_ARCH), true)
 endif
 
 
-.PHONY: help analyze build profile-build data-generator data-generator-tests atomic-unit-tests atomic-api-tests atomic-syzygy-driver atomic-nnue-incremental-tests legacy-atomic-v1-tests atomic-bin-v2-tests atomic-bin-v2-sink-tests atomic-bin-v2-manifest-tests atomic-bin-v2-manifest-reader-tests atomic-bin-v2-reader-tests macos-lipo strip install clean net \
+.PHONY: help analyze build profile-build data-generator data-generator-tests data-tools data-tools-tests atomic-data-tools-json-tests atomic-unit-tests atomic-api-tests atomic-syzygy-driver atomic-nnue-incremental-tests legacy-atomic-v1-tests atomic-bin-v2-tests atomic-bin-v2-sink-tests atomic-bin-v2-manifest-tests atomic-bin-v2-manifest-reader-tests atomic-bin-v2-reader-tests macos-lipo strip install clean net \
 	objclean profileclean config-sanity \
 	icx-profile-use icx-profile-make \
 	gcc-profile-use gcc-profile-make \
@@ -1303,7 +1330,7 @@ clean: objclean profileclean universalclean
 
 # clean binaries and objects
 objclean:
-	@rm -f stockfish stockfish.exe atomic-stockfish atomic-stockfish.exe atomic-stockfish.js atomic-stockfish-data-generator atomic-stockfish-data-generator.exe atomic-unit-tests atomic-unit-tests.exe atomic-unit-tests.bin atomic-api-tests atomic-api-tests.exe atomic-api-tests.bin atomic-syzygy-driver* atomic-nnue-incremental-tests atomic-nnue-incremental-tests.exe atomic-nnue-incremental-tests.bin legacy-atomic-v1-tests legacy-atomic-v1-tests.exe legacy-atomic-v1-tests.bin atomic-bin-v2-tests atomic-bin-v2-tests.exe atomic-bin-v2-tests.bin atomic-bin-v2-tests.* atomic-bin-v2-sink-tests atomic-bin-v2-sink-tests.exe atomic-bin-v2-sink-tests.bin atomic-bin-v2-sink-tests.* atomic-bin-v2-manifest-tests atomic-bin-v2-manifest-tests.exe atomic-bin-v2-manifest-tests.bin atomic-bin-v2-manifest-tests.* atomic-bin-v2-manifest-reader-tests atomic-bin-v2-manifest-reader-tests.exe atomic-bin-v2-manifest-reader-tests.bin atomic-bin-v2-manifest-reader-tests.* atomic-bin-v2-reader-tests atomic-bin-v2-reader-tests.exe atomic-bin-v2-reader-tests.bin atomic-bin-v2-reader-tests.* *.o ./api/*.o ./syzygy/*.o ./nnue/*.o ./nnue/features/*.o $(BUILD_SHA_FILE) $(BUILD_FULL_SHA_FILE) $(BUILD_DATE_FILE)
+	@rm -f stockfish stockfish.exe atomic-stockfish atomic-stockfish.exe atomic-stockfish.js atomic-stockfish-data-generator atomic-stockfish-data-generator.exe atomic-stockfish-data-tools atomic-stockfish-data-tools.exe atomic-stockfish-data-tools.* atomic-data-tools-json-tests atomic-data-tools-json-tests.exe atomic-data-tools-json-tests.bin atomic-data-tools-json-tests.* atomic-unit-tests atomic-unit-tests.exe atomic-unit-tests.bin atomic-api-tests atomic-api-tests.exe atomic-api-tests.bin atomic-syzygy-driver* atomic-nnue-incremental-tests atomic-nnue-incremental-tests.exe atomic-nnue-incremental-tests.bin legacy-atomic-v1-tests legacy-atomic-v1-tests.exe legacy-atomic-v1-tests.bin atomic-bin-v2-tests atomic-bin-v2-tests.exe atomic-bin-v2-tests.bin atomic-bin-v2-tests.* atomic-bin-v2-sink-tests atomic-bin-v2-sink-tests.exe atomic-bin-v2-sink-tests.bin atomic-bin-v2-sink-tests.* atomic-bin-v2-manifest-tests atomic-bin-v2-manifest-tests.exe atomic-bin-v2-manifest-tests.bin atomic-bin-v2-manifest-tests.* atomic-bin-v2-manifest-reader-tests atomic-bin-v2-manifest-reader-tests.exe atomic-bin-v2-manifest-reader-tests.bin atomic-bin-v2-manifest-reader-tests.* atomic-bin-v2-reader-tests atomic-bin-v2-reader-tests.exe atomic-bin-v2-reader-tests.bin atomic-bin-v2-reader-tests.* *.o ./api/*.o ./syzygy/*.o ./nnue/*.o ./nnue/features/*.o $(BUILD_SHA_FILE) $(BUILD_FULL_SHA_FILE) $(BUILD_DATE_FILE)
 
 # clean auxiliary profiling files
 profileclean:
@@ -1326,7 +1353,7 @@ net:
 	@echo "Atomic NNUE networks are external; set EvalFile to a compatible Legacy Atomic V1 .nnue file."
 
 format:
-	$(CLANG-FORMAT) -i $(SRCS) $(ATOMIC_DATA_GENERATOR_SRCS) $(OTHER_SRCS) $(HEADERS) $(ATOMIC_DATA_GENERATOR_HEADERS) -style=file
+	$(CLANG-FORMAT) -i $(SRCS) $(ATOMIC_DATA_GENERATOR_SRCS) $(ATOMIC_DATA_TOOLS_SRCS) $(OTHER_SRCS) $(HEADERS) $(ATOMIC_DATA_GENERATOR_HEADERS) $(ATOMIC_DATA_TOOLS_HEADERS) -style=file
 
 ### ==========================================================================
 ### Section 5. Private Targets
@@ -1344,6 +1371,15 @@ data-generator-tests: config-sanity $(ATOMIC_DATA_GENERATOR_EXE) $(EXE) $(ATOMIC
 	./$(ATOMIC_BIN_V2_MANIFEST_READER_TEST_EXE)
 	./$(ATOMIC_BIN_V2_READER_TEST_EXE)
 	$(PYTHON) ../tests/data_generator.py --generator ./$(ATOMIC_DATA_GENERATOR_EXE) --normal-engine ./$(EXE) --net "$(ATOMIC_NNUE_TEST_NET)"
+
+data-tools: config-sanity $(ATOMIC_DATA_TOOLS_EXE)
+
+data-tools-tests: config-sanity $(ATOMIC_DATA_TOOLS_EXE) $(ATOMIC_DATA_TOOLS_JSON_TEST_EXE)
+	./$(ATOMIC_DATA_TOOLS_JSON_TEST_EXE)
+	$(PYTHON) ../tests/atomic_data_tools.py --tools ./$(ATOMIC_DATA_TOOLS_EXE)
+
+atomic-data-tools-json-tests: config-sanity $(ATOMIC_DATA_TOOLS_JSON_TEST_EXE)
+	./$(ATOMIC_DATA_TOOLS_JSON_TEST_EXE)
 
 atomic-unit-tests: config-sanity $(ATOMIC_UNIT_TEST_EXE)
 	./$(ATOMIC_UNIT_TEST_EXE)
@@ -1451,6 +1487,12 @@ $(EXE): $(OBJS)
 $(ATOMIC_DATA_GENERATOR_EXE): $(ATOMIC_DATA_GENERATOR_OBJS)
 	+$(CXX) -o $@ $(ATOMIC_DATA_GENERATOR_OBJS) $(LDFLAGS)
 
+$(ATOMIC_DATA_TOOLS_EXE): $(ATOMIC_DATA_TOOLS_OBJS)
+	+$(CXX) -o $@ $(ATOMIC_DATA_TOOLS_OBJS) $(ATOMIC_DATA_TOOLS_ENTRY_LDFLAGS) $(LDFLAGS)
+
+$(ATOMIC_DATA_TOOLS_JSON_TEST_EXE): $(ATOMIC_DATA_TOOLS_JSON_TEST_OBJS)
+	+$(CXX) -o $@ $(ATOMIC_DATA_TOOLS_JSON_TEST_OBJS) $(LDFLAGS)
+
 $(ATOMIC_UNIT_TEST_EXE): $(ATOMIC_UNIT_TEST_OBJS)
 	+$(CXX) -o $@ $(ATOMIC_UNIT_TEST_OBJS) $(LDFLAGS)
 
@@ -1530,6 +1572,15 @@ atomic_bin_v2_reader_codec.o: data/atomic_bin_v2_reader.cpp $(HEADERS) $(ATOMIC_
 	$(strip $(CXX) $(CPPFLAGS) $(CXXFLAGS)) -I. -c -o $@ $<
 
 atomic_bin_v2_reader_tests.o: ../tests/atomic_bin_v2_reader.cpp $(HEADERS) $(ATOMIC_BIN_V2_HEADERS)
+	$(strip $(CXX) $(CPPFLAGS) $(CXXFLAGS)) -I. -c -o $@ $<
+
+atomic_data_tools.o: data/atomic_data_tools.cpp $(HEADERS) $(ATOMIC_DATA_TOOLS_HEADERS)
+	$(strip $(CXX) $(CPPFLAGS) $(CXXFLAGS)) -I. -c -o $@ $<
+
+atomic_data_tools_json.o: data/atomic_data_tools_json.cpp $(HEADERS) $(ATOMIC_DATA_TOOLS_HEADERS)
+	$(strip $(CXX) $(CPPFLAGS) $(CXXFLAGS)) -I. -c -o $@ $<
+
+atomic_data_tools_json_tests.o: ../tests/atomic_data_tools_json.cpp $(HEADERS) $(ATOMIC_DATA_TOOLS_HEADERS)
 	$(strip $(CXX) $(CPPFLAGS) $(CXXFLAGS)) -I. -c -o $@ $<
 
 atomic_data_generator_uci.o: uci.cpp $(HEADERS) $(ATOMIC_DATA_GENERATOR_HEADERS)
