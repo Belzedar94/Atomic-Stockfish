@@ -8,6 +8,7 @@
   (at your option) any later version.
 */
 
+#include <charconv>
 #include <filesystem>
 #include <iostream>
 #include <limits>
@@ -231,8 +232,10 @@ int emit_contract_error(std::string_view                  operation,
     return emit_error(operation, format, code, message, ContractErrorExit);
 }
 
-int emit_dataset_error(const std::string& format, const DataResult& result) {
-    return emit_error("validate", format, error_code(result.error), result.message,
+int emit_dataset_error(std::string_view   operation,
+                       const std::string& format,
+                       const DataResult&  result) {
+    return emit_error(operation, format, error_code(result.error), result.message,
                       DatasetErrorExit);
 }
 
@@ -244,8 +247,9 @@ int capabilities(const std::vector<std::string>& arguments) {
     std::cout
       << R"({"type":"atomic-data-tools-capabilities","contract_version":1,"formats":{"atomic-bin-v2":{"data_schema_sha256":")"
       << Data::AtomicBinV2SchemaSha256Hex << R"(","manifest_schema_sha256":")"
-      << Data::AtomicBinV2ManifestSchemaSha256Hex
-      << R"(","entrypoint":"manifest","read":true,"write":false,"operations":["validate"]}}})"
+      << Data::AtomicBinV2ManifestSchemaSha256Hex << R"(","decode_schema_sha256":")"
+      << Data::AtomicDataToolsDecodeSchemaSha256Hex
+      << R"(","entrypoint":"manifest","read":true,"write":false,"operations":["validate","decode"]}}})"
       << '\n';
     return SuccessExit;
 }
@@ -297,7 +301,7 @@ int validate(const std::vector<std::string>& arguments) {
     if (DataResult opened =
           AtomicBinV2DatasetReader::open(std::filesystem::u8path(*manifest), reader);
         !opened)
-        return emit_dataset_error(*format, opened);
+        return emit_dataset_error("validate", *format, opened);
 
     u64 records          = 0;
     u64 sideToMoveWins   = 0;
@@ -309,7 +313,7 @@ int validate(const std::vector<std::string>& arguments) {
         AtomicBinV2DecodedRecord decoded;
         bool                     hasRecord = false;
         if (DataResult read = reader->next(decoded, hasRecord); !read)
-            return emit_dataset_error(*format, read);
+            return emit_dataset_error("validate", *format, read);
         if (!hasRecord)
             break;
 
@@ -330,6 +334,138 @@ int validate(const std::vector<std::string>& arguments) {
     return SuccessExit;
 }
 
+bool parse_unsigned(std::string_view text, u64& output) {
+    output = 0;
+    if (text.empty())
+        return false;
+    const char* first  = text.data();
+    const char* last   = first + text.size();
+    const auto  parsed = std::from_chars(first, last, output, 10);
+    return parsed.ec == std::errc{} && parsed.ptr == last;
+}
+
+int decode(const std::vector<std::string>& arguments) {
+    std::optional<std::string> format;
+    std::optional<std::string> manifest;
+    std::optional<std::string> offsetToken;
+    std::optional<std::string> limitToken;
+
+    const auto is_decode_option = [](std::string_view argument) {
+        return argument == "--format" || argument == "--manifest" || argument == "--offset"
+            || argument == "--limit";
+    };
+
+    for (std::size_t index = 2; index < arguments.size(); ++index)
+    {
+        const std::string_view      argument = arguments[index];
+        std::optional<std::string>* destination;
+        if (argument == "--format")
+            destination = &format;
+        else if (argument == "--manifest")
+            destination = &manifest;
+        else if (argument == "--offset")
+            destination = &offsetToken;
+        else if (argument == "--limit")
+            destination = &limitToken;
+        else
+            return emit_contract_error("decode", format, "unknown_argument",
+                                       "unknown decode argument: " + std::string(argument));
+
+        if (*destination)
+            return emit_contract_error("decode", format, "duplicate_argument",
+                                       "duplicate decode argument: " + std::string(argument));
+        if (index + 1 >= arguments.size() || is_decode_option(arguments[index + 1]))
+            return emit_contract_error("decode", format, "missing_value",
+                                       "missing value for decode argument: "
+                                         + std::string(argument));
+        *destination = arguments[++index];
+    }
+
+    if (!format)
+        return emit_contract_error("decode", std::nullopt, "missing_format",
+                                   "decode requires --format atomic-bin-v2");
+    if (*format != "atomic-bin-v2")
+        return emit_contract_error("decode", format, "unsupported_format",
+                                   "unsupported data format: " + *format);
+    if (!manifest)
+        return emit_contract_error("decode", format, "missing_manifest",
+                                   "decode requires --manifest <dataset.atbin.manifest.json>");
+    if (manifest->empty())
+        return emit_contract_error("decode", format, "empty_manifest",
+                                   "--manifest must not be empty");
+    if (!limitToken)
+        return emit_contract_error("decode", format, "missing_limit",
+                                   "decode requires --limit <1..4096>");
+
+    u64 offset = 0;
+    if (offsetToken && !parse_unsigned(*offsetToken, offset))
+        return emit_contract_error("decode", format, "invalid_offset",
+                                   "--offset must be an unsigned 64-bit decimal integer");
+    u64 parsedLimit = 0;
+    if (!parse_unsigned(*limitToken, parsedLimit))
+        return emit_contract_error("decode", format, "invalid_limit",
+                                   "--limit must be an unsigned decimal integer in 1..4096");
+    if (parsedLimit == 0 || parsedLimit > 4096)
+        return emit_contract_error("decode", format, "limit_out_of_range",
+                                   "--limit must be in 1..4096");
+    const u32 limit = u32(parsedLimit);
+
+    std::unique_ptr<AtomicBinV2DatasetReader> reader;
+    if (DataResult opened =
+          AtomicBinV2DatasetReader::open(std::filesystem::u8path(*manifest), reader);
+        !opened)
+        return emit_dataset_error("decode", *format, opened);
+    if (offset > reader->manifest().records || u64(limit) > reader->manifest().records - offset)
+        return emit_contract_error("decode", format, "range_out_of_bounds",
+                                   "decode slice must fit entirely inside the dataset");
+
+    // Buffer at most 4096 rendered records. Nothing reaches stdout until the
+    // reader authenticates and round-trips every record in every shard.
+    std::vector<std::string> renderedRecords;
+    renderedRecords.reserve(limit);
+    u64 records          = 0;
+    u64 sideToMoveWins   = 0;
+    u64 draws            = 0;
+    u64 sideToMoveLosses = 0;
+    u64 atomic960Records = 0;
+    while (true)
+    {
+        AtomicBinV2DecodedRecord decoded;
+        bool                     hasRecord = false;
+        if (DataResult read = reader->next(decoded, hasRecord); !read)
+            return emit_dataset_error("decode", *format, read);
+        if (!hasRecord)
+            break;
+
+        if (decoded.globalIndex >= offset && decoded.globalIndex - offset < limit)
+            renderedRecords.push_back(Data::render_atomic_data_tools_decode_record(decoded));
+        ++records;
+        sideToMoveWins += decoded.sample.result > 0;
+        draws += decoded.sample.result == 0;
+        sideToMoveLosses += decoded.sample.result < 0;
+        atomic960Records += bool(decoded.fields.flags & Data::ATOMIC_BIN_V2_ATOMIC960);
+    }
+
+    if (renderedRecords.size() != limit)
+        return emit_error("decode", *format, "range_out_of_bounds",
+                          "decode slice did not produce its complete requested range",
+                          DatasetErrorExit);
+
+    const Data::AtomicDataToolsValidationStats stats{u32(reader->manifest().shards.size()),
+                                                     records,
+                                                     sideToMoveWins,
+                                                     draws,
+                                                     sideToMoveLosses,
+                                                     atomic960Records};
+    std::string                                output =
+      Data::render_atomic_data_tools_decode_header(reader->manifest(), offset, limit);
+    for (const std::string& record : renderedRecords)
+        output += record;
+    output += Data::render_atomic_data_tools_decode_footer(stats, offset, limit);
+    std::cout << output;
+    return SuccessExit;
+}
+
 int run(const std::vector<std::string>& arguments) {
     for (const std::string& argument : arguments)
         if (!valid_utf8(argument))
@@ -338,13 +474,15 @@ int run(const std::vector<std::string>& arguments) {
 
     if (arguments.size() < 2)
         return emit_contract_error("cli", std::nullopt, "missing_command",
-                                   "expected capabilities or validate");
+                                   "expected capabilities, validate, or decode");
 
     const std::string_view command = arguments[1];
     if (command == "capabilities")
         return capabilities(arguments);
     if (command == "validate")
         return validate(arguments);
+    if (command == "decode")
+        return decode(arguments);
     return emit_contract_error("cli", std::nullopt, "unknown_command",
                                "unknown command: " + std::string(command));
 }

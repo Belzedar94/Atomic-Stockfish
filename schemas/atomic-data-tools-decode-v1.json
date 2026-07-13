@@ -1,0 +1,649 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:atomic-stockfish:schema:atomic-data-tools-decode:1",
+  "title": "Atomic data-tools decode JSONL line",
+  "schema_version": 1,
+  "status": "frozen",
+  "description": "Schema for each UTF-8/LF JSON line emitted by atomic-stockfish-data-tools decode. A stream is one header, exactly slice.limit records, then one footer.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/header"
+    },
+    {
+      "$ref": "#/$defs/record"
+    },
+    {
+      "$ref": "#/$defs/footer"
+    }
+  ],
+  "x-jsonl-contract": {
+    "encoding": "UTF-8",
+    "bom": false,
+    "line_ending": "LF",
+    "key_order": "schema-declaration-order",
+    "sequence": [
+      "atomic-data-tools-decode-header",
+      "atomic-data-tools-decode-record repeated slice.limit times",
+      "atomic-data-tools-decode-footer"
+    ],
+    "atomic_output": "No stdout bytes are emitted unless the complete manifest dataset authenticates, decodes and re-encodes byte-exactly."
+  },
+  "$defs": {
+    "u64-string": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "square": {
+      "type": "string",
+      "pattern": "^[a-h][1-8]$"
+    },
+    "nullable-square": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/square"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "slice-request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "offset",
+        "limit"
+      ],
+      "properties": {
+        "offset": {
+          "$ref": "#/$defs/u64-string"
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4096
+        }
+      }
+    },
+    "slice-result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "offset",
+        "limit",
+        "records"
+      ],
+      "properties": {
+        "offset": {
+          "$ref": "#/$defs/u64-string"
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4096
+        },
+        "records": {
+          "$ref": "#/$defs/u64-string"
+        }
+      }
+    },
+    "generation-options": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "search_depth_min",
+        "search_depth_max",
+        "nodes",
+        "requested_records",
+        "records_per_shard",
+        "eval_limit",
+        "eval_diff_limit",
+        "random_move_min_ply",
+        "random_move_max_ply",
+        "random_move_count",
+        "random_move_like_apery",
+        "random_multi_pv",
+        "random_multi_pv_diff",
+        "random_multi_pv_depth",
+        "write_min_ply",
+        "write_max_ply",
+        "keep_draws",
+        "adjudicate_draws_by_score",
+        "adjudicate_insufficient",
+        "filter_captures",
+        "filter_checks",
+        "filter_promotions",
+        "random_file_name",
+        "set_recommended_uci_options_seen"
+      ],
+      "properties": {
+        "search_depth_min": {
+          "type": "integer"
+        },
+        "search_depth_max": {
+          "type": "integer"
+        },
+        "nodes": {
+          "$ref": "#/$defs/u64-string"
+        },
+        "requested_records": {
+          "$ref": "#/$defs/u64-string"
+        },
+        "records_per_shard": {
+          "$ref": "#/$defs/u64-string"
+        },
+        "eval_limit": {
+          "type": "integer"
+        },
+        "eval_diff_limit": {
+          "type": "integer"
+        },
+        "random_move_min_ply": {
+          "type": "integer"
+        },
+        "random_move_max_ply": {
+          "type": "integer"
+        },
+        "random_move_count": {
+          "type": "integer"
+        },
+        "random_move_like_apery": {
+          "type": "integer"
+        },
+        "random_multi_pv": {
+          "type": "integer"
+        },
+        "random_multi_pv_diff": {
+          "type": "integer"
+        },
+        "random_multi_pv_depth": {
+          "type": "integer"
+        },
+        "write_min_ply": {
+          "type": "integer"
+        },
+        "write_max_ply": {
+          "type": "integer"
+        },
+        "keep_draws": {
+          "type": "string"
+        },
+        "adjudicate_draws_by_score": {
+          "type": "boolean"
+        },
+        "adjudicate_insufficient": {
+          "type": "boolean"
+        },
+        "filter_captures": {
+          "type": "boolean"
+        },
+        "filter_checks": {
+          "type": "boolean"
+        },
+        "filter_promotions": {
+          "type": "boolean"
+        },
+        "random_file_name": {
+          "type": "boolean"
+        },
+        "set_recommended_uci_options_seen": {
+          "type": "boolean"
+        }
+      }
+    },
+    "header": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "contract_version",
+        "status",
+        "format",
+        "entrypoint",
+        "decode_schema_sha256",
+        "data_schema_sha256",
+        "manifest_schema_sha256",
+        "slice",
+        "dataset",
+        "provenance"
+      ],
+      "properties": {
+        "type": {
+          "const": "atomic-data-tools-decode-header"
+        },
+        "contract_version": {
+          "const": 1
+        },
+        "status": {
+          "const": "ok"
+        },
+        "format": {
+          "const": "atomic-bin-v2"
+        },
+        "entrypoint": {
+          "const": "manifest"
+        },
+        "decode_schema_sha256": {
+          "$ref": "#/$defs/sha256",
+          "x-value": "sha256-of-exact-decode-schema-file"
+        },
+        "data_schema_sha256": {
+          "const": "0352b036f2a140c609e3eb9c9d635dc553e8d77253d8faa92437390f5cf93cb6"
+        },
+        "manifest_schema_sha256": {
+          "const": "83d63922df3ac4a0c81a21ec9d9fd9e180efe50f26efee62fe01710e09da5b42"
+        },
+        "slice": {
+          "$ref": "#/$defs/slice-request"
+        },
+        "dataset": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "records",
+            "shards",
+            "atomic960"
+          ],
+          "properties": {
+            "records": {
+              "$ref": "#/$defs/u64-string"
+            },
+            "shards": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100000
+            },
+            "atomic960": {
+              "type": "boolean"
+            }
+          }
+        },
+        "provenance": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "engine",
+            "network",
+            "book",
+            "generation"
+          ],
+          "properties": {
+            "engine": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "commit",
+                "version"
+              ],
+              "properties": {
+                "commit": {
+                  "oneOf": [
+                    {
+                      "const": "unknown"
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{40}$"
+                    }
+                  ]
+                },
+                "version": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            },
+            "network": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "file",
+                "sha256"
+              ],
+              "properties": {
+                "file": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "sha256": {
+                  "$ref": "#/$defs/sha256"
+                }
+              }
+            },
+            "book": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "kind",
+                "file",
+                "sha256"
+              ],
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "builtin-startpos",
+                    "file"
+                  ]
+                },
+                "file": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "sha256": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/$defs/sha256"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            },
+            "generation": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "resolved_seed",
+                "atomic960",
+                "threads",
+                "hash_mb",
+                "use_nnue",
+                "options"
+              ],
+              "properties": {
+                "resolved_seed": {
+                  "$ref": "#/$defs/u64-string"
+                },
+                "atomic960": {
+                  "type": "boolean"
+                },
+                "threads": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "hash_mb": {
+                  "$ref": "#/$defs/u64-string"
+                },
+                "use_nnue": {
+                  "const": "pure"
+                },
+                "options": {
+                  "$ref": "#/$defs/generation-options"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "contract_version",
+        "global_index",
+        "shard_index",
+        "local_index",
+        "position",
+        "score_stm",
+        "ply",
+        "result_stm",
+        "flags",
+        "atomic960",
+        "move"
+      ],
+      "properties": {
+        "type": {
+          "const": "atomic-data-tools-decode-record"
+        },
+        "contract_version": {
+          "const": 1
+        },
+        "global_index": {
+          "$ref": "#/$defs/u64-string"
+        },
+        "shard_index": {
+          "$ref": "#/$defs/u64-string"
+        },
+        "local_index": {
+          "$ref": "#/$defs/u64-string"
+        },
+        "position": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "fen",
+            "fen_notation",
+            "side_to_move",
+            "rule50",
+            "fullmove",
+            "castling_rights",
+            "castling_rook_origins",
+            "en_passant"
+          ],
+          "properties": {
+            "fen": {
+              "type": "string",
+              "minLength": 1
+            },
+            "fen_notation": {
+              "enum": [
+                "fen",
+                "shredder-fen"
+              ]
+            },
+            "side_to_move": {
+              "enum": [
+                "white",
+                "black"
+              ]
+            },
+            "rule50": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 32767
+            },
+            "fullmove": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100000
+            },
+            "castling_rights": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "wire",
+                "fen"
+              ],
+              "properties": {
+                "wire": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 15
+                },
+                "fen": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4
+                }
+              }
+            },
+            "castling_rook_origins": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "white_kingside",
+                "white_queenside",
+                "black_kingside",
+                "black_queenside"
+              ],
+              "properties": {
+                "white_kingside": {
+                  "$ref": "#/$defs/nullable-square"
+                },
+                "white_queenside": {
+                  "$ref": "#/$defs/nullable-square"
+                },
+                "black_kingside": {
+                  "$ref": "#/$defs/nullable-square"
+                },
+                "black_queenside": {
+                  "$ref": "#/$defs/nullable-square"
+                }
+              }
+            },
+            "en_passant": {
+              "$ref": "#/$defs/nullable-square"
+            }
+          }
+        },
+        "score_stm": {
+          "type": "integer",
+          "minimum": -2147483647,
+          "maximum": 2147483647
+        },
+        "ply": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]{0,9})$",
+          "x-maximum": "4294967295"
+        },
+        "result_stm": {
+          "enum": [
+            -1,
+            0,
+            1
+          ]
+        },
+        "flags": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "atomic960": {
+          "type": "boolean"
+        },
+        "move": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "wire",
+            "from",
+            "to",
+            "type",
+            "promotion"
+          ],
+          "properties": {
+            "wire": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]{0,9})$",
+              "x-maximum": "4294967295"
+            },
+            "from": {
+              "$ref": "#/$defs/square"
+            },
+            "to": {
+              "$ref": "#/$defs/square",
+              "description": "For castling this is the rook origin, matching the frozen Atomic BIN V2 wire rather than orthodox UCI king destination."
+            },
+            "type": {
+              "enum": [
+                "normal",
+                "promotion",
+                "en-passant",
+                "castling"
+              ]
+            },
+            "promotion": {
+              "enum": [
+                "none",
+                "knight",
+                "bishop",
+                "rook",
+                "queen"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "shards",
+        "records",
+        "side_to_move_wins",
+        "draws",
+        "side_to_move_losses",
+        "atomic960_records"
+      ],
+      "properties": {
+        "status": {
+          "const": "ok"
+        },
+        "shards": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100000
+        },
+        "records": {
+          "$ref": "#/$defs/u64-string"
+        },
+        "side_to_move_wins": {
+          "$ref": "#/$defs/u64-string"
+        },
+        "draws": {
+          "$ref": "#/$defs/u64-string"
+        },
+        "side_to_move_losses": {
+          "$ref": "#/$defs/u64-string"
+        },
+        "atomic960_records": {
+          "$ref": "#/$defs/u64-string"
+        }
+      }
+    },
+    "footer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "contract_version",
+        "status",
+        "format",
+        "slice",
+        "validation"
+      ],
+      "properties": {
+        "type": {
+          "const": "atomic-data-tools-decode-footer"
+        },
+        "contract_version": {
+          "const": 1
+        },
+        "status": {
+          "const": "ok"
+        },
+        "format": {
+          "const": "atomic-bin-v2"
+        },
+        "slice": {
+          "$ref": "#/$defs/slice-result"
+        },
+        "validation": {
+          "$ref": "#/$defs/validation"
+        }
+      }
+    }
+  }
+}
