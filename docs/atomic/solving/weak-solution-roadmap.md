@@ -123,7 +123,7 @@ Hay material útil para priorizar, pero no para declarar líneas resueltas:
 - La ruta `Nf3-e3` explorada por aiorla contiene finales especialmente difíciles y Fairy contra Fairy tampoco los convertía de forma fiable ([Discord: endgames difíciles](https://discord.com/channels/779317816897699850/1260924156526985307/1261035971915415735)); no se priorizará sobre `...Nh6` por su score histórico.
 - Una defensa atípica `...Kg1` no apareció a tiempo ni a profundidad 41 y casi dos mil millones de nodos; perft confirmó que era legal. Ubdip dejó como causas posibles pseudo-legalidad, poda o evaluación a largo plazo ([caso](https://discord.com/channels/779317816897699850/812407482369441813/1259607759968796764), [diagnóstico](https://discord.com/channels/779317816897699850/812407482369441813/1259620577098993665)). Es un fixture ideal para demostrar que el oracle nunca autoriza omitir movimientos legales.
 
-Hay una corrección importante para cualquier piloto reducido. El `6x6atom` histórico no es Atomic Lichess/Fairy sobre un tablero menor: la configuración finalmente usada heredaba de `nocheckatomic`, activaba `extinctionPseudoRoyal` y eliminaba el doble paso ([configuración del hilo](https://discord.com/channels/779317816897699850/791247944463417374/816738779313733694)); el descriptor de Fairyground lo llama explícitamente «No Check Atomic Chess 6×6» y Fairy-Stockfish aún lo declara como `[6x6atom:nocheckatomic]` ([variants.ini](https://github.com/fairy-stockfish/Fairy-Stockfish/blob/fb78cb561aa01708338e35b3dc3b65a42149a3c4/src/variants.ini#L712)). El primer borrador del chat sí heredaba temporalmente de `atomic` ([mensaje](https://discord.com/channels/779317816897699850/791247944463417374/816735608231821352)), lo que explica la confusión. Este juego puede probar mecánica de scheduler en una campaña y schema separados, pero **cero resultados, fixtures o redes 6×6 cuentan como evidencia sobre Atomic 8×8 normativo**.
+El `6x6atom` histórico no es Atomic Lichess/Fairy sobre un tablero menor: la configuración finalmente usada heredaba de `nocheckatomic`, activaba `extinctionPseudoRoyal` y eliminaba el doble paso ([configuración del hilo](https://discord.com/channels/779317816897699850/791247944463417374/816738779313733694)); el descriptor de Fairyground lo llama explícitamente «No Check Atomic Chess 6×6» y Fairy-Stockfish aún lo declara como `[6x6atom:nocheckatomic]` ([variants.ini](https://github.com/fairy-stockfish/Fairy-Stockfish/blob/fb78cb561aa01708338e35b3dc3b65a42149a3c4/src/variants.ini#L712)). El primer borrador del chat sí heredaba temporalmente de `atomic` ([mensaje](https://discord.com/channels/779317816897699850/791247944463417374/816735608231821352)), lo que explica la confusión. Precisamente porque son reglas distintas, **no se usará 6×6 para ninguna campaña, piloto, gate, benchmark o artefacto del proyecto, y ninguno de sus resultados, fixtures o redes aporta evidencia sobre Atomic 8×8 normativo**.
 
 También debe existir un build de oracle específico para solving. En 2024 ubdip recordó que forks de mate/studies solían retirar podas problemáticas como null-move pruning ([mensaje](https://discord.com/channels/779317816897699850/779319972614242354/1232073153480622211)); en 2021 se sugirió además comparar una evaluación barata y una búsqueda más depth-first contra Fairy completo ([mensaje](https://discord.com/channels/779317816897699850/812407482369441813/828157064018395177)). No se adopta por intuición: S2 medirá al menos `NNUE/full-search`, `NNUE/safe-pruning`, `cheap-eval/safe-pruning` y ordenación sin evaluación. La métrica es tiempo, RAM y nodos exactos hasta un certificado verificado, no Elo ni NPS bruto.
 
@@ -138,7 +138,6 @@ Registro inicial de recuperación, que S0 convertirá en un manifiesto machine-r
 | `atomic.epd`, libros 477/666 y `acb.bin` | Metadatos y tamaños en el vault ([adjuntos](https://discord.com/channels/779317816897699850/1260924156526985307/1414448796783607830)); recuperar y hashear cada blob | Ordenación/censo, jamás cobertura de movimientos |
 | `atomic.epd` local del match runner | 394.785 bytes, SHA-256 `28ED51C2F42E723D5E127D2D3F21C0BFA4A9B318615AFDB299B93EA62DEA2B1E`; no coincide por tamaño con el adjunto de 22.099 bytes | Mantener como corpus distinto con procedencia propia |
 | `Atomic_Rating16.pgn` local | 1.793.098 bytes y SHA-256 `C9C60808C83528411C446E55F5C8228C55DE85DB411F4D95E364245D2ECB1D1D`; coincide en tamaño con [el adjunto histórico](https://discord.com/channels/779317816897699850/791249497090686987/882882082248986665) y existen tres copias byte-idénticas | Corpus histórico de aperturas/partidas, no proof data |
-| `6x6atom_run1_e15_l0.nnue` local | SHA-256 `8A326F2FBA0310B945E1940A577F9E87074D427790F7986767B87E144D45F16B`; pertenece a `nocheckatomic` 6×6 | Solo benchmark no normativo y campaña separada |
 | Prueba Los Alamos y proofs/source de Antichess | Públicos y versionados en [figshare](https://figshare.com/articles/dataset/game2_d2d3_proof_gz/25424674) y el [proyecto de Watkins](https://magma.maths.usyd.edu.au/~watkins/LOSING_CHESS/) | Corpus de formatos, verificación y corrupción adversarial |
 
 Las fortalezas son un riesgo medido, no teórico. En Discord se reportaron posiciones Atomic evaluadas entre `+2` y `+7` que eran tablas por pawnitization, perpetuos o simetría; la escala HCE/NNUE es arbitraria. Se incorporarán como regresión estas FEN:
@@ -516,7 +515,6 @@ Entregables:
 - Atomic-Stockfish como oracle exclusivamente de ordenación.
 - Checkpoints no confiables y certificados separados.
 - Piloto normativo sobre posiciones **Atomic 8×8 exactas** de mate/resultado conocido, raíces tácticas pequeñas fuera de TB y subárboles históricos preseleccionados que puedan cerrarse exhaustivamente.
-- Campaña opcional `nocheckatomic-6x6-lab` con rules/schema/namespace propios solo para stress del algoritmo, partición y scheduler; nunca forma parte de los gates de corrección Atomic.
 - Primer diseño de `SafetyCertificate`; hasta que supere fixtures cíclicos, `PROVED_COMPLEMENT` solo se acepta mediante DAG finito hasta terminal/TB explícita.
 
 Benchmarks:
@@ -531,7 +529,6 @@ Gate:
 - En todo problema cerrado, el `AcceptedFact` no cambia al desactivar NNUE, variar orden/seeds o usar PNS frente a DFPN. Una búsqueda acotada `UNKNOWN` sí puede producir frontiers distintos y eso no es un fallo.
 - El backend monohilo reanuda byte-exacto; backends paralelos reanudan semánticamente y convergen al mismo certificado verificado.
 - El piloto 8×8 cierra sus raíces preseleccionadas, publica certificados y registra P50/P95 de tiempo, RAM, frontier y bytes por arista.
-- `nocheckatomic-6x6-lab`, si se ejecuta, demuestra únicamente recuperación y escalado del scheduler y aparece separado en dashboard, métricas y artefactos.
 
 ### Fase S3 — Frontera de confianza de tablebases
 
@@ -558,7 +555,7 @@ Entregables:
 
 Piloto:
 
-- 10–50 workers sobre roots Atomic 8×8 conocidas y un frente desconocido; opcionalmente una campaña 6×6-lab separada para fallos de infraestructura.
+- 10–50 workers sobre roots Atomic 8×8 conocidas y un frente desconocido.
 - Inyección deliberada de expiraciones, replay, resultados tardíos/falsos, hashes/artefactos truncados y presión de RAM.
 
 Gate:
@@ -659,7 +656,7 @@ La prueba revisada de Antichess es mucho más compacta, pero no conviene transfe
 | Branching inicial demasiado grande | Siglos de CPU o más | Oracle fuerte, PN2, splitting adaptativo, corpus de teoría y métricas tempranas |
 | Draw/repetition mal modelados | Prueba inválida | Estado con historial suficiente; tests y ADR antes del solver |
 | Tratar un ciclo como tablas por volver al mismo hash | `PROVED_COMPLEMENT` falso | DAG/rango para alcanzabilidad; `SafetyCertificate` coinductivo con cierre, SCC e historial; si falta, `UNKNOWN` |
-| Usar `6x6atom` como piloto normativo | Validar reglas distintas (`nocheckatomic`) y obtener falsa confianza | Roots Atomic 8×8 exactas como gate; 6×6 solo campaña lab separada |
+| Introducir una variante reducida con reglas distintas | Obtener falsa confianza sobre Atomic normativo | Ejecutar exclusivamente roots Atomic 8×8 exactas |
 | Bug compartido en reglas o TB | Certificado aparentemente válido pero falso | Movegen externo, fuzzing, `tb_leaf_applicability` y retrograde independiente; precedente double-EP |
 | TT/hash collision | Falso cutoff | Hash criptográfico + estado completo en certificado; engine TT solo heurístico |
 | Checkpoint tratado como certificado | pn/dn falsos contaminan el árbol superior | Separar checkpoint, certificate y `AcceptedFact`; recomputar desde facts |
@@ -701,7 +698,7 @@ El camino de menor riesgo es:
 1. Terminar Atomic-Stockfish y el pipeline NNUE previsto.
 2. Congelar reglas, claims binarios, historia/GHI y aplicabilidad WDL/DTZ.
 3. Construir el verificador con movegen externo e independiente.
-4. Implementar PNS/DFPN local, cerrar roots pequeñas de Atomic 8×8 exacto y validar la frontera TB; 6×6 queda como stress lab no normativo.
+4. Implementar PNS/DFPN local, cerrar roots pequeñas de Atomic 8×8 exacto y validar la frontera TB.
 5. Añadir `PROOF` a OpenBench con claim/profile/expansion/work/attempt/fact separados y ejecutar un piloto adversarial.
 6. Censar primero `...Nh6`, después `...c6` y solo entonces la apertura completa.
 7. Elegir la raíz con métricas y escalar gradualmente.

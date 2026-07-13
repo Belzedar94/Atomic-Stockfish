@@ -79,7 +79,7 @@ WDL/DTZ no incorporan por sí solos historial de repetición, derechos de enroqu
 ### 2.5 Dos precedentes negativos que cambian gates
 
 1. **Atomic-crazyhouse:** ubdip dijo primero que estaba «básicamente resuelto» ([general:122](https://discord.com/channels/779317816897699850/779317816897699854/782349069372096582), message `782349069372096582`, 2020-11-28), pero explicó que no lo incluyó en la wiki porque el código no reflejaba todas las reglas y el double-check fue manual ([general:129](https://discord.com/channels/779317816897699850/779317816897699854/782352310314860544), `782352310314860544`). El lesson learned es publicar “analysis/practical solve”, no “weakly solved”, hasta tener certificado reproducible.
-2. **6×6 histórico:** el borrador inicial heredó de `atomic` ([help:793](https://discord.com/channels/779317816897699850/791247944463417374/816735608231821352), `816735608231821352`), pero el snippet posterior se encabezó `[6x6atomic:nocheckatomic]`, con `extinctionPseudoRoyal` y sin double-step ([help:817](https://discord.com/channels/779317816897699850/791247944463417374/816738779313733694), `816738779313733694`). Ese encabezado histórico no es el token vigente: Fairy-Stockfish expone `6x6atom` y lo declara como [`[6x6atom:nocheckatomic]`](https://github.com/fairy-stockfish/Fairy-Stockfish/blob/fb78cb561aa01708338e35b3dc3b65a42149a3c4/src/variants.ini#L712). Toda campaña lab debe usar `6x6atom`; el piloto normativo debe usar Atomic 8×8 exacto.
+2. **6×6 histórico:** el borrador inicial heredó de `atomic` ([help:793](https://discord.com/channels/779317816897699850/791247944463417374/816735608231821352), `816735608231821352`), pero el snippet posterior se encabezó `[6x6atomic:nocheckatomic]`, con `extinctionPseudoRoyal` y sin double-step ([help:817](https://discord.com/channels/779317816897699850/791247944463417374/816738779313733694), `816738779313733694`). Ese encabezado histórico no es el token vigente: Fairy-Stockfish expone `6x6atom` y lo declara como [`[6x6atom:nocheckatomic]`](https://github.com/fairy-stockfish/Fairy-Stockfish/blob/fb78cb561aa01708338e35b3dc3b65a42149a3c4/src/variants.ini#L712). Al ser reglas distintas, 6×6 no se usará en campañas, pilotos, gates, benchmarks ni artefactos, y no aporta evidencia sobre Atomic 8×8.
 
 ## 3. Artefactos localizados o recuperables
 
@@ -92,7 +92,6 @@ WDL/DTZ no incorporan por sí solos historial de repetición, derechos de enroqu
 | Mega tournament y v2.1 selfplay | [Mega tournament](https://discord.com/channels/779317816897699850/791249497090686987/818580012122505236), [v2.1 selfplay](https://discord.com/channels/779317816897699850/791249497090686987/872034529555148801) | Solo metadata; recuperar blobs, útiles para openings, no prueba |
 | `Atomic_Rating16.pgn` | [metadata Discord](https://discord.com/channels/779317816897699850/791249497090686987/882882082248986665); copia de trabajo recuperada | Recuperado: 1.793.098 bytes, SHA-256 `C9C60808C83528411C446E55F5C8228C55DE85DB411F4D95E364245D2ECB1D1D`; tres copias locales byte-idénticas |
 | `atomic.epd` recuperado | copia de trabajo recuperada | 394.785 bytes; SHA-256 `28ED51C2F42E723D5E127D2D3F21C0BFA4A9B318615AFDB299B93EA62DEA2B1E`; distinto del adjunto de 22.099 bytes |
-| Net 6×6 local | copia de trabajo recuperada | SHA-256 `8A326F2FBA0310B945E1940A577F9E87074D427790F7986767B87E144D45F16B`; solo `nocheckatomic-6x6-lab` |
 | Proof Los Alamos | [figshare DOI 10.6084/m9.figshare.25424674](https://figshare.com/articles/dataset/game2_d2d3_proof_gz/25424674) | Público: 267.410.116 líneas; corpus inmediato de streaming/chunking |
 | Proofs y source Antichess | [Watkins](https://magma.maths.usyd.edu.au/~watkins/LOSING_CHESS/) | Públicos; incluyen historial de corrección double-EP y checksums |
 
@@ -113,9 +112,7 @@ No se deben conservar como identificador las URLs firmadas de Discord: caducan. 
 
 ### 5.1 Piloto
 
-- Eliminado `6x6atom` como gate normativo.
 - S2 usa mates/roots pequeñas de Atomic 8×8 exacto, fuera y dentro de TB.
-- `nocheckatomic-6x6-lab` queda opcional y aislado por rules/schema/namespace/dashboard.
 
 ### 5.2 Target frente a complemento
 
@@ -186,7 +183,7 @@ Orden inmediato:
 11. Modelos/API `PROOF` detrás de feature flag en OpenBench.
 12. Tres workers locales, roots 8×8 conocidas, después piloto 10–50 workers y censo `...Nh6` → `...c6`.
 
-El resultado de este deep dive no cambia la meta, pero endurece tres puntos críticos: no usar 6×6 como falsa equivalencia, no aceptar ciclos como tablas y no confundir un manifest TB concreto con la identidad semántica del claim.
+El resultado de este deep dive no cambia la meta, pero endurece tres puntos críticos: atacar exclusivamente Atomic 8×8 estándar, no aceptar ciclos como tablas y no confundir un manifest TB concreto con la identidad semántica del claim.
 
 ## Apéndice A: índice completo de citas Discord
 
