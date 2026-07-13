@@ -1,0 +1,152 @@
+# Hito 8 performance specialization validation
+
+Hito 8 specializes memory layout and hot paths only after Atomic rules, search,
+Legacy Atomic V1 NNUE, and the data pipeline have stable gates. Every block is
+kept small enough to attribute a regression. A block that changes the playing
+signature requires the normal OpenBench strength workflow; a no-functional-
+change block must preserve the signature exactly and still pass all applicable
+functional and performance gates.
+
+## H8.1 - Remove inactive NNUE threat-delta runtime state
+
+The active feature set is `HalfKAv2Atomic`. It declares
+`UsesThreatDeltas == false` and uses `DirtyPiece` as its incremental-difference
+type. Nevertheless, each accumulator state still contained a 392-byte
+`DirtyThreats` member, and `Position` retained another 392-byte scratch object.
+Those objects were never consumed by the active network.
+
+H8.1 removes that runtime state and the unused parameters that carried it
+through make/undo. It also adds a compile-time assertion that the active feature
+set remains a `DirtyPiece` feature set without threat deltas. The legacy network
+reader, feature indices, quantization, accumulator values, and serialized NNUE
+format are unchanged.
+
+The functional code commit is
+`6153609c8b454e13bb3941789b9184f9b4825dad`, based on Hito 7 merge
+`281bcc382eb4449886d0ee930ef7e23cb12b4dba`. The measured release artifact was
+then rebuilt from the clean committed tree
+`85b2c909a5fa48c02c83104498567d32a454347d`; the commits after that build only
+add the reusable A/B runner and this corrected evidence record.
+
+### Layout and artifact evidence
+
+Both artifacts below were rebuilt from clean, commit-bound trees with the same
+MinGW g++ 15.2 toolchain and the exact normative `ARCH=x86-64-bmi2` release
+target. The candidate additionally uses `-Wl,--no-insert-timestamp`, embeds
+`85b2c909`, and records the full source commit above in `.build_full_sha.txt`.
+
+| Item | Hito 7 control | H8.1 candidate | Change |
+| --- | ---: | ---: | ---: |
+| `AccumulatorState` | 2,560 B | 2,176 B | -384 B |
+| `AccumulatorStack` | 632,384 B | 537,536 B | -94,848 B (-15.0%) |
+| `Position` | 1,056 B | 664 B | -392 B (-37.1%) |
+| Native executable | 4,269,764 B | 4,263,264 B | -6,500 B |
+
+| Artifact | SHA-256 |
+| --- | --- |
+| Hito 7 control executable | `92E9C3C254741B628996D2F6617FF871EA1C06DAEEFB8AC749BF755FAAAC2323` |
+| H8.1 candidate executable | `B2F750FEE129D04ECAA9360E6AE6BE94F525A4453E085F03B02F2200AE56EB2C` |
+| Frozen Legacy Atomic V1 net | `99DC67EABF26A64FAEECA3A88B4C38597A840B8D4A874B9F2CF658C6F92A04A6` |
+
+The machine-readable manifest and complete benchmark output are retained in
+[`evidence/hito8-dirty-threats`](evidence/hito8-dirty-threats/README.md).
+
+### Functional validation
+
+The source-equivalent release BMI2 candidate passed:
+
+- C++ Atomic unit tests: 63/63.
+- Shared board API tests: 34/34.
+- All eight frozen Atomic/Atomic960 perft vectors.
+- Focused rules and state transitions: 19/19.
+- Fixed search corpus with classical evaluation: 16/16.
+- The same search corpus with `Use NNUE=true` and the frozen net: 16/16.
+- Reprosearch with the frozen net: 12/12.
+- One million deterministic incremental make/undo operations: 500,000 make,
+  500,000 undo, 18,761 captures, zero capture-forced refreshes, and 241,087
+  comparisons against a full accumulator refresh. The state signature was
+  `0x8742E39B793C46AB`.
+- A 10,000-position differential against frozen Fairy-Stockfish: 10,000/10,000
+  accepted, maximum `Use NNUE=true` delta 0, and maximum pure trace delta
+  0.005. The separately reported rule-50 oracle diagnostic reached 0.740 in
+  866 rule-50-damped positions; it is not an accumulator mismatch.
+
+The debug/assert build independently passed 63/63 C++ tests, 34/34 API tests,
+all perft and 19 focused rule cases, both 16/16 search corpora, and an
+incremental 4,096-operation smoke with 4,104 full-refresh comparisons and state
+signature `0xDDB8196C6A0BE4A8`.
+
+After the clean commit-bound rebuild, the exact measured artifact loaded the
+frozen network and reproduced the playing signature `338376`. GitHub CI on the
+same `85b2c909` source commit passed all 14 jobs: native GCC and Clang,
+debug/assert, ASan+UBSan, TSan, Valgrind, MinGW data generator, both Windows and
+Linux Python 3.9/3.12 jobs, CommonJS/ES-module WASM, format, and the pinned
+Legacy Atomic V1 pipeline. The strong-network million-operation and 10,000-
+position local gates above exercise the identical engine source; their first
+artifact was precommit and is not used for the performance or reproducibility
+claim.
+
+CI now compiles the modified incremental NNUE test executable under native GCC,
+Clang, debug/assert, Windows MinGW, ASan+UBSan, and TSan. CI does not execute the
+strong-network gate because that network is deliberately external; the full
+local release gate above authenticates and executes it.
+
+### Fixed-corpus performance evidence
+
+The runner used 10 Atomic and three Atomic960 positions, one thread, 64 MiB
+hash, CPU affinity 24, 100,000 nodes per FEN, one warm-up, five alternating
+serialized repetitions, and the frozen net. The corpus SHA-256 was
+`2738065A8A70D61DA46FA3C75F95D645E50E601B43792DF0E7B3CC97B1D891A1`.
+The compiler preflight identified both sides as g++ 15.2, 64-bit BMI2 release
+builds, and the artifact postflight re-authenticated every binary, the net, and
+the pinned process-affinity dependency. The commit comparison uses the tracked
+`tests/atomic_bench_ab.py`; the frozen-Fairy comparison continues to use the
+normative `tests/atomic_bench_compare.py`.
+
+Against the exact Hito 7 control:
+
+| Side | NPS samples | Median NPS |
+| --- | --- | ---: |
+| H8.1 candidate | 828,565; 762,513; 840,884; 867,231; 869,550 | 840,884 |
+| Hito 7 control | 861,488; 869,550; 824,364; 777,553; 801,014 | 824,364 |
+
+The commit A/B gate passed with ratio `1.0200` (+2.00%) and a 6,500-byte
+smaller executable.
+
+Against the frozen Fairy-Stockfish BMI2 baseline
+`4EACAAB40DCA84F5A255EA57231F2795D43B5DDA85CE50EBBA1A1B2937B46331`:
+
+| Side | NPS samples | Median NPS |
+| --- | --- | ---: |
+| H8.1 candidate | 859,780; 781,289; 679,293; 779,417; 912,875 | 781,289 |
+| Frozen Fairy baseline | 756,755; 635,186; 748,482; 736,614; 803,001 | 748,482 |
+
+The normative performance gate passed with ratio `1.0438` (+4.38%) and an
+18,607-byte smaller executable. These percentages are observations from a
+machine with one concurrent assigned workload, not universal speed promises;
+the alternating order and median reduce but do not eliminate shared-load noise.
+The gate-relevant facts are that both comparisons use versioned runners and
+clean commit-bound artifacts, authenticate every input before and after the
+workload, and are positive.
+
+### Playing-strength gate
+
+The playing signature remains exactly:
+
+```text
+Bench: 338376
+```
+
+H8.1 is therefore a no-functional-change optimization under the project's
+OpenBench rules. It does not require an Elo/LOS match. Any later Hito 8 block
+that changes this signature must use the normal Atomic OpenBench STC/LTC
+methodology before acceptance.
+
+### Deferred work
+
+H8.1 intentionally leaves the inactive `FullThreats`, `HalfKAv2_hm`, and
+`DirtyThreats` implementation sources buildable. H8.2 will remove that dead
+feature family as a separately reviewable build-graph change, including native,
+bindings, WASM, and data-generator compilation gates. Later Hito 8 blocks will
+profile make/undo, move generation, accumulator caching, and NNUE-trained PGO
+before proposing further changes.

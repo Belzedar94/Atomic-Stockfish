@@ -41,6 +41,7 @@ jobs:
         run: |
           make -j2 ARCH=x86-64 COMP=${{ matrix.comp }} COMPCXX=${{ matrix.cxx }} atomic-unit-tests
           make -j2 ARCH=x86-64 COMP=${{ matrix.comp }} COMPCXX=${{ matrix.cxx }} atomic-api-tests
+          make -j2 ARCH=x86-64 COMP=${{ matrix.comp }} COMPCXX=${{ matrix.cxx }} atomic-nnue-incremental-tests.bin
           make -j2 ARCH=x86-64 COMP=${{ matrix.comp }} COMPCXX=${{ matrix.cxx }} atomic-syzygy-driver
           make -j2 ARCH=x86-64 COMP=${{ matrix.comp }} COMPCXX=${{ matrix.cxx }} legacy-atomic-v1-tests
           make -j2 ARCH=x86-64 COMP=${{ matrix.comp }} COMPCXX=${{ matrix.cxx }} atomic-bin-v2-tests
@@ -83,6 +84,7 @@ jobs:
         run: |
           make -C src -j2 ARCH=x86-64 debug=yes optimize=no atomic-unit-tests
           make -C src -j2 ARCH=x86-64 debug=yes optimize=no atomic-api-tests
+          make -C src -j2 ARCH=x86-64 debug=yes optimize=no atomic-nnue-incremental-tests.bin
           make -C src -j2 ARCH=x86-64 debug=yes optimize=no atomic-syzygy-driver
           make -C src -j2 ARCH=x86-64 debug=yes optimize=no legacy-atomic-v1-tests
           make -C src -j2 ARCH=x86-64 debug=yes optimize=no atomic-bin-v2-tests
@@ -125,6 +127,7 @@ jobs:
       - name: Build isolated generator and run frozen codec fixture
         run: |
           make -C src -j2 ARCH=x86-64 COMP=mingw build
+          make -C src -j2 ARCH=x86-64 COMP=mingw atomic-nnue-incremental-tests.exe
           make -C src -j2 ARCH=x86-64 COMP=mingw data-generator
           make -C src -j2 ARCH=x86-64 COMP=mingw legacy-atomic-v1-tests
           make -C src -j2 ARCH=x86-64 COMP=mingw atomic-bin-v2-tests
@@ -172,6 +175,7 @@ jobs:
           CXXFLAGS: -O1
         run: |
           make -j2 ARCH=x86-64-sse41-popcnt sanitize=${{ matrix.sanitizer }} debug=yes optimize=no build
+          make -j2 ARCH=x86-64-sse41-popcnt sanitize=${{ matrix.sanitizer }} debug=yes optimize=no atomic-nnue-incremental-tests.bin
           make -j2 ARCH=x86-64-sse41-popcnt sanitize=${{ matrix.sanitizer }} debug=yes optimize=no data-generator
           make -j2 ARCH=x86-64-sse41-popcnt sanitize=${{ matrix.sanitizer }} debug=yes optimize=no data-tools
       - name: Memory-sanitized units

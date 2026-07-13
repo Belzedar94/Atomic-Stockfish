@@ -264,9 +264,8 @@ u64 run_fixed_fixture(const Fixture& fixture, const NNUE::Network& network) {
     u64 signature = SignatureOffset;
     append_snapshot_signature(signature, before);
 
-    auto [dirtyPiece, dirtyThreats] = incremental->push();
-    pos.do_move(move, childState, pos.gives_check(move), dirtyPiece, dirtyThreats, nullptr,
-                nullptr);
+    DirtyPiece& dirtyPiece = incremental->push();
+    pos.do_move(move, childState, pos.gives_check(move), dirtyPiece, nullptr, nullptr);
 
     if (dirtyPiece.requiresRefresh)
         fail(context, "move set the global full-refresh flag");
@@ -406,9 +405,9 @@ RandomStats run_random_sequence(const RandomSequence& sequence,
             context              = {sequence.seed, pos.fen(), UCI::move(move, pos.is_chess960()),
                                     "random-make-" + std::to_string(operation)};
 
-            auto [dirtyPiece, dirtyThreats] = incremental->push();
-            pos.do_move(move, states[depth + 1], pos.gives_check(move), dirtyPiece, dirtyThreats,
-                        nullptr, nullptr);
+            DirtyPiece& dirtyPiece = incremental->push();
+            pos.do_move(move, states[depth + 1], pos.gives_check(move), dirtyPiece, nullptr,
+                        nullptr);
 
             if (isCapture)
             {

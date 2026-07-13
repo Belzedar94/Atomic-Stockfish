@@ -1,0 +1,21 @@
+Compiler preflight: PASS signature=64bit BMI2 AVX2 SSE41 SSSE3 SSE2 POPCNT compiler=g++ (GNUC) 15.2.0
+Engine artifacts preflight: candidate_bytes=4263264 candidate_sha256=B2F750FEE129D04ECAA9360E6AE6BE94F525A4453E085F03B02F2200AE56EB2C baseline_bytes=4281871 baseline_sha256=4EACAAB40DCA84F5A255EA57231F2795D43B5DDA85CE50EBBA1A1B2937B46331
+Corpus: positions=13 atomic=10 atomic960=3 sha256=2738065a8a70d61da46fa3c75f95d645e50e601b43792df0e7b3cc97b1d891a1
+Configuration: net_sha256=99DC67EABF26A64FAEECA3A88B4C38597A840B8D4A874B9F2CF658C6F92A04A6 threads=1 hash_mb=64 cpu=24 psutil=7.2.2 nodes_per_fen=100000 warmups=1 repetitions=5
+Warm-up candidate: nodes=1300847 time_ms=1854 nps=701643
+Warm-up baseline: nodes=1300861 time_ms=1849 nps=703548
+Run 1/5 candidate: nodes=1300847 time_ms=1513 nps=859780
+Run 1/5 baseline: nodes=1300861 time_ms=1719 nps=756755
+Run 2/5 baseline: nodes=1300861 time_ms=2048 nps=635186
+Run 2/5 candidate: nodes=1300847 time_ms=1665 nps=781289
+Run 3/5 candidate: nodes=1300847 time_ms=1915 nps=679293
+Run 3/5 baseline: nodes=1300861 time_ms=1738 nps=748482
+Run 4/5 baseline: nodes=1300861 time_ms=1766 nps=736614
+Run 4/5 candidate: nodes=1300847 time_ms=1669 nps=779417
+Run 5/5 candidate: nodes=1300847 time_ms=1425 nps=912875
+Run 5/5 baseline: nodes=1300861 time_ms=1620 nps=803001
+Benchmark artifact postflight: PASS files=8
+Candidate: median_nps=781289 binary_bytes=4263264
+Baseline: median_nps=748482 binary_bytes=4281871
+Comparison: nps_ratio=1.0438 speed_delta_pct=4.38 size_ratio=0.9957 size_delta_bytes=-18607
+PERFORMANCE GATE: PASS (candidate median NPS is strictly higher)
