@@ -289,6 +289,7 @@ jobs:
       - run: >-
           python -m pytest -q
           tests/python/test_atomic_los_gate.py
+          tests/python/test_atomic_syzygy_uci.py
           tests/python/test_atomic_compiler_preflight.py
           tests/python/test_atomic_training_data_schema.py
           tests/python/test_atomic_bin_v2_schema.py

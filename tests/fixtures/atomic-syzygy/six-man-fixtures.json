@@ -1,0 +1,98 @@
+{
+  "schema": "atomic-syzygy-six-man-fixtures-v1",
+  "retrieved_on": "2026-07-12",
+  "distribution": {
+    "table_author": "Ronald de Man",
+    "host": "https://tablebase.lichess.ovh/tables/atomic/",
+    "license_status": "No separate data license for the table blobs was identified; the blobs are intentionally not vendored.",
+    "lila_tablebase_source": "https://github.com/lichess-org/lila-tablebase",
+    "lila_tablebase_source_license": "AGPL-3.0-or-later"
+  },
+  "source_manifests": [
+    {
+      "url": "https://tablebase.lichess.ovh/tables/atomic/6-wdl/6.atbw.md5",
+      "sha256": "F99BA4B82C70408C7F49E3F85A0FA031A5A5FBEEB550C873CE443336E6438736"
+    },
+    {
+      "url": "https://tablebase.lichess.ovh/tables/atomic/6-dtz/6.atbz.md5",
+      "sha256": "80D78D1EF575B3D520247A55C8C32AB4CFD4165CA9014E6F7A88FB8D53B5019E"
+    }
+  ],
+  "required_probe_pair": [
+    {
+      "name": "KPPPPvK.atbw",
+      "kind": "WDL",
+      "url": "https://tablebase.lichess.ovh/tables/atomic/6-wdl/KPPPPvK.atbw",
+      "bytes": 420944,
+      "md5": "8E117605E37B83C7CB23C28D83EA726B",
+      "sha256": "897A15846A4B027CBD0A31E425FDF0690F68C0BD4E62105CCA2055678E2910F9"
+    },
+    {
+      "name": "KPPPPvK.atbz",
+      "kind": "DTZ",
+      "url": "https://tablebase.lichess.ovh/tables/atomic/6-dtz/KPPPPvK.atbz",
+      "bytes": 189008,
+      "md5": "23F02152C182C52E5F588ADCC2367E78",
+      "sha256": "E740168D8CBB0BF662863F278EF470C5D7EB395ECE0C8BF80FED004A47991BC6"
+    }
+  ],
+  "probe_position": {
+    "fen": "8/8/8/8/8/PPPP4/8/K6k w - - 0 1",
+    "category": "win",
+    "internal_wdl": 2,
+    "dtz": 1,
+    "precise_dtz": 1,
+    "oracle_winning_moves": [
+      "a3a4",
+      "b3b4",
+      "c3c4",
+      "d3d4",
+      "a1b1",
+      "a1a2",
+      "a1b2"
+    ]
+  },
+  "oracle": "https://tablebase.lichess.ovh/atomic?fen=",
+  "challenge_positions": {
+    "source": "Niklas Fiekas atomic-stats.txt, then verified through the Lichess Atomic API",
+    "book": "six-man-endgames.epd",
+    "selection": "six-man wins for the side to move with exactly one API winning move",
+    "positions": [
+      {
+        "fen": "2k5/8/8/8/4N3/3R4/3p4/K1N5 w - - 0 1",
+        "category": "win",
+        "dtz": 98,
+        "best_move": "e4d6",
+        "unique_winning_move": true
+      },
+      {
+        "fen": "8/8/8/2pN4/6rk/K7/R7/8 w - - 0 1",
+        "category": "win",
+        "dtz": 94,
+        "best_move": "a2h2",
+        "unique_winning_move": true
+      },
+      {
+        "fen": "1n6/8/8/8/Q5n1/5B2/2K5/1k6 w - - 0 1",
+        "category": "win",
+        "dtz": 93,
+        "best_move": "c2d3",
+        "unique_winning_move": true
+      },
+      {
+        "fen": "8/7B/3b3k/8/8/8/R7/1K2b3 w - - 0 1",
+        "category": "win",
+        "dtz": 92,
+        "best_move": "a2e2",
+        "unique_winning_move": true
+      },
+      {
+        "fen": "k7/8/8/N1b5/P7/2KB4/8/8 w - - 0 1",
+        "category": "win",
+        "dtz": 91,
+        "best_move": "a5c6",
+        "unique_winning_move": true
+      }
+    ]
+  }
+}
