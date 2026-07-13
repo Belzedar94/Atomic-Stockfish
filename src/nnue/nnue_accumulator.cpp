@@ -19,6 +19,7 @@
 #include "nnue_accumulator.h"
 
 #include <algorithm>
+#include <type_traits>
 
 #include "../position.h"
 #include "features/half_ka_v2_atomic.h"
@@ -28,6 +29,9 @@
 namespace Stockfish::Eval::NNUE {
 
 using namespace SIMD;
+
+static_assert(std::is_same_v<FeatureSet::DiffType, DirtyPiece>,
+              "The Atomic accumulator stack stores DirtyPiece deltas");
 
 #ifdef VECTOR
 using LegacyAtomicAccumulatorTiling =

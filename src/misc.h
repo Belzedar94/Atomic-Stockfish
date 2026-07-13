@@ -233,13 +233,6 @@ class ValueList {
     const T* end() const { return values_ + size_; }
     const T& operator[](int index) const { return values_[index]; }
 
-    T* make_space(usize count) {
-        T* result = &values_[size_];
-        size_ += count;
-        assert(size_ <= MaxSize);
-        return result;
-    }
-
    private:
     T     values_[MaxSize];
     usize size_ = 0;
