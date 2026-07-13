@@ -4,7 +4,6 @@
 #include <cerrno>
 #include <chrono>
 #include <filesystem>
-#include <functional>
 #include <fstream>
 #include <iostream>
 #include <memory>
@@ -288,10 +287,18 @@ void expect_stream_failure(const std::filesystem::path& manifest, std::string_vi
 }
 
 #ifndef _WIN32
-bool child_completes(std::function<bool()> action) {
+// Re-exec the test binary so the timeout probe has an independent lifetime.
+// A fork-only child must use _exit() and would make inherited allocations look
+// live to Valgrind even when the reader itself releases everything correctly.
+bool child_completes(const char*                  executable,
+                     const char*                  mode,
+                     const std::filesystem::path& argument) {
     const pid_t child = ::fork();
     if (child == 0)
-        ::_exit(action() ? 0 : 1);
+    {
+        ::execl(executable, executable, mode, argument.c_str(), static_cast<char*>(nullptr));
+        ::_exit(127);
+    }
     if (child < 0)
         return false;
     for (int attempt = 0; attempt < 200; ++attempt)
@@ -326,7 +333,29 @@ void rewrite_authentication(Dataset& dataset) {
 
 }  // namespace
 
-int main() {
+int main(int argc, char* argv[]) {
+#ifdef _WIN32
+    (void) argv;
+#else
+    if (argc == 3 && std::string_view(argv[1]) == "--probe-fifo-manifest")
+    {
+        std::unique_ptr<Data::AtomicBinV2DatasetReader> reader;
+        const Data::DataResult result = Data::AtomicBinV2DatasetReader::open(argv[2], reader);
+        return !result && !reader ? 0 : 1;
+    }
+    if (argc == 3 && std::string_view(argv[1]) == "--probe-fifo-shard")
+    {
+        std::unique_ptr<Data::AtomicBinV2DatasetReader> reader;
+        if (!Data::AtomicBinV2DatasetReader::open(argv[2], reader) || !reader)
+            return 1;
+        Data::AtomicBinV2DecodedRecord decoded;
+        bool                           hasRecord = false;
+        return !reader->next(decoded, hasRecord) && !hasRecord ? 0 : 1;
+    }
+#endif
+    if (argc != 1)
+        return 2;
+
     // This fixture is pure frozen wire data: constructing it does not touch
     // Position. The first public reader call must initialize the Atomic core
     // itself before performing semantic validation.
@@ -649,12 +678,7 @@ int main() {
         TempDirectory temporary("fifo-manifest");
         const auto    manifest = temporary.path / "fifo.atbin.manifest.json";
         check(::mkfifo(manifest.c_str(), 0600) == 0, "create FIFO sidecar fixture");
-        check(child_completes([&] {
-                  std::unique_ptr<Data::AtomicBinV2DatasetReader> reader;
-                  const Data::DataResult                          result =
-                    Data::AtomicBinV2DatasetReader::open(manifest, reader);
-                  return !result && !reader;
-              }),
+        check(child_completes(argv[0], "--probe-fifo-manifest", manifest),
               "FIFO sidecar is rejected without blocking before regular-file inspection");
     }
     {
@@ -664,14 +688,7 @@ int main() {
         check(::mkfifo(shard.c_str(), 0600) == 0, "create FIFO shard fixture");
         auto metadata = metadata_for(manifest, shard, 1, 0, std::string(64, '3'));
         check(write_manifest(metadata), "write FIFO shard manifest");
-        check(child_completes([&] {
-                  std::unique_ptr<Data::AtomicBinV2DatasetReader> reader;
-                  if (!Data::AtomicBinV2DatasetReader::open(manifest, reader) || !reader)
-                      return false;
-                  Data::AtomicBinV2DecodedRecord decoded;
-                  bool                           hasRecord = false;
-                  return !reader->next(decoded, hasRecord) && !hasRecord;
-              }),
+        check(child_completes(argv[0], "--probe-fifo-shard", manifest),
               "FIFO shard is rejected lazily without blocking before regular-file inspection");
     }
 #endif
