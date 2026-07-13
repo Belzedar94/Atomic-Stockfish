@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import sys
+from types import SimpleNamespace
 
 import pytest
 
@@ -45,6 +46,41 @@ def test_fixture_lookup_crosses_directories_and_rejects_ambiguity(tmp_path):
     (dtz / expected.name).write_bytes(b"duplicate")
     with pytest.raises(AssertionError, match="ambiguous"):
         syzygy_uci.find_table_file((wdl, dtz), expected.name)
+
+
+def test_partial_optional_six_man_pair_does_not_break_base_smoke(tmp_path):
+    tables = tmp_path / "tables"
+    tables.mkdir()
+    for name in (
+        "KBBBvK.atbw",
+        "KBBBvK.atbz",
+        "KRvK.atbw",
+        syzygy_uci.KPPPPVK_WDL,
+    ):
+        (tables / name).write_bytes(b"fixture")
+    engine = tmp_path / "atomic-stockfish.exe"
+    engine.write_bytes(b"fixture")
+
+    class FakeParser:
+        @staticmethod
+        def error(message):
+            raise ValueError(message)
+
+    args = SimpleNamespace(
+        engine=engine,
+        tables=(tables,),
+        require_six_man=False,
+        syzygy_driver=None,
+        eval_file=None,
+        analysis_book=None,
+        analysis_manifest=tmp_path / "unused.json",
+    )
+    syzygy_uci.validate_inputs(FakeParser(), args)
+    assert args.has_six_man is False
+
+    args.require_six_man = True
+    with pytest.raises(ValueError, match="must provide both"):
+        syzygy_uci.validate_inputs(FakeParser(), args)
 
 
 def test_six_man_limit_conformance_requires_limit6_tbhits():
@@ -146,8 +182,10 @@ def test_six_man_driver_isolates_the_required_pair(tmp_path, monkeypatch):
 def test_analysis_book_requires_hits_only_when_limit6(tmp_path):
     book = tmp_path / "endgames.epd"
     book.write_text(
-        "8/Q7/p6K/8/1Q3k2/8/8/q7 b - - 0 1\n"
-        "n7/8/8/8/8/8/8/1K2NkR1 b - - 0 1\n",
+        "# Standard EPD records and full FEN records may be mixed.\n"
+        "8/Q7/p6K/8/1Q3k2/8/8/q7 b - - bm f4g5; id \"unique win\";\n"
+        "\n"
+        "n7/8/8/8/8/8/8/1K2NkR1 b - - 7 42\n",
         encoding="utf-8",
     )
 
@@ -174,3 +212,50 @@ def test_analysis_book_requires_hits_only_when_limit6(tmp_path):
     results = syzygy_uci.analyze_six_man_book(engine, book)
     assert len(results) == 2
     assert [limit for _fen, _go, limit in engine.searches] == [6, 0, 6, 0]
+    assert [fen for fen, _go, limit in engine.searches if limit == 6] == [
+        "8/Q7/p6K/8/1Q3k2/8/8/q7 b - - 0 1",
+        "n7/8/8/8/8/8/8/1K2NkR1 b - - 7 42",
+    ]
+
+
+def test_analysis_epd_hmvc_and_fmvn_operations_set_fen_clocks():
+    line = (
+        '8/8/8/8/8/PPPP4/8/K6k w - - bm a3a4; hmvc 17; '
+        'fmvn 23; id "clock fixture";'
+    )
+    assert syzygy_uci.analysis_epd_to_fen(line, line_number=9) == (
+        "8/8/8/8/8/PPPP4/8/K6k w - - 17 23"
+    )
+
+
+def test_analysis_epd_ignores_semicolons_and_clock_names_inside_strings():
+    line = (
+        '8/8/8/8/8/PPPP4/8/K6k w - - '
+        'id "fixture; hmvc 99; quoted \\"value\\""; bm a3a4;'
+    )
+    assert syzygy_uci.analysis_epd_to_fen(line, line_number=4) == (
+        "8/8/8/8/8/PPPP4/8/K6k w - - 0 1"
+    )
+
+
+@pytest.mark.parametrize(
+    "suffix, message",
+    (
+        ("17 typo", "malformed FEN clocks"),
+        ("17", "malformed FEN clocks"),
+        ("hmvc 17 extra;", "invalid hmvc operand"),
+        ("fmvn 0;", "invalid fmvn operand"),
+        ('id "unterminated;', "unterminated string"),
+    ),
+)
+def test_analysis_epd_rejects_malformed_clocks_and_operations(suffix, message):
+    line = f"8/8/8/8/8/PPPP4/8/K6k w - - {suffix}"
+    with pytest.raises(AssertionError, match=message):
+        syzygy_uci.analysis_epd_to_fen(line, line_number=12)
+
+
+def test_analysis_book_rejects_malformed_epd(tmp_path):
+    book = tmp_path / "broken.epd"
+    book.write_text("8/8/8/8/8/8/8/K6k w -\n", encoding="utf-8")
+    with pytest.raises(AssertionError, match="line 1 is not FEN/EPD"):
+        syzygy_uci.load_analysis_book(book)

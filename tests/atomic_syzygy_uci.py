@@ -467,6 +467,113 @@ def load_analysis_expectations(manifest: Path) -> dict[str, dict[str, object]]:
     return expectations
 
 
+def split_epd_operations(text: str, *, line: str, line_number: int) -> list[str]:
+    """Split EPD operations without treating semicolons in strings as delimiters."""
+
+    operations: list[str] = []
+    current: list[str] = []
+    quoted = False
+    escaped = False
+    for character in text:
+        if quoted and escaped:
+            escaped = False
+        elif quoted and character == "\\":
+            escaped = True
+        elif character == '"':
+            quoted = not quoted
+        elif character == ";" and not quoted:
+            operation = "".join(current).strip()
+            if operation:
+                operations.append(operation)
+            current = []
+            continue
+        current.append(character)
+
+    require(
+        not quoted and not escaped,
+        f"analysis book line {line_number} has an unterminated string: {line}",
+    )
+    operation = "".join(current).strip()
+    if operation:
+        operations.append(operation)
+    return operations
+
+
+def analysis_epd_to_fen(line: str, *, line_number: int) -> str:
+    """Convert a FEN or standard four-field EPD record to a six-field FEN."""
+
+    fields = line.split(maxsplit=4)
+    require(
+        len(fields) >= 4,
+        f"analysis book line {line_number} is not FEN/EPD: {line}",
+    )
+
+    position_fields = fields[:4]
+    halfmove = "0"
+    fullmove = "1"
+    operations_text = fields[4] if len(fields) == 5 else ""
+    trailing = operations_text.split(maxsplit=2)
+    if trailing and trailing[0].isdigit():
+        require(
+            len(trailing) >= 2 and trailing[1].isdigit(),
+            f"analysis book line {line_number} has malformed FEN clocks: {line}",
+        )
+        halfmove, fullmove = trailing[:2]
+        require(
+            int(fullmove) >= 1,
+            f"analysis book line {line_number} has an invalid fullmove clock: {line}",
+        )
+        operations_text = trailing[2] if len(trailing) == 3 else ""
+
+    seen_clocks: set[str] = set()
+    for operation in split_epd_operations(
+        operations_text, line=line, line_number=line_number
+    ):
+        operands = operation.strip().split()
+        opcode = operands[0]
+        require(
+            re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", opcode) is not None,
+            f"analysis book line {line_number} has an invalid EPD opcode: {line}",
+        )
+        normalized_opcode = opcode.lower()
+        if normalized_opcode in {"hmvc", "fmvn"}:
+            require(
+                len(operands) == 2 and operands[1].isdigit(),
+                f"analysis book line {line_number} has an invalid "
+                f"{opcode} operand: {line}",
+            )
+            require(
+                normalized_opcode not in seen_clocks,
+                f"analysis book line {line_number} repeats {opcode}: {line}",
+            )
+            seen_clocks.add(normalized_opcode)
+            if normalized_opcode == "hmvc":
+                halfmove = operands[1]
+            else:
+                require(
+                    int(operands[1]) >= 1,
+                    f"analysis book line {line_number} has an invalid "
+                    f"{opcode} operand: {line}",
+                )
+                fullmove = operands[1]
+
+    return " ".join((*position_fields, halfmove, fullmove))
+
+
+def load_analysis_book(book: Path) -> list[str]:
+    """Load FEN and EPD records, ignoring blank lines and whole-line comments."""
+
+    fens = [
+        analysis_epd_to_fen(line, line_number=line_number)
+        for line_number, raw_line in enumerate(
+            book.read_text(encoding="utf-8").splitlines(), 1
+        )
+        if (line := raw_line.strip()) and not line.startswith("#")
+    ]
+    require(bool(fens), f"six-man analysis book is empty: {book}")
+    return fens
+
+
 def analyze_six_man_book(
     engine: UciProcess,
     book: Path,
@@ -474,12 +581,7 @@ def analyze_six_man_book(
 ) -> list[SearchResult]:
     """Require observable on/off table use for every frozen endgame position."""
 
-    fens = [line.strip() for line in book.read_text(encoding="utf-8").splitlines()]
-    require(bool(fens), f"six-man analysis book is empty: {book}")
-    require(
-        all(len(fen.split()) == 6 for fen in fens),
-        f"six-man analysis book contains a non-FEN line: {book}",
-    )
+    fens = load_analysis_book(book)
     if expectations is not None:
         require(
             set(fens) == set(expectations),
@@ -615,7 +717,12 @@ def validate_inputs(parser: argparse.ArgumentParser, args: argparse.Namespace) -
     six_man = tuple(
         find_table_file(args.tables, name) for name in (KPPPPVK_WDL, KPPPPVK_DTZ)
     )
-    if any(path is None for path in six_man) and any(path is not None for path in six_man):
+    six_man_mode = args.require_six_man or args.analysis_book is not None
+    if (
+        six_man_mode
+        and any(path is None for path in six_man)
+        and any(path is not None for path in six_man)
+    ):
         parser.error("KPPPPvK six-man fixture must provide both .atbw and .atbz")
     if args.require_six_man and any(path is None for path in six_man):
         parser.error(
