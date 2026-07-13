@@ -12,7 +12,7 @@ import argparse
 import statistics
 from contextlib import ExitStack
 from pathlib import Path
-from typing import Optional
+from typing import Mapping, Optional
 
 import psutil
 
@@ -29,6 +29,7 @@ from atomic_bench_compare import (
 )
 from atomic_compiler_preflight import (
     CompilerPreflightError,
+    FileFingerprint,
     fingerprint_files,
     require_matching_compilation_settings,
     require_sha256,
@@ -39,6 +40,18 @@ from atomic_los_gate import (
     GateConfigurationError,
     normative_psutil_fingerprints,
 )
+
+
+def require_distinct_engine_artifacts(
+    artifact_map: Mapping[str, FileFingerprint],
+) -> None:
+    candidate_sha = artifact_map["candidate"].sha256
+    control_sha = artifact_map["baseline"].sha256
+    if candidate_sha == control_sha:
+        raise GateConfigurationError(
+            "candidate and control have identical SHA-256; a commit A/B gate "
+            "requires different engine artifacts"
+        )
 
 
 def main(argv: Optional[list[str]] = None) -> int:
@@ -95,6 +108,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             )
         )
         artifact_map = {artifact.label: artifact for artifact in artifacts}
+        require_distinct_engine_artifacts(artifact_map)
         require_sha256(
             artifact_map["eval_file"],
             EXPECTED_NET_SHA256,

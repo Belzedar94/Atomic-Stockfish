@@ -329,11 +329,24 @@ class UciEngine:
     def close(self) -> None:
         if self.process.poll() is None:
             try:
-                self.send("quit")
-                self.process.wait(timeout=self.timeout)
-            except (BrokenPipeError, subprocess.TimeoutExpired):
-                self.process.kill()
-                self.process.wait()
+                try:
+                    self.send("quit")
+                except (BrokenPipeError, OSError, ValueError):
+                    pass
+                try:
+                    self.process.wait(timeout=self.timeout)
+                except (subprocess.TimeoutExpired, OSError, ValueError):
+                    pass
+            finally:
+                if self.process.poll() is None:
+                    try:
+                        self.process.kill()
+                    except (OSError, ValueError):
+                        pass
+                    try:
+                        self.process.wait(timeout=self.timeout)
+                    except (subprocess.TimeoutExpired, OSError, ValueError):
+                        pass
 
 
 def corpus_sha256() -> str:

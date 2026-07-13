@@ -31,9 +31,9 @@ add the reusable A/B runner and this corrected evidence record.
 ### Layout and artifact evidence
 
 Both artifacts below were rebuilt from clean, commit-bound trees with the same
-MinGW g++ 15.2 toolchain, the exact normative `ARCH=x86-64-bmi2` release target,
-and `-Wl,--no-insert-timestamp`. The candidate embeds `85b2c909` and its
-`.build_full_sha.txt` records the full source commit above.
+MinGW g++ 15.2 toolchain and the exact normative `ARCH=x86-64-bmi2` release
+target. The candidate additionally uses `-Wl,--no-insert-timestamp`, embeds
+`85b2c909`, and records the full source commit above in `.build_full_sha.txt`.
 
 | Item | Hito 7 control | H8.1 candidate | Change |
 | --- | ---: | ---: | ---: |

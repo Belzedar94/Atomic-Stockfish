@@ -603,6 +603,57 @@ def test_commit_ab_requires_normative_workload_before_preflight(
     assert message in capsys.readouterr().err
 
 
+def test_commit_ab_rejects_byte_identical_engines():
+    artifacts = {
+        "candidate": SimpleNamespace(sha256="A" * 64),
+        "baseline": SimpleNamespace(sha256="A" * 64),
+    }
+    with pytest.raises(
+        bench_ab.GateConfigurationError, match="identical SHA-256"
+    ):
+        bench_ab.require_distinct_engine_artifacts(artifacts)
+
+
+@pytest.mark.parametrize("pipe_error", (BrokenPipeError, OSError, ValueError))
+def test_uci_engine_close_reaps_child_after_pipe_error(pipe_error):
+    class FailingInput:
+        def write(self, _value):
+            raise pipe_error("closed input")
+
+        def flush(self):
+            raise AssertionError("flush must not run after write fails")
+
+    class FakeProcess:
+        def __init__(self):
+            self.stdin = FailingInput()
+            self.alive = True
+            self.waited = False
+            self.killed = False
+
+        def poll(self):
+            return None if self.alive else 0
+
+        def wait(self, timeout=None):
+            assert timeout == 1.0
+            self.alive = False
+            self.waited = True
+            return 0
+
+        def kill(self):
+            self.alive = False
+            self.killed = True
+
+    process = FakeProcess()
+    engine = object.__new__(bench_compare.UciEngine)
+    engine.process = process
+    engine.timeout = 1.0
+    engine.close()
+
+    assert process.waited
+    assert not process.alive
+    assert not process.killed
+
+
 def test_bench_nnue_preflight_accepts_candidate_marker_emitted_on_go(tmp_path):
     net = (tmp_path / "atomic.nnue").resolve()
     commands = []
