@@ -24,7 +24,10 @@ def test_single_backend_facade_is_inline_and_has_no_runtime_dispatch_state():
     assert "inline constexpr usize NetworkBackendCount = 1;" in dispatcher
     assert "static_assert(NetworkBackendCount == 1);" in dispatcher
     assert "LegacyAtomicV1::Network legacy_;" in DISPATCHER
-    assert "class AnyAccumulator : private LegacyAtomicV1::AccumulatorCaches" in DISPATCHER
+    assert re.search(
+        r"class\s+AnyAccumulator\s*:\s*private\s+LegacyAtomicV1::AccumulatorCaches",
+        DISPATCHER,
+    )
     assert "LegacyAtomicV1::AccumulatorStack stack_;" in DISPATCHER
 
     for forbidden in (
