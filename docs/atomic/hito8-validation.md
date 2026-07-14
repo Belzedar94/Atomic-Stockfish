@@ -307,6 +307,7 @@ result is classified as neutral measurement noise rather than a speed claim.
 Complete evidence is in
 [`evidence/hito8-modern-nnue-layers`](evidence/hito8-modern-nnue-layers/README.md).
 
-The structural test explicitly allows H9 to add modern layers under an
-independent `AtomicNNUEV2` build graph. LegacyAtomicV1 remains bit-compatible,
-and the playing signature remains exactly `338376`.
+The structural test protects the current single-backend tree globally and
+records that H9 must split or replace the guard when it adds modern layers
+under an independent `AtomicNNUEV2` build graph. LegacyAtomicV1 remains
+bit-compatible, and the playing signature remains exactly `338376`.

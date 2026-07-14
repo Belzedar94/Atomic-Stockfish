@@ -9,9 +9,10 @@ SIMD helpers from the LegacyAtomicV1 source inventory:
 
 LegacyAtomicV1 uses only dense `AffineTransform` and `ClippedReLU`, so none of
 the deleted code reached the native, data-generator, Python, JavaScript, or
-WASM build graphs. The structural guard is deliberately scoped to the legacy
-inventory: H9 may add modern layers again under an isolated `AtomicNNUEV2`
-backend and must then split the guard by backend.
+WASM build graphs. The current single-backend structural guard is intentionally
+global. When H9 adds modern layers under an isolated `AtomicNNUEV2` backend, it
+must split or replace that guard so it continues to constrain only the legacy
+inventory.
 
 The normative speed command was:
 
