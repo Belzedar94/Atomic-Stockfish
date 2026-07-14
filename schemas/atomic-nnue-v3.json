@@ -158,8 +158,8 @@
       "id": "atomic-capture-pair",
       "name": "AtomicCapturePair",
       "physical_offset": 22528,
-      "physical_dimensions": 46648,
-      "training_dimensions": 46648,
+      "physical_dimensions": 40012,
+      "training_dimensions": 40012,
       "virtual_factor_dimensions": 0,
       "weight_dtype": "i8",
       "psqt": false,
@@ -168,14 +168,13 @@
         "OPP"
       ],
       "actor_relation_frame": "relative to the accumulator perspective",
-      "target_class_order": [
+      "normal_target_class_order": [
         "PAWN",
         "KNIGHT",
         "BISHOP",
         "ROOK",
         "QUEEN",
-        "KING",
-        "EN_PASSANT"
+        "KING"
       ],
       "geometry_order": [
         {
@@ -213,25 +212,103 @@
         "QUEEN": 1876
       },
       "edge_ordinal_order": "within each geometry segment enumerate oriented from-square in ascending A1=0 ordinal, then oriented to-square in ascending A1=0 ordinal",
-      "index_formula": "((actor_rel * 3332 + edge_ordinal) * 7 + target_class)",
+      "local_index_domain": {
+        "minimum": 0,
+        "maximum": 40011,
+        "normal_range": [
+          0,
+          39983
+        ],
+        "en_passant_range": [
+          39984,
+          40011
+        ]
+      },
+      "physical_index_domain": {
+        "minimum": 22528,
+        "maximum": 62539
+      },
+      "normal_dimensions": 39984,
+      "normal_local_index_formula": "((actor_rel * 3332 + edge_ordinal) * 6 + target_class), with actor_rel OWN=0/OPP=1 and target_class in normal_target_class_order",
+      "en_passant_local_offset": 39984,
+      "en_passant_edges_per_actor_relation": 14,
+      "en_passant_dimensions": 28,
+      "en_passant_local_index_formula": "39984 + actor_rel * 14 + ep_ordinal, with actor_rel OWN=0/OPP=1",
+      "physical_index_formula": "physical_offset + local_index = 22528 + local_index",
+      "en_passant_edge_tables": {
+        "order": "for each actor_rel enumerate (oriented_from, oriented_center) lexicographically by ascending A1=0 from-square and then ascending center-square",
+        "OWN": [
+          "a5-b6",
+          "b5-a6",
+          "b5-c6",
+          "c5-b6",
+          "c5-d6",
+          "d5-c6",
+          "d5-e6",
+          "e5-d6",
+          "e5-f6",
+          "f5-e6",
+          "f5-g6",
+          "g5-f6",
+          "g5-h6",
+          "h5-g6"
+        ],
+        "OPP": [
+          "a4-b3",
+          "b4-a3",
+          "b4-c3",
+          "c4-b3",
+          "c4-d3",
+          "d4-c3",
+          "d4-e3",
+          "e4-d3",
+          "e4-f3",
+          "f4-e3",
+          "f4-g3",
+          "g4-f3",
+          "g4-h3",
+          "h4-g3"
+        ]
+      },
       "pawn_edge_ordinal_formula": "apply the joint per-perspective position orientation; select an 84-edge table by actor_rel; OWN contains north-moving diagonals and OPP contains south-moving diagonals; enumerate each table by ascending oriented from-square then ascending oriented to-square without another square transform",
+      "actor_relation_derivation": "actor_rel is OWN exactly when the actual capture-actor color equals the accumulator perspective, otherwise OPP; it relabels color only and never changes the joint square orientation",
+      "emission_order": "emit unique active rows in strictly ascending local index (therefore strictly ascending physical index); no board traversal order is observable",
+      "enumeration_ownership": "the emitter writes only caller-owned output and scratch storage and retains no pointer, reference or span into either the Position or the output after return",
+      "thread_safety": "pure and reentrant for concurrent reads of immutable positions: no mutable global, static or shared scratch state; callers must synchronize any concurrent Position mutation",
+      "impossible_row_policy": {
+        "old_rectangular_dimensions": 46648,
+        "old_en_passant_rows": 6664,
+        "retained_en_passant_rows": 28,
+        "eliminated_impossible_rows": 6636,
+        "reserved_or_hole_rows": 0,
+        "policy": "the normal branchless rectangle stores six physical target classes for every geometric edge; EN_PASSANT exists only in the compact 28-row cold tail, so impossible edge-by-EN_PASSANT rows are absent rather than reserved, masked or serialized as zeros. This compaction does not claim every normal row is structurally reachable; the authenticated reachability bitmap remains authoritative for that separate question"
+      },
       "semantics": {
         "capture_kind": "occupancy-based pseudocaptures",
         "target": "stop at the first occupied square and emit only when that occupant is enemy",
         "pins_checks_and_self_blast": "not filtered",
         "king_actor": "excluded",
         "pawn_pushes": "excluded",
-        "en_passant": "when Position::ep_square() is not SQ_NONE, emit one EN_PASSANT target for every side-to-move pawn whose geometric pawn attack reaches that square; do not filter pins, check evasion, self-blast or any other legality",
+        "promotion": "a pawn pseudocapture onto its promotion rank activates exactly one normal PAWN-actor CapturePair row; do not multiply the relation by promotion choice. A piece already promoted on the board is classified by its current KNIGHT, BISHOP, ROOK or QUEEN type as actor or target, with no history-dependent marker",
+        "en_passant": "after the fail-closed metadata preconditions pass, emit one cold-tail EN_PASSANT row for every side-to-move pawn whose geometric attack reaches the EP center; do not filter pins, check evasion, self-blast or any other move-legality condition",
+        "en_passant_metadata_validation": {
+          "rank": "the raw EP center is on rank 6 when side to move is WHITE and rank 3 when side to move is BLACK",
+          "center": "the raw EP center is empty",
+          "captured_pawn": "raw_ep_center - pawn_push(side_to_move) is on board and contains an opponent pawn",
+          "actor": "the candidate origin contains a side-to-move pawn, actor_rel is derived from side-to-move versus accumulator perspective, and the jointly oriented origin/center pair exists in that actor_rel's 14-edge table",
+          "last_move_history": "not reconstructed from a static Position",
+          "failure_policy": "if any metadata precondition fails, emit zero EN_PASSANT rows and provide zero EP candidates to downstream slices while preserving normal CapturePair enumeration; never form a partial, fallback or out-of-range EP index"
+        },
         "relation_source": "the exact unfiltered CapturePair candidates, including geometric EN_PASSANT candidates, are the sole candidate source for AtomicKingBlastEP and AtomicBlastRing",
         "duplicates": "impossible because every actor/from/to edge is unique"
       },
       "max_active_reachable_material": 240,
-      "descriptor": "AtomicCapturePair|v1|square=A1_0_rank_major|offset=22528|axes=actor_rel_accumulator:OWN,OPP;edge:PAWN84@0,KNIGHT336@84,BISHOP560@420,ROOK896@980,QUEEN1456@1876;edge_order=oriented_from_asc_then_to_asc;target_enemy_of_actor:PAWN,KNIGHT,BISHOP,ROOK,QUEEN,KING,EN_PASSANT|physical=46648|orientation=per_perspective_black_xor56_mirror_if_pre_h_king_file_lt4_shared_all_slices|pawn_edge=OWN_north_OPP_south_no_extra_flip|occupancy=stop_first_occupied_emit_enemy|pins_checks_self_blast=unfiltered|ep=stm_geometric_attack_ep_square_unfiltered_source_for_kbr_ring|king_actor=excluded|pawn_push=excluded|dtype=i8|wire=i8_raw_signed_twos_feature_major_output1024_contiguous_canonical_unpermuted_permute8_after_hm|psqt=none"
+      "descriptor": "AtomicCapturePair|v2-provisional-compact|square=A1_0_rank_major|offset=22528|axes=normal:actor_rel_accumulator:OWN,OPP;edge:PAWN84@0,KNIGHT336@84,BISHOP560@420,ROOK896@980,QUEEN1456@1876;target_enemy_of_actor:PAWN,KNIGHT,BISHOP,ROOK,QUEEN,KING;normal_local=((actor_rel*3332+edge)*6+target)@offset0_count39984;ep_tail=(actor_rel*14+ep_ordinal)@offset39984_count28;ep_edges=OWN_rank5_to6_OPP_rank4_to3_oriented_from_then_center_asc|physical=40012|physical_index=22528+local|orientation=per_perspective_black_xor56_mirror_if_pre_h_king_file_lt4_shared_all_slices|actor_rel=color_only|pawn_edge=OWN_north_OPP_south_no_extra_flip|occupancy=stop_first_occupied_emit_enemy|pins_checks_self_blast=unfiltered|promotion=one_pawn_relation_no_choice_expansion_current_piece_types|ep=validated_stm_geometric_cold_tail_fail_closed_source_for_kbr_ring|impossible_ep_rows=eliminated_no_holes|order=local_asc_unique|ownership=caller_owned|thread=pure_reentrant_immutable_position|king_actor=excluded|pawn_push=excluded|dtype=i8|wire=i8_raw_signed_twos_feature_major_output1024_contiguous_canonical_unpermuted_permute8_after_hm|psqt=none"
     },
     {
       "id": "atomic-king-blast-ep",
       "name": "AtomicKingBlastEP",
-      "physical_offset": 69176,
+      "physical_offset": 62540,
       "physical_dimensions": 2304,
       "training_dimensions": 2304,
       "virtual_factor_dimensions": 0,
@@ -280,12 +357,12 @@
       },
       "max_active_reachable_material": 35,
       "freeze_gate": "numeric goldens with center d4 and related king d5 for direct king target, every directional offset, self-blast, touching kings, simultaneous enemy/own blast relations, both perspectives, both mirror branches and EP adjacent to either king",
-      "descriptor": "AtomicKingBlastEP|v1-provisional|offset=69176|axes=center:64;actor_rel_accumulator:OWN,OPP;king_rel_actor:ENEMY_KING_CENTER,ENEMY_KING_N,ENEMY_KING_NE,ENEMY_KING_E,ENEMY_KING_SE,ENEMY_KING_S,ENEMY_KING_SW,ENEMY_KING_W,ENEMY_KING_NW,OWN_KING_N,OWN_KING_NE,OWN_KING_E,OWN_KING_SE,OWN_KING_S,OWN_KING_SW,OWN_KING_W,OWN_KING_NW;class:EN_PASSANT_MARKER|physical=2304|orientation=per_perspective_black_xor56_mirror_if_pre_h_king_file_lt4_shared_all_slices|source=exact_unfiltered_cp_including_geometric_ep|offset=related_king_minus_center_in_joint_frame|activation=boolean_capture_center_set|dtype=i16|wire=i16_sleb_feature_major_output1024_contiguous_canonical_unpermuted_permute16_after_capture_pair|psqt=none"
+      "descriptor": "AtomicKingBlastEP|v1-provisional|offset=62540|axes=center:64;actor_rel_accumulator:OWN,OPP;king_rel_actor:ENEMY_KING_CENTER,ENEMY_KING_N,ENEMY_KING_NE,ENEMY_KING_E,ENEMY_KING_SE,ENEMY_KING_S,ENEMY_KING_SW,ENEMY_KING_W,ENEMY_KING_NW,OWN_KING_N,OWN_KING_NE,OWN_KING_E,OWN_KING_SE,OWN_KING_S,OWN_KING_SW,OWN_KING_W,OWN_KING_NW;class:EN_PASSANT_MARKER|physical=2304|orientation=per_perspective_black_xor56_mirror_if_pre_h_king_file_lt4_shared_all_slices|source=exact_unfiltered_cp_including_validated_geometric_ep|offset=related_king_minus_center_in_joint_frame|activation=boolean_capture_center_set|dtype=i16|wire=i16_sleb_feature_major_output1024_contiguous_canonical_unpermuted_permute16_after_capture_pair|psqt=none"
     },
     {
       "id": "atomic-blast-ring",
       "name": "AtomicBlastRing",
-      "physical_offset": 71480,
+      "physical_offset": 64844,
       "physical_dimensions": 10240,
       "training_dimensions": 10240,
       "virtual_factor_dimensions": 0,
@@ -333,7 +410,7 @@
       },
       "max_active_reachable_material": 240,
       "freeze_gate": "numeric goldens with center d4 and collateral d5 for every offset, a sole adjacent capturer, two attackers sharing a center, pawn immunity, both perspectives, both mirror branches, board edges and off-center EP removal",
-      "descriptor": "AtomicBlastRing|v1-provisional|offset=71480|axes=center:64;actor_rel_accumulator:OWN,OPP;collateral_rel_accumulator:OWN,OPP;offset:N,NE,E,SE,S,SW,W,NW;class:KNIGHT,BISHOP,ROOK,QUEEN,ADJACENT_PAWN_SURVIVES|physical=10240|orientation=per_perspective_black_xor56_mirror_if_pre_h_king_file_lt4_shared_all_slices|source=exact_unfiltered_cp_including_geometric_ep|offset=collateral_minus_center_in_joint_frame|activation=boolean_capture_center_union|origin=exclude_only_sole_origin_same_center_actor_rel|pawn=adjacent_survives_except_sole_origin_or_ep_captured|ep_captured_pawn=oriented_center_minus_own8_or_opp_minus8_excluded|kings=separate|dtype=i8|wire=i8_raw_signed_twos_feature_major_output1024_contiguous_canonical_unpermuted_permute8_after_king_blast|psqt=none"
+      "descriptor": "AtomicBlastRing|v1-provisional|offset=64844|axes=center:64;actor_rel_accumulator:OWN,OPP;collateral_rel_accumulator:OWN,OPP;offset:N,NE,E,SE,S,SW,W,NW;class:KNIGHT,BISHOP,ROOK,QUEEN,ADJACENT_PAWN_SURVIVES|physical=10240|orientation=per_perspective_black_xor56_mirror_if_pre_h_king_file_lt4_shared_all_slices|source=exact_unfiltered_cp_including_validated_geometric_ep|offset=collateral_minus_center_in_joint_frame|activation=boolean_capture_center_union|origin=exclude_only_sole_origin_same_center_actor_rel|pawn=adjacent_survives_except_sole_origin_or_ep_captured|ep_captured_pawn=oriented_center_minus_own8_or_opp_minus8_excluded|kings=separate|dtype=i8|wire=i8_raw_signed_twos_feature_major_output1024_contiguous_canonical_unpermuted_permute8_after_king_blast|psqt=none"
     }
   ],
   "active_feature_bounds": {
@@ -410,10 +487,10 @@
     }
   },
   "dimensions": {
-    "physical_total": 81720,
-    "training_total_excluding_virtual": 83768,
+    "physical_total": 75084,
+    "training_total_excluding_virtual": 77132,
     "virtual_factor_total": 768,
-    "training_parameter_rows_total": 84536,
+    "training_parameter_rows_total": 77900,
     "accumulator_dimensions_per_perspective": 1024,
     "feature_transformer_output_dimensions": 1024,
     "psqt_buckets": 8,
@@ -489,7 +566,7 @@
       "atomic_capture_pair_weights": {
         "dtype": "i8",
         "shape": [
-          46648,
+          40012,
           1024
         ]
       },
@@ -543,7 +620,7 @@
       "atomic-blast-ring"
     ],
     "feature_fold": "start at zero; rotate the current u32 left by one bit; XOR the next slice hash",
-    "transformer_descriptor": "AtomicNNUEV3Transformer|v1-provisional|wire=bias_i16_sleb[1024],hm_i16_sleb[22528x1024],cp_i8_raw[46648x1024],kbr_i16_sleb[2304x1024],ring_i8_raw[10240x1024],hm_psqt_i32_sleb[22528x8],8x_sfnnv15|tensor=feature_major_outputs_contiguous_psqt_buckets_contiguous|file=canonical_unpermuted|raw_i8=signed_twos|load=permute16_i16_permute8_i8|save=unpermute_copy|psqt=hm_only_same_factor_and_12to11_mapping|strict_eof=true",
+    "transformer_descriptor": "AtomicNNUEV3Transformer|v2-provisional-compact-cp|wire=bias_i16_sleb[1024],hm_i16_sleb[22528x1024],cp_i8_raw[40012x1024],kbr_i16_sleb[2304x1024],ring_i8_raw[10240x1024],hm_psqt_i32_sleb[22528x8],8x_sfnnv15|tensor=feature_major_outputs_contiguous_psqt_buckets_contiguous|file=canonical_unpermuted|raw_i8=signed_twos|load=permute16_i16_permute8_i8|save=unpermute_copy|psqt=hm_only_same_factor_and_12to11_mapping|strict_eof=true",
     "transformer_descriptor_hash": "FNV-1a-32 over transformer_descriptor",
     "feature_transformer_hash": "feature_hash XOR 2048 XOR transformer_descriptor_hash",
     "architecture_hash": "0x63337116",
@@ -555,7 +632,7 @@
     "semantic_decision_blockers": [
       "per-perspective joint orientation golden semantics",
       "HM virtual-factor coalesce and 12-to-11 accumulator and PSQT export goldens",
-      "AtomicCapturePair edge ordinals and geometric en-passant goldens",
+      "AtomicCapturePair compact normal/EP split, edge ordinals, malformed-EP rejection and geometric en-passant goldens",
       "AtomicKingBlastEP center-to-king offset and en-passant goldens",
       "AtomicBlastRing center-to-collateral, multiple-origin, pawn-immunity and en-passant goldens",
       "HM-only versus relation PSQT ablation decision",
@@ -571,7 +648,7 @@
   },
   "ablation_profiles": {
     "production_layout_profiles": {
-      "wire_identity": "the complete 81720-row V3 layout and hashes; disabled slices are zero-locked and exported as canonical zero blocks",
+      "wire_identity": "the complete 75084-row V3 layout and hashes; disabled slices are zero-locked and exported as canonical zero blocks",
       "profiles": [
         "V3-HM",
         "V3-HM+CapturePair",

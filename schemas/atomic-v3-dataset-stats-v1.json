@@ -23,6 +23,7 @@
     "for each slice observed_reachable + reachable_unobserved equals structurally_reachable",
     "for each slice structural counts equal bitmap popcount, observed counts equal reachable indices with nonzero counters, and every nonzero counter under a zero structural bit is rejected",
     "all per-index counters, class matrices and semantic counters agree with an independent full-refresh oracle",
+    "CapturePair EN_PASSANT semantic counters may be nonzero only in the PAWN actor-geometry row; KNIGHT, BISHOP, ROOK and QUEEN EN_PASSANT counters are zero because their former rectangular physical rows were eliminated",
     "under a release-candidate policy trajectory_events.stop_reasons indices 7 and 8 are zero because the v1 ledger cannot prove score-draw adjudication or evaluation resignation",
     "validation coverage is evaluated independently against the authenticated coverage policy",
     "no invalid record, truncated active list, accumulator overflow or strict-EOF failure is accepted"
@@ -793,7 +794,7 @@
       }
     },
     "capturePairClasses": {
-      "description": "[actor_rel OWN,OPP][geometry PAWN,KNIGHT,BISHOP,ROOK,QUEEN][target PAWN,KNIGHT,BISHOP,ROOK,QUEEN,KING,EN_PASSANT]",
+      "description": "Semantic counters [actor_rel OWN,OPP][actor geometry PAWN,KNIGHT,BISHOP,ROOK,QUEEN][event PAWN,KNIGHT,BISHOP,ROOK,QUEEN,KING,EN_PASSANT]. EN_PASSANT is a cold-tail event permitted only under PAWN geometry; this statistics matrix does not recreate the eliminated rectangular physical rows, and EN_PASSANT counters under KNIGHT/BISHOP/ROOK/QUEEN are required to remain zero.",
       "type": "array",
       "items": {
         "type": "array",
@@ -960,7 +961,7 @@
             {
               "properties": {
                 "physical_dimensions": {
-                  "const": 46648
+                  "const": 40012
                 },
                 "active_per_position": {
                   "$ref": "#/$defs/activeDistributionMax240"

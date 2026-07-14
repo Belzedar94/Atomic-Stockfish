@@ -33,7 +33,7 @@ STATS_SCHEMA_SHA = hashlib.sha256(
 RECORDS = 50_000
 SEMANTIC_IDS = VALIDATOR.SEMANTIC_COUNTER_IDS
 SLICE_IDS = VALIDATOR.SLICE_IDS
-MASK_DIMENSIONS = (22_528, 46_648, 2_304, 10_240)
+MASK_DIMENSIONS = (22_528, 40_012, 2_304, 10_240)
 ROLE_TRAJECTORY_CACHE: dict[
     tuple[str, int, int, int, int, str, str], tuple[bytes, bytes, tuple[int, ...]]
 ] = {}
@@ -261,7 +261,7 @@ def _active_distribution() -> dict[str, Any]:
 def _perspective_coverage() -> dict[str, Any]:
     dimensions = {
         "half_ka_v2_atomic_hm": 22_528,
-        "atomic_capture_pair": 46_648,
+        "atomic_capture_pair": 40_012,
         "atomic_king_blast_ep": 2_304,
         "atomic_blast_ring": 10_240,
     }
@@ -873,7 +873,7 @@ def _aggregate_maximum_above_slice_sum(bundle: dict[str, dict[str, Any]]) -> Non
             _set(("index", "header", "magic_hex"), "00" * 8),
             "must equal 4154434f56310000",
         ),
-        (_set(("index", "file_policy", "file_size"), 1), "must equal 1739918"),
+        (_set(("index", "file_policy", "file_size"), 1), "must equal 1632084"),
         (
             _set(("index", "reachability_masks", "storage"), "derived-not-stored"),
             "trailing-canonical-bitmaps",
