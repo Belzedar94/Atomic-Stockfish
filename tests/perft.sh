@@ -3,10 +3,12 @@
 #
 # Usage:
 #   tests/perft.sh [path/to/atomic-stockfish]
+#   ATOMIC_PERFT_NET=/path/to/net tests/perft.sh [path/to/atomic-stockfish]
 #
 # The eight historical Fairy vectors are kept in atomic.sh. The focused Python
 # contract adds explosions, Atomic check, en passant, promotions, castling
-# rights, mate, stalemate, transitions, and terminal-result assertions.
+# rights, mate, stalemate, transitions, and terminal-result assertions. When a
+# net is supplied, all eight vectors run with Use NNUE=false, true, and pure.
 
 set -euo pipefail
 

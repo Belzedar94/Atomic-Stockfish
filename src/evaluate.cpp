@@ -38,7 +38,7 @@ namespace Stockfish {
 
 namespace {
 
-constexpr Value CorneredBishop = Value(50);
+constexpr Value CorneredBishop         = Value(50);
 constexpr Value LegacyAtomicRoyalValue = Value(700);
 
 Value classical_atomic(const Position& pos) {
@@ -55,8 +55,8 @@ Value classical_atomic(const Position& pos) {
 // public mode, so preserving this small cornered-bishop term is part of V1
 // evaluation compatibility.
 Value fix_frc(const Position& pos) {
-    constexpr Bitboard Corners = square_bb(SQ_A1) | square_bb(SQ_H1) | square_bb(SQ_A8)
-                               | square_bb(SQ_H8);
+    constexpr Bitboard Corners =
+      square_bb(SQ_A1) | square_bb(SQ_H1) | square_bb(SQ_A8) | square_bb(SQ_H8);
 
     if (!(pos.pieces(BISHOP) & Corners))
         return VALUE_ZERO;
@@ -114,26 +114,38 @@ Value Eval::evaluate(const Eval::NNUE::AnyNetwork& network,
         const auto [rawPsqt, rawPositional] = network.evaluate_raw(pos, accumulator);
 
         if (mode == UseNNUEMode::Pure)
-            // Pure is the raw legacy network result: no compatibility scale,
-            // Chess960 correction, or fifty-move damping.
+            // Pure is the raw selected network result: no compatibility
+            // scaling, Chess960 correction, or fifty-move damping. It remains
+            // a data-generation-only mode.
             v = Value((rawPsqt + rawPositional) / 16);
+        else if (network.backend() == NNUE::NetworkBackend::AtomicNNUEV2)
+        {
+            // AtomicNNUEV2 is trained directly in Atomic engine units. The
+            // Legacy COMMONER material proxy, entertainment blend, and V1
+            // calibration scale must never leak into this backend.
+            v = Value((rawPsqt + rawPositional) / 16);
+
+            if (pos.is_chess960())
+                v += fix_frc(pos);
+
+            v = damp_for_atomic_rule50(v, pos);
+        }
         else
         {
-            const int deltaNpm = std::abs(int(pos.non_pawn_material(WHITE)
-                                              - pos.non_pawn_material(BLACK)));
+            const int deltaNpm =
+              std::abs(int(pos.non_pawn_material(WHITE) - pos.non_pawn_material(BLACK)));
             const int entertainment = deltaNpm <= BishopValue - KnightValue ? 7 : 0;
-            const int blendedRaw = ((128 - entertainment) * rawPsqt
-                                  + (128 + entertainment) * rawPositional)
-                                 / 128;
+            const int blendedRaw =
+              ((128 - entertainment) * rawPsqt + (128 + entertainment) * rawPositional) / 128;
 
             // Fairy's Atomic net was trained with its royal piece represented
             // as COMMONER, whose middlegame value (700) contributed to NPM.
             // Keep KING zero-valued in the specialized search, but restore that
             // historical material proxy locally for Legacy Atomic V1 scaling.
-            const int legacyNpm = int(pos.non_pawn_material())
-                                + LegacyAtomicRoyalValue * pos.count<KING>();
+            const int legacyNpm =
+              int(pos.non_pawn_material()) + LegacyAtomicRoyalValue * pos.count<KING>();
             const int scale = 903 + 32 * pos.count<PAWN>() + 32 * legacyNpm / 1024;
-            v = Value((blendedRaw / 16) * scale / 1024);
+            v               = Value((blendedRaw / 16) * scale / 1024);
 
             if (pos.is_chess960())
                 v += fix_frc(pos);
@@ -173,7 +185,7 @@ std::string Eval::trace(Position& pos, const Eval::NNUE::AnyNetwork& network, Us
     if (mode != UseNNUEMode::False)
     {
         auto [rawPsqt, rawPositional] = network.evaluate_raw(pos, *accumulator);
-        v = Value((rawPsqt + rawPositional) / 16);
+        v                             = Value((rawPsqt + rawPositional) / 16);
         ss << "NNUE evaluation          " << v << " (side to move, internal units)\n";
         v = pos.side_to_move() == WHITE ? v : -v;
         ss << "NNUE evaluation        " << double(v) / PawnValue << " (white side)\n";
@@ -185,7 +197,9 @@ std::string Eval::trace(Position& pos, const Eval::NNUE::AnyNetwork& network, Us
     ss << "Final evaluation      ";
     ss << double(v) / PawnValue << " (white side)";
     ss << " [Use NNUE="
-       << (mode == UseNNUEMode::False ? "false" : mode == UseNNUEMode::Pure ? "pure" : "true")
+       << (mode == UseNNUEMode::False  ? "false"
+           : mode == UseNNUEMode::Pure ? "pure"
+                                       : "true")
        << "]\n";
 
     return ss.str();

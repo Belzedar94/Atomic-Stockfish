@@ -48,10 +48,9 @@ namespace Stockfish {
 
 namespace NN = Eval::NNUE;
 
-constexpr int MaxHashMB  = Is64Bit ? 33554432 : 2048;
-int           MaxThreads = std::max(1024, 4 * int(get_hardware_concurrency()));
-constexpr auto AtomicStartFEN =
-  "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+constexpr int  MaxHashMB      = Is64Bit ? 33554432 : 2048;
+int            MaxThreads     = std::max(1024, 4 * int(get_hardware_concurrency()));
+constexpr auto AtomicStartFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
 // The default configuration will attempt to group L3 domains up to 32 threads.
 // This size was found to be a good balance between the Elo gain of increased
@@ -265,7 +264,7 @@ void Engine::set_ponderhit(bool b) { threads.main_manager()->ponder = b; }
 Eval::UseNNUEMode Engine::nnue_mode() const {
     return options["Use NNUE"] == "pure" ? Eval::UseNNUEMode::Pure
          : options["Use NNUE"] == "true" ? Eval::UseNNUEMode::True
-                                           : Eval::UseNNUEMode::False;
+                                         : Eval::UseNNUEMode::False;
 }
 
 bool Engine::verify_network() const {
@@ -314,20 +313,26 @@ bool Engine::verify_network() const {
     return true;
 }
 
-std::unique_ptr<Eval::NNUE::AnyNetwork> Engine::get_default_network() {
+LargePagePtr<Eval::NNUE::AnyNetwork> Engine::get_default_network() {
 
-    auto network_ = std::make_unique<NN::AnyNetwork>();
-
-    network_->load(binaryDirectory, std::filesystem::path{}, networkFile);
+    auto         network_ = make_unique_large_page<NN::AnyNetwork>();
+    NN::EvalFile candidateFile{std::nullopt, ""};
+    if (network_->load(binaryDirectory, std::filesystem::path{}, candidateFile))
+        networkFile = std::move(candidateFile);
 
     return network_;
 }
 
 void Engine::load_network(const std::filesystem::path& file) {
     wait_for_search_finished();
-    network.modify_and_replicate([this, &file](NN::AnyNetwork& network_) {
-        network_.load(binaryDirectory, file, networkFile);
-    });
+
+    auto         candidate = make_unique_large_page<NN::AnyNetwork>();
+    NN::EvalFile candidateFile{std::nullopt, ""};
+    if (!candidate->load(binaryDirectory, file, candidateFile))
+        return;
+
+    network     = std::move(candidate);
+    networkFile = std::move(candidateFile);
     threads.clear();
     threads.ensure_network_replicated();
 }

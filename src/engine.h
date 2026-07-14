@@ -33,6 +33,7 @@
 #include "misc.h"
 #include "evaluate.h"
 #include "history.h"
+#include "memory.h"
 #include "nnue/nnue_dispatcher.h"
 #include "nnue/nnue_misc.h"
 #include "numa.h"
@@ -96,9 +97,9 @@ class Engine {
 
     // network related
 
-    bool                                    verify_network() const;
-    std::unique_ptr<Eval::NNUE::AnyNetwork> get_default_network();
-    void                                    load_network(const std::filesystem::path& file);
+    bool                                 verify_network() const;
+    LargePagePtr<Eval::NNUE::AnyNetwork> get_default_network();
+    void                                 load_network(const std::filesystem::path& file);
     void save_network(const std::optional<std::filesystem::path>& file);
 
     // utility functions

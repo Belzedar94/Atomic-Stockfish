@@ -15,6 +15,8 @@ src/atomic-unit-tests*
 src/atomic-api-tests*
 src/atomic-syzygy-driver*
 src/atomic-nnue-incremental-tests*
+src/atomic-v2-backend-core-tests*
+src/atomic-v2-incremental-tests*
 src/legacy-atomic-v1-tests*
 src/atomic-bin-v2-tests*
 src/atomic-bin-v2-sink-tests*
@@ -36,6 +38,7 @@ tests/bench_tmp.epd
 
 # Python extension and wheel build products
 /build/
+/src/build/
 /dist/
 /*.pyd
 /*.so

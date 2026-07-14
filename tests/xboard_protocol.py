@@ -4,7 +4,8 @@
 The test deliberately uses ``ping`` as a protocol barrier instead of sleeps.
 It covers feature negotiation, state editing, Atomic960, ``go``, the
 historically missing ``playother`` command, clocks, terminal results, invalid
-NNUE rejection, Atomic Syzygy path wiring, and the analysis lifecycle.
+NNUE rejection, valid AtomicNNUEV2 search, Atomic Syzygy path wiring, and the
+analysis lifecycle.
 """
 
 from __future__ import annotations
@@ -138,7 +139,7 @@ def expect_no_move(output: list[str], action: str) -> None:
         raise AssertionError(f"{action}: discarded search leaked moves: {moves}")
 
 
-def run(engine: Path, timeout: float) -> None:
+def run(engine: Path, timeout: float, eval_file: Path | None = None) -> None:
     start = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 
     with XBoardProcess(engine, timeout) as xb:
@@ -301,6 +302,23 @@ def run(engine: Path, timeout: float) -> None:
         xb.send("option Use NNUE=false")
         xb.barrier()
 
+        if eval_file is not None:
+            xb.send(f"option EvalFile={eval_file}")
+            xb.send("option Use NNUE=true")
+            xb.send("new")
+            xb.send("sd 1")
+            xb.send("go")
+            _, v2_output = xb.expect_move()
+            if not any(
+                "NNUE evaluation using AtomicNNUEV2" in line for line in v2_output
+            ):
+                raise AssertionError(
+                    f"XBoard did not search with the requested AtomicNNUEV2: {v2_output}"
+                )
+            xb.send("force")
+            xb.send("option Use NNUE=false")
+            xb.barrier()
+
         # Normal go: the engine plays the side to move and applies its move.
         xb.send("new")
         xb.send("sd 1")
@@ -460,13 +478,21 @@ def main() -> int:
         default=REPO_ROOT / "src" / "atomic-stockfish.exe",
     )
     parser.add_argument("--timeout", type=float, default=15.0)
+    parser.add_argument(
+        "--eval-file",
+        type=Path,
+        help="optional authenticated AtomicNNUEV2 fixture used for a CECP search",
+    )
     args = parser.parse_args()
     if args.timeout <= 0:
         parser.error("timeout must be positive")
     candidate = args.candidate.resolve()
     if not candidate.is_file():
         parser.error(f"candidate does not exist: {candidate}")
-    run(candidate, args.timeout)
+    eval_file = args.eval_file.resolve() if args.eval_file is not None else None
+    if eval_file is not None and not eval_file.is_file():
+        parser.error(f"evaluation file does not exist: {eval_file}")
+    run(candidate, args.timeout, eval_file)
     return 0
 
 

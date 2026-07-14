@@ -4,6 +4,7 @@
 # Usage:
 #   tests/atomic.sh --protocol-only [path/to/engine]
 #   tests/atomic.sh --perft [path/to/engine]
+#   ATOMIC_PERFT_NET=/path/to/net tests/atomic.sh --perft [path/to/engine]
 #
 # The protocol-only gate is expected to pass before the Atomic rules port. The
 # perft gate is intentionally strict and will fail until those rules are wired
@@ -20,9 +21,14 @@ else
 fi
 
 ENGINE="${1:-./atomic-stockfish}"
+PERFT_NET="${ATOMIC_PERFT_NET:-}"
 
 if [[ ! -x "$ENGINE" ]]; then
     echo "Atomic test engine is not executable: $ENGINE" >&2
+    exit 2
+fi
+if [[ -n "$PERFT_NET" && ! -f "$PERFT_NET" ]]; then
+    echo "Atomic perft NNUE file does not exist: $PERFT_NET" >&2
     exit 2
 fi
 
@@ -101,26 +107,56 @@ PERFT_CASES=(
     'atomic|true|fen 1R4kr/4K3/8/8/8/8/8/8 b k - 0 1|4|17915'
 )
 
-perft_failed=0
-for case_data in "${PERFT_CASES[@]}"; do
-    IFS='|' read -r variant chess960 position depth expected <<<"$case_data"
+PERFT_MODES=(false)
+if [[ -n "$PERFT_NET" ]]; then
+    PERFT_MODES=(false true pure)
 
-    output="$({
+    # `go perft` deliberately bypasses evaluation, so node counts alone cannot
+    # prove that the requested network was accepted. Authenticate the fixture
+    # once with a real search before exercising all three perft modes.
+    nnue_probe_output="$({
         printf 'uci\n'
-        printf 'setoption name UCI_Variant value %s\n' "$variant"
-        printf 'setoption name Use NNUE value false\n'
-        printf 'setoption name UCI_Chess960 value %s\n' "$chess960"
-        printf 'position %s\n' "$position"
-        printf 'go perft %s\n' "$depth"
+        printf 'setoption name EvalFile value %s\n' "$PERFT_NET"
+        printf 'setoption name Use NNUE value true\n'
+        printf 'isready\n'
+        printf 'position startpos\n'
+        printf 'go nodes 1\n'
         printf 'quit\n'
     } | "$ENGINE")"
+    grep -Fq 'NNUE evaluation using AtomicNNUEV2' <<<"$nnue_probe_output" \
+        || fail "perft fixture was not authenticated as AtomicNNUEV2"
+    grep -Eq '^bestmove [a-h][1-8][a-h][1-8][nbrq]?$' <<<"$nnue_probe_output" \
+        || fail "AtomicNNUEV2 perft preflight did not complete a search"
+fi
 
-    if grep -Fxq "Nodes searched: $expected" <<<"$output"; then
-        printf 'PASS perft depth=%s expected=%s chess960=%s\n' "$depth" "$expected" "$chess960"
-    else
-        printf 'FAIL perft depth=%s expected=%s chess960=%s\n' "$depth" "$expected" "$chess960" >&2
-        perft_failed=1
-    fi
+perft_failed=0
+for eval_mode in "${PERFT_MODES[@]}"; do
+    for case_data in "${PERFT_CASES[@]}"; do
+        IFS='|' read -r variant chess960 position depth expected <<<"$case_data"
+
+        output="$({
+            printf 'uci\n'
+            printf 'setoption name UCI_Variant value %s\n' "$variant"
+            if [[ -n "$PERFT_NET" ]]; then
+                printf 'setoption name EvalFile value %s\n' "$PERFT_NET"
+            fi
+            printf 'setoption name Use NNUE value %s\n' "$eval_mode"
+            printf 'setoption name UCI_Chess960 value %s\n' "$chess960"
+            printf 'isready\n'
+            printf 'position %s\n' "$position"
+            printf 'go perft %s\n' "$depth"
+            printf 'quit\n'
+        } | "$ENGINE")"
+
+        if grep -Fxq "Nodes searched: $expected" <<<"$output"; then
+            printf 'PASS perft mode=%s depth=%s expected=%s chess960=%s\n' \
+                "$eval_mode" "$depth" "$expected" "$chess960"
+        else
+            printf 'FAIL perft mode=%s depth=%s expected=%s chess960=%s\n' \
+                "$eval_mode" "$depth" "$expected" "$chess960" >&2
+            perft_failed=1
+        fi
+    done
 done
 
 if [[ "$perft_failed" -ne 0 ]]; then

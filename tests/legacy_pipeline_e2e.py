@@ -64,6 +64,7 @@ RESULT_OFFSET = TRAINING_DATA_SCHEMA.field("result").offset
 PADDING_OFFSET = TRAINING_DATA_SCHEMA.field("padding").offset
 LEGACY_NNUE_VERSION = 0x7AF32F20
 LEGACY_NNUE_ARCHITECTURE = 0x3C103E72
+LEGACY_NNUE_LOAD_PREFIX = "info string NNUE evaluation using Legacy Atomic V1 "
 ATOMIC_PURE_OPTION = "option name Use NNUE type combo default true var false var true var pure"
 ATOMIC_PURE_LOAD_SUFFIX = " (45MiB, (45056, 1024, 16, 32, 1))"
 ATOMIC_DATA_GENERATOR_MARKER_RE = re.compile(
@@ -849,7 +850,7 @@ def run_generation_command(
             "generator does not expose exactly one required pure NNUE option "
             f"{pure_option!r}:\n{output}"
         )
-    expected_marker = f"info string NNUE evaluation using {source_net}{pure_load_suffix}"
+    expected_marker = f"{LEGACY_NNUE_LOAD_PREFIX}{source_net}{pure_load_suffix}"
     if output.splitlines().count(expected_marker) != 1:
         raise AssertionError(
             "generator did not load the selected source network in pure mode; expected "
@@ -1636,7 +1637,7 @@ def load_in_engine(engine: Path, network: Path) -> str:
         uci.send("eval")
         evaluation = uci.read_until(lambda line: line.startswith("Final evaluation"))
         expected_load_marker = (
-            f"info string NNUE evaluation using {resolved_network} "
+            f"{LEGACY_NNUE_LOAD_PREFIX}{resolved_network} "
             "(45MiB, (45056, 1024, 16, 32, 1))"
         )
         if expected_load_marker not in evaluation:

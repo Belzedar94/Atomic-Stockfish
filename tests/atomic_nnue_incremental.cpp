@@ -190,8 +190,8 @@ Value evaluate_fen(std::string_view fen, const NNUE::AnyNetwork& network, Eval::
 }
 
 void run_rule50_damping(const NNUE::AnyNetwork& network) {
-    constexpr std::string_view At99 = "7k/8/8/8/8/8/Q7/K7 w - - 99 1";
-    constexpr std::string_view At100 = "7k/8/8/8/8/8/Q7/K7 w - - 100 1";
+    constexpr std::string_view At99   = "7k/8/8/8/8/8/Q7/K7 w - - 99 1";
+    constexpr std::string_view At100  = "7k/8/8/8/8/8/Q7/K7 w - - 100 1";
     constexpr std::string_view Beyond = "7k/8/8/8/8/8/Q7/K7 w - - 150 1";
 
     const Value classical99 = evaluate_fen(At99, network, Eval::UseNNUEMode::False);
@@ -368,9 +368,9 @@ RandomStats run_random_sequence(const RandomSequence&   sequence,
     std::array<StateInfo, MaxDepth + 1> states{};
     std::vector<Move>                   path;
     std::vector<Snapshot>               frames;
-    auto incremental = std::make_unique<NNUE::AnyAccumulator>(network);
-    PRNG                                rng(sequence.seed);
-    RandomStats                         stats;
+    auto        incremental = std::make_unique<NNUE::AnyAccumulator>(network);
+    PRNG        rng(sequence.seed);
+    RandomStats stats;
 
     if (auto error = pos.set(std::string(sequence.fen), sequence.chess960, &states[0]))
         die("invalid random-sequence fixture: " + std::string(error->what()));
@@ -564,8 +564,8 @@ int main(int argc, char* argv[]) {
 
     auto                 network = std::make_unique<Eval::NNUE::AnyNetwork>();
     Eval::NNUE::EvalFile evalFile;
-    network->load({}, options.net, evalFile);
-    if (!evalFile.current || network->get_content_hash() == 0)
+    if (!network->load({}, options.net, evalFile) || !evalFile.current
+        || network->get_content_hash() == 0)
         die("failed to load a compatible Legacy Atomic V1 network: " + options.net.string());
 
     run_rule50_damping(*network);
