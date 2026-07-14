@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from contextlib import nullcontext
 import hashlib
+import inspect
 import json
 from pathlib import Path
 import struct
@@ -300,6 +301,15 @@ def test_generate_data_uses_the_atomic_pure_protocol(
         "option": pipeline.ATOMIC_PURE_OPTION,
         "suffix": pipeline.ATOMIC_PURE_LOAD_SUFFIX,
     }
+
+
+def test_legacy_nnue_load_marker_names_the_selected_backend() -> None:
+    assert (
+        pipeline.LEGACY_NNUE_LOAD_PREFIX
+        == "info string NNUE evaluation using Legacy Atomic V1 "
+    )
+    source = inspect.getsource(pipeline)
+    assert source.count("f\"{LEGACY_NNUE_LOAD_PREFIX}") == 2
 
 
 @pytest.mark.parametrize(
