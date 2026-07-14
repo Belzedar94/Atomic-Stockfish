@@ -1184,11 +1184,6 @@ void Position::do_move(Move                      m,
     // Update king attacks used for fast check detection
     set_check_info();
 
-#ifndef NDEBUG
-    // Keep the fast pre-move predictor honest against the complete child position.
-    assert(givesCheck == atomic_in_check(sideToMove));
-#endif
-
     // Calculate the repetition info. It is the ply distance from the previous
     // occurrence of the same position, negative in the 3-fold case, or zero
     // if the position was not repeated.

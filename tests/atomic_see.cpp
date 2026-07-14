@@ -6,9 +6,11 @@
 */
 
 #include <array>
+#include <cstddef>
 #include <iostream>
 #include <string>
 #include <string_view>
+#include <type_traits>
 
 #include "attacks.h"
 #include "bitboard.h"
@@ -21,6 +23,15 @@
 using namespace Stockfish;
 
 namespace {
+
+static_assert(std::is_standard_layout_v<StateInfo>);
+static_assert(std::is_trivially_copyable_v<StateInfo>);
+static_assert(StateInfo::CHECK_SQUARE_NB == 5);
+static_assert(StateInfo::check_square_index(PAWN) == 0);
+static_assert(StateInfo::check_square_index(QUEEN) == StateInfo::CHECK_SQUARE_NB - 1);
+static_assert(offsetof(StateInfo, key)
+              >= offsetof(StateInfo, atomicOpponentInCheck) + sizeof(bool));
+static_assert(offsetof(StateInfo, key) < offsetof(StateInfo, previous));
 
 struct SeeCase {
     std::string_view name;
@@ -212,6 +223,92 @@ bool expect_atomic_gives_check() {
             std::cout << "PASS " << test.name << " gives_check=" << actual << '\n';
     }
 
+    return ok;
+}
+
+bool expect_state_info_layout_contract() {
+    Position  pos;
+    StateInfo state{};
+
+    if (pos.set("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", false, &state)
+        || pos.check_squares(KING) != 0)
+    {
+        std::cerr << "FAIL StateInfo layout: KING check squares must stay empty\n";
+        return false;
+    }
+
+    std::cout << "PASS StateInfo layout sizeof=" << sizeof(StateInfo)
+              << " copied-prefix=" << offsetof(StateInfo, key) << '\n';
+    return true;
+}
+
+bool expect_gives_check_matches_child() {
+    struct CorpusPosition {
+        std::string_view name;
+        std::string_view fen;
+        bool             chess960;
+    };
+
+    const std::array<CorpusPosition, 11> corpus = {{
+      {"start position", "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", false},
+      {"terminal king explosion", "7k/7R/8/8/8/8/8/K7 w - - 0 1", false},
+      {"en passant", "8/8/8/R2pP2k/8/8/8/K7 w - d6 0 1", false},
+      {"promotion", "7k/6P1/8/8/8/8/8/K7 w - - 0 1", false},
+      {"orthodox-layout castling", "5k2/8/8/8/8/8/8/4K2R w K - 0 1", false},
+      {"discovered check", "R2B3k/8/8/8/8/8/8/K7 w - - 0 1", false},
+      {"adjacent kings", "R4K1k/8/8/8/8/8/8/8 w - - 0 1", false},
+      {"Atomic960 king on g1", "5k2/8/8/8/8/8/8/6KR w H - 0 1", true},
+      {"Atomic960 rook on f1", "5k2/8/8/8/8/8/8/4KR2 w F - 0 1", true},
+      {"Atomic960 king on f1", "5k2/8/8/8/8/8/8/5K1R w H - 0 1", true},
+      {"Atomic960 rook on g1", "5k2/8/8/8/8/8/8/4K1R1 w G - 0 1", true},
+    }};
+
+    usize checkedMoves = 0;
+    bool  ok           = true;
+
+    for (const auto& fixture : corpus)
+    {
+        Position  pos;
+        StateInfo rootState{};
+        StateInfo childState{};
+
+        if (pos.set(std::string(fixture.fen), fixture.chess960, &rootState))
+        {
+            std::cerr << "FAIL gives_check child parity " << fixture.name << ": invalid FEN\n";
+            ok = false;
+            continue;
+        }
+
+        const std::string     rootFen = pos.fen();
+        const Key             rootKey = pos.key();
+        const MoveList<LEGAL> moves(pos);
+
+        for (Move move : moves)
+        {
+            const bool predicted = pos.gives_check(move);
+            pos.do_move(move, childState);
+            const bool actual = pos.atomic_in_check(pos.side_to_move());
+            pos.undo_move(move);
+            ++checkedMoves;
+
+            if (predicted != actual || pos.fen() != rootFen || pos.key() != rootKey)
+            {
+                std::cerr << "FAIL gives_check child parity " << fixture.name
+                          << " move=" << UCI::move(move, fixture.chess960)
+                          << " predicted=" << predicted << " actual=" << actual << '\n';
+                ok = false;
+            }
+        }
+    }
+
+    if (!checkedMoves)
+    {
+        std::cerr << "FAIL gives_check child parity: corpus had no legal moves\n";
+        return false;
+    }
+
+    if (ok)
+        std::cout << "PASS gives_check child parity moves=" << checkedMoves << '\n';
     return ok;
 }
 
@@ -569,6 +666,8 @@ int main() {
     ok &= expect_special_moves_are_neutral();
     ok &= expect_atomic_wins();
     ok &= expect_atomic_gives_check();
+    ok &= expect_state_info_layout_contract();
+    ok &= expect_gives_check_matches_child();
     ok &= expect_make_undo_state();
     ok &= expect_repetition_state();
     ok &= expect_rule50_state();
@@ -580,7 +679,7 @@ int main() {
     if (!ok)
         return 1;
 
-    constexpr usize TestCount = SeeCases.size() + 3 + 7 + 8 + 14 + 3 + 6 + 7 + 6;
+    constexpr usize TestCount = SeeCases.size() + 3 + 7 + 8 + 14 + 3 + 6 + 7 + 6 + 2;
     std::cout << "Atomic C++ unit tests passed: " << TestCount << "/" << TestCount << '\n';
     return 0;
 }
