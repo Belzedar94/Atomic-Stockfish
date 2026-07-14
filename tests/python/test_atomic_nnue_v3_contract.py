@@ -254,10 +254,19 @@ def test_active_feature_bounds_are_machine_readable_and_capacity_safe() -> None:
         "atomic_king_blast_ep": 35,
         "atomic_blast_ring": 240,
     }
+    slice_ids_by_bound = {
+        "half_ka_v2_atomic_hm": "half-ka-v2-atomic-hm",
+        "atomic_capture_pair": "atomic-capture-pair",
+        "atomic_king_blast_ep": "atomic-king-blast-ep",
+        "atomic_blast_ring": "atomic-blast-ring",
+    }
     assert {
         item["id"]: item["max_active_reachable_material"]
         for item in contract["feature_slices"]
-    } == results
+    } == {
+        slice_ids_by_bound[bound_id]: result
+        for bound_id, result in results.items()
+    }
     aggregate = bounds["aggregate"]
     assert aggregate["classification"] == "conservative-independent-slice-sum"
     assert aggregate["activation_domain"] == "physical/runtime-export"
