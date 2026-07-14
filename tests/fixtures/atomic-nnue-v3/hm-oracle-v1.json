@@ -1,0 +1,1213 @@
+{
+  "schema": "atomic-nnue-v3-hm-oracle-v1",
+  "contract_source": [
+    "schemas/atomic-nnue-v3.json#feature_slices/half-ka-v2-atomic-hm",
+    "docs/atomic/adr/0004-atomic-nnue-v3.md"
+  ],
+  "digest_wires": {
+    "activation_sha256": "sorted lexicographic <u32 bucket_training_index, u32 slice_relative_virtual_index, u32 physical_index> triples",
+    "outputs_i32le_sha256": "1032 consecutive signed little-endian i32 values; outputs 0..1023 accumulator, 1024..1031 PSQT"
+  },
+  "synthetic_weights": {
+    "bucket": "((training_index * 73 + output * 19 + 11) % 24001) - 12000",
+    "virtual": "((virtual_index * 43 + output * 29 + 5) % 8001) - 4000",
+    "coalesced": "bucket + virtual, independently for every output 0..1031"
+  },
+  "king_orientation": {
+    "WHITE": {
+      "orientation_xor_by_raw_square": [
+        7,
+        7,
+        7,
+        7,
+        0,
+        0,
+        0,
+        0,
+        7,
+        7,
+        7,
+        7,
+        0,
+        0,
+        0,
+        0,
+        7,
+        7,
+        7,
+        7,
+        0,
+        0,
+        0,
+        0,
+        7,
+        7,
+        7,
+        7,
+        0,
+        0,
+        0,
+        0,
+        7,
+        7,
+        7,
+        7,
+        0,
+        0,
+        0,
+        0,
+        7,
+        7,
+        7,
+        7,
+        0,
+        0,
+        0,
+        0,
+        7,
+        7,
+        7,
+        7,
+        0,
+        0,
+        0,
+        0,
+        7,
+        7,
+        7,
+        7,
+        0,
+        0,
+        0,
+        0
+      ],
+      "oriented_square_by_raw_square": [
+        7,
+        6,
+        5,
+        4,
+        4,
+        5,
+        6,
+        7,
+        15,
+        14,
+        13,
+        12,
+        12,
+        13,
+        14,
+        15,
+        23,
+        22,
+        21,
+        20,
+        20,
+        21,
+        22,
+        23,
+        31,
+        30,
+        29,
+        28,
+        28,
+        29,
+        30,
+        31,
+        39,
+        38,
+        37,
+        36,
+        36,
+        37,
+        38,
+        39,
+        47,
+        46,
+        45,
+        44,
+        44,
+        45,
+        46,
+        47,
+        55,
+        54,
+        53,
+        52,
+        52,
+        53,
+        54,
+        55,
+        63,
+        62,
+        61,
+        60,
+        60,
+        61,
+        62,
+        63
+      ],
+      "bucket_by_raw_square": [
+        28,
+        29,
+        30,
+        31,
+        31,
+        30,
+        29,
+        28,
+        24,
+        25,
+        26,
+        27,
+        27,
+        26,
+        25,
+        24,
+        20,
+        21,
+        22,
+        23,
+        23,
+        22,
+        21,
+        20,
+        16,
+        17,
+        18,
+        19,
+        19,
+        18,
+        17,
+        16,
+        12,
+        13,
+        14,
+        15,
+        15,
+        14,
+        13,
+        12,
+        8,
+        9,
+        10,
+        11,
+        11,
+        10,
+        9,
+        8,
+        4,
+        5,
+        6,
+        7,
+        7,
+        6,
+        5,
+        4,
+        0,
+        1,
+        2,
+        3,
+        3,
+        2,
+        1,
+        0
+      ]
+    },
+    "BLACK": {
+      "orientation_xor_by_raw_square": [
+        63,
+        63,
+        63,
+        63,
+        56,
+        56,
+        56,
+        56,
+        63,
+        63,
+        63,
+        63,
+        56,
+        56,
+        56,
+        56,
+        63,
+        63,
+        63,
+        63,
+        56,
+        56,
+        56,
+        56,
+        63,
+        63,
+        63,
+        63,
+        56,
+        56,
+        56,
+        56,
+        63,
+        63,
+        63,
+        63,
+        56,
+        56,
+        56,
+        56,
+        63,
+        63,
+        63,
+        63,
+        56,
+        56,
+        56,
+        56,
+        63,
+        63,
+        63,
+        63,
+        56,
+        56,
+        56,
+        56,
+        63,
+        63,
+        63,
+        63,
+        56,
+        56,
+        56,
+        56
+      ],
+      "oriented_square_by_raw_square": [
+        63,
+        62,
+        61,
+        60,
+        60,
+        61,
+        62,
+        63,
+        55,
+        54,
+        53,
+        52,
+        52,
+        53,
+        54,
+        55,
+        47,
+        46,
+        45,
+        44,
+        44,
+        45,
+        46,
+        47,
+        39,
+        38,
+        37,
+        36,
+        36,
+        37,
+        38,
+        39,
+        31,
+        30,
+        29,
+        28,
+        28,
+        29,
+        30,
+        31,
+        23,
+        22,
+        21,
+        20,
+        20,
+        21,
+        22,
+        23,
+        15,
+        14,
+        13,
+        12,
+        12,
+        13,
+        14,
+        15,
+        7,
+        6,
+        5,
+        4,
+        4,
+        5,
+        6,
+        7
+      ],
+      "bucket_by_raw_square": [
+        0,
+        1,
+        2,
+        3,
+        3,
+        2,
+        1,
+        0,
+        4,
+        5,
+        6,
+        7,
+        7,
+        6,
+        5,
+        4,
+        8,
+        9,
+        10,
+        11,
+        11,
+        10,
+        9,
+        8,
+        12,
+        13,
+        14,
+        15,
+        15,
+        14,
+        13,
+        12,
+        16,
+        17,
+        18,
+        19,
+        19,
+        18,
+        17,
+        16,
+        20,
+        21,
+        22,
+        23,
+        23,
+        22,
+        21,
+        20,
+        24,
+        25,
+        26,
+        27,
+        27,
+        26,
+        25,
+        24,
+        28,
+        29,
+        30,
+        31,
+        31,
+        30,
+        29,
+        28
+      ]
+    }
+  },
+  "export_mapping_cases": [
+    {
+      "id": "bucket29-own-pawn-h2",
+      "physical_index": 20431,
+      "oriented_own_king": "g1",
+      "expected_source": {
+        "king_bucket": 29,
+        "physical_plane": 0,
+        "oriented_square": 15,
+        "training_plane": 0,
+        "training_index": 22287,
+        "virtual_index": 15
+      },
+      "outputs_i32le_sha256": "1cfbbef6c643c838bee738406c60418e2e688d40f71c67453eac1b62b23d6d0c",
+      "output_sentinels": {
+        "0": 3545,
+        "1023": 4645,
+        "1024": 4693,
+        "1025": 4741,
+        "1026": 4789,
+        "1027": 4837,
+        "1028": 4885,
+        "1029": 4933,
+        "1030": 4981,
+        "1031": 5029
+      }
+    },
+    {
+      "id": "bucket29-merged-own-king-g1",
+      "physical_index": 21062,
+      "oriented_own_king": "g1",
+      "expected_source": {
+        "king_bucket": 29,
+        "physical_plane": 10,
+        "oriented_square": 6,
+        "training_plane": 10,
+        "training_index": 22918,
+        "virtual_index": 646
+      },
+      "outputs_i32le_sha256": "54f13d464a30942a14b0468fb920962b189487671e4d473500d507b2b3bad89f",
+      "output_sentinels": {
+        "0": 4736,
+        "1023": -2165,
+        "1024": -2117,
+        "1025": -2069,
+        "1026": -2021,
+        "1027": -1973,
+        "1028": -1925,
+        "1029": -1877,
+        "1030": -1829,
+        "1031": -1781
+      }
+    },
+    {
+      "id": "bucket29-merged-opponent-king-b8",
+      "physical_index": 21113,
+      "oriented_own_king": "g1",
+      "expected_source": {
+        "king_bucket": 29,
+        "physical_plane": 10,
+        "oriented_square": 57,
+        "training_plane": 11,
+        "training_index": 23033,
+        "virtual_index": 761
+      },
+      "outputs_i32le_sha256": "bfcd796de8e6eabe62c984e30e229f7befeba1f68e49ce3304f7b0d11401011e",
+      "output_sentinels": {
+        "0": -13926,
+        "1023": 11175,
+        "1024": 11223,
+        "1025": 11271,
+        "1026": 11319,
+        "1027": 11367,
+        "1028": 11415,
+        "1029": 11463,
+        "1030": 11511,
+        "1031": 11559
+      }
+    },
+    {
+      "id": "bucket30-merged-own-king-f1",
+      "physical_index": 21765,
+      "oriented_own_king": "f1",
+      "expected_source": {
+        "king_bucket": 30,
+        "physical_plane": 10,
+        "oriented_square": 5,
+        "training_plane": 10,
+        "training_index": 23685,
+        "virtual_index": 645
+      },
+      "outputs_i32le_sha256": "8dba05225aa8c494c8ee0721e5c5e4056e997e35c5ea0b786eb6743a3cc373d1",
+      "output_sentinels": {
+        "0": -11319,
+        "1023": 5781,
+        "1024": 5829,
+        "1025": 5877,
+        "1026": 5925,
+        "1027": 5973,
+        "1028": 6021,
+        "1029": 6069,
+        "1030": 6117,
+        "1031": 6165
+      }
+    }
+  ],
+  "positions": [
+    {
+      "id": "opposite-mirror-all-classes",
+      "position": {
+        "pieces": [
+          [
+            "WHITE",
+            "KING",
+            "b1"
+          ],
+          [
+            "WHITE",
+            "ROOK",
+            "f2"
+          ],
+          [
+            "WHITE",
+            "PAWN",
+            "a3"
+          ],
+          [
+            "WHITE",
+            "KNIGHT",
+            "d3"
+          ],
+          [
+            "WHITE",
+            "BISHOP",
+            "e3"
+          ],
+          [
+            "WHITE",
+            "QUEEN",
+            "h3"
+          ],
+          [
+            "BLACK",
+            "QUEEN",
+            "a6"
+          ],
+          [
+            "BLACK",
+            "BISHOP",
+            "e6"
+          ],
+          [
+            "BLACK",
+            "KNIGHT",
+            "f6"
+          ],
+          [
+            "BLACK",
+            "PAWN",
+            "h6"
+          ],
+          [
+            "BLACK",
+            "ROOK",
+            "d7"
+          ],
+          [
+            "BLACK",
+            "KING",
+            "g8"
+          ]
+        ],
+        "side_to_move": "WHITE",
+        "ep_square": "-",
+        "atomic960": false,
+        "castling_rights": "-"
+      },
+      "expected": {
+        "WHITE": {
+          "orientation": {
+            "vertical_xor": 0,
+            "horizontal_xor": 7,
+            "oriented_own_king": "g1",
+            "king_bucket": 29
+          },
+          "piece_count": 12,
+          "network_bucket": 2,
+          "activation_sha256": "fd4824c4975cbb5c70ba8f2568d4d500f51726f0e6b0af08b08ddd163df10ff7",
+          "outputs_i32le_sha256": "85e003fd1830cf1ecadd071273f216757d6a7c458d21032d820e0a09799b1d20",
+          "output_sentinels": {
+            "0": -4892,
+            "1023": -7698,
+            "1024": -7122,
+            "1025": -6546,
+            "1026": -5970,
+            "1027": -5394,
+            "1028": -4818,
+            "1029": -4242,
+            "1030": -3666,
+            "1031": -3090
+          },
+          "selected_psqt": -5970
+        },
+        "BLACK": {
+          "orientation": {
+            "vertical_xor": 56,
+            "horizontal_xor": 0,
+            "oriented_own_king": "g1",
+            "king_bucket": 29
+          },
+          "piece_count": 12,
+          "network_bucket": 2,
+          "activation_sha256": "106522c08de4b149cd03b98981289b2ab4890e4ac1ab3d3818270dacbaff3f57",
+          "outputs_i32le_sha256": "079efd811d0ebf7148f78a79e133f5c2495db36ab650a694a6c6ad99a9028f86",
+          "output_sentinels": {
+            "0": -4196,
+            "1023": -7002,
+            "1024": -6426,
+            "1025": -5850,
+            "1026": -5274,
+            "1027": -4698,
+            "1028": -4122,
+            "1029": -3546,
+            "1030": -2970,
+            "1031": -10395
+          },
+          "selected_psqt": -5274
+        }
+      }
+    },
+    {
+      "id": "opposite-mirror-all-classes-horizontal",
+      "position": {
+        "pieces": [
+          [
+            "WHITE",
+            "KING",
+            "g1"
+          ],
+          [
+            "WHITE",
+            "ROOK",
+            "c2"
+          ],
+          [
+            "WHITE",
+            "PAWN",
+            "h3"
+          ],
+          [
+            "WHITE",
+            "KNIGHT",
+            "e3"
+          ],
+          [
+            "WHITE",
+            "BISHOP",
+            "d3"
+          ],
+          [
+            "WHITE",
+            "QUEEN",
+            "a3"
+          ],
+          [
+            "BLACK",
+            "QUEEN",
+            "h6"
+          ],
+          [
+            "BLACK",
+            "BISHOP",
+            "d6"
+          ],
+          [
+            "BLACK",
+            "KNIGHT",
+            "c6"
+          ],
+          [
+            "BLACK",
+            "PAWN",
+            "a6"
+          ],
+          [
+            "BLACK",
+            "ROOK",
+            "e7"
+          ],
+          [
+            "BLACK",
+            "KING",
+            "b8"
+          ]
+        ],
+        "side_to_move": "WHITE",
+        "ep_square": "-",
+        "atomic960": false,
+        "castling_rights": "-"
+      },
+      "expected": {
+        "WHITE": {
+          "orientation": {
+            "vertical_xor": 0,
+            "horizontal_xor": 0,
+            "oriented_own_king": "g1",
+            "king_bucket": 29
+          },
+          "piece_count": 12,
+          "network_bucket": 2,
+          "activation_sha256": "fd4824c4975cbb5c70ba8f2568d4d500f51726f0e6b0af08b08ddd163df10ff7",
+          "outputs_i32le_sha256": "85e003fd1830cf1ecadd071273f216757d6a7c458d21032d820e0a09799b1d20",
+          "output_sentinels": {
+            "0": -4892,
+            "1023": -7698,
+            "1024": -7122,
+            "1025": -6546,
+            "1026": -5970,
+            "1027": -5394,
+            "1028": -4818,
+            "1029": -4242,
+            "1030": -3666,
+            "1031": -3090
+          },
+          "selected_psqt": -5970
+        },
+        "BLACK": {
+          "orientation": {
+            "vertical_xor": 56,
+            "horizontal_xor": 7,
+            "oriented_own_king": "g1",
+            "king_bucket": 29
+          },
+          "piece_count": 12,
+          "network_bucket": 2,
+          "activation_sha256": "106522c08de4b149cd03b98981289b2ab4890e4ac1ab3d3818270dacbaff3f57",
+          "outputs_i32le_sha256": "079efd811d0ebf7148f78a79e133f5c2495db36ab650a694a6c6ad99a9028f86",
+          "output_sentinels": {
+            "0": -4196,
+            "1023": -7002,
+            "1024": -6426,
+            "1025": -5850,
+            "1026": -5274,
+            "1027": -4698,
+            "1028": -4122,
+            "1029": -3546,
+            "1030": -2970,
+            "1031": -10395
+          },
+          "selected_psqt": -5274
+        }
+      }
+    },
+    {
+      "id": "atomic960-ep-metadata",
+      "position": {
+        "pieces": [
+          [
+            "WHITE",
+            "ROOK",
+            "a1"
+          ],
+          [
+            "WHITE",
+            "KING",
+            "c1"
+          ],
+          [
+            "WHITE",
+            "ROOK",
+            "h1"
+          ],
+          [
+            "WHITE",
+            "PAWN",
+            "e5"
+          ],
+          [
+            "BLACK",
+            "ROOK",
+            "a8"
+          ],
+          [
+            "BLACK",
+            "KING",
+            "c8"
+          ],
+          [
+            "BLACK",
+            "ROOK",
+            "h8"
+          ],
+          [
+            "BLACK",
+            "PAWN",
+            "d5"
+          ]
+        ],
+        "side_to_move": "WHITE",
+        "ep_square": "d6",
+        "atomic960": true,
+        "castling_rights": "AHah"
+      },
+      "expected": {
+        "WHITE": {
+          "orientation": {
+            "vertical_xor": 0,
+            "horizontal_xor": 7,
+            "oriented_own_king": "f1",
+            "king_bucket": 30
+          },
+          "piece_count": 8,
+          "network_bucket": 1,
+          "activation_sha256": "2757d15005f30c58f10ba98846e22b021dcd292427647b03e818a34a29c54f41",
+          "outputs_i32le_sha256": "2c20954c1de0061934ff59f7a7132cd0414b44cb4e0ec52e188956d481bbd7f8",
+          "output_sentinels": {
+            "0": -38235,
+            "1023": -13437,
+            "1024": -13053,
+            "1025": -12669,
+            "1026": -12285,
+            "1027": -11901,
+            "1028": -11517,
+            "1029": -11133,
+            "1030": -10749,
+            "1031": -34366
+          },
+          "selected_psqt": -12669
+        },
+        "BLACK": {
+          "orientation": {
+            "vertical_xor": 56,
+            "horizontal_xor": 7,
+            "oriented_own_king": "f1",
+            "king_bucket": 30
+          },
+          "piece_count": 8,
+          "network_bucket": 1,
+          "activation_sha256": "8b5a09862440e764436463d5a3bda687a4929906398a27d1a54b80a660e60e7d",
+          "outputs_i32le_sha256": "a9942f8f42c380d0661788fa256b11035d9deff7152e6e5264a65e73a3cb5ec5",
+          "output_sentinels": {
+            "0": -40091,
+            "1023": -15293,
+            "1024": -14909,
+            "1025": -14525,
+            "1026": -14141,
+            "1027": -13757,
+            "1028": -13373,
+            "1029": -12989,
+            "1030": -12605,
+            "1031": -12221
+          },
+          "selected_psqt": -14525
+        }
+      }
+    },
+    {
+      "id": "same-material-metadata-mutated",
+      "position": {
+        "pieces": [
+          [
+            "WHITE",
+            "ROOK",
+            "a1"
+          ],
+          [
+            "WHITE",
+            "KING",
+            "c1"
+          ],
+          [
+            "WHITE",
+            "ROOK",
+            "h1"
+          ],
+          [
+            "WHITE",
+            "PAWN",
+            "e5"
+          ],
+          [
+            "BLACK",
+            "ROOK",
+            "a8"
+          ],
+          [
+            "BLACK",
+            "KING",
+            "c8"
+          ],
+          [
+            "BLACK",
+            "ROOK",
+            "h8"
+          ],
+          [
+            "BLACK",
+            "PAWN",
+            "d5"
+          ]
+        ],
+        "side_to_move": "BLACK",
+        "ep_square": "-",
+        "atomic960": false,
+        "castling_rights": "-"
+      },
+      "expected": {
+        "WHITE": {
+          "orientation": {
+            "vertical_xor": 0,
+            "horizontal_xor": 7,
+            "oriented_own_king": "f1",
+            "king_bucket": 30
+          },
+          "piece_count": 8,
+          "network_bucket": 1,
+          "activation_sha256": "2757d15005f30c58f10ba98846e22b021dcd292427647b03e818a34a29c54f41",
+          "outputs_i32le_sha256": "2c20954c1de0061934ff59f7a7132cd0414b44cb4e0ec52e188956d481bbd7f8",
+          "output_sentinels": {
+            "0": -38235,
+            "1023": -13437,
+            "1024": -13053,
+            "1025": -12669,
+            "1026": -12285,
+            "1027": -11901,
+            "1028": -11517,
+            "1029": -11133,
+            "1030": -10749,
+            "1031": -34366
+          },
+          "selected_psqt": -12669
+        },
+        "BLACK": {
+          "orientation": {
+            "vertical_xor": 56,
+            "horizontal_xor": 7,
+            "oriented_own_king": "f1",
+            "king_bucket": 30
+          },
+          "piece_count": 8,
+          "network_bucket": 1,
+          "activation_sha256": "8b5a09862440e764436463d5a3bda687a4929906398a27d1a54b80a660e60e7d",
+          "outputs_i32le_sha256": "a9942f8f42c380d0661788fa256b11035d9deff7152e6e5264a65e73a3cb5ec5",
+          "output_sentinels": {
+            "0": -40091,
+            "1023": -15293,
+            "1024": -14909,
+            "1025": -14525,
+            "1026": -14141,
+            "1027": -13757,
+            "1028": -13373,
+            "1029": -12989,
+            "1030": -12605,
+            "1031": -12221
+          },
+          "selected_psqt": -14525
+        }
+      }
+    },
+    {
+      "id": "thirty-two-piece-boundary",
+      "position": {
+        "pieces": [
+          [
+            "WHITE",
+            "ROOK",
+            "a1"
+          ],
+          [
+            "WHITE",
+            "PAWN",
+            "a2"
+          ],
+          [
+            "BLACK",
+            "PAWN",
+            "a7"
+          ],
+          [
+            "BLACK",
+            "ROOK",
+            "a8"
+          ],
+          [
+            "WHITE",
+            "KNIGHT",
+            "b1"
+          ],
+          [
+            "WHITE",
+            "PAWN",
+            "b2"
+          ],
+          [
+            "BLACK",
+            "PAWN",
+            "b7"
+          ],
+          [
+            "BLACK",
+            "KNIGHT",
+            "b8"
+          ],
+          [
+            "WHITE",
+            "BISHOP",
+            "c1"
+          ],
+          [
+            "WHITE",
+            "PAWN",
+            "c2"
+          ],
+          [
+            "BLACK",
+            "PAWN",
+            "c7"
+          ],
+          [
+            "BLACK",
+            "BISHOP",
+            "c8"
+          ],
+          [
+            "WHITE",
+            "QUEEN",
+            "d1"
+          ],
+          [
+            "WHITE",
+            "PAWN",
+            "d2"
+          ],
+          [
+            "BLACK",
+            "PAWN",
+            "d7"
+          ],
+          [
+            "BLACK",
+            "QUEEN",
+            "d8"
+          ],
+          [
+            "WHITE",
+            "KING",
+            "e1"
+          ],
+          [
+            "WHITE",
+            "PAWN",
+            "e2"
+          ],
+          [
+            "BLACK",
+            "PAWN",
+            "e7"
+          ],
+          [
+            "BLACK",
+            "KING",
+            "e8"
+          ],
+          [
+            "WHITE",
+            "BISHOP",
+            "f1"
+          ],
+          [
+            "WHITE",
+            "PAWN",
+            "f2"
+          ],
+          [
+            "BLACK",
+            "PAWN",
+            "f7"
+          ],
+          [
+            "BLACK",
+            "BISHOP",
+            "f8"
+          ],
+          [
+            "WHITE",
+            "KNIGHT",
+            "g1"
+          ],
+          [
+            "WHITE",
+            "PAWN",
+            "g2"
+          ],
+          [
+            "BLACK",
+            "PAWN",
+            "g7"
+          ],
+          [
+            "BLACK",
+            "KNIGHT",
+            "g8"
+          ],
+          [
+            "WHITE",
+            "ROOK",
+            "h1"
+          ],
+          [
+            "WHITE",
+            "PAWN",
+            "h2"
+          ],
+          [
+            "BLACK",
+            "PAWN",
+            "h7"
+          ],
+          [
+            "BLACK",
+            "ROOK",
+            "h8"
+          ]
+        ],
+        "side_to_move": "WHITE",
+        "ep_square": "-",
+        "atomic960": false,
+        "castling_rights": "KQkq"
+      },
+      "expected": {
+        "WHITE": {
+          "orientation": {
+            "vertical_xor": 0,
+            "horizontal_xor": 0,
+            "oriented_own_king": "e1",
+            "king_bucket": 31
+          },
+          "piece_count": 32,
+          "network_bucket": 7,
+          "activation_sha256": "3f54387f5298a984d314819bc92d1f114ccd6e542bc7269ff5a9fd83269e9d20",
+          "outputs_i32le_sha256": "3a570f2be2e7bb71771a2019c8c3581200b187f1bd9ff5deb10f8347ae36173a",
+          "output_sentinels": {
+            "0": 32979,
+            "1023": -35838,
+            "1024": -34302,
+            "1025": -32766,
+            "1026": -31230,
+            "1027": -29694,
+            "1028": -28158,
+            "1029": -50623,
+            "1030": -49087,
+            "1031": -47551
+          },
+          "selected_psqt": -47551
+        },
+        "BLACK": {
+          "orientation": {
+            "vertical_xor": 56,
+            "horizontal_xor": 0,
+            "oriented_own_king": "e1",
+            "king_bucket": 31
+          },
+          "piece_count": 32,
+          "network_bucket": 7,
+          "activation_sha256": "3f54387f5298a984d314819bc92d1f114ccd6e542bc7269ff5a9fd83269e9d20",
+          "outputs_i32le_sha256": "3a570f2be2e7bb71771a2019c8c3581200b187f1bd9ff5deb10f8347ae36173a",
+          "output_sentinels": {
+            "0": 32979,
+            "1023": -35838,
+            "1024": -34302,
+            "1025": -32766,
+            "1026": -31230,
+            "1027": -29694,
+            "1028": -28158,
+            "1029": -50623,
+            "1030": -49087,
+            "1031": -47551
+          },
+          "selected_psqt": -47551
+        }
+      }
+    }
+  ],
+  "metamorphic_pairs": [
+    {
+      "kind": "horizontal-mirror",
+      "left": "opposite-mirror-all-classes",
+      "right": "opposite-mirror-all-classes-horizontal"
+    },
+    {
+      "kind": "stm-ep-castling-atomic960-neutral",
+      "left": "atomic960-ep-metadata",
+      "right": "same-material-metadata-mutated"
+    }
+  ]
+}

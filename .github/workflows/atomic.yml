@@ -45,6 +45,8 @@ jobs:
           make -j2 ARCH=x86-64 COMP=${{ matrix.comp }} COMPCXX=${{ matrix.cxx }} atomic-nnue-incremental-tests.bin
           make -j2 ARCH=x86-64 COMP=${{ matrix.comp }} COMPCXX=${{ matrix.cxx }} atomic-v2-backend-core-tests.bin
           make -j2 ARCH=x86-64 COMP=${{ matrix.comp }} COMPCXX=${{ matrix.cxx }} atomic-v2-incremental-tests.bin
+          make -j2 ARCH=x86-64 COMP=${{ matrix.comp }} COMPCXX=${{ matrix.cxx }} atomic-v3-hm-oracle-tests
+          python3 ../tests/atomic_v3_hm_differential.py --oracle ./atomic-v3-hm-oracle-tests.bin
           make -j2 ARCH=x86-64 COMP=${{ matrix.comp }} COMPCXX=${{ matrix.cxx }} atomic-syzygy-driver
           make -j2 ARCH=x86-64 COMP=${{ matrix.comp }} COMPCXX=${{ matrix.cxx }} legacy-atomic-v1-tests
           make -j2 ARCH=x86-64 COMP=${{ matrix.comp }} COMPCXX=${{ matrix.cxx }} atomic-bin-v2-tests
@@ -148,6 +150,8 @@ jobs:
           make -C src -j2 ARCH=x86-64 debug=yes optimize=no atomic-nnue-incremental-tests.bin
           make -C src -j2 ARCH=x86-64 debug=yes optimize=no atomic-v2-backend-core-tests.bin
           make -C src -j2 ARCH=x86-64 debug=yes optimize=no atomic-v2-incremental-tests.bin
+          make -C src -j2 ARCH=x86-64 debug=yes optimize=no atomic-v3-hm-oracle-tests
+          python3 tests/atomic_v3_hm_differential.py --oracle src/atomic-v3-hm-oracle-tests.bin
           make -C src -j2 ARCH=x86-64 debug=yes optimize=no atomic-syzygy-driver
           make -C src -j2 ARCH=x86-64 debug=yes optimize=no legacy-atomic-v1-tests
           make -C src -j2 ARCH=x86-64 debug=yes optimize=no atomic-bin-v2-tests
@@ -194,6 +198,8 @@ jobs:
           make -C src -j2 ARCH=x86-64 COMP=mingw atomic-nnue-incremental-tests.exe
           make -C src -j2 ARCH=x86-64 COMP=mingw atomic-v2-backend-core-tests.exe
           make -C src -j2 ARCH=x86-64 COMP=mingw atomic-v2-incremental-tests.exe
+          make -C src -j2 ARCH=x86-64 COMP=mingw atomic-v3-hm-oracle-tests
+          python tests/atomic_v3_hm_differential.py --oracle src/atomic-v3-hm-oracle-tests.exe
           make -C src -j2 ARCH=x86-64 COMP=mingw data-generator
           make -C src -j2 ARCH=x86-64 COMP=mingw legacy-atomic-v1-tests
           make -C src -j2 ARCH=x86-64 COMP=mingw atomic-bin-v2-tests
@@ -247,6 +253,7 @@ jobs:
           make -j2 ARCH=x86-64-sse41-popcnt sanitize=${{ matrix.sanitizer }} debug=yes optimize=no atomic-nnue-incremental-tests.bin
           make -j2 ARCH=x86-64-sse41-popcnt sanitize=${{ matrix.sanitizer }} debug=yes optimize=no atomic-v2-backend-core-tests.bin
           make -j2 ARCH=x86-64-sse41-popcnt sanitize=${{ matrix.sanitizer }} debug=yes optimize=no atomic-v2-incremental-tests.bin
+          make -j2 ARCH=x86-64-sse41-popcnt sanitize=${{ matrix.sanitizer }} debug=yes optimize=no atomic-v3-hm-oracle-tests.bin
           make -j2 ARCH=x86-64-sse41-popcnt sanitize=${{ matrix.sanitizer }} debug=yes optimize=no data-generator
           make -j2 ARCH=x86-64-sse41-popcnt sanitize=${{ matrix.sanitizer }} debug=yes optimize=no data-tools
       - name: Create authenticated Legacy V1 and AtomicNNUEV2 fixtures
@@ -283,6 +290,7 @@ jobs:
             --net "$RUNNER_TEMP/atomic-v2.nnue" \
             --operations "$operations" \
             --full-refresh-interval 1 && \
+          src/atomic-v3-hm-oracle-tests.bin && \
           python3 tests/nnue_v2_modes.py \
             --engine src/atomic-stockfish \
             --legacy-net "$RUNNER_TEMP/atomic-zero.nnue" \
@@ -328,8 +336,8 @@ jobs:
           fi
           exit "$status"
 
-  nnue-v2-valgrind:
-    name: AtomicNNUEV2 Valgrind
+  nnue-v2-v3-valgrind:
+    name: AtomicNNUE V2 + V3 Valgrind
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
@@ -340,14 +348,16 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends valgrind
-      - name: Build AtomicNNUEV2 core and incremental tests
+      - name: Build AtomicNNUEV2 and AtomicNNUEV3 isolated tests
         working-directory: src
         run: |
           make -j2 ARCH=x86-64 COMP=gcc COMPCXX=g++ \
             debug=yes optimize=no atomic-v2-backend-core-tests.bin
           make -j2 ARCH=x86-64 COMP=gcc COMPCXX=g++ \
             debug=yes optimize=no atomic-v2-incremental-tests.bin
-      - name: Run AtomicNNUEV2 core and incremental tests under Valgrind
+          make -j2 ARCH=x86-64 COMP=gcc COMPCXX=g++ \
+            debug=yes optimize=no atomic-v3-hm-oracle-tests.bin
+      - name: Run AtomicNNUEV2 and AtomicNNUEV3 isolated tests under Valgrind
         run: |
           python3 tests/create_synthetic_atomic_v2_nnue.py \
             --output "$RUNNER_TEMP/atomic-v2.nnue"
@@ -371,6 +381,14 @@ jobs:
             --net "$RUNNER_TEMP/atomic-v2.nnue" \
             --operations 256 \
             --full-refresh-interval 1
+          valgrind \
+            --error-exitcode=99 \
+            --leak-check=full \
+            --show-leak-kinds=all \
+            --errors-for-leak-kinds=all \
+            --track-origins=yes \
+            --num-callers=30 \
+            src/atomic-v3-hm-oracle-tests.bin
 
   atomic-bin-v2-valgrind:
     name: Atomic BIN V2 Valgrind
@@ -455,6 +473,7 @@ jobs:
           tests/python/test_atomic_nnue_incremental_wrapper.py
           tests/python/test_atomic_nnue_v2_contract.py
           tests/python/test_atomic_nnue_v3_contract.py
+          tests/python/test_atomic_v3_hm_oracle.py
           tests/python/test_validate_atomic_v3_bundle.py
           tests/python/test_create_synthetic_atomic_v2_nnue.py
           tests/python/test_atomic_v2_generator_smoke.py

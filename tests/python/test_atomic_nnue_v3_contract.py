@@ -1006,6 +1006,7 @@ def test_numeric_and_null_move_policies_fail_safe() -> None:
     contract = _load_contract()
     numeric = contract["numeric_policy"]
     null_move = contract["null_move_policy"]
+    overpopulated = contract["dataset_statistics"]["overpopulated_fen_policy"]
 
     assert numeric["oracle_accumulator_dtype"] == "i32"
     assert numeric["runtime_accumulator_policy"] == "unfrozen"
@@ -1013,6 +1014,10 @@ def test_numeric_and_null_move_policies_fail_safe() -> None:
     assert contract["dimensions"]["full_refresh_enumerator"].startswith(
         "streaming visitor"
     )
+    assert "exceeds 16 pieces" in overpopulated
+    assert "exceeds 32 pieces" in overpopulated
+    assert "never enumerate an overpopulated V3 sample" in overpopulated
+    assert overpopulated.endswith("never truncate")
     assert "epSquareWhenComputed" in null_move["guard"]
     assert null_move["required_fixture"] == (
         "EP parent -> evaluate -> null move -> evaluate -> undo null -> evaluate parent"

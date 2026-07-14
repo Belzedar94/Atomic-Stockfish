@@ -19,3 +19,4 @@ schemas/atomic-v3-split-audit-v1.json text eol=lf
 schemas/atomic-v3-training-run-manifest-v1.json text eol=lf
 tests/fixtures/atomic-syzygy/*.epd text eol=lf
 tests/fixtures/atomic-syzygy/*.json text eol=lf
+tests/fixtures/atomic-nnue-v3/*.json text eol=lf

@@ -122,6 +122,12 @@ ATOMIC_V2_BACKEND_CORE_TEST_EXE  = atomic-v2-backend-core-tests$(ATOMIC_TEST_EXE
 ATOMIC_V2_BACKEND_CORE_TEST_OBJS = $(filter-out main.o,$(OBJS)) atomic_v2_backend_core_tests.o
 ATOMIC_V2_INCREMENTAL_TEST_EXE  = atomic-v2-incremental-tests$(ATOMIC_TEST_EXE_SUFFIX)
 ATOMIC_V2_INCREMENTAL_TEST_OBJS = $(filter-out main.o,$(OBJS)) atomic_nnue_v2_incremental_tests.o
+ATOMIC_V3_HM_ORACLE_TEST_EXE  = atomic-v3-hm-oracle-tests$(ATOMIC_TEST_EXE_SUFFIX)
+ATOMIC_V3_HM_ORACLE_TEST_OBJS = $(filter-out main.o,$(OBJS)) \
+	atomic_v3_hm_oracle.o atomic_v3_hm_oracle_tests.o
+ATOMIC_V3_HM_ORACLE_SRCS = nnue/atomic_v3/hm_oracle.cpp \
+	nnue/atomic_v3/tests/hm_oracle_cli.cpp
+ATOMIC_V3_HM_ORACLE_HEADERS = nnue/atomic_v3/orientation.h nnue/atomic_v3/hm_oracle.h
 ATOMIC_LEGACY_V1_TEST_EXE  = legacy-atomic-v1-tests$(ATOMIC_TEST_EXE_SUFFIX)
 ATOMIC_LEGACY_V1_TEST_OBJS = attacks.o bitboard.o misc.o movegen.o position.o tbprobe.o \
 	uci_move.o ucioption.o atomic_data_generator_legacy_atomic_v1.o \
@@ -1146,6 +1152,7 @@ help:
 	echo "atomic-v2-test-fixture  > create the authenticated local AtomicNNUEV2 fixture" && \
 	echo "atomic-v2-backend-core-tests > verify strict AtomicNNUEV2 I/O and arithmetic" && \
 	echo "atomic-v2-incremental-tests > compare AtomicNNUEV2 incremental and refresh paths" && \
+	echo "atomic-v3-hm-oracle-tests > verify/dump the isolated scalar AtomicNNUEV3 HM oracle" && \
 	echo "legacy-atomic-v1-tests  > build and run the frozen 72-byte data codec tests" && \
 	echo "atomic-bin-v2-tests     > build and run the isolated 96/64-byte V2 codec tests" && \
 	echo "atomic-bin-v2-sink-tests > build and run the V2 sink/hash lifecycle tests" && \
@@ -1223,7 +1230,7 @@ ifneq ($(SUPPORTED_ARCH), true)
 endif
 
 
-.PHONY: help analyze build profile-build data-generator data-generator-tests data-tools data-tools-tests atomic-data-tools-json-tests atomic-unit-tests atomic-api-tests atomic-syzygy-driver atomic-nnue-incremental-tests atomic-v2-test-fixture atomic-v2-backend-core-tests atomic-v2-incremental-tests legacy-atomic-v1-tests atomic-bin-v2-tests atomic-bin-v2-sink-tests atomic-bin-v2-manifest-tests atomic-bin-v2-manifest-reader-tests atomic-bin-v2-reader-tests macos-lipo strip install clean net \
+.PHONY: help analyze build profile-build data-generator data-generator-tests data-tools data-tools-tests atomic-data-tools-json-tests atomic-unit-tests atomic-api-tests atomic-syzygy-driver atomic-nnue-incremental-tests atomic-v2-test-fixture atomic-v2-backend-core-tests atomic-v2-incremental-tests atomic-v3-hm-oracle-tests legacy-atomic-v1-tests atomic-bin-v2-tests atomic-bin-v2-sink-tests atomic-bin-v2-manifest-tests atomic-bin-v2-manifest-reader-tests atomic-bin-v2-reader-tests macos-lipo strip install clean net \
 	objclean profileclean config-sanity \
 	icx-profile-use icx-profile-make \
 	gcc-profile-use gcc-profile-make \
@@ -1345,7 +1352,7 @@ clean: objclean profileclean universalclean
 
 # clean binaries and objects
 objclean:
-	@rm -f stockfish stockfish.exe atomic-stockfish atomic-stockfish.exe atomic-stockfish.js atomic-stockfish-data-generator atomic-stockfish-data-generator.exe atomic-stockfish-data-tools atomic-stockfish-data-tools.exe atomic-stockfish-data-tools.* atomic-data-tools-json-tests atomic-data-tools-json-tests.exe atomic-data-tools-json-tests.bin atomic-data-tools-json-tests.* atomic-unit-tests atomic-unit-tests.exe atomic-unit-tests.bin atomic-api-tests atomic-api-tests.exe atomic-api-tests.bin atomic-syzygy-driver* atomic-nnue-incremental-tests atomic-nnue-incremental-tests.exe atomic-nnue-incremental-tests.bin atomic-v2-backend-core-tests atomic-v2-backend-core-tests.exe atomic-v2-backend-core-tests.bin atomic-v2-backend-core-tests.* atomic-v2-incremental-tests atomic-v2-incremental-tests.exe atomic-v2-incremental-tests.bin atomic-v2-incremental-tests.* legacy-atomic-v1-tests legacy-atomic-v1-tests.exe legacy-atomic-v1-tests.bin atomic-bin-v2-tests atomic-bin-v2-tests.exe atomic-bin-v2-tests.bin atomic-bin-v2-tests.* atomic-bin-v2-sink-tests atomic-bin-v2-sink-tests.exe atomic-bin-v2-sink-tests.bin atomic-bin-v2-sink-tests.* atomic-bin-v2-manifest-tests atomic-bin-v2-manifest-tests.exe atomic-bin-v2-manifest-tests.bin atomic-bin-v2-manifest-tests.* atomic-bin-v2-manifest-reader-tests atomic-bin-v2-manifest-reader-tests.exe atomic-bin-v2-manifest-reader-tests.bin atomic-bin-v2-manifest-reader-tests.* atomic-bin-v2-reader-tests atomic-bin-v2-reader-tests.exe atomic-bin-v2-reader-tests.bin atomic-bin-v2-reader-tests.* *.o ./api/*.o ./syzygy/*.o ./nnue/*.o ./nnue/features/*.o $(BUILD_SHA_FILE) $(BUILD_FULL_SHA_FILE) $(BUILD_DATE_FILE)
+	@rm -f stockfish stockfish.exe atomic-stockfish atomic-stockfish.exe atomic-stockfish.js atomic-stockfish-data-generator atomic-stockfish-data-generator.exe atomic-stockfish-data-tools atomic-stockfish-data-tools.exe atomic-stockfish-data-tools.* atomic-data-tools-json-tests atomic-data-tools-json-tests.exe atomic-data-tools-json-tests.bin atomic-data-tools-json-tests.* atomic-unit-tests atomic-unit-tests.exe atomic-unit-tests.bin atomic-api-tests atomic-api-tests.exe atomic-api-tests.bin atomic-syzygy-driver* atomic-nnue-incremental-tests atomic-nnue-incremental-tests.exe atomic-nnue-incremental-tests.bin atomic-v2-backend-core-tests atomic-v2-backend-core-tests.exe atomic-v2-backend-core-tests.bin atomic-v2-backend-core-tests.* atomic-v2-incremental-tests atomic-v2-incremental-tests.exe atomic-v2-incremental-tests.bin atomic-v2-incremental-tests.* atomic-v3-hm-oracle-tests atomic-v3-hm-oracle-tests.exe atomic-v3-hm-oracle-tests.bin atomic-v3-hm-oracle-tests.* legacy-atomic-v1-tests legacy-atomic-v1-tests.exe legacy-atomic-v1-tests.bin atomic-bin-v2-tests atomic-bin-v2-tests.exe atomic-bin-v2-tests.bin atomic-bin-v2-tests.* atomic-bin-v2-sink-tests atomic-bin-v2-sink-tests.exe atomic-bin-v2-sink-tests.bin atomic-bin-v2-sink-tests.* atomic-bin-v2-manifest-tests atomic-bin-v2-manifest-tests.exe atomic-bin-v2-manifest-tests.bin atomic-bin-v2-manifest-tests.* atomic-bin-v2-manifest-reader-tests atomic-bin-v2-manifest-reader-tests.exe atomic-bin-v2-manifest-reader-tests.bin atomic-bin-v2-manifest-reader-tests.* atomic-bin-v2-reader-tests atomic-bin-v2-reader-tests.exe atomic-bin-v2-reader-tests.bin atomic-bin-v2-reader-tests.* *.o ./api/*.o ./syzygy/*.o ./nnue/*.o ./nnue/features/*.o $(BUILD_SHA_FILE) $(BUILD_FULL_SHA_FILE) $(BUILD_DATE_FILE)
 
 # clean auxiliary profiling files
 profileclean:
@@ -1368,7 +1375,7 @@ net:
 	@echo "Atomic NNUE networks are external; set EvalFile to a compatible Legacy Atomic V1 .nnue file."
 
 format:
-	$(CLANG-FORMAT) -i $(SRCS) $(ATOMIC_DATA_GENERATOR_SRCS) $(ATOMIC_DATA_TOOLS_SRCS) $(OTHER_SRCS) $(HEADERS) $(ATOMIC_DATA_GENERATOR_HEADERS) $(ATOMIC_DATA_TOOLS_HEADERS) -style=file
+	$(CLANG-FORMAT) -i $(SRCS) $(ATOMIC_DATA_GENERATOR_SRCS) $(ATOMIC_DATA_TOOLS_SRCS) $(ATOMIC_V3_HM_ORACLE_SRCS) $(OTHER_SRCS) $(HEADERS) $(ATOMIC_DATA_GENERATOR_HEADERS) $(ATOMIC_DATA_TOOLS_HEADERS) $(ATOMIC_V3_HM_ORACLE_HEADERS) -style=file
 
 ### ==========================================================================
 ### Section 5. Private Targets
@@ -1419,6 +1426,9 @@ atomic-v2-backend-core-tests: config-sanity $(ATOMIC_V2_BACKEND_CORE_TEST_EXE) a
 
 atomic-v2-incremental-tests: config-sanity $(ATOMIC_V2_INCREMENTAL_TEST_EXE) atomic-v2-test-fixture
 	./$(ATOMIC_V2_INCREMENTAL_TEST_EXE) --net "$(ATOMIC_NNUE_V2_TEST_NET)" --operations "$(ATOMIC_NNUE_V2_OPERATIONS)" --full-refresh-interval "$(ATOMIC_NNUE_V2_REFRESH_INTERVAL)"
+
+atomic-v3-hm-oracle-tests: config-sanity $(ATOMIC_V3_HM_ORACLE_TEST_EXE)
+	./$(ATOMIC_V3_HM_ORACLE_TEST_EXE)
 
 legacy-atomic-v1-tests: config-sanity $(ATOMIC_LEGACY_V1_TEST_EXE)
 	./$(ATOMIC_LEGACY_V1_TEST_EXE)
@@ -1557,6 +1567,9 @@ $(ATOMIC_V2_BACKEND_CORE_TEST_EXE): $(ATOMIC_V2_BACKEND_CORE_TEST_OBJS)
 $(ATOMIC_V2_INCREMENTAL_TEST_EXE): $(ATOMIC_V2_INCREMENTAL_TEST_OBJS)
 	+$(CXX) -o $@ $(ATOMIC_V2_INCREMENTAL_TEST_OBJS) $(LDFLAGS)
 
+$(ATOMIC_V3_HM_ORACLE_TEST_EXE): $(ATOMIC_V3_HM_ORACLE_TEST_OBJS)
+	+$(CXX) -o $@ $(ATOMIC_V3_HM_ORACLE_TEST_OBJS) $(LDFLAGS)
+
 atomic_see_tests.o: ../tests/atomic_see.cpp
 	$(strip $(CXX) $(CPPFLAGS) $(CXXFLAGS)) -I. -c -o $@ $<
 
@@ -1576,6 +1589,12 @@ atomic_v2_backend_core_tests.o: nnue/atomic_v2/tests/backend_core.cpp
 	$(strip $(CXX) $(CPPFLAGS) $(CXXFLAGS)) -I. -c -o $@ $<
 
 atomic_nnue_v2_incremental_tests.o: ../tests/atomic_nnue_v2_incremental.cpp
+	$(strip $(CXX) $(CPPFLAGS) $(CXXFLAGS)) -I. -c -o $@ $<
+
+atomic_v3_hm_oracle.o: nnue/atomic_v3/hm_oracle.cpp nnue/atomic_v3/hm_oracle.h nnue/atomic_v3/orientation.h
+	$(strip $(CXX) $(CPPFLAGS) $(CXXFLAGS)) -I. -c -o $@ $<
+
+atomic_v3_hm_oracle_tests.o: nnue/atomic_v3/tests/hm_oracle_cli.cpp nnue/atomic_v3/hm_oracle.h nnue/atomic_v3/orientation.h
 	$(strip $(CXX) $(CPPFLAGS) $(CXXFLAGS)) -I. -c -o $@ $<
 
 legacy_atomic_v1_tests.o: ../tests/legacy_atomic_v1.cpp $(ATOMIC_DATA_GENERATOR_HEADERS)
