@@ -1,0 +1,77 @@
+{
+  "schema": "atomic-hito8-performance-evidence-v1",
+  "block": "H8.3a",
+  "source_commit": "d35706d8dc7823bd7e423b0413e2d698b1f5b916",
+  "base_commit": "067f81ce9f41d59b27f93060b7bfc2a180240816",
+  "source_tree_clean": true,
+  "compiler": "g++ (GNUC) 15.2.0",
+  "target": "64bit BMI2 AVX2 SSE41 SSSE3 SSE2 POPCNT",
+  "linker_reproducibility_flag": "-Wl,--no-insert-timestamp",
+  "candidate": {
+    "bytes": 4262552,
+    "sha256": "5335201E2D4EFBA9B34814D7258E83118D2C8A60EA0C4D538750D31E3118911E"
+  },
+  "control": {
+    "source_commit": "2728a7798fbc525e3397c736a46736b3dd15bf5b",
+    "bytes": 4266467,
+    "sha256": "ACA0C03907D750D1991A61F94439B2539AAA25070FDCF0F22D0558E9EB9335E7"
+  },
+  "state_info": {
+    "x64_before_bytes": 208,
+    "x64_after_bytes": 160,
+    "delta_bytes": -48,
+    "delta_percent": -23.1,
+    "copied_prefix_bytes": 64
+  },
+  "network_sha256": "99DC67EABF26A64FAEECA3A88B4C38597A840B8D4A874B9F2CF658C6F92A04A6",
+  "corpus_sha256": "2738065A8A70D61DA46FA3C75F95D645E50E601B43792DF0E7B3CC97B1D891A1",
+  "configuration": {
+    "threads": 1,
+    "hash_mb": 64,
+    "cpu_affinity": 24,
+    "nodes_per_fen": 100000,
+    "warmups_per_batch": 1,
+    "measured_repetitions_per_batch": 5,
+    "extended_batches": 5,
+    "concurrent_assignment_roots": 0
+  },
+  "preliminary_batch": {
+    "candidate_median_nps": 1412429,
+    "control_median_nps": 1417045,
+    "ratio": 0.9967,
+    "passed_strict_gate": false
+  },
+  "extended_batches": [
+    {"candidate_median_nps": 1412429, "control_median_nps": 1409368, "ratio": 1.0022, "passed_strict_gate": true},
+    {"candidate_median_nps": 1412429, "control_median_nps": 1406321, "ratio": 1.0043, "passed_strict_gate": true},
+    {"candidate_median_nps": 1431075, "control_median_nps": 1413964, "ratio": 1.0121, "passed_strict_gate": true},
+    {"candidate_median_nps": 1434230, "control_median_nps": 1418590, "ratio": 1.0110, "passed_strict_gate": true},
+    {"candidate_median_nps": 1406321, "control_median_nps": 1418590, "ratio": 0.9914, "passed_strict_gate": false}
+  ],
+  "pooled_extended_measurement": {
+    "samples_per_side": 25,
+    "candidate_median_nps": 1420139,
+    "control_median_nps": 1410897,
+    "ratio": 1.0066,
+    "speed_delta_percent": 0.66,
+    "positive_batches": 4,
+    "interpretation": "small positive signal with visible batch noise"
+  },
+  "binary_delta_bytes": -3915,
+  "playing_signature": 338376,
+  "incremental_state_signature": "0x8742E39B793C46AB",
+  "data_generator_smoke": {
+    "fixtures": 7,
+    "data_sha256": "7E89411B84C2036DEEB2DB56F3E43FEA89917C5546C72C37F8E082F103B27CC0",
+    "network_sha256": "99DC67EABF26A64FAEECA3A88B4C38597A840B8D4A874B9F2CF658C6F92A04A6"
+  },
+  "openbench_isolation": {
+    "preliminary_paused_processes": 53,
+    "static_rng_fill_unavailable": true,
+    "weak_intermediate_credential_rotated_immediately": true,
+    "secure_rotation_entropy_bytes": 32,
+    "extended_paused_processes": 41,
+    "restored_worker_processes": 2,
+    "credential_transport": "environment"
+  }
+}
