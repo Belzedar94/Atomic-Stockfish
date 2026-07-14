@@ -311,3 +311,52 @@ The structural test protects the current single-backend tree globally and
 records that H9 must split or replace the guard when it adds modern layers
 under an independent `AtomicNNUEV2` build graph. LegacyAtomicV1 remains
 bit-compatible, and the playing signature remains exactly `338376`.
+
+## H8.3a - Compact Atomic search state
+
+H8.3a removes the zero-only orthodox `checkersBB`, the unconsumed
+`pinners[COLOR_NB]`, and three unused `checkSquares` entries from `StateInfo`.
+The x64 layout falls from 208 to 160 bytes (-48 bytes, -23.1%) while the copied
+prefix remains exactly 64 bytes. `Position::checkers()` remains constant-zero,
+KING check squares remain empty, and all live PAWN-through-QUEEN indices are
+covered by compile-time contracts.
+
+The measured source commit is
+`d35706d8dc7823bd7e423b0413e2d698b1f5b916`, based on H8.2c squash merge
+`067f81ce9f41d59b27f93060b7bfc2a180240816`.
+
+### Functional and artifact evidence
+
+- BMI2 executable: 4,262,552 bytes, SHA-256
+  `5335201E2D4EFBA9B34814D7258E83118D2C8A60EA0C4D538750D31E3118911E`;
+  3,915 bytes smaller than H8.2c.
+- C++ units 65/65 in release and debug/assert; shared API 34/34.
+- MSVC Python build, `test.py` 22/22, and focused pytest 66/66.
+- Real MinGW data-generator smoke passed all seven fixtures with the frozen
+  strong network.
+- Eight Atomic/Atomic960 perfts; focused rules 19/19.
+- Search 16/16 classical and 16/16 LegacyAtomicV1; XBoard passed.
+- NNUE modes `false`, `true`, `pure`, invalid-net recovery, and reprosearch
+  12/12.
+- One million deterministic make/undo operations reproduced 18,761 captures,
+  241,087 full-refresh comparisons, zero capture-forced refreshes, and state
+  signature `0x8742E39B793C46AB`.
+- Frozen-Fairy differential 10,000/10,000, maximum playing delta 0, maximum
+  pure-trace delta 0.005, and 866 rule-50-damped positions.
+- Playing signature remains exactly `338376`.
+
+The new C++ corpus exhausts every legal move in 11 focused positions (166
+moves) and proves `gives_check(move) == atomic_in_check(child)` plus exact
+FEN/key restoration after undo.
+
+### Serialized commit A/B
+
+A preliminary five-sample batch measured -0.33%. To distinguish that short
+batch from a real regression, five further complete batches were run under the
+same isolated conditions. Their pooled 25 samples per side measured median
+1,420,139 NPS for H8.3a and 1,410,897 for H8.2c, ratio `1.0066` (+0.66%);
+four of five extended batches had a positive median. This is classified as a
+small positive signal with visible batch noise, not as a precise speed claim.
+
+Complete artifacts and every sample are in
+[`evidence/hito8-compact-stateinfo`](evidence/hito8-compact-stateinfo/README.md).

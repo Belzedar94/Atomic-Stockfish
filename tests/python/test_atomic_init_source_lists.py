@@ -94,6 +94,31 @@ def test_legacy_atomic_v1_inventory_omits_unselected_modern_nnue_layers():
     assert "vec_nnz" not in simd
 
 
+def test_atomic_state_info_only_stores_live_check_metadata():
+    header = (ROOT / "src" / "position.h").read_text(encoding="utf-8")
+    source = (ROOT / "src" / "position.cpp").read_text(encoding="utf-8")
+    unit_test = (ROOT / "tests" / "atomic_see.cpp").read_text(encoding="utf-8")
+
+    assert "usize(QUEEN) - usize(PAWN) + 1" in header
+    assert "static_assert(CHECK_SQUARE_NB == 5);" in header
+    assert "std::array<Bitboard, CHECK_SQUARE_NB>" in header
+    assert "pt == KING ? 0" in header
+    assert "Position::checkers() const { return 0; }" in header
+
+    for removed in ("checkersBB", "pinners[", "Position::pinners"):
+        assert removed not in header
+        assert removed not in source
+
+    assert "assert(givesCheck == atomic_in_check(sideToMove));" not in source
+    for contract in (
+        "std::is_standard_layout_v<StateInfo>",
+        "std::is_trivially_copyable_v<StateInfo>",
+        "offsetof(StateInfo, key)",
+        "expect_gives_check_matches_child",
+    ):
+        assert contract in unit_test
+
+
 def test_reader_test_links_keep_transposition_table_dependency_isolated():
     makefile = (ROOT / "src" / "Makefile").read_text(encoding="utf-8")
     gitignore = (ROOT / ".gitignore").read_text(encoding="utf-8")

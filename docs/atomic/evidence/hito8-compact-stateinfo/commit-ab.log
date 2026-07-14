@@ -1,0 +1,39 @@
+H8.3a compact StateInfo serialized commit A/B
+candidate source=d35706d8dc7823bd7e423b0413e2d698b1f5b916 bytes=4262552 sha256=5335201E2D4EFBA9B34814D7258E83118D2C8A60EA0C4D538750D31E3118911E
+control source=2728a7798fbc525e3397c736a46736b3dd15bf5b bytes=4266467 sha256=ACA0C03907D750D1991A61F94439B2539AAA25070FDCF0F22D0558E9EB9335E7
+corpus positions=13 atomic=10 atomic960=3 sha256=2738065a8a70d61da46fa3c75f95d645e50e601b43792df0e7b3cc97b1d891a1
+configuration threads=1 hash_mb=64 cpu=24 nodes_per_fen=100000 warmups=1 repetitions_per_batch=5
+
+preliminary candidate=1395759,1418590,1421691,1410897,1412429 median=1412429
+preliminary control=1407843,1410897,1417045,1418590,1426367 median=1417045
+preliminary ratio=0.9967 speed_delta_pct=-0.33 strict_gate=FAIL
+preliminary_openbench_pause process_count=53
+preliminary_restore static_rng_fill_unavailable=true weak_intermediate_credential=true
+corrective_rotation entropy_bytes=32 api=RandomNumberGenerator.Create.GetBytes worker_processes=2 credential_mode=environment
+
+extended_openbench_pause process_count=41
+extended_batch_1 candidate=1413964,1409368,1418590,1407843,1412429 median=1412429
+extended_batch_1 control=1404802,1409368,1415503,1407843,1410897 median=1409368
+extended_batch_1 ratio=1.0022 speed_delta_pct=0.22 strict_gate=PASS
+
+extended_batch_2 candidate=1423246,1412429,1434230,1404802,1363571 median=1412429
+extended_batch_2 control=1410897,1404802,1406321,1418590,1404802 median=1406321
+extended_batch_2 ratio=1.0043 speed_delta_pct=0.43 strict_gate=PASS
+
+extended_batch_3 candidate=1432651,1420139,1431075,1432651,1427933 median=1431075
+extended_batch_3 control=1404802,1413964,1394263,1415503,1415503 median=1413964
+extended_batch_3 ratio=1.0121 speed_delta_pct=1.21 strict_gate=PASS
+
+extended_batch_4 candidate=1435813,1423246,1434230,1445386,1434230 median=1434230
+extended_batch_4 control=1410897,1427933,1412429,1418590,1421691 median=1418590
+extended_batch_4 ratio=1.0110 speed_delta_pct=1.10 strict_gate=PASS
+
+extended_batch_5 candidate=1434230,1413964,1406321,1392770,1398760 median=1406321
+extended_batch_5 control=1398760,1372201,1424805,1418590,1421691 median=1418590
+extended_batch_5 ratio=0.9914 speed_delta_pct=-0.86 strict_gate=FAIL
+
+pooled_extended samples_per_side=25 candidate_median=1420139 control_median=1410897 ratio=1.0066 speed_delta_pct=0.66 positive_batches=4/5
+binary_size_delta=-3915
+interpretation=small positive signal with visible batch noise
+extended_openbench_restore worker_processes=2 credential_mode=environment entropy_bytes=32
+openbench_server_health clientGetBuildInfo=6 clientWorkerInfo=6 clientGetWorkload=20 clientSubmitResults=537

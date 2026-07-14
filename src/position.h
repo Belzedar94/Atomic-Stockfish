@@ -44,6 +44,10 @@ struct SharedHistories;
 struct StateInfo {
 
     static constexpr usize MAX_ATOMIC_BLAST_PIECES = DirtyPiece::MAX_ATOMIC_BLAST_PIECES;
+    static constexpr usize CHECK_SQUARE_NB         = usize(QUEEN) - usize(PAWN) + 1;
+    static_assert(CHECK_SQUARE_NB == 5);
+
+    static constexpr usize check_square_index(PieceType pt) { return usize(pt) - usize(PAWN); }
 
     struct AtomicBlastPiece {
         Piece  piece;
@@ -64,11 +68,9 @@ struct StateInfo {
 
     // Not copied when making a move (will be recomputed anyhow)
     Key                                                   key;
-    Bitboard                                              checkersBB;
     StateInfo*                                            previous;
     Bitboard                                              blockersForKing[COLOR_NB];
-    Bitboard                                              pinners[COLOR_NB];
-    Bitboard                                              checkSquares[PIECE_TYPE_NB];
+    std::array<Bitboard, CHECK_SQUARE_NB>                 checkSquares;
     Piece                                                 capturedPiece;
     std::array<AtomicBlastPiece, MAX_ATOMIC_BLAST_PIECES> atomicBlast;
     u8                                                    atomicBlastCount;
@@ -131,7 +133,6 @@ class Position {
     Bitboard checkers() const;
     Bitboard blockers_for_king(Color c) const;
     Bitboard check_squares(PieceType pt) const;
-    Bitboard pinners(Color c) const;
 
     // Attacks to/from a given square
     Bitboard attackers_to(Square s) const;
@@ -312,13 +313,14 @@ inline Bitboard Position::attacks_by(Color c) const {
     }
 }
 
-inline Bitboard Position::checkers() const { return st->checkersBB; }
+inline Bitboard Position::checkers() const { return 0; }
 
 inline Bitboard Position::blockers_for_king(Color c) const { return st->blockersForKing[c]; }
 
-inline Bitboard Position::pinners(Color c) const { return st->pinners[c]; }
-
-inline Bitboard Position::check_squares(PieceType pt) const { return st->checkSquares[pt]; }
+inline Bitboard Position::check_squares(PieceType pt) const {
+    assert(pt >= PAWN && pt <= KING);
+    return pt == KING ? 0 : st->checkSquares[StateInfo::check_square_index(pt)];
+}
 
 inline Key Position::key() const { return adjust_key50(st->key); }
 
