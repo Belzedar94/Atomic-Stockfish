@@ -172,10 +172,10 @@ def test_slice_offsets_dimensions_dtypes_and_training_factorization() -> None:
         "atomic-king-blast-ep",
         "atomic-blast-ring",
     ]
-    assert [item["physical_offset"] for item in slices] == [0, 22528, 69176, 71480]
+    assert [item["physical_offset"] for item in slices] == [0, 22528, 62540, 64844]
     assert [item["physical_dimensions"] for item in slices] == [
         22528,
-        46648,
+        40012,
         2304,
         10240,
     ]
@@ -190,14 +190,14 @@ def test_slice_offsets_dimensions_dtypes_and_training_factorization() -> None:
     dimensions = contract["dimensions"]
     assert sum(item["physical_dimensions"] for item in slices) == dimensions[
         "physical_total"
-    ] == 81720
+    ] == 75084
     assert sum(item["training_dimensions"] for item in slices) == dimensions[
         "training_total_excluding_virtual"
-    ] == 83768
+    ] == 77132
     assert sum(item["virtual_factor_dimensions"] for item in slices) == dimensions[
         "virtual_factor_total"
     ] == 768
-    assert 83768 + 768 == dimensions["training_parameter_rows_total"] == 84536
+    assert 77132 + 768 == dimensions["training_parameter_rows_total"] == 77900
 
     hm = slices[0]
     assert hm["king_buckets"] * hm["physical_piece_planes"] * 64 == 22528
@@ -366,9 +366,73 @@ def test_capture_pair_geometry_is_derived_instead_of_magic() -> None:
         "QUEEN": 1876,
     }
     assert "ascending A1=0 ordinal" in capture["edge_ordinal_order"]
-    assert 2 * 3332 * len(capture["target_class_order"]) == capture[
-        "physical_dimensions"
-    ] == 46648
+    assert capture["normal_target_class_order"] == [
+        "PAWN",
+        "KNIGHT",
+        "BISHOP",
+        "ROOK",
+        "QUEEN",
+        "KING",
+    ]
+    assert 2 * 3332 * len(capture["normal_target_class_order"]) == capture[
+        "normal_dimensions"
+    ] == 39984
+    assert capture["normal_local_index_formula"].startswith(
+        "((actor_rel * 3332 + edge_ordinal) * 6 + target_class)"
+    )
+    assert capture["en_passant_local_offset"] == 39984
+    assert capture["en_passant_edges_per_actor_relation"] == 14
+    assert 2 * capture["en_passant_edges_per_actor_relation"] == capture[
+        "en_passant_dimensions"
+    ] == 28
+    assert capture["en_passant_local_index_formula"].startswith(
+        "39984 + actor_rel * 14 + ep_ordinal"
+    )
+    assert capture["physical_dimensions"] == 39984 + 2 * 14 == 40012
+    assert capture["local_index_domain"] == {
+        "minimum": 0,
+        "maximum": 40011,
+        "normal_range": [0, 39983],
+        "en_passant_range": [39984, 40011],
+    }
+    assert capture["physical_index_domain"] == {"minimum": 22528, "maximum": 62539}
+    assert capture["physical_index_formula"].endswith("22528 + local_index")
+
+    own_ep = [
+        "a5-b6",
+        "b5-a6",
+        "b5-c6",
+        "c5-b6",
+        "c5-d6",
+        "d5-c6",
+        "d5-e6",
+        "e5-d6",
+        "e5-f6",
+        "f5-e6",
+        "f5-g6",
+        "g5-f6",
+        "g5-h6",
+        "h5-g6",
+    ]
+    opp_ep = [
+        "a4-b3",
+        "b4-a3",
+        "b4-c3",
+        "c4-b3",
+        "c4-d3",
+        "d4-c3",
+        "d4-e3",
+        "e4-d3",
+        "e4-f3",
+        "f4-e3",
+        "f4-g3",
+        "g4-f3",
+        "g4-h3",
+        "h4-g3",
+    ]
+    assert capture["en_passant_edge_tables"]["OWN"] == own_ep
+    assert capture["en_passant_edge_tables"]["OPP"] == opp_ep
+    assert "lexicographically" in capture["en_passant_edge_tables"]["order"]
     assert "select an 84-edge table by actor_rel" in capture[
         "pawn_edge_ordinal_formula"
     ]
@@ -379,12 +443,59 @@ def test_capture_pair_geometry_is_derived_instead_of_magic() -> None:
         "pawn_edge_ordinal_formula"
     ]
     assert "without another square transform" in capture["pawn_edge_ordinal_formula"]
+    assert "actual capture-actor color equals the accumulator perspective" in capture[
+        "actor_relation_derivation"
+    ]
+    assert "strictly ascending local index" in capture["emission_order"]
+    assert "caller-owned" in capture["enumeration_ownership"]
+    assert "no mutable global, static or shared scratch state" in capture["thread_safety"]
     assert capture["semantics"]["target"] == (
         "stop at the first occupied square and emit only when that occupant is enemy"
     )
-    assert "geometric pawn attack" in capture["semantics"]["en_passant"]
+    assert "promotion rank activates exactly one" in capture["semantics"]["promotion"]
+    assert "do not multiply" in capture["semantics"]["promotion"]
+    assert "side-to-move pawn" in capture["semantics"]["en_passant"]
     assert "do not filter pins" in capture["semantics"]["en_passant"]
+    ep_validation = capture["semantics"]["en_passant_metadata_validation"]
+    assert "rank 6" in ep_validation["rank"] and "rank 3" in ep_validation["rank"]
+    assert ep_validation["center"] == "the raw EP center is empty"
+    assert "opponent pawn" in ep_validation["captured_pawn"]
+    assert "side-to-move pawn" in ep_validation["actor"]
+    assert ep_validation["last_move_history"] == (
+        "not reconstructed from a static Position"
+    )
+    assert "emit zero EN_PASSANT rows" in ep_validation["failure_policy"]
+    assert "preserving normal CapturePair" in ep_validation["failure_policy"]
+    impossible = capture["impossible_row_policy"]
+    assert set(impossible) == {
+        "old_rectangular_dimensions",
+        "old_en_passant_rows",
+        "retained_en_passant_rows",
+        "eliminated_impossible_rows",
+        "reserved_or_hole_rows",
+        "policy",
+    }
+    assert {key: value for key, value in impossible.items() if key != "policy"} == {
+        "old_rectangular_dimensions": 46648,
+        "old_en_passant_rows": 6664,
+        "retained_en_passant_rows": 28,
+        "eliminated_impossible_rows": 6636,
+        "reserved_or_hole_rows": 0,
+    }
+    assert "absent rather than reserved" in impossible["policy"]
+    assert "does not claim every normal row is structurally reachable" in impossible[
+        "policy"
+    ]
     assert "sole candidate source" in capture["semantics"]["relation_source"]
+    assert capture["descriptor"].startswith(
+        "AtomicCapturePair|v2-provisional-compact|"
+    )
+    assert "normal_local=((actor_rel*3332+edge)*6+target)@offset0_count39984" in capture[
+        "descriptor"
+    ]
+    assert "ep_tail=(actor_rel*14+ep_ordinal)@offset39984_count28" in capture[
+        "descriptor"
+    ]
 
 
 def test_atomic_relation_prototype_dimensions_and_semantic_orders_are_explicit() -> None:
@@ -463,6 +574,10 @@ def test_wire_keeps_v2_tail_but_makes_mixed_slices_unambiguous() -> None:
         "dtype": "i32",
         "shape": [22528, 8],
     }
+    assert wire["tensor_shapes"]["atomic_capture_pair_weights"] == {
+        "dtype": "i8",
+        "shape": [40012, 1024],
+    }
     assert "8 PSQT buckets contiguous" in wire["tensor_order"]
     assert "same virtual-factor coalesce" in wire["psqt_export_mapping"]
     assert wire["dense_tail"] == (
@@ -508,6 +623,8 @@ def test_hash_recipe_is_deterministic_but_production_values_remain_unfrozen() ->
     slices = {item["id"]: item for item in contract["feature_slices"]}
 
     assert hashing["status"] == "not frozen"
+    assert "cp_i8_raw[40012x1024]" in hashing["transformer_descriptor"]
+    assert "cp_i8_raw[46648x1024]" not in hashing["transformer_descriptor"]
     assert hashing["descriptor_encoding"] == "ASCII"
     assert _u32(hashing["fnv_offset_basis"]) == 0x811C9DC5
     assert _u32(hashing["fnv_prime"]) == 0x01000193
@@ -537,7 +654,7 @@ def test_hash_recipe_is_deterministic_but_production_values_remain_unfrozen() ->
     assert hashing["semantic_decision_blockers"] == [
         "per-perspective joint orientation golden semantics",
         "HM virtual-factor coalesce and 12-to-11 accumulator and PSQT export goldens",
-        "AtomicCapturePair edge ordinals and geometric en-passant goldens",
+        "AtomicCapturePair compact normal/EP split, edge ordinals, malformed-EP rejection and geometric en-passant goldens",
         "AtomicKingBlastEP center-to-king offset and en-passant goldens",
         "AtomicBlastRing center-to-collateral, multiple-origin, pawn-immunity and en-passant goldens",
         "HM-only versus relation PSQT ablation decision",
@@ -626,7 +743,7 @@ def test_dataset_statistics_schema_authenticates_coverage_and_leakage_gates() ->
     perspective = definitions["perspectiveCoverage"]
     expected_dimensions = {
         "half_ka_v2_atomic_hm": 22528,
-        "atomic_capture_pair": 46648,
+        "atomic_capture_pair": 40012,
         "atomic_king_blast_ep": 2304,
         "atomic_blast_ring": 10240,
     }
@@ -653,6 +770,17 @@ def test_dataset_statistics_schema_authenticates_coverage_and_leakage_gates() ->
     assert active_contract["accumulator_capacity"] == 1024
     assert active_contract["capacity_headroom"] == 477
     assert active_contract["activation_domain"] == "physical/runtime-export"
+    capture_class_description = definitions["capturePairClasses"]["description"]
+    assert "EN_PASSANT is a cold-tail event permitted only under PAWN geometry" in (
+        capture_class_description
+    )
+    assert "does not recreate the eliminated rectangular physical rows" in (
+        capture_class_description
+    )
+    assert any(
+        "EN_PASSANT semantic counters may be nonzero only in the PAWN" in rule
+        for rule in schema["x-semantic-invariants"]
+    )
     assert "579 parameter rows" in active_contract["factorized_training_note"]
     assert active_contract["source"] == "schemas/atomic-nnue-v3.json#active_feature_bounds"
     assert "16 pieces per color" in active_contract["scope"]
@@ -781,7 +909,7 @@ def test_index_coverage_wire_has_exact_v3_segments_and_no_float_counters() -> No
         for perspective in ("WHITE", "BLACK")
         for kind, slice_id, count in (
             ("physical", "half-ka-v2-atomic-hm", 22528),
-            ("physical", "atomic-capture-pair", 46648),
+            ("physical", "atomic-capture-pair", 40012),
             ("physical", "atomic-king-blast-ep", 2304),
             ("physical", "atomic-blast-ring", 10240),
             ("training", "half-ka-v2-atomic-hm", 24576),
@@ -796,13 +924,13 @@ def test_index_coverage_wire_has_exact_v3_segments_and_no_float_counters() -> No
     for segment in segments:
         assert segment["offset"] == next_offset
         next_offset += segment["count"]
-    assert next_offset == 214128
+    assert next_offset == 200856
     assert len(segments) == 12
     assert [segment["perspective"] for segment in segments[:6]] == ["WHITE"] * 6
     assert [segment["perspective"] for segment in segments[6:]] == ["BLACK"] * 6
     assert [segment["count"] for segment in segments[:6]] == [
         22528,
-        46648,
+        40012,
         2304,
         10240,
         24576,
@@ -814,8 +942,8 @@ def test_index_coverage_wire_has_exact_v3_segments_and_no_float_counters() -> No
         if field["name"] == "counter_count"
     )
     assert counter_count["required_value"] == next_offset
-    mask_bytes = 2 * (2816 + 5831 + 288 + 1280 + 3072 + 96)
-    assert mask_bytes == 26766
+    mask_bytes = 2 * (2816 + 5002 + 288 + 1280 + 3072 + 96)
+    assert mask_bytes == 25108
     assert coverage["reachability_masks"]["storage"] == (
         "trailing-canonical-bitmaps"
     )
@@ -824,6 +952,19 @@ def test_index_coverage_wire_has_exact_v3_segments_and_no_float_counters() -> No
     ]["derivation"]
     assert len(coverage["reachability_masks"]["layout"]) == 12
     reachability = coverage["reachability_masks"]
+    assert reachability["offset"] == 128 + next_offset * coverage["counter"]["size"]
+    assert reachability["mask_byte_count"] == {
+        "half-ka-v2-atomic-hm": 2816,
+        "atomic-capture-pair": 5002,
+        "atomic-king-blast-ep": 288,
+        "atomic-blast-ring": 1280,
+        "hm-training": 3072,
+        "hm-virtual-factors": 96,
+    }
+    next_mask_offset = reachability["offset"]
+    for mask in reachability["layout"]:
+        assert mask["offset"] == next_mask_offset
+        next_mask_offset += mask["bytes"]
     assert reachability["kind_id"] == {
         "physical": 0,
         "training": 1,
@@ -849,8 +990,9 @@ def test_index_coverage_wire_has_exact_v3_segments_and_no_float_counters() -> No
         "BLACK.training.half-ka-v2-atomic-hm",
         "BLACK.virtual-factor.half-ka-v2-atomic-hm",
     ]
-    assert coverage["file_policy"]["file_size"] == 128 + 214128 * 8 + mask_bytes
-    assert coverage["file_policy"]["formula"] == "128 + 214128 * 8 + 26766"
+    assert coverage["file_policy"]["file_size"] == 128 + 200856 * 8 + mask_bytes
+    assert next_mask_offset == coverage["file_policy"]["file_size"]
+    assert coverage["file_policy"]["formula"] == "128 + 200856 * 8 + 25108"
 
 
 def test_coverage_policy_and_split_audit_are_hash_pinned_integer_gates() -> None:

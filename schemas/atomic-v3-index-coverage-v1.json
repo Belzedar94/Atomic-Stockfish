@@ -5,7 +5,7 @@
   "variant": "atomic",
   "backend": "AtomicNNUEV3",
   "byte_order": "little-endian",
-  "purpose": "Preserve auditable activation counts for every V3 physical, HM training and HM virtual-factor index without embedding 214128 counters in JSON.",
+  "purpose": "Preserve auditable activation counts for every V3 physical, HM training and HM virtual-factor index without embedding 200856 counters in JSON.",
   "header": {
     "size": 128,
     "magic_hex": "4154434f56310000",
@@ -80,7 +80,7 @@
         "offset": 120,
         "size": 8,
         "storage": "uint64",
-        "required_value": 214128
+        "required_value": 200856
       }
     ]
   },
@@ -103,82 +103,82 @@
       "kind": "physical",
       "slice": "atomic-capture-pair",
       "offset": 22528,
-      "count": 46648
+      "count": 40012
     },
     {
       "perspective": "WHITE",
       "kind": "physical",
       "slice": "atomic-king-blast-ep",
-      "offset": 69176,
+      "offset": 62540,
       "count": 2304
     },
     {
       "perspective": "WHITE",
       "kind": "physical",
       "slice": "atomic-blast-ring",
-      "offset": 71480,
+      "offset": 64844,
       "count": 10240
     },
     {
       "perspective": "WHITE",
       "kind": "training",
       "slice": "half-ka-v2-atomic-hm",
-      "offset": 81720,
+      "offset": 75084,
       "count": 24576
     },
     {
       "perspective": "WHITE",
       "kind": "virtual-factor",
       "slice": "half-ka-v2-atomic-hm",
-      "offset": 106296,
+      "offset": 99660,
       "count": 768
     },
     {
       "perspective": "BLACK",
       "kind": "physical",
       "slice": "half-ka-v2-atomic-hm",
-      "offset": 107064,
+      "offset": 100428,
       "count": 22528
     },
     {
       "perspective": "BLACK",
       "kind": "physical",
       "slice": "atomic-capture-pair",
-      "offset": 129592,
-      "count": 46648
+      "offset": 122956,
+      "count": 40012
     },
     {
       "perspective": "BLACK",
       "kind": "physical",
       "slice": "atomic-king-blast-ep",
-      "offset": 176240,
+      "offset": 162968,
       "count": 2304
     },
     {
       "perspective": "BLACK",
       "kind": "physical",
       "slice": "atomic-blast-ring",
-      "offset": 178544,
+      "offset": 165272,
       "count": 10240
     },
     {
       "perspective": "BLACK",
       "kind": "training",
       "slice": "half-ka-v2-atomic-hm",
-      "offset": 188784,
+      "offset": 175512,
       "count": 24576
     },
     {
       "perspective": "BLACK",
       "kind": "virtual-factor",
       "slice": "half-ka-v2-atomic-hm",
-      "offset": 213360,
+      "offset": 200088,
       "count": 768
     }
   ],
   "reachability_masks": {
     "storage": "trailing-canonical-bitmaps",
-    "offset": 1713152,
+    "offset": 1606976,
     "derivation": "physical mask bits come only from an independent symbolic V3 reachability oracle; HM training and virtual-factor masks are exact deterministic projections of the physical HM mask and never independent trusted oracles; dataset counters and labels are forbidden inputs",
     "observed_relation": "counter > 0 means observed; structurally reachable is read only from this bitmap. A nonzero counter under a zero mask bit is invalid, while a zero counter under a one mask bit is reachable-but-unseen.",
     "bit_packing": "index i is bit (i mod 8), least-significant-bit first, of byte floor(i / 8); unused high bits in the final byte are zero",
@@ -199,7 +199,7 @@
     },
     "mask_byte_count": {
       "half-ka-v2-atomic-hm": 2816,
-      "atomic-capture-pair": 5831,
+      "atomic-capture-pair": 5002,
       "atomic-king-blast-ep": 288,
       "atomic-blast-ring": 1280,
       "hm-training": 3072,
@@ -210,84 +210,84 @@
         "perspective": "WHITE",
         "kind": "physical",
         "slice": "half-ka-v2-atomic-hm",
-        "offset": 1713152,
+        "offset": 1606976,
         "bytes": 2816
       },
       {
         "perspective": "WHITE",
         "kind": "physical",
         "slice": "atomic-capture-pair",
-        "offset": 1715968,
-        "bytes": 5831
+        "offset": 1609792,
+        "bytes": 5002
       },
       {
         "perspective": "WHITE",
         "kind": "physical",
         "slice": "atomic-king-blast-ep",
-        "offset": 1721799,
+        "offset": 1614794,
         "bytes": 288
       },
       {
         "perspective": "WHITE",
         "kind": "physical",
         "slice": "atomic-blast-ring",
-        "offset": 1722087,
+        "offset": 1615082,
         "bytes": 1280
       },
       {
         "perspective": "WHITE",
         "kind": "training",
         "slice": "half-ka-v2-atomic-hm",
-        "offset": 1723367,
+        "offset": 1616362,
         "bytes": 3072
       },
       {
         "perspective": "WHITE",
         "kind": "virtual-factor",
         "slice": "half-ka-v2-atomic-hm",
-        "offset": 1726439,
+        "offset": 1619434,
         "bytes": 96
       },
       {
         "perspective": "BLACK",
         "kind": "physical",
         "slice": "half-ka-v2-atomic-hm",
-        "offset": 1726535,
+        "offset": 1619530,
         "bytes": 2816
       },
       {
         "perspective": "BLACK",
         "kind": "physical",
         "slice": "atomic-capture-pair",
-        "offset": 1729351,
-        "bytes": 5831
+        "offset": 1622346,
+        "bytes": 5002
       },
       {
         "perspective": "BLACK",
         "kind": "physical",
         "slice": "atomic-king-blast-ep",
-        "offset": 1735182,
+        "offset": 1627348,
         "bytes": 288
       },
       {
         "perspective": "BLACK",
         "kind": "physical",
         "slice": "atomic-blast-ring",
-        "offset": 1735470,
+        "offset": 1627636,
         "bytes": 1280
       },
       {
         "perspective": "BLACK",
         "kind": "training",
         "slice": "half-ka-v2-atomic-hm",
-        "offset": 1736750,
+        "offset": 1628916,
         "bytes": 3072
       },
       {
         "perspective": "BLACK",
         "kind": "virtual-factor",
         "slice": "half-ka-v2-atomic-hm",
-        "offset": 1739822,
+        "offset": 1631988,
         "bytes": 96
       }
     ],
@@ -331,8 +331,8 @@
   },
   "verification": {
     "segment_count": 12,
-    "counter_count": 214128,
-    "file_size": 1739918,
+    "counter_count": 200856,
+    "file_size": 1632084,
     "segment_order": "exactly the array order above; every offset equals the prior offset plus count",
     "counter_count_formula": "sum of all segment counts",
     "physical_indices": "exactly the V3 physical index emitted by the independent full-refresh oracle",
@@ -346,7 +346,7 @@
     "extension": ".atcov",
     "append": "forbidden",
     "overwrite": "forbidden",
-    "file_size": 1739918,
-    "formula": "128 + 214128 * 8 + 26766"
+    "file_size": 1632084,
+    "formula": "128 + 200856 * 8 + 25108"
   }
 }

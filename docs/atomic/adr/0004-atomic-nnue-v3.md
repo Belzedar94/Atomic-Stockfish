@@ -50,12 +50,12 @@ an independent full-board enumerator.
    | Slice | Physical dimensions | Trainer dimensions | Wire weight | PSQT |
    | --- | ---: | ---: | --- | --- |
    | HalfKAv2Atomic_hm | 22,528 | 24,576 + 768 virtual | i16 | yes |
-   | AtomicCapturePair | 46,648 | 46,648 | i8 | no |
+   | AtomicCapturePair | 40,012 | 40,012 | i8 | no |
    | AtomicKingBlastEP | 2,304 | 2,304 | i16 | no |
    | AtomicBlastRing | 10,240 | 10,240 | i8 | no |
 
-   The physical total is 81,720 rows. The trainer has 83,768 ordinary input
-   rows and another 768 virtual factorizer rows, for 84,536 parameter rows.
+   The physical total is 75,084 rows. The trainer has 77,132 ordinary input
+   rows and another 768 virtual factorizer rows, for 77,900 parameter rows.
 4. `HalfKAv2Atomic_hm` follows the modern 12-plane training and 11-plane
    export mapping. Non-terminal positions use the compact `KING`; evaluation
    after either king has exploded is forbidden. Horizontal mirror invariance
@@ -74,9 +74,10 @@ an independent full-board enumerator.
 5. `AtomicCapturePair` records occupancy-based pseudocaptures, not legal moves.
    It deliberately retains pinned, checked and self-blasting candidates so the
    network can learn why they are unusable. Kings are excluded as actors, pawn
-   pushes are absent, sliders stop at the first blocker, and EP is a seventh
-   virtual target class. Its 3,332 directed geometric edges are 84 pawn, 336
-   knight, 560 bishop, 896 rook and 1,456 queen edges. Actor relation is own or
+   pushes are absent, sliders stop at the first blocker, and EP uses a compact
+   cold tail rather than a normal victim class. Its 3,332 directed geometric
+   edges are 84 pawn, 336 knight, 560 bishop, 896 rook and 1,456 queen edges.
+   Actor relation is own or
    opponent relative to the accumulator perspective.
    The joint position orientation leaves own pawns moving north and opponent
    pawns moving south. CapturePair therefore has two actor-relative 84-edge
@@ -85,11 +86,44 @@ an independent full-board enumerator.
    with KingBlastEP and BlastRing centers.
    Edge ordinals are lexicographic by ascending oriented A1=0 from-square and
    then ascending oriented to-square. Segment bases are pawn 0, knight 84,
-   bishop 420, rook 980 and queen 1,876. En passant is equally unfiltered: when
-   `Position::ep_square()` is not `SQ_NONE`, emit one `EN_PASSANT` target for
-   every side-to-move pawn whose geometric attack reaches that square, even if
-   the candidate is pinned, fails check evasion or would self-blast. This exact
-   CP set is the sole candidate source for the two downstream relation slices.
+   bishop 420, rook 980 and queen 1,876. The hot normal rectangle has six
+   victim classes P, N, B, R, Q and K and uses the branchless local formula
+   `((actor_rel * 3332 + edge) * 6 + target)`, giving rows 0 through 39,983.
+   `actor_rel` is OWN=0 exactly when the actual actor color equals the
+   accumulator perspective; it only relabels color and never applies a second
+   square transform. The physical index is `22,528 + local_index`.
+
+   En passant occupies a compact cold tail instead of reserving an impossible
+   seventh target class for all 3,332 edges. For each actor relation, enumerate
+   14 `(oriented_from, oriented_center)` pairs lexicographically. OWN is
+   `a5-b6; b5-a6,b5-c6; ...; h5-g6`, while OPP is
+   `a4-b3; b4-a3,b4-c3; ...; h4-g3`. Its local formula is
+   `39,984 + actor_rel * 14 + ep_ordinal`, giving rows 39,984 through 40,011.
+   This retains all 28 geometric EP rows and removes 6,636 impossible rows
+   from the former 46,648-row rectangle; there are no holes or zero-reserved
+   rows. This compaction does not assert that every normal row is structurally
+   reachable; the authenticated reachability bitmap remains authoritative for
+   that separate question.
+
+   EP metadata fails closed before any cold-tail index is formed. The raw EP
+   center must be on rank 6 for White to move or rank 3 for Black to move, be
+   empty, and have an opponent pawn at
+   `center - pawn_push(side_to_move)`. Each origin must contain a side-to-move
+   pawn and its jointly oriented origin/center must occur in the appropriate
+   14-edge table. A failure emits no EP feature and supplies no EP candidate to
+   downstream slices, while normal CP enumeration continues. Static evaluation
+   does not reconstruct the prior move. Once these metadata checks pass, pins,
+   check evasion and self-blast remain deliberately unfiltered.
+
+   A pawn capture onto its promotion rank activates one PAWN-actor relation,
+   not one row per promotion choice. A piece already promoted on the board is
+   classified by its current N, B, R or Q type, never by move history. Emitted
+   active indices are unique and strictly ascending. The enumerator uses only
+   caller-owned output/scratch storage, retains no references after return and
+   has no mutable static or global state. It is reentrant for concurrent reads
+   of immutable positions; callers synchronize any Position mutation. This
+   exact CP set is the sole candidate source for the two downstream relation
+   slices.
 6. `AtomicKingBlastEP` is a boolean set over 64 centers, two actor relations
    and 18 provisional classes relative to the capture actor: enemy king at the
    center, eight enemy-king blast offsets, eight actor-own-king/self-blast
@@ -134,7 +168,7 @@ an independent full-board enumerator.
    complement. Loading permutes only after strict parsing succeeds; saving
    unpermutes a copy and never mutates the live network.
    The exact transformer shapes are biases `[1024]`, HM `[22528][1024]`,
-   CapturePair `[46648][1024]`, KingBlastEP `[2304][1024]`, BlastRing
+   CapturePair `[40012][1024]`, KingBlastEP `[2304][1024]`, BlastRing
    `[10240][1024]` and HM PSQT `[22528][8]`. The eight PSQT buckets are
    contiguous inside each feature-major HM row and are never SIMD-permuted.
    V3 inherits V2's one runtime bucket
@@ -232,7 +266,7 @@ an independent full-board enumerator.
     Train and validation each have a separate full-scan stats sidecar. Every
     distribution, feature class and semantic counter is reported separately for
     WHITE and BLACK accumulator perspectives. A compact `u64-le` companion keeps
-    all 214,128 physical, HM-training and virtual-factor activation counters,
+    all 200,856 physical, HM-training and virtual-factor activation counters,
     followed by twelve canonical structural-reachability bitmaps: four
     physical slices plus HM training and HM virtual for each perspective. The
     physical bitmaps come from an independent symbolic feature oracle; HM
@@ -306,9 +340,12 @@ an independent full-board enumerator.
 
 ## Contract freeze gates
 
-- Golden indices for every piece/target class, CP segment base, board edge,
-  perspective and independent WHITE/BLACK mirror branch. At least one joint
-  position must put the two perspectives on opposite horizontal-mirror branches.
+- Golden indices for every piece/normal-target class, CP segment base, compact
+  EP-tail edge, board edge, perspective and independent WHITE/BLACK mirror
+  branch. These include malformed EP fail-closed cases, promotion capture
+  non-expansion, local-to-physical translation and strictly ascending unique
+  output. At least one joint position must put the two perspectives on opposite
+  horizontal-mirror branches.
 - Numeric HM goldens must activate the bucket and virtual rows, coalesce all
   1,032 outputs, and then verify the per-bucket 12-to-11 king mapping in both
   accumulator and PSQT tensors.
@@ -373,7 +410,7 @@ an independent full-board enumerator.
 
 ## Consequences
 
-The transformer is estimated at roughly 104.75 MiB before the dense tail. That
+The transformer is estimated at roughly 98.26 MiB before the dense tail. That
 is larger than V2, but H9.2 already eliminated the extra fallback copy when a
 validated network is published on WASM. The design spends memory on explicit
 Atomic relations while keeping the hot dense head stable and every experiment
