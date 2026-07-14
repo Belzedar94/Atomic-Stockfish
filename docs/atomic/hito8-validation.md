@@ -387,7 +387,7 @@ The measured source commit is
   `0x8742E39B793C46AB`.
 - Frozen-Fairy differential 10,000/10,000 with zero final playing delta and
   maximum pure-trace delta 0.005.
-- Real generator smoke reproduced the seven-record fixture byte for byte.
+- Real generator smoke reproduced all seven fixture datasets byte for byte.
 - Playing signature remains exactly `338376`; an independent audit found no
   P0-P3 issue.
 
