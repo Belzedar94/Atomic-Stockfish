@@ -141,8 +141,11 @@ trained V2 control or V3 candidate from OpenBench.
 ## Consequences
 
 The inline union reserves approximately 90 MiB even while Legacy is active, and
-a transactional V2 reload temporarily needs another candidate of that size.
-That is acceptable for native builds but makes explicit WASM peak-memory tests
-mandatory.  In return, releases retain the strongest current network and gain
+a transactional V2 reload temporarily needs another candidate of that size. On
+a single-node local-memory fallback, the validated large-page candidate is
+adopted as the live replica instead of allocating a third full-size copy; native
+shared-memory and multi-NUMA paths retain their placement and replication
+semantics. Explicit repeated-reload WASM tests remain mandatory under the fixed
+512 MiB heap. In return, releases retain the strongest current network and gain
 an authenticated path to the modern trainer without coupling either backend's
 wire format or evaluation calibration to the other.

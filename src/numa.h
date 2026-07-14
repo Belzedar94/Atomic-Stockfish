@@ -1504,10 +1504,10 @@ class LazyNumaReplicatedSystemWide: public NumaReplicatedBase {
 
     LazyNumaReplicatedSystemWide(NumaReplicationContext& ctx) :
         NumaReplicatedBase(ctx) {
-        prepare_replicate_from(std::make_unique<T>());
+        prepare_replicate_from(make_unique_large_page<T>());
     }
 
-    LazyNumaReplicatedSystemWide(NumaReplicationContext& ctx, std::unique_ptr<T>&& source) :
+    LazyNumaReplicatedSystemWide(NumaReplicationContext& ctx, LargePagePtr<T>&& source) :
         NumaReplicatedBase(ctx) {
         prepare_replicate_from(std::move(source));
     }
@@ -1525,7 +1525,7 @@ class LazyNumaReplicatedSystemWide: public NumaReplicatedBase {
         return *this;
     }
 
-    LazyNumaReplicatedSystemWide& operator=(std::unique_ptr<T>&& source) {
+    LazyNumaReplicatedSystemWide& operator=(LargePagePtr<T>&& source) {
         prepare_replicate_from(std::move(source));
 
         return *this;
@@ -1559,7 +1559,7 @@ class LazyNumaReplicatedSystemWide: public NumaReplicatedBase {
 
     template<typename FuncT>
     void modify_and_replicate(FuncT&& f) {
-        auto source = std::make_unique<T>(*instances[0]);
+        auto source = make_unique_large_page<T>(*instances[0]);
         std::forward<FuncT>(f)(*source);
         prepare_replicate_from(std::move(source));
     }
@@ -1567,7 +1567,7 @@ class LazyNumaReplicatedSystemWide: public NumaReplicatedBase {
     void on_numa_config_changed() override {
         // Use the first one as the source. It doesn't matter which one we use,
         // because they all must be identical, but the first one is guaranteed to exist.
-        auto source = std::make_unique<T>(*instances[0]);
+        auto source = make_unique_large_page<T>(*instances[0]);
         prepare_replicate_from(std::move(source));
     }
 
@@ -1604,14 +1604,14 @@ class LazyNumaReplicatedSystemWide: public NumaReplicatedBase {
         });
     }
 
-    void prepare_replicate_from(std::unique_ptr<T>&& source) {
+    void prepare_replicate_from(LargePagePtr<T>&& source) {
         instances.clear();
 
         const NumaConfig& cfg = get_numa_config();
-        // We just need to make sure the first instance is there.
-        // Note that we cannot move here as we need to reallocate the data
-        // on the correct NUMA node.
-        // Even in the case of a single NUMA node we have to copy since it's shared memory.
+        // We just need to make sure the first instance is there. Replicated
+        // native configurations must allocate on the selected NUMA node. A
+        // single-node fallback can adopt the validated source and avoid a
+        // second full-size allocation.
         if (cfg.requires_memory_replication())
         {
             assert(cfg.num_numa_nodes() > 0);
@@ -1626,7 +1626,8 @@ class LazyNumaReplicatedSystemWide: public NumaReplicatedBase {
         else
         {
             assert(cfg.num_numa_nodes() == 1);
-            instances.emplace_back(SystemWideSharedConstant<T>(*source, get_discriminator(0)));
+            instances.emplace_back(
+              SystemWideSharedConstant<T>(std::move(source), get_discriminator(0)));
         }
     }
 };

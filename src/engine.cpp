@@ -313,9 +313,9 @@ bool Engine::verify_network() const {
     return true;
 }
 
-std::unique_ptr<Eval::NNUE::AnyNetwork> Engine::get_default_network() {
+LargePagePtr<Eval::NNUE::AnyNetwork> Engine::get_default_network() {
 
-    auto         network_ = std::make_unique<NN::AnyNetwork>();
+    auto         network_ = make_unique_large_page<NN::AnyNetwork>();
     NN::EvalFile candidateFile{std::nullopt, ""};
     if (network_->load(binaryDirectory, std::filesystem::path{}, candidateFile))
         networkFile = std::move(candidateFile);
@@ -326,7 +326,7 @@ std::unique_ptr<Eval::NNUE::AnyNetwork> Engine::get_default_network() {
 void Engine::load_network(const std::filesystem::path& file) {
     wait_for_search_finished();
 
-    auto         candidate = std::make_unique<NN::AnyNetwork>();
+    auto         candidate = make_unique_large_page<NN::AnyNetwork>();
     NN::EvalFile candidateFile{std::nullopt, ""};
     if (!candidate->load(binaryDirectory, file, candidateFile))
         return;

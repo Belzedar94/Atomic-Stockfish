@@ -20,6 +20,7 @@
 #define SHM_H_INCLUDED
 
 #include <algorithm>
+#include <cassert>
 #include <cinttypes>
 #include <cstddef>
 #include <cstdint>
@@ -479,6 +480,9 @@ struct SharedMemoryBackendFallback {
     SharedMemoryBackendFallback(const std::string&, const T& value) :
         fallback_object(make_unique_large_page<T>(value)) {}
 
+    SharedMemoryBackendFallback(const std::string&, LargePagePtr<T>&& value) :
+        fallback_object(std::move(value)) {}
+
     void* get() const { return fallback_object.get(); }
 
     SharedMemoryBackendFallback(const SharedMemoryBackendFallback&)            = delete;
@@ -518,6 +522,26 @@ struct SystemWideSharedConstant {
         return buf;
     }
 
+    static std::string createShmName(const T& value, usize discriminator) {
+        usize content_hash    = std::hash<T>{}(value);
+        usize executable_hash = hash_string(getExecutablePathHash());
+
+        char buf[1024];
+        std::snprintf(buf, sizeof(buf), "Local\\sf_%zu$%zu$%zu", content_hash, executable_hash,
+                      discriminator);
+        std::string shm_name = buf;
+
+#if defined(__linux__) && !defined(__ANDROID__)
+        // POSIX shared memory names must start with a slash.
+        shm_name = "/sf_" + createHashString(shm_name);
+
+        if (shm_name.size() > SF_MAX_SEM_NAME_LEN)
+            shm_name = shm_name.substr(0, SF_MAX_SEM_NAME_LEN - 1);
+#endif
+
+        return shm_name;
+    }
+
    public:
     // We can't run the destructor because it may be in a completely different process.
     // The object stored must also be obviously in-line but we can't check for that, other than some basic checks that cover most cases.
@@ -531,24 +555,7 @@ struct SystemWideSharedConstant {
     // Content is addressed by its hash. An additional discriminator can be added to account for differences
     // that are not present in the content, for example NUMA node allocation.
     SystemWideSharedConstant(const T& value, usize discriminator = 0) {
-        usize content_hash    = std::hash<T>{}(value);
-        usize executable_hash = hash_string(getExecutablePathHash());
-
-        char buf[1024];
-        std::snprintf(buf, sizeof(buf), "Local\\sf_%zu$%zu$%zu", content_hash, executable_hash,
-                      discriminator);
-        std::string shm_name = buf;
-
-#if defined(__linux__) && !defined(__ANDROID__)
-        // POSIX shared memory names must start with a slash
-        shm_name = "/sf_" + createHashString(shm_name);
-
-        // hash name and make sure it is not longer than SF_MAX_SEM_NAME_LEN
-        if (shm_name.size() > SF_MAX_SEM_NAME_LEN)
-        {
-            shm_name = shm_name.substr(0, SF_MAX_SEM_NAME_LEN - 1);
-        }
-#endif
+        const std::string shm_name = createShmName(value, discriminator);
 
         SharedMemoryBackend<T> shm_backend(shm_name, value);
 
@@ -560,6 +567,21 @@ struct SystemWideSharedConstant {
         {
             backend = SharedMemoryBackendFallback<T>(shm_name, value);
         }
+    }
+
+    // A validated large object can be published without allocating and copying
+    // it again when shared memory is unavailable (notably pthread WASM). Native
+    // shared-memory backends still initialize from the same immutable value.
+    SystemWideSharedConstant(LargePagePtr<T>&& value, usize discriminator = 0) {
+        assert(value != nullptr);
+        const std::string shm_name = createShmName(*value, discriminator);
+
+        SharedMemoryBackend<T> shm_backend(shm_name, *value);
+
+        if (shm_backend.is_valid())
+            backend = std::move(shm_backend);
+        else
+            backend = SharedMemoryBackendFallback<T>(shm_name, std::move(value));
     }
 
     SystemWideSharedConstant(const SystemWideSharedConstant&)            = delete;

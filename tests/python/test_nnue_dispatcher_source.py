@@ -115,7 +115,7 @@ def test_reload_is_quiescent_candidate_first_transactional_and_rebinds_workers()
     )
 
     assert load.index("wait_for_search_finished();") < load.index(
-        "auto candidate = std::make_unique<NN::AnyNetwork>();"
+        "auto candidate = make_unique_large_page<NN::AnyNetwork>();"
     )
     assert "NN::EvalFile candidateFile{std::nullopt, \"\"};" in load
     assert "if (!candidate->load(binaryDirectory, file, candidateFile)) return;" in load
@@ -133,6 +133,18 @@ def test_reload_is_quiescent_candidate_first_transactional_and_rebinds_workers()
     assert "wait_for_search_finished();" in save
     assert "network->save(networkFile, file);" in save
     assert "modify_and_replicate" not in save
+
+
+def test_wasm_fallback_adopts_the_validated_network_allocation():
+    engine = (ROOT / "src" / "engine.cpp").read_text(encoding="utf-8")
+    numa = (ROOT / "src" / "numa.h").read_text(encoding="utf-8")
+    shm = (ROOT / "src" / "shm.h").read_text(encoding="utf-8")
+
+    assert engine.count("make_unique_large_page<NN::AnyNetwork>()") == 2
+    assert "prepare_replicate_from(LargePagePtr<T>&& source)" in numa
+    assert "SystemWideSharedConstant<T>(std::move(source), get_discriminator(0))" in numa
+    assert "SharedMemoryBackendFallback(const std::string&, LargePagePtr<T>&& value)" in shm
+    assert "fallback_object(std::move(value))" in shm
 
 
 def test_failed_load_keeps_live_metadata_and_reports_both_accepted_backends():
