@@ -178,9 +178,7 @@ Snapshot full_refresh_snapshot(const Position& pos, const NNUE::AnyNetwork& netw
     return take_snapshot(pos, network, *fresh);
 }
 
-Value evaluate_fen(std::string_view fen,
-                   const NNUE::AnyNetwork& network,
-                   Eval::UseNNUEMode mode) {
+Value evaluate_fen(std::string_view fen, const NNUE::AnyNetwork& network, Eval::UseNNUEMode mode) {
     Position  pos;
     StateInfo state{};
     if (auto error = pos.set(std::string(fen), false, &state))
@@ -360,18 +358,17 @@ struct RandomStats {
     u64 stateSignature = SignatureOffset;
 };
 
-RandomStats run_random_sequence(const RandomSequence& sequence,
+RandomStats run_random_sequence(const RandomSequence&   sequence,
                                 const NNUE::AnyNetwork& network,
-                                u64                   operations,
-                                u64                   fullRefreshInterval) {
+                                u64                     operations,
+                                u64                     fullRefreshInterval) {
     constexpr usize MaxDepth = 96;
 
     Position                            pos;
     std::array<StateInfo, MaxDepth + 1> states{};
     std::vector<Move>                   path;
     std::vector<Snapshot>               frames;
-    auto                                incremental =
-      std::make_unique<NNUE::AnyAccumulator>(network);
+    auto incremental = std::make_unique<NNUE::AnyAccumulator>(network);
     PRNG                                rng(sequence.seed);
     RandomStats                         stats;
 

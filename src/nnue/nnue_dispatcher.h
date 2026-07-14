@@ -80,7 +80,7 @@ class AnyNetwork {
 // The worker-facing accumulator owns both Legacy objects. No pointer or
 // reference to a concrete NUMA replica is retained: rebind() receives the
 // current facade after every network replication and resets all cached state.
-class AnyAccumulator : private LegacyAtomicV1::AccumulatorCaches {
+class AnyAccumulator: private LegacyAtomicV1::AccumulatorCaches {
    public:
     explicit AnyAccumulator(const AnyNetwork& network) :
         LegacyAtomicV1::AccumulatorCaches(network.legacy_) {

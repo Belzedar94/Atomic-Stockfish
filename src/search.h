@@ -222,10 +222,10 @@ struct LimitsType {
 // The UCI stores the uci options, thread pool, and transposition table.
 // This struct is used to easily forward data to the Search::Worker class.
 struct SharedState {
-    SharedState(const OptionsMap&                                        optionsMap,
-                ThreadPool&                                              threadPool,
-                TranspositionTable&                                      transpositionTable,
-                std::map<NumaIndex, SharedHistories>&                    sharedHists,
+    SharedState(const OptionsMap&                                           optionsMap,
+                ThreadPool&                                                 threadPool,
+                TranspositionTable&                                         transpositionTable,
+                std::map<NumaIndex, SharedHistories>&                       sharedHists,
                 const LazyNumaReplicatedSystemWide<Eval::NNUE::AnyNetwork>& net) :
         options(optionsMap),
         threads(threadPool),

@@ -325,10 +325,9 @@ std::unique_ptr<Eval::NNUE::AnyNetwork> Engine::get_default_network() {
 
 void Engine::load_network(const std::filesystem::path& file) {
     wait_for_search_finished();
-    network.modify_and_replicate(
-      [this, &file](NN::AnyNetwork& network_) {
-          network_.load(binaryDirectory, file, networkFile);
-      });
+    network.modify_and_replicate([this, &file](NN::AnyNetwork& network_) {
+        network_.load(binaryDirectory, file, networkFile);
+    });
     threads.clear();
     threads.ensure_network_replicated();
 }

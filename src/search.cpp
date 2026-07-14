@@ -2117,8 +2117,8 @@ TimePoint Search::Worker::elapsed() const {
 }
 
 Value Search::Worker::evaluate(const Position& pos) {
-    return Eval::evaluate(network[numaAccessToken], pos, accumulator,
-                          optimism[pos.side_to_move()], useNnueMode);
+    return Eval::evaluate(network[numaAccessToken], pos, accumulator, optimism[pos.side_to_move()],
+                          useNnueMode);
 }
 
 namespace {
