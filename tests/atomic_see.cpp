@@ -279,6 +279,78 @@ bool expect_non_orthodox_atomic_evasions() {
     return ok;
 }
 
+bool expect_atomic_capture_generation_prefilter() {
+    struct CaptureCase {
+        std::string_view name;
+        std::string_view fen;
+        Move             move;
+        bool             inCaptures;
+        bool             inNonEvasions;
+        bool             isLegal;
+    };
+
+    const std::array<CaptureCase, 13> tests = {{
+      {"self-exploding slider capture", "7k/8/8/3R4/8/8/3n4/4K3 w - - 0 1", Move(SQ_D5, SQ_D2),
+       false, true, false},
+      {"self-exploding king capture", "7k/8/8/8/8/8/3n4/4K3 w - - 0 1", Move(SQ_E1, SQ_D2), false,
+       true, false},
+      {"self-exploding pawn capture", "7k/8/8/8/3n4/2P1K3/8/8 w - - 0 1", Move(SQ_C3, SQ_D4), false,
+       true, false},
+      {"self-exploding capture promotion", "k4r2/4P1K1/8/8/8/8/8/8 w - - 0 1",
+       Move::make<PROMOTION>(SQ_E7, SQ_F8, QUEEN), false, true, false},
+      {"self-exploding en passant", "7k/8/4K3/3pP3/8/8/8/8 w - d6 0 1",
+       Move::make<EN_PASSANT>(SQ_E5, SQ_D6), false, true, false},
+      {"remote capture retained", "7k/8/8/3R4/8/8/3n4/K7 w - - 0 1", Move(SQ_D5, SQ_D2), true, true,
+       true},
+      {"remote pawn capture retained", "7k/8/8/8/3n4/2P5/8/K7 w - - 0 1", Move(SQ_C3, SQ_D4), true,
+       true, true},
+      {"remote capture promotion retained", "k4r2/4P3/8/8/8/8/8/K7 w - - 0 1",
+       Move::make<PROMOTION>(SQ_E7, SQ_F8, QUEEN), true, true, true},
+      {"remote en passant retained", "7k/8/8/3pP3/8/8/8/K7 w - d6 0 1",
+       Move::make<EN_PASSANT>(SQ_E5, SQ_D6), true, true, true},
+      {"terminal direct king capture retained", "7k/7R/8/8/8/8/8/K7 w - - 0 1", Move(SQ_H7, SQ_H8),
+       true, true, true},
+      {"quiet queen promotion retained in captures", "7k/P7/8/8/8/8/8/K7 w - - 0 1",
+       Move::make<PROMOTION>(SQ_A7, SQ_A8, QUEEN), true, true, true},
+      {"quiet queen promotion beside own king retained", "7k/PK6/8/8/8/8/8/8 w - - 0 1",
+       Move::make<PROMOTION>(SQ_A7, SQ_A8, QUEEN), true, true, true},
+      {"legal quiet move beside own king retained", "7k/8/8/8/8/3R4/8/4K3 w - - 0 1",
+       Move(SQ_D3, SQ_D2), false, true, true},
+    }};
+
+    bool ok = true;
+    for (const auto& test : tests)
+    {
+        Position  pos;
+        StateInfo state{};
+        if (pos.set(std::string(test.fen), false, &state))
+        {
+            std::cerr << "FAIL Atomic capture prefilter " << test.name << ": invalid fixture\n";
+            ok = false;
+            continue;
+        }
+
+        const bool inCaptures    = MoveList<CAPTURES>(pos).contains(test.move);
+        const bool inNonEvasions = MoveList<NON_EVASIONS>(pos).contains(test.move);
+        const bool isLegal       = MoveList<LEGAL>(pos).contains(test.move);
+
+        if (inCaptures != test.inCaptures || inNonEvasions != test.inNonEvasions
+            || isLegal != test.isLegal)
+        {
+            std::cerr << "FAIL Atomic capture prefilter " << test.name
+                      << ": captures=" << inCaptures << " expected=" << test.inCaptures
+                      << " non-evasions=" << inNonEvasions << " expected=" << test.inNonEvasions
+                      << " legal=" << isLegal << " expected=" << test.isLegal << '\n';
+            ok = false;
+        }
+        else
+            std::cout << "PASS Atomic capture prefilter " << test.name << " captures=" << inCaptures
+                      << " non-evasions=" << inNonEvasions << " legal=" << isLegal << '\n';
+    }
+
+    return ok;
+}
+
 bool expect_state_info_layout_contract() {
     Position  pos;
     StateInfo state{};
@@ -774,8 +846,8 @@ bool expect_atomic_capture_futility_eligibility() {
       {"non-pawn explosion bycatch", "7k/8/8/8/3pR3/2B5/8/K7 w - - 0 1", "c3d4", false},
       {"en passant", "7k/8/8/3pP3/8/8/8/K7 w - d6 0 1", "e5d6", false},
       {"capture promotion", "k5br/6P1/8/8/8/8/8/K7 w - - 0 1", "g7h8q", false},
-      {"quiet normal move",
-       "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", "e2e4", false},
+      {"quiet normal move", "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", "e2e4",
+       false},
     }};
 
     bool ok = true;
@@ -830,6 +902,7 @@ int main() {
     ok &= expect_atomic_wins();
     ok &= expect_atomic_gives_check();
     ok &= expect_non_orthodox_atomic_evasions();
+    ok &= expect_atomic_capture_generation_prefilter();
     ok &= expect_state_info_layout_contract();
     ok &= expect_gives_check_matches_child();
     ok &= expect_nnue_index_list_bounds();
@@ -844,8 +917,7 @@ int main() {
     if (!ok)
         return 1;
 
-    constexpr usize TestCount =
-      SeeCases.size() + 3 + 7 + 8 + 14 + 2 + 3 + 6 + 7 + 7 + 6 + 2;
+    constexpr usize TestCount = SeeCases.size() + 3 + 7 + 8 + 14 + 2 + 13 + 3 + 6 + 7 + 7 + 6 + 2;
     std::cout << "Atomic C++ unit tests passed: " << TestCount << "/" << TestCount << '\n';
     return 0;
 }
