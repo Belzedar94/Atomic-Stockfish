@@ -1,23 +1,19 @@
-# This workflow will run clang-format and comment on the PR.
-# Because of security reasons, it is crucial that this workflow
-# executes no shell script nor runs make.
-# Read this before editing: https://securitylab.github.com/research/github-actions-preventing-pwn-requests/
-
 name: Clang-Format
+
 on:
-  pull_request_target:
-    branches:
-      - "main"
+  pull_request:
+    branches: [main]
     paths:
+      - ".github/workflows/clang-format.yml"
       - "**.cpp"
       - "**.h"
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 permissions:
-  pull-requests: write
+  contents: read
 
 jobs:
   Clang-Format:
@@ -26,37 +22,25 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
 
-      - name: Run clang-format style check
-        uses: jidicula/clang-format-action@654a770daa28443dd111d133e4083e21c1075674 # v4.18.0
-        id: clang-format
-        continue-on-error: true
-        with:
-          clang-format-version: "20"
-          exclude-regex: "incbin"
+      - name: Install pinned clang-format 20.1.8
+        env:
+          WHEEL_URL: https://files.pythonhosted.org/packages/a6/77/786aa0fc8a75d8ce94966bb33e44c63fec1964cbf343ee862ed6a5be38c1/clang_format-20.1.8-py2.py3-none-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
+          WHEEL_SHA256: 7c6bcb7e01ba4f05a4c980fda147b330f7e4833c2aea8c92a0c2df9573ae7afe
+        run: |
+          wheel="$RUNNER_TEMP/clang_format-20.1.8-py2.py3-none-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl"
+          curl --fail --silent --show-error --location "$WHEEL_URL" --output "$wheel"
+          echo "$WHEEL_SHA256  $wheel" | sha256sum --check --strict
+          python3 -m pip install --disable-pip-version-check --no-deps "$wheel"
+          clang-format --version
 
-      - name: Comment on PR
-        if: steps.clang-format.outcome == 'failure'
-        uses: thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b # v3.0.1
-        with:
-          message: |
-            clang-format 20 needs to be run on this PR.
-            If you do not have clang-format installed, the maintainer will run it when merging.
-            For the exact version please see https://packages.ubuntu.com/questing/clang-format-20.
-            An easier way to install it might be through https://apt.llvm.org/#llvmsh.
-
-            _(execution **${{ github.run_id }}** / attempt **${{ github.run_attempt }}**)_
-          comment-tag: execution
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Comment on PR
-        if: steps.clang-format.outcome != 'failure'
-        uses: thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b # v3.0.1
-        with:
-          message: |
-            _(execution **${{ github.run_id }}** / attempt **${{ github.run_attempt }}**)_
-          create-if-not-exists: false
-          comment-tag: execution
-          mode: delete
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Check PR-touched lines
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git-clang-format --binary clang-format \
+            --extensions 'c,C,cc,cpp,cxx,c++,h,H,hh,hpp,hxx,h++,ino,pde,proto,cu' \
+            "$BASE_SHA" -- ':!src/incbin/**'
+          git diff --exit-code -- . ':(exclude)src/incbin/**'
