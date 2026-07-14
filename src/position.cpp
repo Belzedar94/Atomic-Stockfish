@@ -462,7 +462,7 @@ void Position::set_check_info() const {
     update_slider_blockers(WHITE);
     update_slider_blockers(BLACK);
 
-    std::fill(std::begin(st->checkSquares), std::end(st->checkSquares), 0);
+    st->checkSquares.fill(0);
 
     // Atomic legality is checked against the complete post-move position.
     // The orthodox check-square shortcut cannot model explosions or adjacent kings.
@@ -471,12 +471,13 @@ void Position::set_check_info() const {
 
     Square ksq = square<KING>(~sideToMove);
 
-    st->checkSquares[PAWN]   = attacks_bb<PAWN>(ksq, ~sideToMove);
-    st->checkSquares[KNIGHT] = attacks_bb<KNIGHT>(ksq);
-    st->checkSquares[BISHOP] = attacks_bb<BISHOP>(ksq, pieces());
-    st->checkSquares[ROOK]   = attacks_bb<ROOK>(ksq, pieces());
-    st->checkSquares[QUEEN]  = st->checkSquares[BISHOP] | st->checkSquares[ROOK];
-    st->checkSquares[KING]   = 0;
+    st->checkSquares[StateInfo::check_square_index(PAWN)]   = attacks_bb<PAWN>(ksq, ~sideToMove);
+    st->checkSquares[StateInfo::check_square_index(KNIGHT)] = attacks_bb<KNIGHT>(ksq);
+    st->checkSquares[StateInfo::check_square_index(BISHOP)] = attacks_bb<BISHOP>(ksq, pieces());
+    st->checkSquares[StateInfo::check_square_index(ROOK)]   = attacks_bb<ROOK>(ksq, pieces());
+    st->checkSquares[StateInfo::check_square_index(QUEEN)] =
+      st->checkSquares[StateInfo::check_square_index(BISHOP)]
+      | st->checkSquares[StateInfo::check_square_index(ROOK)];
 }
 
 
@@ -490,10 +491,6 @@ void Position::set_state() const {
     st->nonPawnKey[WHITE] = st->nonPawnKey[BLACK] = 0;
     st->pawnKey                                   = Zobrist::noPawns;
     st->nonPawnMaterial[WHITE] = st->nonPawnMaterial[BLACK] = VALUE_ZERO;
-    // Fairy-Stockfish models the Atomic royal as a COMMONER, so its orthodox
-    // checkers bitboard stays empty and every candidate is filtered by legal().
-    st->checkersBB = 0;
-
     set_check_info();
 
     for (Bitboard b = pieces(); b;)
@@ -608,13 +605,10 @@ string Position::fen() const {
     return ss.str();
 }
 
-// Calculates st->blockersForKing[c] and st->pinners[~c],
-// which store respectively the pieces preventing king of color c from being in check
-// and the slider pieces of color ~c pinning pieces of color c to the king.
+// Calculates the pieces preventing the king of color c from being in check.
 void Position::update_slider_blockers(Color c) const {
 
     st->blockersForKing[c] = 0;
-    st->pinners[~c]        = 0;
 
     if (!has_king(c))
         return;
@@ -633,11 +627,7 @@ void Position::update_slider_blockers(Color c) const {
         Bitboard b        = between_bb(ksq, sniperSq) & occupancy;
 
         if (b && !more_than_one(b))
-        {
             st->blockersForKing[c] |= b;
-            if (b & pieces(c))
-                st->pinners[~c] |= sniperSq;
-        }
     }
 }
 
@@ -1189,13 +1179,15 @@ void Position::do_move(Move                      m,
     // Set capture piece
     st->capturedPiece = captured;
 
-    // Atomic uses full post-move legality instead of the orthodox evasion path.
-    st->checkersBB = 0;
-
     sideToMove = ~sideToMove;
 
     // Update king attacks used for fast check detection
     set_check_info();
+
+#ifndef NDEBUG
+    // Keep the fast pre-move predictor honest against the complete child position.
+    assert(givesCheck == atomic_in_check(sideToMove));
+#endif
 
     // Calculate the repetition info. It is the ply distance from the previous
     // occurrence of the same position, negative in the 3-fold case, or zero
