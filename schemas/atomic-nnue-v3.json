@@ -612,6 +612,6 @@
     "historical_policy": "existing atomic-bin-v2 datasets cannot acquire a trusted game-level split retrospectively because filtered played moves were not retained",
     "active_capacity": 1024,
     "reachable_bound_scope": "at most 16 pieces per color from normal Atomic starting material",
-    "overpopulated_fen_policy": "stream/grow in the engine oracle and reject explicitly in fixed-capacity trainer input; never truncate"
+    "overpopulated_fen_policy": "reject explicitly at the engine HM-oracle, dataset-parser and fixed-capacity trainer boundaries when either color exceeds 16 pieces or the board exceeds 32 pieces; never enumerate an overpopulated V3 sample and never truncate"
   }
 }
