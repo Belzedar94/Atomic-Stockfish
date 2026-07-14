@@ -1,0 +1,63 @@
+{
+  "schema": "atomic-hito8-performance-evidence-v1",
+  "block": "H8.3b",
+  "source_commit": "1fecfec95eb9b2b50166be882a5d315a4396882f",
+  "base_commit": "063eede4f6176c2f438a7fea54ce682d293997dd",
+  "source_tree_clean_before_evidence": true,
+  "compiler": "g++ (GNUC) 15.2.0",
+  "target": "64bit BMI2 AVX2 SSE41 SSSE3 SSE2 POPCNT",
+  "linker_reproducibility_flag": "-Wl,--no-insert-timestamp",
+  "candidate": {
+    "bytes": 4257648,
+    "sha256": "B47DD600D41BC47AF996C4A3ABC6C8189F3EF89A91ACC032C4FD2B687EDC71F5"
+  },
+  "control": {
+    "source_commit": "d35706d8dc7823bd7e423b0413e2d698b1f5b916",
+    "bytes": 4262552,
+    "sha256": "5335201E2D4EFBA9B34814D7258E83118D2C8A60EA0C4D538750D31E3118911E"
+  },
+  "network_sha256": "99DC67EABF26A64FAEECA3A88B4C38597A840B8D4A874B9F2CF658C6F92A04A6",
+  "corpus_sha256": "2738065A8A70D61DA46FA3C75F95D645E50E601B43792DF0E7B3CC97B1D891A1",
+  "configuration": {
+    "threads": 1,
+    "hash_mb": 64,
+    "cpu_affinity": 24,
+    "nodes_per_fen": 100000,
+    "warmups_per_batch": 1,
+    "measured_repetitions_per_batch": 5,
+    "batches": 10
+  },
+  "pooled_measurement": {
+    "samples_per_side": 50,
+    "candidate_median_nps": 1392770,
+    "control_median_nps": 1388311,
+    "ratio": 1.003212,
+    "speed_delta_percent": 0.321,
+    "positive_batches": 6,
+    "negative_batches": 3,
+    "tied_batches": 1,
+    "interpretation": "small positive pooled signal with visible short-run noise"
+  },
+  "binary_delta_bytes": -4904,
+  "playing_signature": 338376,
+  "incremental_state_signature": "0x8742E39B793C46AB",
+  "frozen_fairy_differential": {
+    "positions": 10000,
+    "playing_max_delta": 0.0,
+    "pure_trace_max_delta": 0.005,
+    "rule50_damped_positions": 866,
+    "corpus_sha256": "46C96F405BC15D468D94BC1E2186B577CE55128832E1108066581D35037FA2DE"
+  },
+  "data_generator_smoke": {
+    "fixtures": 7,
+    "data_sha256": "7E89411B84C2036DEEB2DB56F3E43FEA89917C5546C72C37F8E082F103B27CC0"
+  },
+  "openbench_isolation": {
+    "paused_roots_per_window": 1,
+    "paused_processes_per_window": 2,
+    "measurement_windows": 2,
+    "secure_rotation_entropy_bytes": 32,
+    "restored_worker_processes": 2,
+    "credential_transport": "environment"
+  }
+}

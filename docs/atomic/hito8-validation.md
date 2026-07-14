@@ -360,3 +360,45 @@ small positive signal with visible batch noise, not as a precise speed claim.
 
 Complete artifacts and every sample are in
 [`evidence/hito8-compact-stateinfo`](evidence/hito8-compact-stateinfo/README.md).
+
+## H8.3b - Remove unreachable orthodox evasions
+
+H8.3b removes the concrete `EVASIONS` move-generation specialization and the
+associated MovePicker stages after H8.3a made `Position::checkers()` a
+constant zero. Atomic check handling remains on `atomic_in_check()`: main
+search and qsearch still enumerate captures and quiets before the complete
+Atomic legality filter. The generic enum and compile-time source branches are
+retained to avoid unrelated upstream-source and ordinal churn.
+
+The measured source commit is
+`1fecfec95eb9b2b50166be882a5d315a4396882f`, based on H8.3a squash merge
+`063eede4f6176c2f438a7fea54ce682d293997dd`.
+
+### Functional and artifact evidence
+
+- BMI2 executable: 4,257,648 bytes, SHA-256
+  `B47DD600D41BC47AF996C4A3ABC6C8189F3EF89A91ACC032C4FD2B687EDC71F5`;
+  4,904 bytes smaller than H8.3a.
+- C++ units 67/67 in release and debug/assert; shared API 34/34.
+- MSVC Python build, `test.py` 22/22, and focused pytest 67/67.
+- Eight Atomic/Atomic960 perfts, 19/19 focused rules, 16/16 classical search,
+  16/16 LegacyAtomicV1 search, XBoard, NNUE modes, and reprosearch 12/12.
+- One million deterministic make/undo operations retained state signature
+  `0x8742E39B793C46AB`.
+- Frozen-Fairy differential 10,000/10,000 with zero final playing delta and
+  maximum pure-trace delta 0.005.
+- Real generator smoke reproduced all seven fixture datasets byte for byte.
+- Playing signature remains exactly `338376`; an independent audit found no
+  P0-P3 issue.
+
+### Serialized commit A/B
+
+Ten complete isolated batches produced 50 samples per side. The first half
+measured -0.32%, while the independent extension measured +0.65%. The pooled
+median was 1,392,770 NPS for H8.3b and 1,388,311 for H8.3a, ratio `1.0032`
+(+0.32%); six batches favored the candidate, three the control, and one tied.
+This is classified as a small positive pooled signal with visible short-run
+noise, not a precise speed claim.
+
+Complete artifacts and every sample are in
+[`evidence/hito8-orthodox-evasions`](evidence/hito8-orthodox-evasions/README.md).

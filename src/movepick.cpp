@@ -40,11 +40,6 @@ enum Stages {
     BAD_CAPTURE,
     BAD_QUIET,
 
-    // generate evasion moves
-    EVASION_TT,
-    EVASION_INIT,
-    EVASION,
-
     // generate probcut moves
     PROBCUT_TT,
     PROBCUT_INIT,
@@ -169,11 +164,7 @@ MovePicker::MovePicker(const Position&              p,
     depth(d),
     ply(pl) {
 
-    if (pos.checkers())
-        stage = EVASION_TT + !(ttm && pos.pseudo_legal(ttm));
-
-    else
-        stage = (depth > 0 ? MAIN_TT : QSEARCH_TT) + !(ttm && pos.pseudo_legal(ttm));
+    stage = (depth > 0 ? MAIN_TT : QSEARCH_TT) + !(ttm && pos.pseudo_legal(ttm));
 }
 
 // MovePicker constructor for ProbCut: we generate captures with Static Exchange
@@ -194,9 +185,9 @@ MovePicker::MovePicker(const Position& p, Move ttm, int th, const CapturePieceTo
 template<GenType Type>
 ExtMove* MovePicker::score(const MoveList<Type>& ml) {
 
-    static_assert(Type == CAPTURES || Type == QUIETS || Type == EVASIONS, "Wrong type");
+    static_assert(Type == CAPTURES || Type == QUIETS, "Wrong type");
 
-    Color us = pos.side_to_move();
+    [[maybe_unused]] Color us = pos.side_to_move();
 
     [[maybe_unused]] Bitboard threatByLesser[KING + 1];
     if constexpr (Type == QUIETS)
@@ -215,18 +206,21 @@ ExtMove* MovePicker::score(const MoveList<Type>& ml) {
         ExtMove& m = *it++;
         m          = move;
 
-        const Square    from          = m.from_sq();
-        const Square    to            = m.to_sq();
-        const Piece     pc            = pos.moved_piece(m);
-        const PieceType pt            = type_of(pc);
-        const Piece     capturedPiece = pos.piece_on(to);
+        const Square to = m.to_sq();
+        const Piece  pc = pos.moved_piece(m);
 
         if constexpr (Type == CAPTURES)
+        {
+            const Piece capturedPiece = pos.piece_on(to);
             m.value = (*captureHistory)[pc][to][type_of(capturedPiece)]
                     + 7 * int(PieceValue[capturedPiece]);
+        }
 
         else if constexpr (Type == QUIETS)
         {
+            const Square    from = m.from_sq();
+            const PieceType pt   = type_of(pc);
+
             // histories
             m.value = 2 * (*mainHistory)[us][m.raw()];
             m.value += 2 * sharedHistory->pawn_entry(pos)[pc][to];
@@ -247,14 +241,6 @@ ExtMove* MovePicker::score(const MoveList<Type>& ml) {
 
             if (ply < LOW_PLY_HISTORY_SIZE)
                 m.value += 8 * (*lowPlyHistory)[ply][m.raw()] / (1 + ply);
-        }
-
-        else  // Type == EVASIONS
-        {
-            if (pos.capture_stage(m))
-                m.value = PieceValue[capturedPiece] + (1 << 28);
-            else
-                m.value = (*mainHistory)[us][m.raw()] + (*continuationHistory[0])[pc][to];
         }
     }
     return it;
@@ -283,7 +269,6 @@ top:
     {
 
     case MAIN_TT :
-    case EVASION_TT :
     case QSEARCH_TT :
     case PROBCUT_TT :
         ++stage;
@@ -376,18 +361,6 @@ top:
             return cur->value <= goodQuietThreshold && (!skipQuiets || pos.gives_check(*cur));
         });
 
-    case EVASION_INIT : {
-        MoveList<EVASIONS> ml(pos);
-
-        cur    = moves;
-        endCur = endGenerated = score<EVASIONS>(ml);
-
-        partial_insertion_sort(cur, endCur, std::numeric_limits<int>::min());
-        ++stage;
-        [[fallthrough]];
-    }
-
-    case EVASION :
     case QCAPTURE :
         return select([]() { return true; });
 
