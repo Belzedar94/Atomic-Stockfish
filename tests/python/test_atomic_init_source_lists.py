@@ -119,6 +119,27 @@ def test_atomic_state_info_only_stores_live_check_metadata():
         assert contract in unit_test
 
 
+def test_orthodox_evasion_generator_is_not_instantiated():
+    header = (ROOT / "src" / "movegen.h").read_text(encoding="utf-8")
+    movegen = (ROOT / "src" / "movegen.cpp").read_text(encoding="utf-8")
+    movepick = (ROOT / "src" / "movepick.cpp").read_text(encoding="utf-8")
+    position = (ROOT / "src" / "position.cpp").read_text(encoding="utf-8")
+
+    assert "moveList = generate<NON_EVASIONS>(pos, moveList);" in movegen
+    assert "generate<EVASIONS>(pos" not in movegen
+    assert "template Move* generate<EVASIONS>" not in movegen
+    assert "MoveList<EVASIONS>" not in position
+    assert "MoveList<EVASIONS>" not in movepick
+
+    for removed in ("EVASION_TT", "EVASION_INIT", "score<EVASIONS>"):
+        assert removed not in movepick
+
+    # Keep the uninstantiated upstream template vocabulary. Removing it would
+    # renumber GenType and widen this behavior-neutral specialization change.
+    assert "EVASIONS," in header
+    assert "Type == EVASIONS" in movegen
+
+
 def test_reader_test_links_keep_transposition_table_dependency_isolated():
     makefile = (ROOT / "src" / "Makefile").read_text(encoding="utf-8")
     gitignore = (ROOT / ".gitignore").read_text(encoding="utf-8")

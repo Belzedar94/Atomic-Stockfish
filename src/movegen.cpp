@@ -262,7 +262,6 @@ Move* generate(const Position& pos, Move* moveList) {
 // Explicit template instantiations
 template Move* generate<CAPTURES>(const Position&, Move*);
 template Move* generate<QUIETS>(const Position&, Move*);
-template Move* generate<EVASIONS>(const Position&, Move*);
 template Move* generate<NON_EVASIONS>(const Position&, Move*);
 
 // generate<LEGAL> generates all the legal moves in the given position
@@ -275,8 +274,7 @@ Move* generate<LEGAL>(const Position& pos, Move* moveList) {
 
     Move* cur = moveList;
 
-    moveList =
-      pos.checkers() ? generate<EVASIONS>(pos, moveList) : generate<NON_EVASIONS>(pos, moveList);
+    moveList = generate<NON_EVASIONS>(pos, moveList);
     while (cur != moveList)
         if (!pos.legal(*cur))
             *cur = *(--moveList);

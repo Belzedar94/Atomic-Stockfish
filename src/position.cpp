@@ -765,8 +765,7 @@ bool Position::pseudo_legal(const Move m) const {
     // Use a slower but simpler function for uncommon cases
     // yet we skip the legality check of MoveList<LEGAL>().
     if (m.type_of() != NORMAL)
-        return checkers() ? MoveList<EVASIONS>(*this).contains(m)
-                          : MoveList<NON_EVASIONS>(*this).contains(m);
+        return MoveList<NON_EVASIONS>(*this).contains(m);
 
     // Is not a promotion, so the promotion piece must be empty
     assert(m.promotion_type() - KNIGHT == NO_PIECE_TYPE);
@@ -799,9 +798,6 @@ bool Position::pseudo_legal(const Move m) const {
     }
     else if (!(attacks_bb(type_of(pc), from, pieces()) & to))
         return false;
-
-    if (checkers())
-        return MoveList<EVASIONS>(*this).contains(m);
 
     return true;
 }

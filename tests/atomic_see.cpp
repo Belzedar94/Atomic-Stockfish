@@ -226,6 +226,51 @@ bool expect_atomic_gives_check() {
     return ok;
 }
 
+bool expect_non_orthodox_atomic_evasions() {
+    struct EvasionCase {
+        std::string_view name;
+        std::string_view fen;
+        Move             move;
+    };
+
+    const std::array<EvasionCase, 2> tests = {{
+      {"quiet Atomic check evasion", "7k/8/8/8/8/8/7R/K7 b - - 1 1", Move(SQ_H8, SQ_G7)},
+      {"promotion blast removes checking rook", "rn5k/2P5/8/8/8/8/8/K7 w - - 0 1",
+       Move::make<PROMOTION>(SQ_C7, SQ_B8, QUEEN)},
+    }};
+
+    bool ok = true;
+    for (const auto& test : tests)
+    {
+        Position  pos;
+        StateInfo state{};
+
+        if (pos.set(std::string(test.fen), false, &state))
+        {
+            std::cerr << "FAIL " << test.name << ": invalid fixture\n";
+            ok = false;
+            continue;
+        }
+
+        const bool inCheck     = pos.atomic_in_check(pos.side_to_move());
+        const bool pseudoLegal = pos.pseudo_legal(test.move);
+        const bool legal       = pos.legal(test.move);
+        const bool listed      = MoveList<LEGAL>(pos).contains(test.move);
+
+        if (!inCheck || !pseudoLegal || !legal || !listed)
+        {
+            std::cerr << "FAIL " << test.name << ": inCheck=" << inCheck
+                      << " pseudoLegal=" << pseudoLegal << " legal=" << legal
+                      << " listed=" << listed << '\n';
+            ok = false;
+        }
+        else
+            std::cout << "PASS " << test.name << '\n';
+    }
+
+    return ok;
+}
+
 bool expect_state_info_layout_contract() {
     Position  pos;
     StateInfo state{};
@@ -666,6 +711,7 @@ int main() {
     ok &= expect_special_moves_are_neutral();
     ok &= expect_atomic_wins();
     ok &= expect_atomic_gives_check();
+    ok &= expect_non_orthodox_atomic_evasions();
     ok &= expect_state_info_layout_contract();
     ok &= expect_gives_check_matches_child();
     ok &= expect_make_undo_state();
@@ -679,7 +725,7 @@ int main() {
     if (!ok)
         return 1;
 
-    constexpr usize TestCount = SeeCases.size() + 3 + 7 + 8 + 14 + 3 + 6 + 7 + 6 + 2;
+    constexpr usize TestCount = SeeCases.size() + 3 + 7 + 8 + 14 + 2 + 3 + 6 + 7 + 6 + 2;
     std::cout << "Atomic C++ unit tests passed: " << TestCount << "/" << TestCount << '\n';
     return 0;
 }
