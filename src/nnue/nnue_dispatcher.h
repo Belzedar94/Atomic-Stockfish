@@ -107,6 +107,13 @@ class AnyAccumulator {
     friend class AnyNetwork;
 };
 
+namespace DispatcherDetail {
+struct LegacyAtomicAccumulatorStorage {
+    LegacyAtomicV1::AccumulatorStack  stack;
+    LegacyAtomicV1::AccumulatorCaches caches;
+};
+}
+
 inline NetworkOutput AnyNetwork::evaluate(const Position& pos, AnyAccumulator& accumulator) const {
     return legacy_.evaluate(pos, accumulator.stack_, accumulator.caches_);
 }
@@ -129,6 +136,8 @@ static_assert(std::is_trivially_copyable_v<AnyNetwork>);
 static_assert(std::is_trivially_copy_constructible_v<AnyNetwork>);
 static_assert(std::is_trivially_move_constructible_v<AnyNetwork>);
 static_assert(std::is_trivially_destructible_v<AnyNetwork>);
+static_assert(sizeof(AnyAccumulator) == sizeof(DispatcherDetail::LegacyAtomicAccumulatorStorage));
+static_assert(alignof(AnyAccumulator) == alignof(DispatcherDetail::LegacyAtomicAccumulatorStorage));
 
 }  // namespace Stockfish::Eval::NNUE
 

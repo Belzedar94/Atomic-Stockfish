@@ -47,6 +47,10 @@ def test_facade_freezes_the_legacy_shared_memory_contract():
         "std::is_trivially_copy_constructible_v<AnyNetwork>",
         "std::is_trivially_move_constructible_v<AnyNetwork>",
         "std::is_trivially_destructible_v<AnyNetwork>",
+        "sizeof(AnyAccumulator)",
+        "sizeof(DispatcherDetail::LegacyAtomicAccumulatorStorage)",
+        "alignof(AnyAccumulator)",
+        "alignof(DispatcherDetail::LegacyAtomicAccumulatorStorage)",
     ):
         assert contract in DISPATCHER
 
@@ -114,3 +118,21 @@ def test_worker_rebind_does_not_keep_a_concrete_replica_pointer():
     assert "Eval::evaluate(network[numaAccessToken], pos, accumulator," in search
     assert "&network[token]" not in search
     assert "&network[numaAccessToken]" not in search
+
+
+def test_dispatcher_and_incremental_contracts_are_wired_into_release_gates():
+    hito4 = (ROOT / "tests" / "run_hito4.py").read_text(encoding="utf-8")
+    hito5 = (ROOT / "tests" / "run_hito5.py").read_text(encoding="utf-8")
+    workflow = (ROOT / ".github" / "workflows" / "atomic.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "Atomic C++ unit tests passed: 87/87" in hito4
+    assert "expected_pass_lines=87" in hito4
+    assert "tests/python/test_nnue_dispatcher_source.py" in hito4
+    assert "test_atomic_nnue_incremental_wrapper.py" in hito5
+    for relative in (
+        "tests/python/test_nnue_dispatcher_source.py",
+        "tests/python/test_atomic_nnue_incremental_wrapper.py",
+    ):
+        assert relative in workflow

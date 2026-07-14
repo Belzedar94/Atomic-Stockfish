@@ -522,6 +522,23 @@ def main() -> int:
         incremental_timeout = args.incremental_timeout or (
             7_200.0 if args.mode == "release" else 300.0
         )
+        run_step(
+            "LegacyAtomicV1 incremental wrapper units",
+            [
+                python,
+                "-m",
+                "pytest",
+                "-q",
+                str(
+                    REPO_ROOT
+                    / "tests"
+                    / "python"
+                    / "test_atomic_nnue_incremental_wrapper.py"
+                ),
+            ],
+            timeout=300.0,
+            required_markers=("12 passed",),
+        )
         incremental_output = run_step(
             "LegacyAtomicV1 incremental/full-refresh equivalence",
             [
