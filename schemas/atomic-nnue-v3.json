@@ -1,0 +1,617 @@
+{
+  "schema_version": 1,
+  "schema_id": "atomic-nnue-v3-prototype-v1",
+  "contract_status": "provisional",
+  "variant": "atomic",
+  "backend": "AtomicNNUEV3",
+  "file_version": "0xA70C0003",
+  "byte_order": "little-endian",
+  "base_commits": {
+    "atomic_stockfish": "a719969da5a64c7662be20b9dce6cc2b1a46a47a",
+    "dense_tail_official_stockfish": "eca43a97efd2cf0c9b7153c71b85f35e0fd1f5ca",
+    "dense_tail_official_trainer": "b8512291deb4cd18afa67003bb6bc53dd522cbf0",
+    "modern_feature_architecture_stockfish": "9a8dd81dd7f98cbf02f16c59b4377d174d6eb4b5",
+    "modern_feature_trainer": "4289208fe20cc6ec8753e5ee14c2f210de783ff0"
+  },
+  "orientation": {
+    "scope": "one joint position, center and relation orientation per accumulator perspective, shared by every slice in that perspective",
+    "perspective_order": [
+      "WHITE",
+      "BLACK"
+    ],
+    "perspective_independence": "WHITE and BLACK compute their horizontal mirror independently from their own king and may therefore use different horizontal mirrors for the same position",
+    "black_perspective_xor": 56,
+    "horizontal_mirror_xor": 7,
+    "square_ordinal": "A1=0, B1=1, ..., H1=7, A2=8, ..., H8=63",
+    "mirror_when_oriented_own_king_file_is": [
+      "a",
+      "b",
+      "c",
+      "d"
+    ],
+    "pre_horizontal_own_king_formula": "pre_horizontal_own_king = own_king_square XOR (perspective == BLACK ? 56 : 0)",
+    "formula": "vertical = perspective == BLACK ? 56 : 0; horizontal = file(own_king_square XOR vertical) < 4 ? 7 : 0; oriented(square) = square XOR vertical XOR horizontal",
+    "slice_consistency": "for one accumulator perspective use the same vertical and horizontal XOR for HM piece squares, CapturePair from/to squares, KBR centers and kings, and BlastRing centers and collateral squares; actor_rel and collateral_rel only relabel colors and never apply another square transform",
+    "direction_deltas_after_orientation": {
+      "N": 8,
+      "NE": 9,
+      "E": 1,
+      "SE": -7,
+      "S": -8,
+      "SW": -9,
+      "W": -1,
+      "NW": 7
+    },
+    "terminal_policy": "never evaluate a position after either king has exploded",
+    "metamorphic_gate": "eval(position) == eval(horizontal_mirror(position))"
+  },
+  "dense_tail": {
+    "reference_contract": "schemas/atomic-nnue-v2.json",
+    "reference_backend": "atomic-nnue-v2",
+    "architecture_hash": "0x63337116",
+    "pairwise_multiply": {
+      "input_dimensions_per_perspective": 1024,
+      "half_dimensions": 512,
+      "output_dimensions_per_perspective": 512,
+      "concatenated_output_dimensions": 1024
+    },
+    "topology": {
+      "fc0": {
+        "input_dimensions": 1024,
+        "output_dimensions": 32
+      },
+      "fc1": {
+        "input_dimensions": 64,
+        "output_dimensions": 32
+      },
+      "fc2": {
+        "input_dimensions": 128,
+        "output_dimensions": 1
+      },
+      "activation_paths": {
+        "after_fc0": [
+          "squared-clipped-relu",
+          "clipped-relu"
+        ],
+        "after_fc1": [
+          "squared-clipped-relu",
+          "clipped-relu"
+        ]
+      },
+      "fc0_skip_indices": [
+        30,
+        31
+      ],
+      "fc0_skip_coefficients": [
+        1,
+        -1
+      ],
+      "output_scaling": {
+        "hidden_one": 128,
+        "weight_scale_bits": 6,
+        "output_scale": 16,
+        "network_unit_scale": 600,
+        "multiplier": 9600,
+        "denominator": 16384
+      }
+    },
+    "bucket_selection": {
+      "formula": "clamp(integer_divide(piece_count - 1, 4), 0, 7)",
+      "piece_count": "all pieces present in the evaluated non-terminal Atomic position",
+      "shared_selection": "the same single bucket selects both the HM PSQT output and the SFNNv15 dense stack",
+      "feature_input_identity": "serialize this shared bucket exactly once as bucket_u8"
+    }
+  },
+  "feature_slices": [
+    {
+      "id": "half-ka-v2-atomic-hm",
+      "name": "HalfKAv2Atomic_hm",
+      "physical_offset": 0,
+      "physical_dimensions": 22528,
+      "training_dimensions": 24576,
+      "virtual_factor_dimensions": 768,
+      "training_piece_planes": 12,
+      "physical_piece_planes": 11,
+      "training_plane_order": [
+        "OWN_PAWN",
+        "OPP_PAWN",
+        "OWN_KNIGHT",
+        "OPP_KNIGHT",
+        "OWN_BISHOP",
+        "OPP_BISHOP",
+        "OWN_ROOK",
+        "OPP_ROOK",
+        "OWN_QUEEN",
+        "OPP_QUEEN",
+        "OWN_KING",
+        "OPP_KING"
+      ],
+      "physical_plane_order": [
+        "OWN_PAWN",
+        "OPP_PAWN",
+        "OWN_KNIGHT",
+        "OPP_KNIGHT",
+        "OWN_BISHOP",
+        "OPP_BISHOP",
+        "OWN_ROOK",
+        "OPP_ROOK",
+        "OWN_QUEEN",
+        "OPP_QUEEN",
+        "MERGED_KING"
+      ],
+      "king_buckets": 32,
+      "king_bucket_formula": "for oriented own king file e-h: (7 - rank_index) * 4 + (7 - file_index)",
+      "training_index_formula": "king_bucket * 768 + training_plane * 64 + oriented_piece_square",
+      "physical_index_formula": "king_bucket * 704 + physical_plane * 64 + oriented_piece_square",
+      "virtual_factor_index_formula": "training_plane * 64 + oriented_piece_square",
+      "training_activation_formula": "for every active HM piece activate one bucket-specific training row and the matching virtual factor row; both rows contribute exactly once",
+      "coalesced_output_formula": "coalesced[king_bucket, training_plane, oriented_piece_square, output] = bucket_weight[king_bucket, training_plane, oriented_piece_square, output] + virtual_weight[training_plane, oriented_piece_square, output], for output 0-1031",
+      "export_order": "coalesce all 1024 accumulator outputs and all 8 PSQT outputs before applying the 12-to-11 plane mapping",
+      "king_plane_merge": "copy training planes 0-9; initialize MERGED_KING from OPP_KING, then overwrite the oriented own-king square with OWN_KING",
+      "king_plane_merge_scope": "apply the same per-bucket merge to accumulator outputs 0-1023 and PSQT outputs 1024-1031",
+      "weight_dtype": "i16",
+      "psqt": true,
+      "max_active_reachable_material": 32,
+      "descriptor": "HalfKAv2Atomic_hm|v1|square=A1_0_rank_major|offset=0|axes=king_bucket_h8_to_e1:32,piece_plane:OWN_P,OPP_P,OWN_N,OPP_N,OWN_B,OPP_B,OWN_R,OPP_R,OWN_Q,OPP_Q,MERGED_K,square:64|physical=22528|training_planes=OWN_P,OPP_P,OWN_N,OPP_N,OWN_B,OPP_B,OWN_R,OPP_R,OWN_Q,OPP_Q,OWN_K,OPP_K|training=24576|virtual=768|factor=bucket_plus_virtual_all_1032_then_export|king_merge=opp_then_own_king_square_all_1032|orientation=per_perspective_black_xor56_mirror_if_pre_h_king_file_lt4_shared_all_slices|royal=KING|dtype=i16|wire=i16_sleb_feature_major_output1024_contiguous_canonical_unpermuted_permute16|psqt=hm_only_i32_sleb_feature_major_bucket8_contiguous_after_relations"
+    },
+    {
+      "id": "atomic-capture-pair",
+      "name": "AtomicCapturePair",
+      "physical_offset": 22528,
+      "physical_dimensions": 46648,
+      "training_dimensions": 46648,
+      "virtual_factor_dimensions": 0,
+      "weight_dtype": "i8",
+      "psqt": false,
+      "actor_relation_order": [
+        "OWN",
+        "OPP"
+      ],
+      "actor_relation_frame": "relative to the accumulator perspective",
+      "target_class_order": [
+        "PAWN",
+        "KNIGHT",
+        "BISHOP",
+        "ROOK",
+        "QUEEN",
+        "KING",
+        "EN_PASSANT"
+      ],
+      "geometry_order": [
+        {
+          "piece": "PAWN",
+          "count": 84,
+          "edge_order": "actor-relative table, then from-square and to-square in the joint oriented coordinates; OWN moves north and OPP moves south"
+        },
+        {
+          "piece": "KNIGHT",
+          "count": 336,
+          "edge_order": "from-square then to-square"
+        },
+        {
+          "piece": "BISHOP",
+          "count": 560,
+          "edge_order": "from-square then to-square on an empty board"
+        },
+        {
+          "piece": "ROOK",
+          "count": 896,
+          "edge_order": "from-square then to-square on an empty board"
+        },
+        {
+          "piece": "QUEEN",
+          "count": 1456,
+          "edge_order": "from-square then to-square on an empty board"
+        }
+      ],
+      "geometry_dimensions": 3332,
+      "geometry_segment_bases": {
+        "PAWN": 0,
+        "KNIGHT": 84,
+        "BISHOP": 420,
+        "ROOK": 980,
+        "QUEEN": 1876
+      },
+      "edge_ordinal_order": "within each geometry segment enumerate oriented from-square in ascending A1=0 ordinal, then oriented to-square in ascending A1=0 ordinal",
+      "index_formula": "((actor_rel * 3332 + edge_ordinal) * 7 + target_class)",
+      "pawn_edge_ordinal_formula": "apply the joint per-perspective position orientation; select an 84-edge table by actor_rel; OWN contains north-moving diagonals and OPP contains south-moving diagonals; enumerate each table by ascending oriented from-square then ascending oriented to-square without another square transform",
+      "semantics": {
+        "capture_kind": "occupancy-based pseudocaptures",
+        "target": "stop at the first occupied square and emit only when that occupant is enemy",
+        "pins_checks_and_self_blast": "not filtered",
+        "king_actor": "excluded",
+        "pawn_pushes": "excluded",
+        "en_passant": "when Position::ep_square() is not SQ_NONE, emit one EN_PASSANT target for every side-to-move pawn whose geometric pawn attack reaches that square; do not filter pins, check evasion, self-blast or any other legality",
+        "relation_source": "the exact unfiltered CapturePair candidates, including geometric EN_PASSANT candidates, are the sole candidate source for AtomicKingBlastEP and AtomicBlastRing",
+        "duplicates": "impossible because every actor/from/to edge is unique"
+      },
+      "max_active_reachable_material": 240,
+      "descriptor": "AtomicCapturePair|v1|square=A1_0_rank_major|offset=22528|axes=actor_rel_accumulator:OWN,OPP;edge:PAWN84@0,KNIGHT336@84,BISHOP560@420,ROOK896@980,QUEEN1456@1876;edge_order=oriented_from_asc_then_to_asc;target_enemy_of_actor:PAWN,KNIGHT,BISHOP,ROOK,QUEEN,KING,EN_PASSANT|physical=46648|orientation=per_perspective_black_xor56_mirror_if_pre_h_king_file_lt4_shared_all_slices|pawn_edge=OWN_north_OPP_south_no_extra_flip|occupancy=stop_first_occupied_emit_enemy|pins_checks_self_blast=unfiltered|ep=stm_geometric_attack_ep_square_unfiltered_source_for_kbr_ring|king_actor=excluded|pawn_push=excluded|dtype=i8|wire=i8_raw_signed_twos_feature_major_output1024_contiguous_canonical_unpermuted_permute8_after_hm|psqt=none"
+    },
+    {
+      "id": "atomic-king-blast-ep",
+      "name": "AtomicKingBlastEP",
+      "physical_offset": 69176,
+      "physical_dimensions": 2304,
+      "training_dimensions": 2304,
+      "virtual_factor_dimensions": 0,
+      "weight_dtype": "i16",
+      "psqt": false,
+      "center_dimensions": 64,
+      "actor_relation_order": [
+        "OWN",
+        "OPP"
+      ],
+      "actor_relation_frame": "relative to the accumulator perspective",
+      "king_relation_frame": "ENEMY_KING and OWN_KING are relative to the capture actor, not the accumulator perspective",
+      "class_order": [
+        "ENEMY_KING_CENTER",
+        "ENEMY_KING_N",
+        "ENEMY_KING_NE",
+        "ENEMY_KING_E",
+        "ENEMY_KING_SE",
+        "ENEMY_KING_S",
+        "ENEMY_KING_SW",
+        "ENEMY_KING_W",
+        "ENEMY_KING_NW",
+        "OWN_KING_N",
+        "OWN_KING_NE",
+        "OWN_KING_E",
+        "OWN_KING_SE",
+        "OWN_KING_S",
+        "OWN_KING_SW",
+        "OWN_KING_W",
+        "OWN_KING_NW",
+        "EN_PASSANT_MARKER"
+      ],
+      "index_formula": "((oriented_center * 2 + actor_rel) * 18 + relation_class)",
+      "spatial_relation_formula": "for a directional class, oriented_related_king_square = oriented_center + direction_deltas_after_orientation[class_suffix], with exact file/rank adjacency and both squares on board; ENEMY_KING_N therefore means the enemy king is one rank north of the center",
+      "spatial_frame": "directions use the joint accumulator-perspective orientation; capture-actor relation selects ENEMY_KING versus OWN_KING but never rotates or mirrors squares again",
+      "semantics": {
+        "activation": "boolean set per oriented center, actor relation and class",
+        "candidate_source": "project exactly the unfiltered AtomicCapturePair candidate set by center and actor relation, including geometric EN_PASSANT candidates",
+        "multiple_attackers": "never add the same relation more than once",
+        "direct_check": "ENEMY_KING_CENTER together with CapturePair target KING",
+        "blast_threat": "enemy king on one of the eight adjacent offsets",
+        "self_blast": "own king on one of the eight adjacent offsets",
+        "simultaneous_king_blast": "enemy-blast and self-blast relations may be active simultaneously when a center is adjacent to both kings; the candidate is self-blasting and therefore illegal",
+        "touching_kings": "king adjacency and mutual king immunity are encoded by HM; kings are excluded as CapturePair actors",
+        "en_passant": "EN_PASSANT_MARKER is active exactly when at least one CapturePair EN_PASSANT candidate exists for the same center and actor relation"
+      },
+      "max_active_reachable_material": 35,
+      "freeze_gate": "numeric goldens with center d4 and related king d5 for direct king target, every directional offset, self-blast, touching kings, simultaneous enemy/own blast relations, both perspectives, both mirror branches and EP adjacent to either king",
+      "descriptor": "AtomicKingBlastEP|v1-provisional|offset=69176|axes=center:64;actor_rel_accumulator:OWN,OPP;king_rel_actor:ENEMY_KING_CENTER,ENEMY_KING_N,ENEMY_KING_NE,ENEMY_KING_E,ENEMY_KING_SE,ENEMY_KING_S,ENEMY_KING_SW,ENEMY_KING_W,ENEMY_KING_NW,OWN_KING_N,OWN_KING_NE,OWN_KING_E,OWN_KING_SE,OWN_KING_S,OWN_KING_SW,OWN_KING_W,OWN_KING_NW;class:EN_PASSANT_MARKER|physical=2304|orientation=per_perspective_black_xor56_mirror_if_pre_h_king_file_lt4_shared_all_slices|source=exact_unfiltered_cp_including_geometric_ep|offset=related_king_minus_center_in_joint_frame|activation=boolean_capture_center_set|dtype=i16|wire=i16_sleb_feature_major_output1024_contiguous_canonical_unpermuted_permute16_after_capture_pair|psqt=none"
+    },
+    {
+      "id": "atomic-blast-ring",
+      "name": "AtomicBlastRing",
+      "physical_offset": 71480,
+      "physical_dimensions": 10240,
+      "training_dimensions": 10240,
+      "virtual_factor_dimensions": 0,
+      "weight_dtype": "i8",
+      "psqt": false,
+      "center_dimensions": 64,
+      "actor_relation_order": [
+        "OWN",
+        "OPP"
+      ],
+      "actor_relation_frame": "relative to the accumulator perspective",
+      "collateral_relation_order": [
+        "OWN",
+        "OPP"
+      ],
+      "collateral_relation_frame": "relative to the accumulator perspective, not the capture actor",
+      "offset_order": [
+        "N",
+        "NE",
+        "E",
+        "SE",
+        "S",
+        "SW",
+        "W",
+        "NW"
+      ],
+      "class_order": [
+        "KNIGHT",
+        "BISHOP",
+        "ROOK",
+        "QUEEN",
+        "ADJACENT_PAWN_SURVIVES"
+      ],
+      "index_formula": "((((oriented_center * 2 + actor_rel) * 2 + collateral_rel) * 8 + offset) * 5 + collateral_class)",
+      "spatial_relation_formula": "oriented_collateral_square = oriented_center + direction_deltas_after_orientation[offset], with exact file/rank adjacency and both squares on board; offset N therefore means the collateral square is one rank north of the center",
+      "spatial_frame": "directions use the joint accumulator-perspective orientation; actor_rel and collateral_rel only select color relations and never rotate or mirror squares again",
+      "semantics": {
+        "activation": "boolean union of collateral outcomes for a capturable center and actor relation",
+        "candidate_source": "project exactly the unfiltered AtomicCapturePair candidate set by center and actor relation, including geometric EN_PASSANT candidates",
+        "capturer_origin": "within the same center and actor relation, count distinct origins in the exact CapturePair candidate set; a ring square is excluded only when it is the sole origin and remains a possible collateral when another origin can capture the same center",
+        "kings": "represented only by AtomicKingBlastEP",
+        "pawns": "an occupied adjacent pawn activates ADJACENT_PAWN_SURVIVES because collateral blast does not remove it, except when that square is excluded as the sole capture origin or as the off-center en-passant captured pawn",
+        "en_passant_captured_pawn": "for a CapturePair EN_PASSANT candidate, exclude oriented_center - (actor_rel == OWN ? 8 : -8), equivalently orient(raw_ep_center - pawn_push(actual_actor_color)), because that pawn is removed off-center before the blast",
+        "offboard_offsets": "never active"
+      },
+      "max_active_reachable_material": 240,
+      "freeze_gate": "numeric goldens with center d4 and collateral d5 for every offset, a sole adjacent capturer, two attackers sharing a center, pawn immunity, both perspectives, both mirror branches, board edges and off-center EP removal",
+      "descriptor": "AtomicBlastRing|v1-provisional|offset=71480|axes=center:64;actor_rel_accumulator:OWN,OPP;collateral_rel_accumulator:OWN,OPP;offset:N,NE,E,SE,S,SW,W,NW;class:KNIGHT,BISHOP,ROOK,QUEEN,ADJACENT_PAWN_SURVIVES|physical=10240|orientation=per_perspective_black_xor56_mirror_if_pre_h_king_file_lt4_shared_all_slices|source=exact_unfiltered_cp_including_geometric_ep|offset=collateral_minus_center_in_joint_frame|activation=boolean_capture_center_union|origin=exclude_only_sole_origin_same_center_actor_rel|pawn=adjacent_survives_except_sole_origin_or_ep_captured|ep_captured_pawn=oriented_center_minus_own8_or_opp_minus8_excluded|kings=separate|dtype=i8|wire=i8_raw_signed_twos_feature_major_output1024_contiguous_canonical_unpermuted_permute8_after_king_blast|psqt=none"
+    }
+  ],
+  "active_feature_bounds": {
+    "scope": {
+      "position_class": "evaluable-nonterminal",
+      "required_kings": 2,
+      "maximum_pieces_per_color": 16,
+      "maximum_board_pieces": 32,
+      "terminal_guard": "a king-absent terminal is resolved before NNUE feature enumeration"
+    },
+    "per_perspective": {
+      "half_ka_v2_atomic_hm": {
+        "classification": "tight-maximum",
+        "components": {
+          "maximum_board_pieces": 32,
+          "active_features_per_piece": 1
+        },
+        "formula": "maximum_board_pieces * active_features_per_piece",
+        "result": 32,
+        "proof": "HM activates exactly one physical feature for every board piece; the 32-piece start position attains the bound"
+      },
+      "atomic_capture_pair": {
+        "classification": "conservative-upper-bound",
+        "components": {
+          "maximum_non_king_actors": 30,
+          "maximum_candidate_edges_per_actor": 8
+        },
+        "formula": "maximum_non_king_actors * maximum_candidate_edges_per_actor",
+        "result": 240,
+        "proof": "each non-king piece belongs to exactly one actor relation and has at most eight first-occupied slider directions or eight knight destinations; pawn diagonals, including an empty en-passant target that substitutes one diagonal, never exceed eight total candidate edges"
+      },
+      "atomic_king_blast_ep": {
+        "classification": "conservative-upper-bound",
+        "components": {
+          "actor_relations": 2,
+          "enemy_king_center_or_neighbors_per_relation": 9,
+          "own_king_neighbors_per_relation": 8,
+          "maximum_en_passant_markers": 1
+        },
+        "formula": "actor_relations * (enemy_king_center_or_neighbors_per_relation + own_king_neighbors_per_relation) + maximum_en_passant_markers",
+        "result": 35,
+        "proof": "relations are boolean per center and actor relation; only the side-to-move actor relation can contribute the one deduplicated en-passant marker"
+      },
+      "atomic_blast_ring": {
+        "classification": "conservative-upper-bound",
+        "components": {
+          "maximum_non_king_collateral_pieces": 30,
+          "maximum_adjacent_centers_per_collateral": 8
+        },
+        "formula": "maximum_non_king_collateral_pieces * maximum_adjacent_centers_per_collateral",
+        "result": 240,
+        "proof": "each non-king collateral piece has at most eight adjacent occupied-or-en-passant centers and each center/collateral pair fixes one actor relation; king, sole-origin and off-center en-passant exclusions only reduce activations"
+      }
+    },
+    "aggregate": {
+      "classification": "conservative-independent-slice-sum",
+      "activation_domain": "physical/runtime-export",
+      "hm_virtual_rows_at_runtime": "excluded because every HM virtual row is coalesced into its physical exported row",
+      "components": {
+        "half_ka_v2_atomic_hm": 32,
+        "atomic_capture_pair": 240,
+        "atomic_king_blast_ep": 35,
+        "atomic_blast_ring": 240
+      },
+      "formula": "half_ka_v2_atomic_hm + atomic_capture_pair + atomic_king_blast_ep + atomic_blast_ring",
+      "result": 547,
+      "physical_aggregate": 547,
+      "hm_virtual_expansion": 32,
+      "training_parameter_row_formula": "physical_aggregate + hm_virtual_expansion",
+      "training_parameter_row": 579,
+      "accumulator_capacity": 1024,
+      "capacity_headroom": 477,
+      "proof": "the sum is safe without claiming that the four per-slice maxima are simultaneously attainable"
+    }
+  },
+  "dimensions": {
+    "physical_total": 81720,
+    "training_total_excluding_virtual": 83768,
+    "virtual_factor_total": 768,
+    "training_parameter_rows_total": 84536,
+    "accumulator_dimensions_per_perspective": 1024,
+    "feature_transformer_output_dimensions": 1024,
+    "psqt_buckets": 8,
+    "layer_stacks": 8,
+    "max_active_reachable_material": 547,
+    "max_active_factorized_training_parameter_rows": 579,
+    "full_refresh_enumerator": "streaming visitor; no fixed active-list truncation"
+  },
+  "numeric_policy": {
+    "oracle_accumulator_dtype": "i32",
+    "runtime_accumulator_policy": "unfrozen",
+    "runtime_candidates": [
+      "single i16 accumulator with a proven per-dimension bound",
+      "HM i16 plus relation i32 combined before clamp"
+    ],
+    "overflow_policy": "never saturate or wrap; refresh cannot truncate active features",
+    "freeze_gate": "adversarial active-count and per-dimension range proof for every accepted quantized network"
+  },
+  "trainer_policy": {
+    "feature_transformer": "V3-specific mixed feature transformer; the generic upstream ComposedFeatureTransformer is not wire-compatible",
+    "hm_outputs": "1024 accumulator columns plus 8 trainable PSQT columns",
+    "relation_outputs": "1024 accumulator columns and no PSQT parameters",
+    "relation_psqt": "absent, not zero-initialized trainable columns",
+    "forward": "sum every slice into the 1024 accumulator outputs; derive all eight PSQT outputs from HM only",
+    "serializer": "write the mixed per-slice dtypes and HM-only PSQT in the declared V3 wire order"
+  },
+  "null_move_policy": {
+    "reason": "a null move clears the EP square without pushing the NNUE accumulator",
+    "guard": "store epSquareWhenComputed and force both V3 perspectives to refresh when it differs from Position::ep_square()",
+    "guard_order": "compare the stored and current EP squares, invalidate both V3 perspectives and only then permit any computed early return",
+    "cache": "relation slices are not served from the HM Finny cache; any future V3 relation cache must include EP square in its key",
+    "required_fixture": "EP parent -> evaluate -> null move -> evaluate -> undo null -> evaluate parent",
+    "required_fixture_assertions": [
+      "the EP parent has both perspectives computed before the null move",
+      "the null move does not push the NNUE accumulator and reaches the guard with computed state",
+      "the EP mismatch invalidates and refreshes relation inputs for both perspectives before any computed early return",
+      "the HM Finny cache records a real hit for both perspectives while relation slices refresh",
+      "undo null changes the EP key back and forces a second relation refresh for both perspectives",
+      "the final parent accumulators, PSQT, transformed bytes and raw output are bit-identical to their pre-null values"
+    ]
+  },
+  "wire": {
+    "description": "Stockfish-compatible outer header with a V3-specific mixed feature transformer",
+    "order": [
+      "file_version:u32",
+      "network_hash:u32",
+      "description_length:u32",
+      "description:bytes",
+      "feature_transformer_hash:u32",
+      "biases:i16-sleb128",
+      "half_ka_v2_atomic_hm_weights:i16-sleb128",
+      "atomic_capture_pair_weights:i8-raw",
+      "atomic_king_blast_ep_weights:i16-sleb128",
+      "atomic_blast_ring_weights:i8-raw",
+      "half_ka_v2_atomic_hm_psqt:i32-sleb128",
+      "eight_times_architecture_hash_and_sfnnv15_stack",
+      "strict_eof"
+    ],
+    "tensor_shapes": {
+      "biases": {
+        "dtype": "i16",
+        "shape": [
+          1024
+        ]
+      },
+      "half_ka_v2_atomic_hm_weights": {
+        "dtype": "i16",
+        "shape": [
+          22528,
+          1024
+        ]
+      },
+      "atomic_capture_pair_weights": {
+        "dtype": "i8",
+        "shape": [
+          46648,
+          1024
+        ]
+      },
+      "atomic_king_blast_ep_weights": {
+        "dtype": "i16",
+        "shape": [
+          2304,
+          1024
+        ]
+      },
+      "atomic_blast_ring_weights": {
+        "dtype": "i8",
+        "shape": [
+          10240,
+          1024
+        ]
+      },
+      "half_ka_v2_atomic_hm_psqt": {
+        "dtype": "i32",
+        "shape": [
+          22528,
+          8
+        ]
+      }
+    },
+    "sleb128_framing": "COMPRESSED_LEB128 followed by a little-endian u32 compressed byte count and canonical signed values",
+    "file_parameter_order": "canonical and unpermuted",
+    "tensor_order": "every weight slice is feature-major with the 1024 accumulator output dimensions contiguous inside each row; HM PSQT is feature-major with the 8 PSQT buckets contiguous inside each row",
+    "raw_i8_representation": "signed two's-complement bytes",
+    "simd_permutation": {
+      "load_direction": "permute canonical file parameters into the active SIMD layout only after strict parsing succeeds",
+      "save_direction": "unpermute a copy of the active parameters before writing canonical bytes",
+      "biases_hm_and_king_blast_ep": "16-byte output blocks",
+      "capture_pair_and_blast_ring": "8-byte output blocks",
+      "psqt": "not permuted"
+    },
+    "psqt_scope": "HalfKAv2Atomic_hm only",
+    "psqt_export_mapping": "the 22528 by 8 PSQT tensor uses the same virtual-factor coalesce and per-bucket 12-to-11 king-plane mapping as the HM accumulator weights before serialization",
+    "dense_tail": "exactly the top-level dense_tail object, copied from atomic-nnue-v2"
+  },
+  "hashing": {
+    "status": "not frozen",
+    "descriptor_encoding": "ASCII",
+    "slice_hash": "FNV-1a-32 over the exact descriptor bytes",
+    "fnv_offset_basis": "0x811C9DC5",
+    "fnv_prime": "0x01000193",
+    "feature_fold_order": [
+      "half-ka-v2-atomic-hm",
+      "atomic-capture-pair",
+      "atomic-king-blast-ep",
+      "atomic-blast-ring"
+    ],
+    "feature_fold": "start at zero; rotate the current u32 left by one bit; XOR the next slice hash",
+    "transformer_descriptor": "AtomicNNUEV3Transformer|v1-provisional|wire=bias_i16_sleb[1024],hm_i16_sleb[22528x1024],cp_i8_raw[46648x1024],kbr_i16_sleb[2304x1024],ring_i8_raw[10240x1024],hm_psqt_i32_sleb[22528x8],8x_sfnnv15|tensor=feature_major_outputs_contiguous_psqt_buckets_contiguous|file=canonical_unpermuted|raw_i8=signed_twos|load=permute16_i16_permute8_i8|save=unpermute_copy|psqt=hm_only_same_factor_and_12to11_mapping|strict_eof=true",
+    "transformer_descriptor_hash": "FNV-1a-32 over transformer_descriptor",
+    "feature_transformer_hash": "feature_hash XOR 2048 XOR transformer_descriptor_hash",
+    "architecture_hash": "0x63337116",
+    "network_hash": "feature_transformer_hash XOR architecture_hash",
+    "feature_hash_value": null,
+    "transformer_descriptor_hash_value": null,
+    "feature_transformer_hash_value": null,
+    "network_hash_value": null,
+    "semantic_decision_blockers": [
+      "per-perspective joint orientation golden semantics",
+      "HM virtual-factor coalesce and 12-to-11 accumulator and PSQT export goldens",
+      "AtomicCapturePair edge ordinals and geometric en-passant goldens",
+      "AtomicKingBlastEP center-to-king offset and en-passant goldens",
+      "AtomicBlastRing center-to-collateral, multiple-origin, pawn-immunity and en-passant goldens",
+      "HM-only versus relation PSQT ablation decision",
+      "runtime accumulator arithmetic bound"
+    ],
+    "freeze_gates": [
+      "all semantic decision blockers resolved",
+      "golden indices for every class, edge, perspective, independent WHITE/BLACK mirror branch, center-to-related-square direction and HM factorized 12-to-11 accumulator and PSQT export mapping",
+      "mixed-wire canonical read, write, corruption and byte-exact round trip fixture",
+      "bit-exact C++ and Python descriptors, dimensions, offsets and hash generation",
+      "runtime loader still rejects V3 until every numeric hash is non-null and tested"
+    ]
+  },
+  "ablation_profiles": {
+    "production_layout_profiles": {
+      "wire_identity": "the complete 81720-row V3 layout and hashes; disabled slices are zero-locked and exported as canonical zero blocks",
+      "profiles": [
+        "V3-HM",
+        "V3-HM+CapturePair",
+        "V3-HM+CapturePair+KingBlastEP",
+        "V3-HM+CapturePair+BlastRing",
+        "V3-HM+CapturePair+KingBlastEP+BlastRing"
+      ]
+    },
+    "full_threats_control": "separate experimental descriptor, hash, build and wire; never accepted by the release V3 loader",
+    "precision_profiles": [
+      "CapturePair i8 versus i16",
+      "KingBlastEP i16 versus i8",
+      "BlastRing i8 versus i16",
+      "all relation slices i16"
+    ],
+    "psqt_profiles": [
+      "HM-only PSQT",
+      "all-slice PSQT with a separate experimental wire identity"
+    ],
+    "fairness": "same dataset, train/validation split, seed, batch schedule, dense tail and compute budget"
+  },
+  "dataset_statistics": {
+    "schemas": {
+      "partition_stats": "schemas/atomic-v3-dataset-stats-v1.json",
+      "trajectory_ledger": "schemas/atomic-trajectory-ledger-v1.json",
+      "index_coverage": "schemas/atomic-v3-index-coverage-v1.json",
+      "coverage_policy": "schemas/atomic-v3-coverage-policy-v1.json",
+      "split_audit": "schemas/atomic-v3-split-audit-v1.json",
+      "training_run_manifest": "schemas/atomic-v3-training-run-manifest-v1.json"
+    },
+    "authentication": "the training-run manifest is the root of trust and hashes both per-role stats sidecars, both atomic-bin-v2 manifests, both trajectory ledgers, both index-coverage files, one precommitted coverage policy and the split audit",
+    "split_policy": "partition complete generated self-play trajectories by a domain-separated label-free content hash; never split positions or shards blindly",
+    "leakage_keys": [
+      "raw atomic-bin-v2 record",
+      "V3 physical feature input plus buckets",
+      "label-free trajectory split group"
+    ],
+    "historical_policy": "existing atomic-bin-v2 datasets cannot acquire a trusted game-level split retrospectively because filtered played moves were not retained",
+    "active_capacity": 1024,
+    "reachable_bound_scope": "at most 16 pieces per color from normal Atomic starting material",
+    "overpopulated_fen_policy": "stream/grow in the engine oracle and reject explicitly in fixed-capacity trainer input; never truncate"
+  }
+}

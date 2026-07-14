@@ -1,0 +1,690 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Belzedar94/Atomic-Stockfish/schemas/atomic-v3-coverage-policy-v1.json",
+  "title": "AtomicNNUEV3 dataset coverage policy",
+  "description": "Schema for a campaign-specific, hash-pinned acceptance policy. It fixes histogram boundaries and integer coverage thresholds before data is inspected.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "policy_id",
+    "status",
+    "feature_schema_sha256",
+    "stats_schema_sha256",
+    "partition",
+    "reachability_mask_sha256",
+    "reachability_masks",
+    "histogram_boundaries",
+    "train",
+    "validation",
+    "global_gates"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "policy_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+    },
+    "status": {
+      "enum": [
+        "pilot",
+        "release-candidate"
+      ]
+    },
+    "feature_schema_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "stats_schema_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "partition": {
+      "$ref": "#/$defs/partitionConfig"
+    },
+    "reachability_mask_sha256": {
+      "description": "Aggregate hash of the twelve per-perspective physical, HM-training and HM-virtual-factor reachability-mask hashes in the canonical order declared by atomic-v3-index-coverage-v1.",
+      "$ref": "#/$defs/sha256"
+    },
+    "reachability_masks": {
+      "$ref": "#/$defs/reachabilityMasksByPerspective"
+    },
+    "histogram_boundaries": {
+      "$ref": "#/$defs/histogramBoundaries"
+    },
+    "train": {
+      "$ref": "#/$defs/partitionGate"
+    },
+    "validation": {
+      "$ref": "#/$defs/partitionGate"
+    },
+    "global_gates": {
+      "$ref": "#/$defs/globalGates"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "release-candidate"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "train": {
+            "$ref": "#/$defs/releaseCandidatePartitionGate"
+          },
+          "validation": {
+            "$ref": "#/$defs/releaseCandidatePartitionGate"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "uint64": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]{0,19})$",
+      "x-decimal-maximum": "18446744073709551615"
+    },
+    "positiveUint64": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]{0,19}$",
+      "x-decimal-maximum": "18446744073709551615"
+    },
+    "ppm": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1000000
+    },
+    "positivePpm": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1000000
+    },
+    "nullableSha256": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/sha256"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "generationProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "generation_seed",
+        "qsearch_mode",
+        "exclude_captures",
+        "exclude_promotions",
+        "exclude_checks",
+        "opening_mode",
+        "atomic_bin_v2_generation_sha256",
+        "adjudicate_draws_by_score",
+        "adjudicate_resignations"
+      ],
+      "properties": {
+        "generation_seed": {
+          "$ref": "#/$defs/uint64"
+        },
+        "qsearch_mode": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 65535,
+          "pattern": "^[ -~]+$"
+        },
+        "exclude_captures": {
+          "type": "boolean"
+        },
+        "exclude_promotions": {
+          "type": "boolean"
+        },
+        "exclude_checks": {
+          "type": "boolean"
+        },
+        "opening_mode": {
+          "enum": [
+            "builtin-startpos",
+            "authenticated-book"
+          ]
+        },
+        "atomic_bin_v2_generation_sha256": {
+          "description": "Domain-separated SHA-256 of the canonical shared semantic generation profile. It excludes only requested_records, records_per_shard and random_file_name so train and validation volume/layout may differ.",
+          "$ref": "#/$defs/sha256"
+        },
+        "adjudicate_draws_by_score": {
+          "description": "Authenticated V3 policy attestation. The manifest option must match; release-candidate policies require false.",
+          "type": "boolean"
+        },
+        "adjudicate_resignations": {
+          "description": "Policy attestation until H9.3b adds producer/manifest evidence; false is structurally required for release-candidate policy shape but is not sufficient for publication readiness.",
+          "type": "boolean"
+        }
+      }
+    },
+    "partitionProvenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "engine_commit",
+        "generator_commit",
+        "tools_commit",
+        "teacher_network_sha256",
+        "opening_book_sha256",
+        "generation_profile"
+      ],
+      "properties": {
+        "engine_commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "generator_commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "tools_commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "teacher_network_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "opening_book_sha256": {
+          "$ref": "#/$defs/nullableSha256"
+        },
+        "generation_profile": {
+          "$ref": "#/$defs/generationProfile"
+        }
+      }
+    },
+    "partitionConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "config_sha256",
+        "method",
+        "split_seed",
+        "validation_threshold_u64",
+        "provenance"
+      ],
+      "properties": {
+        "config_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "method": {
+          "const": "content-hash-trajectory-v1"
+        },
+        "split_seed": {
+          "$ref": "#/$defs/uint64"
+        },
+        "validation_threshold_u64": {
+          "$ref": "#/$defs/uint64",
+          "x-exclusive-decimal-minimum": "0",
+          "x-exclusive-decimal-maximum": "18446744073709551615"
+        },
+        "provenance": {
+          "$ref": "#/$defs/partitionProvenance"
+        }
+      }
+    },
+    "reachabilityMaskSet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "half_ka_v2_atomic_hm",
+        "atomic_capture_pair",
+        "atomic_king_blast_ep",
+        "atomic_blast_ring",
+        "hm_training",
+        "hm_virtual_factors"
+      ],
+      "properties": {
+        "half_ka_v2_atomic_hm": {
+          "$ref": "#/$defs/sha256"
+        },
+        "atomic_capture_pair": {
+          "$ref": "#/$defs/sha256"
+        },
+        "atomic_king_blast_ep": {
+          "$ref": "#/$defs/sha256"
+        },
+        "atomic_blast_ring": {
+          "$ref": "#/$defs/sha256"
+        },
+        "hm_training": {
+          "$ref": "#/$defs/sha256"
+        },
+        "hm_virtual_factors": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "reachabilityMasksByPerspective": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "WHITE",
+        "BLACK"
+      ],
+      "properties": {
+        "WHITE": {
+          "$ref": "#/$defs/reachabilityMaskSet"
+        },
+        "BLACK": {
+          "$ref": "#/$defs/reachabilityMaskSet"
+        }
+      }
+    },
+    "strictlyIncreasingIntArray": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "minimum": -2147483648,
+        "maximum": 2147483647
+      },
+      "minItems": 1,
+      "x-order": "strictly-increasing-no-duplicates"
+    },
+    "nonNegativeStrictlyIncreasingIntArray": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 2147483647
+      },
+      "minItems": 1,
+      "x-order": "strictly-increasing-no-duplicates"
+    },
+    "pieceCountStrictlyIncreasingIntArray": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 32
+      },
+      "minItems": 1,
+      "x-order": "strictly-increasing-no-duplicates"
+    },
+    "histogramBoundaries": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "score_cp",
+        "ply",
+        "rule50",
+        "piece_count",
+        "material_cp"
+      ],
+      "properties": {
+        "score_cp": {
+          "$ref": "#/$defs/strictlyIncreasingIntArray"
+        },
+        "ply": {
+          "$ref": "#/$defs/nonNegativeStrictlyIncreasingIntArray"
+        },
+        "rule50": {
+          "$ref": "#/$defs/nonNegativeStrictlyIncreasingIntArray"
+        },
+        "piece_count": {
+          "$ref": "#/$defs/pieceCountStrictlyIncreasingIntArray"
+        },
+        "material_cp": {
+          "$ref": "#/$defs/strictlyIncreasingIntArray"
+        }
+      }
+    },
+    "sliceCoveragePpm": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "half_ka_v2_atomic_hm",
+        "atomic_capture_pair",
+        "atomic_king_blast_ep",
+        "atomic_blast_ring",
+        "hm_training",
+        "hm_virtual_factors"
+      ],
+      "properties": {
+        "half_ka_v2_atomic_hm": {
+          "$ref": "#/$defs/ppm"
+        },
+        "atomic_capture_pair": {
+          "$ref": "#/$defs/ppm"
+        },
+        "atomic_king_blast_ep": {
+          "$ref": "#/$defs/ppm"
+        },
+        "atomic_blast_ring": {
+          "$ref": "#/$defs/ppm"
+        },
+        "hm_training": {
+          "$ref": "#/$defs/ppm"
+        },
+        "hm_virtual_factors": {
+          "$ref": "#/$defs/ppm"
+        }
+      }
+    },
+    "semanticMinimums": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ep_marker",
+        "ep_adjacent_enemy_king",
+        "ep_adjacent_own_king",
+        "target_king",
+        "enemy_king_center",
+        "enemy_king_blast",
+        "own_self_blast",
+        "simultaneous_enemy_and_own_blast",
+        "touching_kings",
+        "sole_origin_excluded",
+        "multiple_origin_preserved",
+        "adjacent_pawn_survives",
+        "off_center_ep_pawn_excluded"
+      ],
+      "properties": {
+        "ep_marker": {
+          "$ref": "#/$defs/uint64"
+        },
+        "ep_adjacent_enemy_king": {
+          "$ref": "#/$defs/uint64"
+        },
+        "ep_adjacent_own_king": {
+          "$ref": "#/$defs/uint64"
+        },
+        "target_king": {
+          "$ref": "#/$defs/uint64"
+        },
+        "enemy_king_center": {
+          "$ref": "#/$defs/uint64"
+        },
+        "enemy_king_blast": {
+          "$ref": "#/$defs/uint64"
+        },
+        "own_self_blast": {
+          "$ref": "#/$defs/uint64"
+        },
+        "simultaneous_enemy_and_own_blast": {
+          "$ref": "#/$defs/uint64"
+        },
+        "touching_kings": {
+          "$ref": "#/$defs/uint64"
+        },
+        "sole_origin_excluded": {
+          "$ref": "#/$defs/uint64"
+        },
+        "multiple_origin_preserved": {
+          "$ref": "#/$defs/uint64"
+        },
+        "adjacent_pawn_survives": {
+          "$ref": "#/$defs/uint64"
+        },
+        "off_center_ep_pawn_excluded": {
+          "$ref": "#/$defs/uint64"
+        }
+      }
+    },
+    "partitionGate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "minimum_records",
+        "minimum_trajectories",
+        "minimum_coverage_ppm_each_perspective",
+        "minimum_semantic_events_each_perspective",
+        "maximum_duplicate_raw_records_ppm",
+        "maximum_duplicate_feature_inputs_ppm"
+      ],
+      "properties": {
+        "minimum_records": {
+          "$ref": "#/$defs/uint64"
+        },
+        "minimum_trajectories": {
+          "$ref": "#/$defs/uint64"
+        },
+        "minimum_coverage_ppm_each_perspective": {
+          "$ref": "#/$defs/sliceCoveragePpm"
+        },
+        "minimum_semantic_events_each_perspective": {
+          "$ref": "#/$defs/semanticMinimums"
+        },
+        "maximum_duplicate_raw_records_ppm": {
+          "$ref": "#/$defs/ppm"
+        },
+        "maximum_duplicate_feature_inputs_ppm": {
+          "$ref": "#/$defs/ppm"
+        }
+      }
+    },
+    "releaseCandidateSliceCoveragePpm": {
+      "type": "object",
+      "properties": {
+        "half_ka_v2_atomic_hm": {
+          "$ref": "#/$defs/positivePpm"
+        },
+        "atomic_capture_pair": {
+          "$ref": "#/$defs/positivePpm"
+        },
+        "atomic_king_blast_ep": {
+          "$ref": "#/$defs/positivePpm"
+        },
+        "atomic_blast_ring": {
+          "$ref": "#/$defs/positivePpm"
+        },
+        "hm_training": {
+          "$ref": "#/$defs/positivePpm"
+        },
+        "hm_virtual_factors": {
+          "$ref": "#/$defs/positivePpm"
+        }
+      }
+    },
+    "releaseCandidateSemanticMinimums": {
+      "type": "object",
+      "properties": {
+        "ep_marker": {
+          "$ref": "#/$defs/positiveUint64"
+        },
+        "ep_adjacent_enemy_king": {
+          "$ref": "#/$defs/positiveUint64"
+        },
+        "ep_adjacent_own_king": {
+          "$ref": "#/$defs/positiveUint64"
+        },
+        "target_king": {
+          "$ref": "#/$defs/positiveUint64"
+        },
+        "enemy_king_center": {
+          "$ref": "#/$defs/positiveUint64"
+        },
+        "enemy_king_blast": {
+          "$ref": "#/$defs/positiveUint64"
+        },
+        "own_self_blast": {
+          "$ref": "#/$defs/positiveUint64"
+        },
+        "simultaneous_enemy_and_own_blast": {
+          "$ref": "#/$defs/positiveUint64"
+        },
+        "touching_kings": {
+          "$ref": "#/$defs/positiveUint64"
+        },
+        "sole_origin_excluded": {
+          "$ref": "#/$defs/positiveUint64"
+        },
+        "multiple_origin_preserved": {
+          "$ref": "#/$defs/positiveUint64"
+        },
+        "adjacent_pawn_survives": {
+          "$ref": "#/$defs/positiveUint64"
+        },
+        "off_center_ep_pawn_excluded": {
+          "$ref": "#/$defs/positiveUint64"
+        }
+      }
+    },
+    "releaseCandidatePartitionGate": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/partitionGate"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "minimum_records": {
+              "$ref": "#/$defs/positiveUint64"
+            },
+            "minimum_trajectories": {
+              "$ref": "#/$defs/positiveUint64"
+            },
+            "minimum_coverage_ppm_each_perspective": {
+              "$ref": "#/$defs/releaseCandidateSliceCoveragePpm"
+            },
+            "minimum_semantic_events_each_perspective": {
+              "$ref": "#/$defs/releaseCandidateSemanticMinimums"
+            }
+          }
+        }
+      ]
+    },
+    "globalGates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "require_both_perspectives",
+        "active_feature_capacity",
+        "require_zero_invalid_records",
+        "require_zero_truncation",
+        "require_zero_overflow",
+        "require_zero_cross_split_record_keys",
+        "require_zero_cross_split_feature_input_keys",
+        "require_zero_cross_split_group_ids"
+      ],
+      "properties": {
+        "require_both_perspectives": {
+          "const": true
+        },
+        "active_feature_capacity": {
+          "const": 1024
+        },
+        "require_zero_invalid_records": {
+          "const": true
+        },
+        "require_zero_truncation": {
+          "const": true
+        },
+        "require_zero_overflow": {
+          "const": true
+        },
+        "require_zero_cross_split_record_keys": {
+          "const": true
+        },
+        "require_zero_cross_split_feature_input_keys": {
+          "const": true
+        },
+        "require_zero_cross_split_group_ids": {
+          "const": true
+        }
+      }
+    }
+  },
+  "x-policy-validation": [
+    "all histogram arrays are strictly increasing and stats counts have exactly len(boundaries) + 1 bins",
+    "coverage ppm is floor(1000000 * observed_reachable / structurally_reachable) with zero denominator rejected",
+    "duplicate ppm is floor(1000000 * duplicate_count / record_count) with zero records rejected",
+    "the exact policy bytes and SHA-256 are frozen before generation or scanning begins",
+    "both role statistics repeat the exact policy partition method, seed, threshold, config hash, generation provenance, teacher hash and book hash",
+    "release-candidate policies require nonzero records, trajectories, every slice coverage threshold and every semantic minimum"
+  ],
+  "x-partition-config-hash": {
+    "algorithm": "SHA-256",
+    "domain_ascii_hex": "61746f6d69632d76332d706172746974696f6e2d636f6e6669672d763100",
+    "component_order": [
+      "method_length_u16_le",
+      "method_ascii",
+      "split_seed_u64_le",
+      "validation_threshold_u64_le",
+      "engine_commit_raw20",
+      "generator_commit_raw20",
+      "tools_commit_raw20",
+      "teacher_network_sha256_raw32",
+      "opening_book_present_u8",
+      "opening_book_sha256_raw32_if_present",
+      "generation_seed_u64_le",
+      "qsearch_mode_length_u16_le",
+      "qsearch_mode_utf8",
+      "exclude_captures_u8",
+      "exclude_promotions_u8",
+      "exclude_checks_u8",
+      "opening_mode_u8",
+      "atomic_bin_v2_generation_sha256_raw32",
+      "adjudicate_draws_by_score_u8",
+      "adjudicate_resignations_u8"
+    ],
+    "opening_mode_mapping": {
+      "builtin-startpos": 0,
+      "authenticated-book": 1
+    },
+    "boolean_mapping": {
+      "false": 0,
+      "true": 1
+    },
+    "formula": "SHA256(domain || components-in-declared-order)",
+    "result_field": "partition.config_sha256"
+  },
+  "x-atomic-bin-v2-generation-binding": {
+    "algorithm": "SHA-256",
+    "domain_ascii_hex": "61746f6d69632d76332d67656e65726174696f6e2d70726f66696c652d763100",
+    "canonical_payload": "a manifest-schema-order UTF-8 JSON object containing resolved_seed, atomic960, threads, hash_mb, use_nnue and generation.options in frozen declaration order except requested_records, records_per_shard and random_file_name; separators comma/colon, ensure_ascii=false, allow_nan=false, without trailing LF",
+    "excluded_volume_layout_fields": [
+      "generation.options.requested_records",
+      "generation.options.records_per_shard",
+      "generation.options.random_file_name"
+    ],
+    "formula": "SHA256(domain || canonical_payload)",
+    "result_field": "partition.provenance.generation_profile.atomic_bin_v2_generation_sha256",
+    "cross_split_rule": "train and validation normalized semantic generation profiles and hashes are byte-identical; excluded volume/layout fields may differ",
+    "release_candidate_flags": {
+      "adjudicate_draws_by_score": false,
+      "adjudicate_resignations": false
+    }
+  },
+  "x-reachability-mask-binding": {
+    "source_contract": "schemas/atomic-v3-index-coverage-v1.json",
+    "per_mask_fields": "reachability_masks.{WHITE,BLACK}.{half_ka_v2_atomic_hm,atomic_capture_pair,atomic_king_blast_ep,atomic_blast_ring,hm_training,hm_virtual_factors}",
+    "aggregate_field": "reachability_mask_sha256",
+    "verification": "all twelve structural-mask hashes and the aggregate hash are precommitted, must authenticate the trailing .atcov bitmaps, and must match both role statistics exactly; HM training/virtual masks are exact physical-HM projections and observed counters never define structural reachability"
+  },
+  "x-wire": {
+    "encoding": "utf-8",
+    "bom": "forbidden",
+    "canonical_json": {
+      "key_order": "schema-declaration-order",
+      "separators": [
+        ",",
+        ":"
+      ],
+      "ensure_ascii": false,
+      "allow_nan": false,
+      "insignificant_whitespace": "forbidden"
+    },
+    "trailing_lf_count": 1,
+    "maximum_bytes": 16777216,
+    "file_type": "regular",
+    "symbolic_links": "forbidden",
+    "snapshot_stability": "same-handle-fstat-before-and-after"
+  }
+}

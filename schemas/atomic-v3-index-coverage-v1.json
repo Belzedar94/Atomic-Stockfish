@@ -1,0 +1,352 @@
+{
+  "schema_version": 1,
+  "schema_id": "atomic-v3-index-coverage-v1",
+  "contract_status": "provisional",
+  "variant": "atomic",
+  "backend": "AtomicNNUEV3",
+  "byte_order": "little-endian",
+  "purpose": "Preserve auditable activation counts for every V3 physical, HM training and HM virtual-factor index without embedding 214128 counters in JSON.",
+  "header": {
+    "size": 128,
+    "magic_hex": "4154434f56310000",
+    "fields": [
+      {
+        "name": "magic",
+        "offset": 0,
+        "size": 8,
+        "storage": "bytes"
+      },
+      {
+        "name": "version",
+        "offset": 8,
+        "size": 2,
+        "storage": "uint16",
+        "required_value": 1
+      },
+      {
+        "name": "header_size",
+        "offset": 10,
+        "size": 2,
+        "storage": "uint16",
+        "required_value": 128
+      },
+      {
+        "name": "endian_marker",
+        "offset": 12,
+        "size": 4,
+        "storage": "uint32",
+        "required_value": 16909060
+      },
+      {
+        "name": "counter_size",
+        "offset": 16,
+        "size": 4,
+        "storage": "uint32",
+        "required_value": 8
+      },
+      {
+        "name": "role",
+        "offset": 20,
+        "size": 4,
+        "storage": "uint32",
+        "mapping": {
+          "train": 0,
+          "validation": 1
+        }
+      },
+      {
+        "name": "schema_sha256",
+        "offset": 24,
+        "size": 32,
+        "storage": "bytes",
+        "encoding": "raw-sha256-of-exact-schema-file"
+      },
+      {
+        "name": "feature_schema_sha256",
+        "offset": 56,
+        "size": 32,
+        "storage": "bytes",
+        "encoding": "raw-sha256-of-exact-atomic-nnue-v3-schema-file"
+      },
+      {
+        "name": "dataset_manifest_sha256",
+        "offset": 88,
+        "size": 32,
+        "storage": "bytes",
+        "encoding": "raw-sha256-of-exact-canonical-atomic-bin-v2-manifest"
+      },
+      {
+        "name": "counter_count",
+        "offset": 120,
+        "size": 8,
+        "storage": "uint64",
+        "required_value": 214128
+      }
+    ]
+  },
+  "counter": {
+    "size": 8,
+    "storage": "uint64",
+    "semantics": "number of records in which the index is active for the declared accumulator perspective",
+    "overflow": "scanner fails before incrementing UINT64_MAX; wrap and saturation are forbidden"
+  },
+  "segments": [
+    {
+      "perspective": "WHITE",
+      "kind": "physical",
+      "slice": "half-ka-v2-atomic-hm",
+      "offset": 0,
+      "count": 22528
+    },
+    {
+      "perspective": "WHITE",
+      "kind": "physical",
+      "slice": "atomic-capture-pair",
+      "offset": 22528,
+      "count": 46648
+    },
+    {
+      "perspective": "WHITE",
+      "kind": "physical",
+      "slice": "atomic-king-blast-ep",
+      "offset": 69176,
+      "count": 2304
+    },
+    {
+      "perspective": "WHITE",
+      "kind": "physical",
+      "slice": "atomic-blast-ring",
+      "offset": 71480,
+      "count": 10240
+    },
+    {
+      "perspective": "WHITE",
+      "kind": "training",
+      "slice": "half-ka-v2-atomic-hm",
+      "offset": 81720,
+      "count": 24576
+    },
+    {
+      "perspective": "WHITE",
+      "kind": "virtual-factor",
+      "slice": "half-ka-v2-atomic-hm",
+      "offset": 106296,
+      "count": 768
+    },
+    {
+      "perspective": "BLACK",
+      "kind": "physical",
+      "slice": "half-ka-v2-atomic-hm",
+      "offset": 107064,
+      "count": 22528
+    },
+    {
+      "perspective": "BLACK",
+      "kind": "physical",
+      "slice": "atomic-capture-pair",
+      "offset": 129592,
+      "count": 46648
+    },
+    {
+      "perspective": "BLACK",
+      "kind": "physical",
+      "slice": "atomic-king-blast-ep",
+      "offset": 176240,
+      "count": 2304
+    },
+    {
+      "perspective": "BLACK",
+      "kind": "physical",
+      "slice": "atomic-blast-ring",
+      "offset": 178544,
+      "count": 10240
+    },
+    {
+      "perspective": "BLACK",
+      "kind": "training",
+      "slice": "half-ka-v2-atomic-hm",
+      "offset": 188784,
+      "count": 24576
+    },
+    {
+      "perspective": "BLACK",
+      "kind": "virtual-factor",
+      "slice": "half-ka-v2-atomic-hm",
+      "offset": 213360,
+      "count": 768
+    }
+  ],
+  "reachability_masks": {
+    "storage": "trailing-canonical-bitmaps",
+    "offset": 1713152,
+    "derivation": "physical mask bits come only from an independent symbolic V3 reachability oracle; HM training and virtual-factor masks are exact deterministic projections of the physical HM mask and never independent trusted oracles; dataset counters and labels are forbidden inputs",
+    "observed_relation": "counter > 0 means observed; structurally reachable is read only from this bitmap. A nonzero counter under a zero mask bit is invalid, while a zero counter under a one mask bit is reachable-but-unseen.",
+    "bit_packing": "index i is bit (i mod 8), least-significant-bit first, of byte floor(i / 8); unused high bits in the final byte are zero",
+    "perspective_id": {
+      "WHITE": 0,
+      "BLACK": 1
+    },
+    "kind_id": {
+      "physical": 0,
+      "training": 1,
+      "virtual-factor": 2
+    },
+    "slice_id": {
+      "half-ka-v2-atomic-hm": 0,
+      "atomic-capture-pair": 1,
+      "atomic-king-blast-ep": 2,
+      "atomic-blast-ring": 3
+    },
+    "mask_byte_count": {
+      "half-ka-v2-atomic-hm": 2816,
+      "atomic-capture-pair": 5831,
+      "atomic-king-blast-ep": 288,
+      "atomic-blast-ring": 1280,
+      "hm-training": 3072,
+      "hm-virtual-factors": 96
+    },
+    "layout": [
+      {
+        "perspective": "WHITE",
+        "kind": "physical",
+        "slice": "half-ka-v2-atomic-hm",
+        "offset": 1713152,
+        "bytes": 2816
+      },
+      {
+        "perspective": "WHITE",
+        "kind": "physical",
+        "slice": "atomic-capture-pair",
+        "offset": 1715968,
+        "bytes": 5831
+      },
+      {
+        "perspective": "WHITE",
+        "kind": "physical",
+        "slice": "atomic-king-blast-ep",
+        "offset": 1721799,
+        "bytes": 288
+      },
+      {
+        "perspective": "WHITE",
+        "kind": "physical",
+        "slice": "atomic-blast-ring",
+        "offset": 1722087,
+        "bytes": 1280
+      },
+      {
+        "perspective": "WHITE",
+        "kind": "training",
+        "slice": "half-ka-v2-atomic-hm",
+        "offset": 1723367,
+        "bytes": 3072
+      },
+      {
+        "perspective": "WHITE",
+        "kind": "virtual-factor",
+        "slice": "half-ka-v2-atomic-hm",
+        "offset": 1726439,
+        "bytes": 96
+      },
+      {
+        "perspective": "BLACK",
+        "kind": "physical",
+        "slice": "half-ka-v2-atomic-hm",
+        "offset": 1726535,
+        "bytes": 2816
+      },
+      {
+        "perspective": "BLACK",
+        "kind": "physical",
+        "slice": "atomic-capture-pair",
+        "offset": 1729351,
+        "bytes": 5831
+      },
+      {
+        "perspective": "BLACK",
+        "kind": "physical",
+        "slice": "atomic-king-blast-ep",
+        "offset": 1735182,
+        "bytes": 288
+      },
+      {
+        "perspective": "BLACK",
+        "kind": "physical",
+        "slice": "atomic-blast-ring",
+        "offset": 1735470,
+        "bytes": 1280
+      },
+      {
+        "perspective": "BLACK",
+        "kind": "training",
+        "slice": "half-ka-v2-atomic-hm",
+        "offset": 1736750,
+        "bytes": 3072
+      },
+      {
+        "perspective": "BLACK",
+        "kind": "virtual-factor",
+        "slice": "half-ka-v2-atomic-hm",
+        "offset": 1739822,
+        "bytes": 96
+      }
+    ],
+    "per_mask_hash": {
+      "algorithm": "SHA-256",
+      "domain_ascii_hex": "61746f6d69632d76332d72656163686162696c6974792d6d61736b2d763200",
+      "component_order": [
+        "feature_schema_sha256_raw32",
+        "perspective_id_u8",
+        "kind_id_u8",
+        "slice_id_u8",
+        "index_count_u32_le",
+        "mask_byte_count_u32_le",
+        "mask_bytes"
+      ],
+      "formula": "SHA256(domain || feature_schema_sha256_raw32 || perspective_id_u8 || kind_id_u8 || slice_id_u8 || index_count_u32_le || mask_byte_count_u32_le || mask_bytes)"
+    },
+    "aggregate_hash": {
+      "algorithm": "SHA-256",
+      "domain_ascii_hex": "61746f6d69632d76332d72656163686162696c6974792d7365742d763200",
+      "per_mask_digest_order": [
+        "WHITE.physical.half-ka-v2-atomic-hm",
+        "WHITE.physical.atomic-capture-pair",
+        "WHITE.physical.atomic-king-blast-ep",
+        "WHITE.physical.atomic-blast-ring",
+        "WHITE.training.half-ka-v2-atomic-hm",
+        "WHITE.virtual-factor.half-ka-v2-atomic-hm",
+        "BLACK.physical.half-ka-v2-atomic-hm",
+        "BLACK.physical.atomic-capture-pair",
+        "BLACK.physical.atomic-king-blast-ep",
+        "BLACK.physical.atomic-blast-ring",
+        "BLACK.training.half-ka-v2-atomic-hm",
+        "BLACK.virtual-factor.half-ka-v2-atomic-hm"
+      ],
+      "formula": "SHA256(domain || twelve-per-mask-sha256-values-as-raw32-in-declared-order)",
+      "authenticated_fields": [
+        "coverage-policy.reachability_mask_sha256",
+        "dataset-stats.backend.reachability_mask_sha256"
+      ]
+    }
+  },
+  "verification": {
+    "segment_count": 12,
+    "counter_count": 214128,
+    "file_size": 1739918,
+    "segment_order": "exactly the array order above; every offset equals the prior offset plus count",
+    "counter_count_formula": "sum of all segment counts",
+    "physical_indices": "exactly the V3 physical index emitted by the independent full-refresh oracle",
+    "structural_reachability": "physical mask bytes are independently reproduced without consulting any dataset counter; HM training and virtual masks must equal the exact projection of physical HM mask bits; every popcount supplies its own structural denominator and every nonzero counter requires a one mask bit",
+    "training_indices": "the uncoalesced 12-plane HM training index before 12-to-11 export",
+    "virtual_factor_indices": "the HM factorizer row activated by the same piece before king-plane coalescing",
+    "role_binding": "role and dataset manifest SHA equal the statistics sidecar and manifest",
+    "strict_eof": true
+  },
+  "file_policy": {
+    "extension": ".atcov",
+    "append": "forbidden",
+    "overwrite": "forbidden",
+    "file_size": 1739918,
+    "formula": "128 + 214128 * 8 + 26766"
+  }
+}

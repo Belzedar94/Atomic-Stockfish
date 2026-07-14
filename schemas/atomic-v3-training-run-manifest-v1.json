@@ -1,0 +1,407 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Belzedar94/Atomic-Stockfish/schemas/atomic-v3-training-run-manifest-v1.json",
+  "title": "AtomicNNUEV3 completed training-run manifest",
+  "description": "Root of trust for one completed V3 training run. The checkpoint stores the acyclic input-bundle hash; the final manifest may then hash the checkpoint, network, logs and metrics without a hash cycle.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run_id",
+    "status",
+    "run_definition_sha256",
+    "input_bundle_sha256",
+    "inputs",
+    "trainer",
+    "schedule",
+    "outputs",
+    "verification"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"
+    },
+    "status": {
+      "const": "completed"
+    },
+    "run_definition_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "input_bundle_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "inputs": {
+      "$ref": "#/$defs/inputs"
+    },
+    "trainer": {
+      "$ref": "#/$defs/trainer"
+    },
+    "schedule": {
+      "$ref": "#/$defs/schedule"
+    },
+    "outputs": {
+      "$ref": "#/$defs/outputs"
+    },
+    "verification": {
+      "$ref": "#/$defs/verification"
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "gitCommit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "uint64": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]{0,19})$",
+      "x-decimal-maximum": "18446744073709551615"
+    },
+    "positiveUint64": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]{0,19}$",
+      "x-decimal-maximum": "18446744073709551615"
+    },
+    "basename": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!\\.{1,2}$)[^/\\\\:\\u0000<>\\\"|?*]+$"
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "file",
+        "bytes",
+        "sha256"
+      ],
+      "properties": {
+        "file": {
+          "$ref": "#/$defs/basename"
+        },
+        "bytes": {
+          "$ref": "#/$defs/uint64"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "nonEmptyArtifact": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/artifact"
+        },
+        {
+          "properties": {
+            "bytes": {
+              "$ref": "#/$defs/positiveUint64"
+            }
+          }
+        }
+      ]
+    },
+    "partitionInputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "manifest",
+        "trajectory_ledger",
+        "index_coverage",
+        "statistics"
+      ],
+      "properties": {
+        "manifest": {
+          "$ref": "#/$defs/artifact"
+        },
+        "trajectory_ledger": {
+          "$ref": "#/$defs/artifact"
+        },
+        "index_coverage": {
+          "$ref": "#/$defs/artifact"
+        },
+        "statistics": {
+          "$ref": "#/$defs/artifact"
+        }
+      }
+    },
+    "inputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "feature_schema",
+        "dataset_schema",
+        "manifest_schema",
+        "trajectory_ledger_schema",
+        "index_coverage_schema",
+        "statistics_schema",
+        "coverage_policy_schema",
+        "split_audit_schema",
+        "train",
+        "validation",
+        "coverage_policy",
+        "split_audit"
+      ],
+      "properties": {
+        "feature_schema": {
+          "$ref": "#/$defs/artifact"
+        },
+        "dataset_schema": {
+          "$ref": "#/$defs/artifact"
+        },
+        "manifest_schema": {
+          "$ref": "#/$defs/artifact"
+        },
+        "trajectory_ledger_schema": {
+          "$ref": "#/$defs/artifact"
+        },
+        "index_coverage_schema": {
+          "$ref": "#/$defs/artifact"
+        },
+        "statistics_schema": {
+          "$ref": "#/$defs/artifact"
+        },
+        "coverage_policy_schema": {
+          "$ref": "#/$defs/artifact"
+        },
+        "split_audit_schema": {
+          "$ref": "#/$defs/artifact"
+        },
+        "train": {
+          "$ref": "#/$defs/partitionInputs"
+        },
+        "validation": {
+          "$ref": "#/$defs/partitionInputs"
+        },
+        "coverage_policy": {
+          "$ref": "#/$defs/artifact"
+        },
+        "split_audit": {
+          "$ref": "#/$defs/artifact"
+        }
+      }
+    },
+    "trainer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "commit",
+        "artifact_sha256",
+        "dependency_lock_sha256",
+        "config",
+        "training_seed",
+        "deterministic_algorithms",
+        "device_description"
+      ],
+      "properties": {
+        "commit": {
+          "$ref": "#/$defs/gitCommit"
+        },
+        "artifact_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "dependency_lock_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "config": {
+          "$ref": "#/$defs/artifact"
+        },
+        "training_seed": {
+          "$ref": "#/$defs/uint64"
+        },
+        "deterministic_algorithms": {
+          "type": "boolean"
+        },
+        "device_description": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "schedule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "batch_size",
+        "optimizer_steps",
+        "epochs",
+        "validation_interval_steps"
+      ],
+      "properties": {
+        "batch_size": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295
+        },
+        "optimizer_steps": {
+          "$ref": "#/$defs/positiveUint64"
+        },
+        "epochs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295
+        },
+        "validation_interval_steps": {
+          "$ref": "#/$defs/positiveUint64"
+        }
+      }
+    },
+    "outputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "checkpoint",
+        "network",
+        "training_log",
+        "metrics"
+      ],
+      "properties": {
+        "checkpoint": {
+          "$ref": "#/$defs/nonEmptyArtifact"
+        },
+        "network": {
+          "$ref": "#/$defs/nonEmptyArtifact"
+        },
+        "training_log": {
+          "$ref": "#/$defs/artifact"
+        },
+        "metrics": {
+          "$ref": "#/$defs/artifact"
+        }
+      }
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "all_inputs_authenticated",
+        "coverage_policy_passed",
+        "split_audit_passed",
+        "run_definition_recomputed",
+        "checkpoint_input_bundle_matches",
+        "checkpoint_run_definition_matches",
+        "network_strict_reimport_passed",
+        "network_engine_load_passed",
+        "strict_eof"
+      ],
+      "properties": {
+        "all_inputs_authenticated": {
+          "const": true
+        },
+        "coverage_policy_passed": {
+          "const": true
+        },
+        "split_audit_passed": {
+          "const": true
+        },
+        "run_definition_recomputed": {
+          "const": true
+        },
+        "checkpoint_input_bundle_matches": {
+          "const": true
+        },
+        "checkpoint_run_definition_matches": {
+          "const": true
+        },
+        "network_strict_reimport_passed": {
+          "const": true
+        },
+        "network_engine_load_passed": {
+          "const": true
+        },
+        "strict_eof": {
+          "const": true
+        }
+      }
+    }
+  },
+  "x-run-definition": {
+    "algorithm": "SHA-256",
+    "domain_ascii_hex": "61746f6d69632d76332d72756e2d646566696e6974696f6e2d763100",
+    "component_order": [
+      "trainer.commit_raw20",
+      "trainer.artifact_sha256_raw32",
+      "trainer.dependency_lock_sha256_raw32",
+      "trainer.config.sha256_raw32",
+      "trainer.training_seed_u64_le",
+      "trainer.deterministic_algorithms_u8",
+      "schedule.batch_size_u32_le",
+      "schedule.optimizer_steps_u64_le",
+      "schedule.epochs_u32_le",
+      "schedule.validation_interval_steps_u64_le"
+    ],
+    "component_encodings": {
+      "trainer.commit_raw20": "20 decoded bytes of the lowercase 40-hex Git commit",
+      "trainer.deterministic_algorithms_u8": "0 for false, 1 for true",
+      "trainer.training_seed_u64_le": "the decimal-string value encoded as unsigned uint64 little-endian",
+      "schedule.batch_size_u32_le": "the JSON integer encoded as unsigned uint32 little-endian",
+      "schedule.optimizer_steps_u64_le": "the decimal-string value encoded as unsigned uint64 little-endian",
+      "schedule.epochs_u32_le": "the JSON integer encoded as unsigned uint32 little-endian",
+      "schedule.validation_interval_steps_u64_le": "the decimal-string value encoded as unsigned uint64 little-endian"
+    },
+    "formula": "SHA256(domain || trainer.commit_raw20 || trainer.artifact_sha256_raw32 || trainer.dependency_lock_sha256_raw32 || trainer.config.sha256_raw32 || trainer.training_seed_u64_le || trainer.deterministic_algorithms_u8 || schedule.batch_size_u32_le || schedule.optimizer_steps_u64_le || schedule.epochs_u32_le || schedule.validation_interval_steps_u64_le)",
+    "result_field": "run_definition_sha256",
+    "acyclicity": "only pre-run trainer, configuration, seed and schedule values are hashed; outputs, the manifest bytes and input_bundle_sha256 are excluded"
+  },
+  "x-input-bundle": {
+    "algorithm": "SHA-256",
+    "domain_ascii_hex": "61746f6d69632d76332d696e7075742d62756e646c652d763100",
+    "component_order": [
+      "inputs.feature_schema.sha256_raw32",
+      "inputs.dataset_schema.sha256_raw32",
+      "inputs.manifest_schema.sha256_raw32",
+      "inputs.trajectory_ledger_schema.sha256_raw32",
+      "inputs.index_coverage_schema.sha256_raw32",
+      "inputs.statistics_schema.sha256_raw32",
+      "inputs.coverage_policy_schema.sha256_raw32",
+      "inputs.split_audit_schema.sha256_raw32",
+      "inputs.train.manifest.sha256_raw32",
+      "inputs.train.trajectory_ledger.sha256_raw32",
+      "inputs.train.index_coverage.sha256_raw32",
+      "inputs.train.statistics.sha256_raw32",
+      "inputs.validation.manifest.sha256_raw32",
+      "inputs.validation.trajectory_ledger.sha256_raw32",
+      "inputs.validation.index_coverage.sha256_raw32",
+      "inputs.validation.statistics.sha256_raw32",
+      "inputs.coverage_policy.sha256_raw32",
+      "inputs.split_audit.sha256_raw32",
+      "run_definition_sha256_raw32"
+    ],
+    "formula": "SHA256(domain || eighteen-input-artifact-sha256-values-as-raw32-in-declared-order || run_definition_sha256_raw32)",
+    "checkpoint_fields": [
+      "input_bundle_sha256",
+      "run_definition_sha256",
+      "feature_schema_sha256",
+      "coverage_policy_sha256",
+      "split_audit_sha256"
+    ],
+    "acyclicity": "the bundle includes only input artifacts and the pre-run definition; it excludes outputs, the manifest bytes and input_bundle_sha256"
+  },
+  "x-publication": "write outputs and manifest to temporary paths, fsync, re-read and authenticate, then atomically publish; never overwrite or append",
+  "x-wire": {
+    "encoding": "utf-8",
+    "bom": "forbidden",
+    "canonical_json": {
+      "key_order": "schema-declaration-order",
+      "separators": [
+        ",",
+        ":"
+      ],
+      "ensure_ascii": false,
+      "allow_nan": false,
+      "insignificant_whitespace": "forbidden"
+    },
+    "trailing_lf_count": 1,
+    "maximum_bytes": 16777216,
+    "file_type": "regular",
+    "symbolic_links": "forbidden",
+    "snapshot_stability": "same-handle-fstat-before-and-after"
+  }
+}

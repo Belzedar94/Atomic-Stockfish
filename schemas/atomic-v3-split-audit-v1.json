@@ -1,0 +1,508 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Belzedar94/Atomic-Stockfish/schemas/atomic-v3-split-audit-v1.json",
+  "title": "AtomicNNUEV3 train-validation split audit",
+  "description": "Authenticated full-scan proof that train and validation share no raw record, V3 feature input or label-free trajectory split group.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "artifacts",
+    "partition",
+    "auditor",
+    "identity_definitions",
+    "sets",
+    "intersections",
+    "verification"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "train_stats",
+        "validation_stats",
+        "coverage_policy"
+      ],
+      "properties": {
+        "train_stats": {
+          "$ref": "#/$defs/artifact"
+        },
+        "validation_stats": {
+          "$ref": "#/$defs/artifact"
+        },
+        "coverage_policy": {
+          "$ref": "#/$defs/artifact"
+        }
+      }
+    },
+    "partition": {
+      "$ref": "#/$defs/partitionBinding"
+    },
+    "auditor": {
+      "$ref": "#/$defs/auditor"
+    },
+    "identity_definitions": {
+      "$ref": "#/$defs/identityDefinitions"
+    },
+    "sets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "train",
+        "validation"
+      ],
+      "properties": {
+        "train": {
+          "$ref": "#/$defs/setGroup"
+        },
+        "validation": {
+          "$ref": "#/$defs/setGroup"
+        }
+      }
+    },
+    "intersections": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "raw_record_keys",
+        "feature_input_keys",
+        "split_group_ids"
+      ],
+      "properties": {
+        "raw_record_keys": {
+          "const": "0"
+        },
+        "feature_input_keys": {
+          "const": "0"
+        },
+        "split_group_ids": {
+          "const": "0"
+        }
+      }
+    },
+    "verification": {
+      "$ref": "#/$defs/verification"
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "gitCommit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "uint64": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]{0,19})$",
+      "x-decimal-maximum": "18446744073709551615"
+    },
+    "nullableSha256": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/sha256"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "generationProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "generation_seed",
+        "qsearch_mode",
+        "exclude_captures",
+        "exclude_promotions",
+        "exclude_checks",
+        "opening_mode",
+        "atomic_bin_v2_generation_sha256",
+        "adjudicate_draws_by_score",
+        "adjudicate_resignations"
+      ],
+      "properties": {
+        "generation_seed": {
+          "$ref": "#/$defs/uint64"
+        },
+        "qsearch_mode": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 65535,
+          "pattern": "^[ -~]+$"
+        },
+        "exclude_captures": {
+          "type": "boolean"
+        },
+        "exclude_promotions": {
+          "type": "boolean"
+        },
+        "exclude_checks": {
+          "type": "boolean"
+        },
+        "opening_mode": {
+          "enum": [
+            "builtin-startpos",
+            "authenticated-book"
+          ]
+        },
+        "atomic_bin_v2_generation_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "adjudicate_draws_by_score": {
+          "type": "boolean"
+        },
+        "adjudicate_resignations": {
+          "type": "boolean"
+        }
+      }
+    },
+    "partitionProvenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "engine_commit",
+        "generator_commit",
+        "tools_commit",
+        "teacher_network_sha256",
+        "opening_book_sha256",
+        "generation_profile"
+      ],
+      "properties": {
+        "engine_commit": {
+          "$ref": "#/$defs/gitCommit"
+        },
+        "generator_commit": {
+          "$ref": "#/$defs/gitCommit"
+        },
+        "tools_commit": {
+          "$ref": "#/$defs/gitCommit"
+        },
+        "teacher_network_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "opening_book_sha256": {
+          "$ref": "#/$defs/nullableSha256"
+        },
+        "generation_profile": {
+          "$ref": "#/$defs/generationProfile"
+        }
+      }
+    },
+    "partitionBinding": {
+      "description": "Exact repetition of the one precommitted coverage-policy.partition object; the auditor rejects any train, validation, ledger or policy disagreement.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "config_sha256",
+        "method",
+        "split_seed",
+        "validation_threshold_u64",
+        "provenance"
+      ],
+      "properties": {
+        "config_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "method": {
+          "const": "content-hash-trajectory-v1"
+        },
+        "split_seed": {
+          "$ref": "#/$defs/uint64"
+        },
+        "validation_threshold_u64": {
+          "$ref": "#/$defs/uint64",
+          "x-exclusive-decimal-minimum": "0",
+          "x-exclusive-decimal-maximum": "18446744073709551615"
+        },
+        "provenance": {
+          "$ref": "#/$defs/partitionProvenance"
+        }
+      }
+    },
+    "basename": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!\\.{1,2}$)[^/\\\\:\\u0000<>\\\"|?*]+$"
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "file",
+        "bytes",
+        "sha256",
+        "schema_sha256"
+      ],
+      "properties": {
+        "file": {
+          "$ref": "#/$defs/basename"
+        },
+        "bytes": {
+          "$ref": "#/$defs/uint64"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "schema_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "auditor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "commit",
+        "artifact_sha256",
+        "algorithm_version",
+        "set_algorithm"
+      ],
+      "properties": {
+        "commit": {
+          "$ref": "#/$defs/gitCommit"
+        },
+        "artifact_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "algorithm_version": {
+          "const": "atomic-v3-split-audit-v1"
+        },
+        "set_algorithm": {
+          "const": "bounded chunks of raw 32-byte keys, unsigned-byte lexicographic sort, per-chunk dedup, k-way merge, exact duplicate/intersection counts, domain-separated ordered-set SHA-256"
+        }
+      }
+    },
+    "identityDefinitions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "raw_record_key",
+        "feature_input_key",
+        "split_group_id",
+        "ordered_set_digest"
+      ],
+      "properties": {
+        "raw_record_key": {
+          "const": "SHA256(ascii('atomic-record-key-v1\\0') || raw-atomic-bin-v2-record-64)"
+        },
+        "feature_input_key": {
+          "const": "SHA256(ascii('atomic-v3-feature-input-v1\\0') || feature-schema-sha256-32 || stm-count-u32-le || sorted-stm-physical-indices-u32-le || opponent-count-u32-le || sorted-opponent-physical-indices-u32-le || bucket-u8)"
+        },
+        "split_group_id": {
+          "const": "the exact label-free 32-byte split_group_id authenticated by atomic-trajectory-ledger-v1"
+        },
+        "ordered_set_digest": {
+          "const": "SHA256(ascii('atomic-ordered-set-v1\\0') || key-count-u64-le || strictly-increasing-unique-keys-32)"
+        }
+      }
+    },
+    "setSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "observations",
+        "unique_keys",
+        "duplicate_observations",
+        "ordered_set_sha256"
+      ],
+      "properties": {
+        "observations": {
+          "$ref": "#/$defs/uint64"
+        },
+        "unique_keys": {
+          "$ref": "#/$defs/uint64"
+        },
+        "duplicate_observations": {
+          "$ref": "#/$defs/uint64"
+        },
+        "ordered_set_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "setGroup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "raw_record_keys",
+        "feature_input_keys",
+        "split_group_ids"
+      ],
+      "properties": {
+        "raw_record_keys": {
+          "$ref": "#/$defs/setSummary"
+        },
+        "feature_input_keys": {
+          "$ref": "#/$defs/setSummary"
+        },
+        "split_group_ids": {
+          "$ref": "#/$defs/setSummary"
+        }
+      }
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "train_role_verified",
+        "validation_role_verified",
+        "same_feature_schema",
+        "same_coverage_policy",
+        "same_partition_config",
+        "same_split_method",
+        "same_split_seed",
+        "same_validation_threshold",
+        "same_generation_provenance",
+        "same_reachability_masks",
+        "manifest_hashes_distinct",
+        "ledger_hashes_distinct",
+        "no_shared_shard_sha256",
+        "no_shared_path_or_file_identity",
+        "full_record_scans",
+        "full_ledger_structural_scans",
+        "partition_hashes_recomputed",
+        "validation_feature_inputs_decontaminated",
+        "strict_eof"
+      ],
+      "properties": {
+        "train_role_verified": {
+          "const": true
+        },
+        "validation_role_verified": {
+          "const": true
+        },
+        "same_feature_schema": {
+          "const": true
+        },
+        "same_coverage_policy": {
+          "const": true
+        },
+        "same_partition_config": {
+          "const": true
+        },
+        "same_split_method": {
+          "const": true
+        },
+        "same_split_seed": {
+          "const": true
+        },
+        "same_validation_threshold": {
+          "const": true
+        },
+        "same_generation_provenance": {
+          "const": true
+        },
+        "same_reachability_masks": {
+          "const": true
+        },
+        "manifest_hashes_distinct": {
+          "const": true
+        },
+        "ledger_hashes_distinct": {
+          "const": true
+        },
+        "no_shared_shard_sha256": {
+          "const": true
+        },
+        "no_shared_path_or_file_identity": {
+          "const": true
+        },
+        "full_record_scans": {
+          "const": true
+        },
+        "full_ledger_structural_scans": {
+          "description": "Every ledger byte, entry, range and partition hash was structurally scanned. Legal Atomic move replay is a separate engine-backed publication gate.",
+          "const": true
+        },
+        "partition_hashes_recomputed": {
+          "const": true
+        },
+        "validation_feature_inputs_decontaminated": {
+          "const": true
+        },
+        "strict_eof": {
+          "const": true
+        }
+      }
+    }
+  },
+  "x-partition-binding": {
+    "canonical_source": "artifacts.coverage_policy -> coverage-policy.partition",
+    "audit_repeat": "partition",
+    "role_repeats": [
+      "artifacts.train_stats -> split and provenance",
+      "artifacts.validation_stats -> split and provenance"
+    ],
+    "verification": "authenticate all three artifacts, require exact equality of config hash, method, seed, threshold and every provenance leaf, then structurally scan every ledger entry and recompute every partition decision"
+  },
+  "x-hash-recipes": {
+    "raw_record_key": {
+      "algorithm": "SHA-256",
+      "domain_ascii_hex": "61746f6d69632d7265636f72642d6b65792d763100",
+      "component_order": [
+        "raw_atomic_bin_v2_record_bytes64"
+      ],
+      "formula": "SHA256(domain || raw_atomic_bin_v2_record_bytes64)"
+    },
+    "feature_input_key": {
+      "algorithm": "SHA-256",
+      "domain_ascii_hex": "61746f6d69632d76332d666561747572652d696e7075742d763100",
+      "component_order": [
+        "feature_schema_sha256_raw32",
+        "stm_count_u32_le",
+        "sorted_stm_physical_indices_u32_le",
+        "opponent_count_u32_le",
+        "sorted_opponent_physical_indices_u32_le",
+        "bucket_u8"
+      ],
+      "formula": "SHA256(domain || feature_schema_sha256_raw32 || stm_count_u32_le || sorted_stm_physical_indices_u32_le || opponent_count_u32_le || sorted_opponent_physical_indices_u32_le || bucket_u8)",
+      "perspective_rule": "the two feature lists are already ordered as side-to-move then opponent, so absolute WHITE/BLACK side-to-move is excluded",
+      "bucket_rule": "bucket_u8 is the single inherited V3 bucket selected for this input and is included exactly once"
+    },
+    "split_group_id": {
+      "source_contract": "schemas/atomic-trajectory-ledger-v1.json#split_group_id",
+      "storage": "raw32"
+    },
+    "ordered_set_digest": {
+      "algorithm": "SHA-256",
+      "domain_ascii_hex": "61746f6d69632d6f7264657265642d7365742d763100",
+      "component_order": [
+        "key_count_u64_le",
+        "strictly_increasing_unique_keys_raw32"
+      ],
+      "formula": "SHA256(domain || key_count_u64_le || concatenated_strictly_increasing_unique_keys_raw32)"
+    }
+  },
+  "x-publication": [
+    "all outputs remain staged while train feature-input keys are external-sorted; validation records with a key present in train are deterministically omitted and empty ledger entries are removed",
+    "generation continues until both roles still meet the precommitted coverage policy after decontamination",
+    "the audit is written to a temporary path, fsynced, re-read and verified before atomic rename",
+    "the training-run manifest hashes both stats sidecars, the audit, the coverage policy and all referenced artifacts",
+    "no final sidecar or audit remains visible if any publication step fails"
+  ],
+  "x-wire": {
+    "encoding": "utf-8",
+    "bom": "forbidden",
+    "canonical_json": {
+      "key_order": "schema-declaration-order",
+      "separators": [
+        ",",
+        ":"
+      ],
+      "ensure_ascii": false,
+      "allow_nan": false,
+      "insignificant_whitespace": "forbidden"
+    },
+    "trailing_lf_count": 1,
+    "maximum_bytes": 16777216,
+    "file_type": "regular",
+    "symbolic_links": "forbidden",
+    "snapshot_stability": "same-handle-fstat-before-and-after"
+  }
+}
