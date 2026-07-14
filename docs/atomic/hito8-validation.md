@@ -262,3 +262,51 @@ bytes after code/LTO layout changed; this is tracked separately from the
 
 The playing signature remains exactly `338376`; H8.2b is therefore a
 no-functional-change specialization and does not require an Elo test.
+
+## H8.2c - Remove unused modern NNUE layers
+
+H8.2c removes `AffineTransformSparseInput`, `SqrClippedReLU`, and the
+non-zero-index helper from the LegacyAtomicV1 source inventory. Their only
+consumers were each other; the active Atomic network continues to use dense
+`AffineTransform`, `ClippedReLU`, and `HalfKAv2Atomic`. The associated dead
+`vec_nnz` implementations are removed from AVX-512, AVX2, SSE, NEON, LSX, and
+LASX branches.
+
+The measured source commit is
+`2728a7798fbc525e3397c736a46736b3dd15bf5b`, based on the H8.2b squash merge
+`caa075a19eef822a01019c77f4c5faf00c84de11`.
+
+### Source, artifact, and functional evidence
+
+- Patch size: 23 insertions and 790 deletions across seven files.
+- Three implementation headers removed from disk and from the native Makefile.
+- BMI2 executable: 4,266,467 bytes, SHA-256
+  `ACA0C03907D750D1991A61F94439B2539AAA25070FDCF0F22D0558E9EB9335E7`.
+- Compile-only AVX-512 ICL artifact: 4,283,265 bytes, SHA-256
+  `426F6DE9D5762B8F374467860AEC10FE46C17C4EF0E47CF5EB2CDE52B0A65AE6`.
+- C++ Atomic unit tests: 63/63; shared API tests: 34/34.
+- All eight Atomic/Atomic960 perfts and 19/19 focused rules/transitions.
+- Fixed search corpus: 16/16 classical and 16/16 LegacyAtomicV1.
+- NNUE modes `false`, `true`, `pure`, invalid-net rejection, and reprosearch
+  12/12.
+- One million deterministic incremental operations retained the exact counters
+  and state signature `0x8742E39B793C46AB`.
+- Frozen-Fairy differential: 10,000/10,000, maximum final NNUE delta 0 and
+  maximum pure trace delta 0.005.
+
+### Clean-machine commit A/B
+
+| Side | NPS samples | Median NPS |
+| --- | --- | ---: |
+| H8.2c candidate | 1,412,429; 1,409,368; 1,421,691; 1,363,571; 1,382,409 | 1,409,368 |
+| H8.2b control | 1,406,321; 1,397,258; 1,407,843; 1,424,805; 1,373,650 | 1,406,321 |
+
+The strict runner reports ratio `1.0022` (+0.22%) with identical executable
+sizes. Because none of the removed headers participated in either binary, this
+result is classified as neutral measurement noise rather than a speed claim.
+Complete evidence is in
+[`evidence/hito8-modern-nnue-layers`](evidence/hito8-modern-nnue-layers/README.md).
+
+The structural test explicitly allows H9 to add modern layers under an
+independent `AtomicNNUEV2` build graph. LegacyAtomicV1 remains bit-compatible,
+and the playing signature remains exactly `338376`.

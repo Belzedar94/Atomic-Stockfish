@@ -1,0 +1,43 @@
+{
+  "schema": "atomic-hito8-performance-evidence-v1",
+  "block": "H8.2c",
+  "source_commit": "2728a7798fbc525e3397c736a46736b3dd15bf5b",
+  "base_commit": "caa075a19eef822a01019c77f4c5faf00c84de11",
+  "source_tree_clean": true,
+  "compiler": "g++ (GNUC) 15.2.0",
+  "target": "64bit BMI2 AVX2 SSE41 SSSE3 SSE2 POPCNT",
+  "linker_reproducibility_flag": "-Wl,--no-insert-timestamp",
+  "candidate": {
+    "bytes": 4266467,
+    "sha256": "ACA0C03907D750D1991A61F94439B2539AAA25070FDCF0F22D0558E9EB9335E7"
+  },
+  "control": {
+    "source_commit": "20b3bd6c191636599ecad3e09aea7b78eb762d77",
+    "bytes": 4266467,
+    "sha256": "78AAE3D35C3D76F3EDCA2E4CA7600F52A2BF7793283E158B835197C3C0D9EDB9"
+  },
+  "avx512icl_compile_only": {
+    "bytes": 4283265,
+    "sha256": "426F6DE9D5762B8F374467860AEC10FE46C17C4EF0E47CF5EB2CDE52B0A65AE6",
+    "passed": true
+  },
+  "network_sha256": "99DC67EABF26A64FAEECA3A88B4C38597A840B8D4A874B9F2CF658C6F92A04A6",
+  "corpus_sha256": "2738065A8A70D61DA46FA3C75F95D645E50E601B43792DF0E7B3CC97B1D891A1",
+  "configuration": {
+    "threads": 1,
+    "hash_mb": 64,
+    "cpu_affinity": 24,
+    "nodes_per_fen": 100000,
+    "warmups": 1,
+    "measured_repetitions": 5,
+    "concurrent_assignment_roots": 0
+  },
+  "commit_ab": {
+    "candidate_median_nps": 1409368,
+    "control_median_nps": 1406321,
+    "ratio": 1.0022,
+    "passed": true,
+    "interpretation": "neutral"
+  },
+  "playing_signature": 338376
+}
