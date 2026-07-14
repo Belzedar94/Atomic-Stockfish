@@ -119,6 +119,44 @@ def test_atomic_state_info_only_stores_live_check_metadata():
         assert contract in unit_test
 
 
+def test_legacy_atomic_feature_index_lists_use_reachable_bounds():
+    header = (ROOT / "src" / "nnue" / "features" / "half_ka_v2_atomic.h").read_text(
+        encoding="utf-8"
+    )
+    accumulator = (ROOT / "src" / "nnue" / "nnue_accumulator.cpp").read_text(
+        encoding="utf-8"
+    )
+    unit_test = (ROOT / "tests" / "atomic_see.cpp").read_text(encoding="utf-8")
+    incremental = (ROOT / "tests" / "atomic_nnue_incremental.cpp").read_text(
+        encoding="utf-8"
+    )
+
+    for contract in (
+        "MaxActiveDimensions  = 32",
+        "MaxRemovedDimensions = 2 + DirtyPiece::MAX_ATOMIC_BLAST_PIECES",
+        "MaxAddedDimensions   = 2",
+        "using ActiveIndexList",
+        "using RemovedIndexList",
+        "using AddedIndexList",
+    ):
+        assert contract in header
+    assert "using IndexList" not in header
+
+    for list_type in ("ActiveIndexList", "RemovedIndexList", "AddedIndexList"):
+        assert f"FeatureSet::{list_type}" in accumulator
+        assert list_type in unit_test
+        assert list_type in incremental
+
+    for boundary in (
+        '"maximum capture"',
+        '"maximum en passant"',
+        '"maximum capture promotion"',
+        '"Atomic960 castling"',
+        '"terminal king capture"',
+    ):
+        assert boundary in unit_test
+
+
 def test_orthodox_evasion_generator_is_not_instantiated():
     header = (ROOT / "src" / "movegen.h").read_text(encoding="utf-8")
     movegen = (ROOT / "src" / "movegen.cpp").read_text(encoding="utf-8")
