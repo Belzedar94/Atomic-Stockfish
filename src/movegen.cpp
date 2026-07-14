@@ -103,7 +103,10 @@ Move* make_promotions(Move* moveList, [[maybe_unused]] Square to) {
 
 
 template<Color Us, GenType Type>
-Move* generate_pawn_moves(const Position& pos, Move* moveList, Bitboard target) {
+Move* generate_pawn_moves(const Position& pos,
+                          Move*           moveList,
+                          Bitboard        target,
+                          Bitboard        kingAttacks) {
 
     constexpr Color     Them     = ~Us;
     constexpr Bitboard  TRank7BB = (Us == WHITE ? Rank7BB : Rank2BB);
@@ -113,7 +116,9 @@ Move* generate_pawn_moves(const Position& pos, Move* moveList, Bitboard target) 
     constexpr Direction UpLeft   = (Us == WHITE ? NORTH_WEST : SOUTH_EAST);
 
     const Bitboard emptySquares = ~pos.pieces();
-    const Bitboard enemies      = Type == EVASIONS ? pos.checkers() : pos.pieces(Them);
+    const Bitboard enemies      = Type == EVASIONS ? pos.checkers()
+                                : Type == CAPTURES ? target
+                                                   : pos.pieces(Them);
 
     Bitboard pawnsOn7    = pos.pieces(Us, PAWN) & TRank7BB;
     Bitboard pawnsNotOn7 = pos.pieces(Us, PAWN) & ~TRank7BB;
@@ -167,6 +172,10 @@ Move* generate_pawn_moves(const Position& pos, Move* moveList, Bitboard target) 
         {
             assert(rank_of(pos.ep_square()) == relative_rank(Us, RANK_6));
 
+            if constexpr (Type == CAPTURES)
+                if (kingAttacks & pos.ep_square())
+                    return moveList;
+
             // An en passant capture cannot resolve a discovered check
             if (Type == EVASIONS && (target & (pos.ep_square() + Up)))
                 return moveList;
@@ -208,25 +217,26 @@ Move* generate_all(const Position& pos, Move* moveList) {
 
     static_assert(Type != LEGAL, "Unsupported type in generate_all()");
 
-    const Square ksq = pos.square<KING>(Us);
-    Bitboard     target;
+    const Square   ksq         = pos.square<KING>(Us);
+    const Bitboard kingAttacks = Attacks::attacks_bb<KING>(ksq);
+    Bitboard       target;
 
     // Skip generating non-king moves when in double check
     if (Type != EVASIONS || !more_than_one(pos.checkers()))
     {
         target = Type == EVASIONS     ? Attacks::between_bb(ksq, lsb(pos.checkers()))
                : Type == NON_EVASIONS ? ~pos.pieces(Us)
-               : Type == CAPTURES     ? pos.pieces(~Us)
+               : Type == CAPTURES     ? pos.pieces(~Us) & ~kingAttacks
                                       : ~pos.pieces();  // QUIETS
 
-        moveList = generate_pawn_moves<Us, Type>(pos, moveList, target);
+        moveList = generate_pawn_moves<Us, Type>(pos, moveList, target, kingAttacks);
         moveList = generate_moves<Us, KNIGHT>(pos, moveList, target);
         moveList = generate_moves<Us, BISHOP>(pos, moveList, target);
         moveList = generate_moves<Us, ROOK>(pos, moveList, target);
         moveList = generate_moves<Us, QUEEN>(pos, moveList, target);
     }
 
-    Bitboard b = Attacks::attacks_bb<KING>(ksq) & (Type == EVASIONS ? ~pos.pieces(Us) : target);
+    Bitboard b = kingAttacks & (Type == EVASIONS ? ~pos.pieces(Us) : target);
 
     moveList = splat_moves(moveList, ksq, b);
 

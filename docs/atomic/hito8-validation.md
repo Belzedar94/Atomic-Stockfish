@@ -450,3 +450,45 @@ evidence to accept the block.
 
 Complete artifacts, platform hashes, caveats, and every sample are in
 [`evidence/hito8-compact-nnue-index-lists`](evidence/hito8-compact-nnue-index-lists/README.md).
+
+## H8.5 - Prefilter self-exploding captures
+
+H8.5 narrows only the capture-stage target set so captures adjacent to the
+moving side's king are not emitted when their explosion would necessarily be
+illegal. En passant receives the equivalent explicit guard. `NON_EVASIONS`,
+the complete legal generator, and the final Atomic legality oracle remain
+unchanged; quiet queen promotions retain their historical capture-stage
+placement.
+
+The measured source commit is
+`be56098f484f92596792e1a35310b65de36f6b17`, based directly on the H8.4b
+squash merge `6cc61af1f108f17ac47a23ca03450590da882457`.
+
+### Functional, platform, and artifact evidence
+
+- C++ units 87/87; API 34/34; Python `test.py` 22/22 and focused pytest
+  71/71.
+- Eight perfts, 19/19 rule transitions, classical and LegacyAtomicV1 search
+  16/16, UCI, XBoard, all NNUE modes, invalid-net rejection, and reprosearch.
+- Exact playing signature `338376` and incremental state signature
+  `0x8742E39B793C46AB`.
+- Fairy movegen/depth-two perft differential: 2,489 positions across three
+  seeds, all exact.
+- Frozen-Fairy NNUE differential: 10,000/10,000 with zero final playing delta;
+  seven generator fixtures reproduced byte for byte.
+- Scalar SSE2, Python, Board WASM CommonJS/ESM, and full pthread NNUE WASM all
+  passed. An independent source audit found no P0-P3 issue.
+- BMI2 executable: 4,255,610 bytes, SHA-256
+  `A1E984FE5E0E604B84BB840B9FAF2B9A6010636B4E7DFE065178C014B4BFC34F`;
+  512 bytes smaller than H8.4b.
+
+### Serialized commit A/B
+
+Five isolated batches produced 25 samples per side. Pooled median was
+1,378,016 NPS for H8.5 and 1,359,297 for H8.4b, ratio `1.013771` (+1.377%).
+All five batch medians favored the candidate. Because the playing signature is
+exactly unchanged, this block uses a serialized throughput gate rather than an
+OpenBench Elo match.
+
+Complete artifacts and every sample are in
+[`evidence/hito8-capture-prefilter`](evidence/hito8-capture-prefilter/README.md).

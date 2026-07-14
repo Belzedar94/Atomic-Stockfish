@@ -1,0 +1,87 @@
+{
+  "schema": "atomic-hito8-performance-evidence-v1",
+  "block": "H8.5",
+  "source_commit": "be56098f484f92596792e1a35310b65de36f6b17",
+  "base_commit": "6cc61af1f108f17ac47a23ca03450590da882457",
+  "source_tree_clean_before_evidence": true,
+  "compiler": "g++ (GNUC) 15.2.0",
+  "target": "64bit BMI2 AVX2 SSE41 SSSE3 SSE2 POPCNT",
+  "linker_reproducibility_flag": "-Wl,--no-insert-timestamp",
+  "candidate": {
+    "bytes": 4255610,
+    "sha256": "A1E984FE5E0E604B84BB840B9FAF2B9A6010636B4E7DFE065178C014B4BFC34F"
+  },
+  "control": {
+    "source_commit": "6cc61af1f108f17ac47a23ca03450590da882457",
+    "bytes": 4256122,
+    "sha256": "E9E7357537E1830A3DAA9EDAF478B7E1F9319438B8EC58EE66580F33488790B8"
+  },
+  "network_sha256": "99DC67EABF26A64FAEECA3A88B4C38597A840B8D4A874B9F2CF658C6F92A04A6",
+  "corpus_sha256": "2738065A8A70D61DA46FA3C75F95D645E50E601B43792DF0E7B3CC97B1D891A1",
+  "configuration": {
+    "threads": 1,
+    "hash_mb": 64,
+    "cpu_affinity": 24,
+    "nodes_per_fen": 100000,
+    "warmups_per_batch": 1,
+    "measured_repetitions_per_batch": 5,
+    "batches": 5
+  },
+  "pooled_measurement": {
+    "samples_per_side": 25,
+    "candidate_median_nps": 1378016,
+    "control_median_nps": 1359297,
+    "ratio": 1.013771,
+    "speed_delta_percent": 1.377,
+    "positive_batches": 5,
+    "negative_batches": 0,
+    "tied_batches": 0,
+    "interpretation": "strong local throughput signal for an exact-signature mechanical optimization"
+  },
+  "binary_delta_bytes": -512,
+  "playing_signature": 338376,
+  "incremental_state_signature": "0x8742E39B793C46AB",
+  "movegen_differential": {
+    "positions": 2489,
+    "seeds": [20260710, 20260711, 20260712],
+    "depth": 2,
+    "mismatches": 0
+  },
+  "frozen_fairy_differential": {
+    "positions": 10000,
+    "playing_max_delta": 0.0,
+    "pure_trace_max_delta": 0.005,
+    "corpus_sha256": "46C96F405BC15D468D94BC1E2186B577CE55128832E1108066581D35037FA2DE"
+  },
+  "data_generator_smoke": {
+    "fixtures": 7,
+    "data_sha256": "7E89411B84C2036DEEB2DB56F3E43FEA89917C5546C72C37F8E082F103B27CC0"
+  },
+  "platforms": {
+    "native_bmi2_release": "pass",
+    "native_bmi2_debug_production_equivalent": "pass",
+    "native_scalar": "pass",
+    "python": "pass",
+    "board_wasm_emscripten_4_0_10": {
+      "tests_per_module_system": 58,
+      "bytes": 262971,
+      "sha256": "50AB0958775BA2FF4C7AE33EA48F1F92D1339DC4F33013652BC44DDDCB0F4F63"
+    },
+    "full_nnue_wasm_release": {
+      "bytes": 540136,
+      "sha256": "0BF34E110499EEA3E82493BC932BE52ED9CA9332EE83ADFBD6A2176CD2C4EB1D"
+    }
+  },
+  "openbench_isolation": {
+    "workload_gate_assignment_roots": 1,
+    "paused_assignment_roots": 1,
+    "paused_assignment_processes": 51,
+    "client_roots_after_restore": 1,
+    "client_processes_after_restore": 2,
+    "credential_transport": "environment"
+  },
+  "openbench_strength_test": {
+    "submitted": false,
+    "reason": "exact playing signature; throughput was the changed observable"
+  }
+}
