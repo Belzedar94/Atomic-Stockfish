@@ -80,10 +80,10 @@ class AnyNetwork {
 // The worker-facing accumulator owns both Legacy objects. No pointer or
 // reference to a concrete NUMA replica is retained: rebind() receives the
 // current facade after every network replication and resets all cached state.
-class AnyAccumulator {
+class AnyAccumulator : private LegacyAtomicV1::AccumulatorCaches {
    public:
     explicit AnyAccumulator(const AnyNetwork& network) :
-        caches_(network.legacy_) {
+        LegacyAtomicV1::AccumulatorCaches(network.legacy_) {
         stack_.reset();
     }
 
@@ -95,37 +95,31 @@ class AnyAccumulator {
 
     void rebind(const AnyNetwork& network) noexcept {
         stack_.reset();
-        caches_.clear(network.legacy_);
+        caches().clear(network.legacy_);
     }
 
     [[nodiscard]] const AccumulatorState& latest() const noexcept { return stack_.latest(); }
 
    private:
-    LegacyAtomicV1::AccumulatorStack  stack_;
-    LegacyAtomicV1::AccumulatorCaches caches_;
+    LegacyAtomicV1::AccumulatorCaches& caches() noexcept { return *this; }
+
+    LegacyAtomicV1::AccumulatorStack stack_;
 
     friend class AnyNetwork;
 };
 
-namespace DispatcherDetail {
-struct LegacyAtomicAccumulatorStorage {
-    LegacyAtomicV1::AccumulatorStack  stack;
-    LegacyAtomicV1::AccumulatorCaches caches;
-};
-}
-
 inline NetworkOutput AnyNetwork::evaluate(const Position& pos, AnyAccumulator& accumulator) const {
-    return legacy_.evaluate(pos, accumulator.stack_, accumulator.caches_);
+    return legacy_.evaluate(pos, accumulator.stack_, accumulator.caches());
 }
 
 inline RawNetworkOutput AnyNetwork::evaluate_raw(const Position& pos,
                                                  AnyAccumulator& accumulator) const {
-    return legacy_.evaluate_raw(pos, accumulator.stack_, accumulator.caches_);
+    return legacy_.evaluate_raw(pos, accumulator.stack_, accumulator.caches());
 }
 
 inline NnueEvalTrace AnyNetwork::trace_evaluate(const Position& pos,
                                                 AnyAccumulator& accumulator) const {
-    return legacy_.trace_evaluate(pos, accumulator.stack_, accumulator.caches_);
+    return legacy_.trace_evaluate(pos, accumulator.stack_, accumulator.caches());
 }
 
 static_assert(AnyNetwork::backend() == NetworkBackend::LegacyAtomicV1);
@@ -136,8 +130,9 @@ static_assert(std::is_trivially_copyable_v<AnyNetwork>);
 static_assert(std::is_trivially_copy_constructible_v<AnyNetwork>);
 static_assert(std::is_trivially_move_constructible_v<AnyNetwork>);
 static_assert(std::is_trivially_destructible_v<AnyNetwork>);
-static_assert(sizeof(AnyAccumulator) == sizeof(DispatcherDetail::LegacyAtomicAccumulatorStorage));
-static_assert(alignof(AnyAccumulator) == alignof(DispatcherDetail::LegacyAtomicAccumulatorStorage));
+static_assert(std::is_empty_v<LegacyAtomicV1::AccumulatorCaches>);
+static_assert(sizeof(AnyAccumulator) == sizeof(LegacyAtomicV1::AccumulatorStack));
+static_assert(alignof(AnyAccumulator) == alignof(LegacyAtomicV1::AccumulatorStack));
 
 }  // namespace Stockfish::Eval::NNUE
 

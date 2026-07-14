@@ -24,8 +24,8 @@ def test_single_backend_facade_is_inline_and_has_no_runtime_dispatch_state():
     assert "inline constexpr usize NetworkBackendCount = 1;" in dispatcher
     assert "static_assert(NetworkBackendCount == 1);" in dispatcher
     assert "LegacyAtomicV1::Network legacy_;" in DISPATCHER
-    assert "LegacyAtomicV1::AccumulatorStack  stack_;" in DISPATCHER
-    assert "LegacyAtomicV1::AccumulatorCaches caches_;" in DISPATCHER
+    assert "class AnyAccumulator : private LegacyAtomicV1::AccumulatorCaches" in DISPATCHER
+    assert "LegacyAtomicV1::AccumulatorStack stack_;" in DISPATCHER
 
     for forbidden in (
         "std::variant",
@@ -48,9 +48,9 @@ def test_facade_freezes_the_legacy_shared_memory_contract():
         "std::is_trivially_move_constructible_v<AnyNetwork>",
         "std::is_trivially_destructible_v<AnyNetwork>",
         "sizeof(AnyAccumulator)",
-        "sizeof(DispatcherDetail::LegacyAtomicAccumulatorStorage)",
+        "sizeof(LegacyAtomicV1::AccumulatorStack)",
         "alignof(AnyAccumulator)",
-        "alignof(DispatcherDetail::LegacyAtomicAccumulatorStorage)",
+        "alignof(LegacyAtomicV1::AccumulatorStack)",
     ):
         assert contract in DISPATCHER
 

@@ -234,8 +234,8 @@ def main() -> int:
             if "option name UCI_Variant type combo default atomic var atomic" not in uci:
                 raise AssertionError(f"UCI_Variant is not fixed to atomic: {uci}")
 
-            # Exercise network replication and per-worker accumulator rebinding,
-            # not only the single-replica path.
+            # Exercise per-worker accumulator rebinding, not only the one-worker
+            # path. NUMA replication is covered separately on multi-node hosts.
             engine.setoption("Threads", "4")
             engine.setoption("Hash", "16")
             # variantfishtest_new1.py always sends this option when variants.ini
