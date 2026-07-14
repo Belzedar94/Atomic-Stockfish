@@ -30,7 +30,7 @@ jobs:
           WHEEL_URL: https://files.pythonhosted.org/packages/a6/77/786aa0fc8a75d8ce94966bb33e44c63fec1964cbf343ee862ed6a5be38c1/clang_format-20.1.8-py2.py3-none-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
           WHEEL_SHA256: 7c6bcb7e01ba4f05a4c980fda147b330f7e4833c2aea8c92a0c2df9573ae7afe
         run: |
-          wheel="$RUNNER_TEMP/clang-format.whl"
+          wheel="$RUNNER_TEMP/clang_format-20.1.8-py2.py3-none-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl"
           curl --fail --silent --show-error --location "$WHEEL_URL" --output "$wheel"
           echo "$WHEEL_SHA256  $wheel" | sha256sum --check --strict
           python3 -m pip install --disable-pip-version-check --no-deps "$wheel"
