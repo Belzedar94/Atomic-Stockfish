@@ -32,7 +32,7 @@
 
 #include "evaluate.h"
 #include "misc.h"
-#include "nnue/network.h"
+#include "nnue/nnue_dispatcher.h"
 #include "nnue/nnue_common.h"
 #include "numa.h"
 #include "perft.h"
@@ -314,9 +314,9 @@ bool Engine::verify_network() const {
     return true;
 }
 
-std::unique_ptr<Eval::NNUE::Network> Engine::get_default_network() {
+std::unique_ptr<Eval::NNUE::AnyNetwork> Engine::get_default_network() {
 
-    auto network_ = std::make_unique<NN::Network>();
+    auto network_ = std::make_unique<NN::AnyNetwork>();
 
     network_->load(binaryDirectory, std::filesystem::path{}, networkFile);
 
@@ -324,15 +324,17 @@ std::unique_ptr<Eval::NNUE::Network> Engine::get_default_network() {
 }
 
 void Engine::load_network(const std::filesystem::path& file) {
-    network.modify_and_replicate(
-      [this, &file](NN::Network& network_) { network_.load(binaryDirectory, file, networkFile); });
+    wait_for_search_finished();
+    network.modify_and_replicate([this, &file](NN::AnyNetwork& network_) {
+        network_.load(binaryDirectory, file, networkFile);
+    });
     threads.clear();
     threads.ensure_network_replicated();
 }
 
 void Engine::save_network(const std::optional<std::filesystem::path>& file) {
-    network.modify_and_replicate(
-      [&file, this](NN::Network& network_) { network_.save(networkFile, file); });
+    wait_for_search_finished();
+    network->save(networkFile, file);
 }
 
 // utility functions

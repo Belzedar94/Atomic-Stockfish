@@ -10,28 +10,28 @@ counts.
 
 ## Current executable coverage
 
-The following evidence was reproduced locally on 2026-07-12 by
+The following evidence was reproduced locally on 2026-07-14 by
 `tests/run_hito5.py` in release mode, including the cross-repository training
 pipeline and full Node UCI/NNUE WASM launcher. The development-only
 `--allow-missing-wasm` switch cannot produce a release pass.
 
 | Surface | Migrated coverage | Current evidence |
 | --- | --- | --- |
-| C++ Atomic rules/state | Atomic SEE, explosion deltas, terminal captures, en passant, promotions, castling/Atomic960, repetition, rule 50, UCI moves, Atomic move-count thresholds, null-move reductions and capture-futility eligibility | `63/63` PASS lines and terminal success marker |
+| C++ Atomic rules/state | Atomic SEE, explosion deltas, terminal captures, en passant, promotions, castling/Atomic960, repetition, rule 50, UCI moves, Atomic move-count thresholds, null-move reductions, capture-futility eligibility and capture-prefilter invariants | `87/87` PASS lines and terminal success marker |
 | Shared C++ board API | SAN, outcomes, checked pieces, material, FEN validation and Atomic960 | `34/34` PASS lines and terminal success marker |
 | Historical Python API | Frozen Fairy `test.py` contracts | `22/22`; two removed-variant APIs are classified, not skipped |
-| Extended Python API | Fixtures, perft, errors, transactional calls, wheel layout and concurrent independent calls | `pytest`: `60 passed`; sdist-to-wheel import and PEP 561 discovery passed |
+| Extended Python API | Fixtures, perft, errors, transactional calls, wheel layout, concurrent independent calls and pipeline/source contracts | Hito 4 lifecycle subset: `60 passed`; complete `tests/python`: `588 passed`; sdist-to-wheel import and PEP 561 discovery passed |
 | Fixture accounting | Frozen Python, JavaScript and perft source inventory | `58` fixtures, `22` Python source tests, `58` JavaScript source tests, eight perft vectors |
 | CommonJS Board WASM | Full Atomic binding/lifecycle suite | `58` fixtures passed |
 | ES-module Board WASM | Full Atomic binding/lifecycle suite | `58` fixtures passed |
 | Cross-surface parity | Exact native/Python/CommonJS/ESM results | `40` shared fixtures; `25` native UCI intersections |
 | Move generation | Eight historical Atomic/Atomic960 vectors plus focused rule/transition corpus | eight exact perfts and `19/19` focused checks |
 | UCI search | Quiet Atomic checks/evasions, preserved analysis checks, mate-before-rule-50, stalemate ordering, terminal explosions, preservation of explosive captures in main search/qsearch and the Atomic NMP tactical-defense fixture | `16/16` with NNUE disabled and with the frozen network loaded |
-| Comparison provenance | Stockfish/Fairy compiler-output parsing, bitness/ISA/debug-mode mismatch rejection, canonical immutable assets including every loaded psutil Python/native module, exact playing-net smoke, fail-fast workers/watchdog and process cleanup | combined LOS/compiler units `85/85` |
+| Comparison provenance | Stockfish/Fairy compiler-output parsing, bitness/ISA/debug-mode mismatch rejection, canonical immutable assets including every loaded psutil Python/native module, exact playing-net smoke, fail-fast workers/watchdog and process cleanup | combined LOS/compiler units `92/92` |
 | XBoard/CECP | Atomic-only negotiation, clocks, state edits, analyze, playother, hard/easy and live ponder cancellation/promotion | complete protocol suite passed |
 | Search repeatability | Two-position Atomic NNUE corpus over increasing node budgets | `12/12`; signature `338376` |
 | Legacy Atomic NNUE | `false`, `true`, `pure`, invalid/truncated recovery, transactional load and byte-exact export | mode contract passed; network SHA-256 pinned |
-| Pipeline reproducibility | Normative `atomic-schema.json`, Atomic-owned generation, thin tools validation/conversion, exact tools/trainer capability handshake, machine-readable sibling commits, tracked clean-build recipes, strict build manifests, exact HEAD/clean-tree/artifact pre/postflight, pinned Python runtime/dependency provenance, locked strong-local fixture and trainer-generated synthetic CI fixture | lock schema v4 pins tools `521f8410` from `atomic`; profile data hashes are solely Atomic-owned (`d95f5180...` strong, `60308342...` synthetic); CI builds `atomic-data-tools` through the pinned root wrapper before the Atomic generate/validate/round-trip/decode/train/serialize/load gate |
+| Pipeline reproducibility | Normative `atomic-schema.json`, Atomic-owned generation, thin tools validation/conversion, exact tools/trainer capability handshake, machine-readable sibling commits, tracked clean-build recipes, strict build manifests, exact HEAD/clean-tree/artifact pre/postflight, authenticated Git identity, pinned Python runtime/dependency provenance, locked strong-local fixture and trainer-generated synthetic CI fixture | Legacy strong-local passed with tools `521f8410`, trainer `350a28f2` and data hash `d95f5180...`; the independent `atomic-bin-v2` E2E passed with tools `40d2db22`, trainer `3e5651a9`, one training step and byte-exact serialize/re-import/load |
 | Atomic Syzygy | Atomic magics/suffixes, connected-kings domain 518, multi-directory paths, real 3-6-man WDL/DTZ, root/interior, six-man limit 5/6, five-position oracle/tbhit analysis, Atomic960 eligibility and recoverable paths | same-checkout Makefile driver, 13 fixture headers/hashes, driver `5/5` and production UCI suite with NNUE false/true are established; coordinated same-binary classical+NNUE LOS execution and authenticated aggregate `6/6` evidence remain pending, so no Syzygy strength gate is claimed passed yet |
 | Full engine UCI/NNUE WASM | Interactive Node launcher, external NNUE, true/pure, perft, terminal positions and pthread operation | integration passed; all four artifact hashes match the reproducible manifest |
 

@@ -11,12 +11,35 @@ from __future__ import annotations
 import argparse
 import hashlib
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
 
 
 FROZEN_NET_SHA256 = "99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f92a04a6"
+DEFAULT_PROFILES = {
+    "smoke": (4_096, 1, "DDB8196C6A0BE4A8"),
+    "release": (1_000_000, 1_024, "8742E39B793C46AB"),
+}
+FINAL_SENTINEL_RE = re.compile(
+    r"^LegacyAtomicV1 incremental gate passed: "
+    r"mode=(?P<mode>smoke|release) "
+    r"requested-random-operations=(?P<requested>\d+) "
+    r"actual-random-operations=(?P<actual>\d+) "
+    r"makes=(?P<makes>\d+) "
+    r"undos=(?P<undos>\d+) "
+    r"captures=(?P<captures>\d+) "
+    r"capture-forced-refresh=(?P<forced_refresh>\d+) "
+    r"perspective-refresh-white=(?P<refresh_white>\d+) "
+    r"perspective-refresh-black=(?P<refresh_black>\d+) "
+    r"full-refresh-comparisons=(?P<full_refresh>\d+) "
+    r"state-signature=0x(?P<signature>[0-9A-F]{1,16})$"
+)
+
+
+class GateOutputError(ValueError):
+    """The child exited successfully without proving the requested gate."""
 
 
 def sha256(path: Path) -> str:
@@ -25,6 +48,61 @@ def sha256(path: Path) -> str:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def validate_gate_output(
+    output: str,
+    *,
+    mode: str,
+    operations: int,
+    full_refresh_interval: int,
+) -> str:
+    """Validate the final C++ sentinel and return its state signature."""
+
+    lines = [line.strip() for line in output.splitlines() if line.strip()]
+    if not lines:
+        raise GateOutputError("child emitted no output")
+
+    match = FINAL_SENTINEL_RE.fullmatch(lines[-1])
+    if match is None:
+        raise GateOutputError(
+            "final non-empty line is not the LegacyAtomicV1 success sentinel: "
+            f"{lines[-1]!r}"
+        )
+
+    child_mode = match.group("mode")
+    requested = int(match.group("requested"))
+    actual = int(match.group("actual"))
+    makes = int(match.group("makes"))
+    undos = int(match.group("undos"))
+    forced_refresh = int(match.group("forced_refresh"))
+    signature = match.group("signature")
+
+    if child_mode != mode:
+        raise GateOutputError(f"child reported mode={child_mode}, expected mode={mode}")
+    if requested != operations or actual != operations:
+        raise GateOutputError(
+            "child operation count mismatch: "
+            f"requested={requested} actual={actual} expected={operations}"
+        )
+    if makes + undos != actual:
+        raise GateOutputError(
+            f"child operation accounting mismatch: makes={makes} undos={undos} actual={actual}"
+        )
+    if forced_refresh != 0:
+        raise GateOutputError(
+            f"child reported capture-forced-refresh={forced_refresh}, expected 0"
+        )
+
+    default_operations, default_interval, default_signature = DEFAULT_PROFILES[mode]
+    if operations == default_operations and full_refresh_interval == default_interval:
+        if signature != default_signature:
+            raise GateOutputError(
+                f"default {mode} signature mismatch: "
+                f"expected=0x{default_signature} actual=0x{signature}"
+            )
+
+    return signature
 
 
 def parse_args() -> argparse.Namespace:
@@ -69,6 +147,16 @@ def main() -> int:
             raise SystemExit("--full-refresh-interval must be positive")
         command.extend(("--full-refresh-interval", str(args.full_refresh_interval)))
 
+    default_operations, default_interval, _ = DEFAULT_PROFILES[args.mode]
+    effective_operations = (
+        args.operations if args.operations is not None else default_operations
+    )
+    effective_interval = (
+        args.full_refresh_interval
+        if args.full_refresh_interval is not None
+        else default_interval
+    )
+
     timeout = args.timeout if args.timeout is not None else (7200.0 if args.mode == "release" else 300.0)
     startup: dict[str, int] = {}
     if os.name == "nt":
@@ -96,9 +184,24 @@ def main() -> int:
     except OSError as error:
         raise SystemExit(f"could not start incremental gate: {error}") from error
 
-    if completed.stdout:
-        print(completed.stdout, end="" if completed.stdout.endswith("\n") else "\n")
-    return completed.returncode
+    output = completed.stdout or ""
+    if output:
+        print(output, end="" if output.endswith("\n") else "\n")
+    if completed.returncode:
+        return completed.returncode
+
+    try:
+        validate_gate_output(
+            output,
+            mode=args.mode,
+            operations=effective_operations,
+            full_refresh_interval=effective_interval,
+        )
+    except GateOutputError as error:
+        print(f"incremental gate output validation failed: {error}", file=sys.stderr)
+        return 1
+
+    return 0
 
 
 if __name__ == "__main__":

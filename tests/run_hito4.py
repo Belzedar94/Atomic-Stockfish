@@ -272,8 +272,8 @@ def main() -> int:
             "C++ Atomic rule/state units",
             [str(paths["cpp_unit"])],
             timeout=args.timeout,
-            required_markers=("Atomic C++ unit tests passed: 63/63",),
-            expected_pass_lines=63,
+            required_markers=("Atomic C++ unit tests passed: 87/87",),
+            expected_pass_lines=87,
         )
         run_step(
             "C++ shared Atomic API units",
@@ -393,6 +393,24 @@ def main() -> int:
             env=python_env,
             timeout=args.timeout,
             required_markers=("Atomic compiler preflight unit suite passed",),
+        )
+
+        run_step(
+            "single-backend NNUE dispatcher source contract",
+            [
+                python,
+                "-P",
+                "-c",
+                pytest_marker_launcher,
+                str(paths["pyffish_root"]),
+                "NNUE dispatcher source contract passed",
+                "-q",
+                "--maxfail=1",
+                str(REPO_ROOT / "tests/python/test_nnue_dispatcher_source.py"),
+            ],
+            env=python_env,
+            timeout=args.timeout,
+            required_markers=("NNUE dispatcher source contract passed",),
         )
 
         cjs_launcher = r"""

@@ -34,8 +34,7 @@
 #include "history.h"
 #include "evaluate.h"
 #include "misc.h"
-#include "nnue/network.h"
-#include "nnue/nnue_accumulator.h"
+#include "nnue/nnue_dispatcher.h"
 #include "numa.h"
 #include "position.h"
 #include "score.h"
@@ -223,11 +222,11 @@ struct LimitsType {
 // The UCI stores the uci options, thread pool, and transposition table.
 // This struct is used to easily forward data to the Search::Worker class.
 struct SharedState {
-    SharedState(const OptionsMap&                                        optionsMap,
-                ThreadPool&                                              threadPool,
-                TranspositionTable&                                      transpositionTable,
-                std::map<NumaIndex, SharedHistories>&                    sharedHists,
-                const LazyNumaReplicatedSystemWide<Eval::NNUE::Network>& net) :
+    SharedState(const OptionsMap&                                           optionsMap,
+                ThreadPool&                                                 threadPool,
+                TranspositionTable&                                         transpositionTable,
+                std::map<NumaIndex, SharedHistories>&                       sharedHists,
+                const LazyNumaReplicatedSystemWide<Eval::NNUE::AnyNetwork>& net) :
         options(optionsMap),
         threads(threadPool),
         tt(transpositionTable),
@@ -238,7 +237,7 @@ struct SharedState {
     ThreadPool&                                              threads;
     TranspositionTable&                                      tt;
     std::map<NumaIndex, SharedHistories>&                    sharedHistories;
-    const LazyNumaReplicatedSystemWide<Eval::NNUE::Network>& network;
+    const LazyNumaReplicatedSystemWide<Eval::NNUE::AnyNetwork>& network;
 };
 
 class Worker;
@@ -448,12 +447,11 @@ class Worker {
     const OptionsMap&                                        options;
     ThreadPool&                                              threads;
     TranspositionTable&                                      tt;
-    const LazyNumaReplicatedSystemWide<Eval::NNUE::Network>& network;
+    const LazyNumaReplicatedSystemWide<Eval::NNUE::AnyNetwork>& network;
 
     // Used by NNUE
-    Eval::NNUE::AccumulatorStack  accumulatorStack;
-    Eval::NNUE::AccumulatorCaches refreshTable;
-    Eval::UseNNUEMode             useNnueMode = Eval::UseNNUEMode::False;
+    Eval::NNUE::AnyAccumulator accumulator;
+    Eval::UseNNUEMode          useNnueMode = Eval::UseNNUEMode::False;
 
     friend class Stockfish::ThreadPool;
     friend class SearchManager;

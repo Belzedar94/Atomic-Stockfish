@@ -33,7 +33,7 @@
 #include "misc.h"
 #include "evaluate.h"
 #include "history.h"
-#include "nnue/network.h"
+#include "nnue/nnue_dispatcher.h"
 #include "nnue/nnue_misc.h"
 #include "numa.h"
 #include "position.h"
@@ -96,9 +96,9 @@ class Engine {
 
     // network related
 
-    bool                                 verify_network() const;
-    std::unique_ptr<Eval::NNUE::Network> get_default_network();
-    void                                 load_network(const std::filesystem::path& file);
+    bool                                    verify_network() const;
+    std::unique_ptr<Eval::NNUE::AnyNetwork> get_default_network();
+    void                                    load_network(const std::filesystem::path& file);
     void save_network(const std::optional<std::filesystem::path>& file);
 
     // utility functions
@@ -132,11 +132,11 @@ class Engine {
     Position     pos;
     StateListPtr states;
 
-    OptionsMap                                        options;
-    ThreadPool                                        threads;
-    TranspositionTable                                tt;
-    Eval::NNUE::EvalFile                              networkFile;
-    LazyNumaReplicatedSystemWide<Eval::NNUE::Network> network;
+    OptionsMap                                           options;
+    ThreadPool                                           threads;
+    TranspositionTable                                   tt;
+    Eval::NNUE::EvalFile                                 networkFile;
+    LazyNumaReplicatedSystemWide<Eval::NNUE::AnyNetwork> network;
 
     Search::SearchManager::UpdateContext  updateContext;
     std::function<void(std::string_view)> onVerifyNetwork;

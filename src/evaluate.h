@@ -37,19 +37,17 @@ namespace Eval {
 enum class UseNNUEMode { False, True, Pure };
 
 namespace NNUE {
-class Network;
-struct AccumulatorCaches;
-class AccumulatorStack;
+class AnyAccumulator;
+class AnyNetwork;
 }
 
-std::string trace(Position& pos, const Eval::NNUE::Network& network, UseNNUEMode mode);
+std::string trace(Position& pos, const Eval::NNUE::AnyNetwork& network, UseNNUEMode mode);
 
-Value evaluate(const NNUE::Network&           network,
-               const Position&                pos,
-               Eval::NNUE::AccumulatorStack&  accumulators,
-               Eval::NNUE::AccumulatorCaches& caches,
-               int                            optimism,
-               UseNNUEMode                    mode);
+Value evaluate(const NNUE::AnyNetwork&     network,
+               const Position&             pos,
+               Eval::NNUE::AnyAccumulator& accumulator,
+               int                         optimism,
+               UseNNUEMode                 mode);
 }  // namespace Eval
 
 }  // namespace Stockfish

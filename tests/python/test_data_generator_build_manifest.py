@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import subprocess
 import sys
 
 import pytest
@@ -13,6 +14,13 @@ if str(TESTS_DIR) not in sys.path:
 import legacy_pipeline_build_manifest as build_manifest
 import legacy_pipeline_e2e as pipeline
 import run_hito5
+
+
+IDENTITY_ARGUMENTS = (
+    "GIT_SHA=01234567",
+    "GIT_SHA_FULL=0123456789abcdef0123456789abcdef01234567",
+    "GIT_DATE=20260714",
+)
 
 
 @pytest.mark.parametrize(
@@ -70,8 +78,13 @@ def test_unknown_atomic_recipe_has_no_implicit_generator_recipe() -> None:
     ),
 )
 def test_generator_recipe_restores_the_normal_engine(
-    recipe_name: str, root: Path
+    recipe_name: str, root: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    monkeypatch.setattr(
+        build_manifest,
+        "_git_make_identity_arguments",
+        lambda _root: IDENTITY_ARGUMENTS,
+    )
     recipe = build_manifest.RECIPES[recipe_name]
     commands = recipe.commands(root)
     generator_command = " ".join(commands[-3])
@@ -92,8 +105,13 @@ def test_generator_recipe_restores_the_normal_engine(
     ),
 )
 def test_normal_recipe_preserves_an_authenticated_pipeline_copy(
-    recipe_name: str, root: Path
+    recipe_name: str, root: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    monkeypatch.setattr(
+        build_manifest,
+        "_git_make_identity_arguments",
+        lambda _root: IDENTITY_ARGUMENTS,
+    )
     recipe = build_manifest.RECIPES[recipe_name]
     commands = recipe.commands(root)
     copy_command = " ".join(commands[-1])
@@ -101,6 +119,72 @@ def test_normal_recipe_preserves_an_authenticated_pipeline_copy(
         ("atomic-stockfish-pipeline", "atomic-stockfish-pipeline.exe")
     )
     assert recipe.artifact_relative in copy_command
+
+
+@pytest.mark.parametrize(
+    "recipe_name",
+    (
+        "strong-local-atomic-windows-v2",
+        "strong-local-atomic-data-generator-windows-v2",
+        "synthetic-ci-atomic-linux-v2",
+        "synthetic-ci-atomic-data-generator-linux-v2",
+    ),
+)
+def test_atomic_build_commands_inject_authenticated_git_identity(
+    recipe_name: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        build_manifest,
+        "_git_make_identity_arguments",
+        lambda _root: IDENTITY_ARGUMENTS,
+    )
+    commands = build_manifest.RECIPES[recipe_name].commands(
+        Path("C:/atomic-stockfish")
+    )
+    build_commands = [
+        command
+        for command in commands
+        if " clean" not in " ".join(command) and "cp " not in " ".join(command)
+    ]
+    assert build_commands
+    for command in build_commands:
+        rendered = " ".join(command)
+        for argument in IDENTITY_ARGUMENTS:
+            assert argument in rendered
+
+
+def test_git_make_identity_matches_the_current_checkout() -> None:
+    root = Path(__file__).resolve().parents[2]
+    arguments = build_manifest._git_make_identity_arguments(root)
+    head = subprocess.run(
+        ["git", "-C", str(root), "rev-parse", "HEAD"],
+        text=True,
+        encoding="utf-8",
+        stdout=subprocess.PIPE,
+        check=True,
+    ).stdout.strip().lower()
+    assert arguments[0] == f"GIT_SHA={head[:8]}"
+    assert arguments[1] == f"GIT_SHA_FULL={head}"
+    assert arguments[2].startswith("GIT_DATE=")
+
+
+@pytest.mark.parametrize(
+    ("head", "date", "message"),
+    (
+        ("unknown", "20260714", "40-digit SHA-1"),
+        ("0" * 40, "unknown", "YYYYMMDD"),
+    ),
+)
+def test_git_make_identity_rejects_unverifiable_values(
+    head: str,
+    date: str,
+    message: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    values = iter((head, date))
+    monkeypatch.setattr(build_manifest, "_git_output", lambda *_args: next(values))
+    with pytest.raises(AssertionError, match=message):
+        build_manifest._git_make_identity_arguments(Path("C:/atomic-stockfish"))
 
 
 def _e2e_arguments() -> list[str]:

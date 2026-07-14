@@ -29,8 +29,7 @@
 #include "misc.h"
 #include "movegen.h"
 #include "nnue/features/half_ka_v2_atomic.h"
-#include "nnue/network.h"
-#include "nnue/nnue_accumulator.h"
+#include "nnue/nnue_dispatcher.h"
 #include "nnue/nnue_misc.h"
 #include "position.h"
 #include "uci.h"
@@ -106,17 +105,16 @@ void append_snapshot_signature(u64& signature, const Snapshot& snapshot) {
     }
 }
 
-Snapshot take_snapshot(const Position&          pos,
-                       const NNUE::Network&     network,
-                       NNUE::AccumulatorStack&  stack,
-                       NNUE::AccumulatorCaches& caches) {
-    const auto raw = network.evaluate_raw(pos, stack, caches);
+Snapshot take_snapshot(const Position&         pos,
+                       const NNUE::AnyNetwork& network,
+                       NNUE::AnyAccumulator&   accumulator) {
+    const auto raw = network.evaluate_raw(pos, accumulator);
     const auto trueValue =
-      Eval::evaluate(network, pos, stack, caches, VALUE_ZERO, Eval::UseNNUEMode::True);
+      Eval::evaluate(network, pos, accumulator, VALUE_ZERO, Eval::UseNNUEMode::True);
     const auto pureValue =
-      Eval::evaluate(network, pos, stack, caches, VALUE_ZERO, Eval::UseNNUEMode::Pure);
+      Eval::evaluate(network, pos, accumulator, VALUE_ZERO, Eval::UseNNUEMode::Pure);
 
-    return {raw, trueValue, pureValue, stack.latest(), pos.fen(), pos.key()};
+    return {raw, trueValue, pureValue, accumulator.latest(), pos.fen(), pos.key()};
 }
 
 std::string raw_string(const NNUE::RawNetworkOutput& raw) {
@@ -174,28 +172,24 @@ void compare_snapshots(const Snapshot& expected, const Snapshot& actual, const C
     }
 }
 
-Snapshot full_refresh_snapshot(const Position& pos, const NNUE::Network& network) {
-    auto freshStack  = std::make_unique<NNUE::AccumulatorStack>();
-    auto freshCaches = std::make_unique<NNUE::AccumulatorCaches>(network);
-    freshStack->reset();
-    return take_snapshot(pos, network, *freshStack, *freshCaches);
+Snapshot full_refresh_snapshot(const Position& pos, const NNUE::AnyNetwork& network) {
+    auto fresh = std::make_unique<NNUE::AnyAccumulator>(network);
+    fresh->reset();
+    return take_snapshot(pos, network, *fresh);
 }
 
-Value evaluate_fen(std::string_view fen,
-                   const NNUE::Network& network,
-                   Eval::UseNNUEMode mode) {
+Value evaluate_fen(std::string_view fen, const NNUE::AnyNetwork& network, Eval::UseNNUEMode mode) {
     Position  pos;
     StateInfo state{};
     if (auto error = pos.set(std::string(fen), false, &state))
         die("invalid rule50 evaluation fixture: " + std::string(error->what()));
 
-    auto stack  = std::make_unique<NNUE::AccumulatorStack>();
-    auto caches = std::make_unique<NNUE::AccumulatorCaches>(network);
-    stack->reset();
-    return Eval::evaluate(network, pos, *stack, *caches, VALUE_ZERO, mode);
+    auto accumulator = std::make_unique<NNUE::AnyAccumulator>(network);
+    accumulator->reset();
+    return Eval::evaluate(network, pos, *accumulator, VALUE_ZERO, mode);
 }
 
-void run_rule50_damping(const NNUE::Network& network) {
+void run_rule50_damping(const NNUE::AnyNetwork& network) {
     constexpr std::string_view At99 = "7k/8/8/8/8/8/Q7/K7 w - - 99 1";
     constexpr std::string_view At100 = "7k/8/8/8/8/8/Q7/K7 w - - 100 1";
     constexpr std::string_view Beyond = "7k/8/8/8/8/8/Q7/K7 w - - 150 1";
@@ -256,7 +250,7 @@ constexpr std::array BoundaryFixtures = {
           false, false, 5, 7, 1},
 };
 
-u64 run_fixed_fixture(const Fixture& fixture, const NNUE::Network& network) {
+u64 run_fixed_fixture(const Fixture& fixture, const NNUE::AnyNetwork& network) {
     Position  pos;
     StateInfo rootState{};
     StateInfo childState{};
@@ -270,11 +264,10 @@ u64 run_fixed_fixture(const Fixture& fixture, const NNUE::Network& network) {
     if (!move)
         fail(context, "fixture move is not legal");
 
-    auto incremental = std::make_unique<NNUE::AccumulatorStack>();
-    auto caches      = std::make_unique<NNUE::AccumulatorCaches>(network);
+    auto incremental = std::make_unique<NNUE::AnyAccumulator>(network);
     incremental->reset();
 
-    const Snapshot before = take_snapshot(pos, network, *incremental, *caches);
+    const Snapshot before = take_snapshot(pos, network, *incremental);
     compare_snapshots(full_refresh_snapshot(pos, network), before, context);
     u64 signature = SignatureOffset;
     append_snapshot_signature(signature, before);
@@ -323,7 +316,7 @@ u64 run_fixed_fixture(const Fixture& fixture, const NNUE::Network& network) {
                         + std::to_string(refreshWhite) + " black=" + std::to_string(refreshBlack));
 
     context.phase        = std::string(fixture.name) + ":after-move";
-    const Snapshot after = take_snapshot(pos, network, *incremental, *caches);
+    const Snapshot after = take_snapshot(pos, network, *incremental);
     compare_snapshots(full_refresh_snapshot(pos, network), after, context);
     append_snapshot_signature(signature, after);
 
@@ -331,7 +324,7 @@ u64 run_fixed_fixture(const Fixture& fixture, const NNUE::Network& network) {
     incremental->pop();
     context.phase         = std::string(fixture.name) + ":after-undo";
     context.fen           = pos.fen();
-    const Snapshot undone = take_snapshot(pos, network, *incremental, *caches);
+    const Snapshot undone = take_snapshot(pos, network, *incremental);
     compare_snapshots(before, undone, context);
     compare_snapshots(full_refresh_snapshot(pos, network), undone, context);
     append_snapshot_signature(signature, undone);
@@ -365,18 +358,17 @@ struct RandomStats {
     u64 stateSignature = SignatureOffset;
 };
 
-RandomStats run_random_sequence(const RandomSequence& sequence,
-                                const NNUE::Network&  network,
-                                u64                   operations,
-                                u64                   fullRefreshInterval) {
+RandomStats run_random_sequence(const RandomSequence&   sequence,
+                                const NNUE::AnyNetwork& network,
+                                u64                     operations,
+                                u64                     fullRefreshInterval) {
     constexpr usize MaxDepth = 96;
 
     Position                            pos;
     std::array<StateInfo, MaxDepth + 1> states{};
     std::vector<Move>                   path;
     std::vector<Snapshot>               frames;
-    auto                                incremental = std::make_unique<NNUE::AccumulatorStack>();
-    auto                                caches = std::make_unique<NNUE::AccumulatorCaches>(network);
+    auto incremental = std::make_unique<NNUE::AnyAccumulator>(network);
     PRNG                                rng(sequence.seed);
     RandomStats                         stats;
 
@@ -384,7 +376,7 @@ RandomStats run_random_sequence(const RandomSequence& sequence,
         die("invalid random-sequence fixture: " + std::string(error->what()));
 
     incremental->reset();
-    frames.push_back(take_snapshot(pos, network, *incremental, *caches));
+    frames.push_back(take_snapshot(pos, network, *incremental));
     Context context{sequence.seed, pos.fen(), "", "random-root"};
     compare_snapshots(full_refresh_snapshot(pos, network), frames.back(), context);
     append_snapshot_signature(stats.stateSignature, frames.back());
@@ -413,7 +405,7 @@ RandomStats run_random_sequence(const RandomSequence& sequence,
 
             context               = {sequence.seed, beforeUndo, moveText,
                                      "random-undo-" + std::to_string(operation)};
-            const Snapshot undone = take_snapshot(pos, network, *incremental, *caches);
+            const Snapshot undone = take_snapshot(pos, network, *incremental);
             compare_snapshots(expected, undone, context);
 
             if (fullRefreshInterval && operation % fullRefreshInterval == 0)
@@ -454,7 +446,7 @@ RandomStats run_random_sequence(const RandomSequence& sequence,
                     perspectiveRefresh = true;
                 }
 
-            const Snapshot after       = take_snapshot(pos, network, *incremental, *caches);
+            const Snapshot after       = take_snapshot(pos, network, *incremental);
             const bool     compareFull = fullRefreshInterval == 1
                                   || (fullRefreshInterval && operation % fullRefreshInterval == 0)
                                   || perspectiveRefresh;
@@ -570,7 +562,7 @@ int main(int argc, char* argv[]) {
     Attacks::init();
     Position::init();
 
-    auto                 network = std::make_unique<Eval::NNUE::Network>();
+    auto                 network = std::make_unique<Eval::NNUE::AnyNetwork>();
     Eval::NNUE::EvalFile evalFile;
     network->load({}, options.net, evalFile);
     if (!evalFile.current || network->get_content_hash() == 0)

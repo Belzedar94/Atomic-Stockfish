@@ -84,6 +84,55 @@ def _msys_path(path: Path) -> str:
     return f"/{drive}{tail}"
 
 
+def _git_output(root: Path, *arguments: str) -> str:
+    completed = subprocess.run(
+        ["git", "-C", str(root.resolve()), *arguments],
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if completed.returncode != 0:
+        raise AssertionError(
+            "cannot derive authenticated Git identity for clean build: "
+            f"git {' '.join(arguments)} exited with {completed.returncode}"
+        )
+    return completed.stdout.strip()
+
+
+def _git_make_identity_arguments(root: Path) -> Tuple[str, str, str]:
+    """Return a fail-closed commit identity for Make-based release builds.
+
+    MSYS2 login shells do not necessarily inherit a Windows Git executable.
+    Derive the identity in the Python preflight, where the checkout has already
+    been authenticated, and pass it to Make explicitly. This prevents a clean
+    release artifact from silently recording ``unknown`` provenance.
+    """
+
+    full_sha = _git_output(root, "rev-parse", "HEAD").lower()
+    commit_date = _git_output(
+        root,
+        "show",
+        "-s",
+        "--date=format:%Y%m%d",
+        "--format=%cd",
+        "HEAD",
+    )
+    if re.fullmatch(r"[0-9a-f]{40}", full_sha) is None:
+        raise AssertionError(
+            "clean-build Git HEAD must be a lowercase 40-digit SHA-1"
+        )
+    if re.fullmatch(r"[0-9]{8}", commit_date) is None:
+        raise AssertionError("clean-build Git commit date must use YYYYMMDD")
+    return (
+        f"GIT_SHA={full_sha[:8]}",
+        f"GIT_SHA_FULL={full_sha}",
+        f"GIT_DATE={commit_date}",
+    )
+
+
 def _msys_make(root: Path, arguments: str) -> Tuple[str, ...]:
     command = (
         "export PATH=/mingw64/bin:$PATH; "
@@ -117,9 +166,10 @@ def _windows_tools(root: Path) -> Tuple[Tuple[str, ...], ...]:
 
 
 def _windows_atomic(root: Path) -> Tuple[Tuple[str, ...], ...]:
+    identity = " ".join(_git_make_identity_arguments(root))
     return (
         _msys_make(root, "ARCH=x86-64-bmi2 COMP=mingw clean"),
-        _msys_make(root, "-j2 ARCH=x86-64-bmi2 COMP=mingw build"),
+        _msys_make(root, f"-j2 ARCH=x86-64-bmi2 COMP=mingw {identity} build"),
         _msys_copy(
             root,
             "src/atomic-stockfish.exe",
@@ -129,9 +179,13 @@ def _windows_atomic(root: Path) -> Tuple[Tuple[str, ...], ...]:
 
 
 def _windows_atomic_data_generator(root: Path) -> Tuple[Tuple[str, ...], ...]:
+    identity = " ".join(_git_make_identity_arguments(root))
     return (
         _msys_make(root, "ARCH=x86-64-bmi2 COMP=mingw clean"),
-        _msys_make(root, "-j2 ARCH=x86-64-bmi2 COMP=mingw data-generator"),
+        _msys_make(
+            root,
+            f"-j2 ARCH=x86-64-bmi2 COMP=mingw {identity} data-generator",
+        ),
         _msys_copy(
             root,
             "src/atomic-stockfish-data-generator.exe",
@@ -140,7 +194,7 @@ def _windows_atomic_data_generator(root: Path) -> Tuple[Tuple[str, ...], ...]:
         # The clean generator recipe runs after the normal-engine recipe in the
         # strong-local gate. Restore the public playing artifact without
         # replacing either separately authenticated pipeline copy.
-        _msys_make(root, "-j2 ARCH=x86-64-bmi2 COMP=mingw build"),
+        _msys_make(root, f"-j2 ARCH=x86-64-bmi2 COMP=mingw {identity} build"),
     )
 
 
@@ -183,14 +237,16 @@ def _linux_tools(root: Path) -> Tuple[Tuple[str, ...], ...]:
 
 
 def _linux_atomic(root: Path) -> Tuple[Tuple[str, ...], ...]:
+    identity = _git_make_identity_arguments(root)
     return (
         ("make", "-C", "src", "ARCH=x86-64", "clean"),
-        ("make", "-C", "src", "-j2", "ARCH=x86-64", "build"),
+        ("make", "-C", "src", "-j2", "ARCH=x86-64", *identity, "build"),
         ("cp", "src/atomic-stockfish", "src/atomic-stockfish-pipeline"),
     )
 
 
 def _linux_atomic_data_generator(root: Path) -> Tuple[Tuple[str, ...], ...]:
+    identity = _git_make_identity_arguments(root)
     return (
         ("make", "-C", "src", "ARCH=x86-64", "clean"),
         (
@@ -199,6 +255,7 @@ def _linux_atomic_data_generator(root: Path) -> Tuple[Tuple[str, ...], ...]:
             "src",
             "-j2",
             "ARCH=x86-64",
+            *identity,
             "data-generator",
         ),
         (
@@ -208,7 +265,7 @@ def _linux_atomic_data_generator(root: Path) -> Tuple[Tuple[str, ...], ...]:
         ),
         # Restore the public playing artifact while preserving both immutable
         # pipeline copies, mirroring the strong-local Windows recipe.
-        ("make", "-C", "src", "-j2", "ARCH=x86-64", "build"),
+        ("make", "-C", "src", "-j2", "ARCH=x86-64", *identity, "build"),
     )
 
 

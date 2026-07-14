@@ -306,6 +306,8 @@ jobs:
           tests/python/test_atomic_data_tools_source_lists.py
           tests/python/test_atomic_init_source_lists.py
           tests/python/test_atomic_nnue_differential.py
+          tests/python/test_atomic_nnue_incremental_wrapper.py
+          tests/python/test_nnue_dispatcher_source.py
           tests/python/test_legacy_pipeline_lock.py
           tests/python/test_legacy_pipeline_build_manifest.py
           tests/python/test_data_generator_build_manifest.py
