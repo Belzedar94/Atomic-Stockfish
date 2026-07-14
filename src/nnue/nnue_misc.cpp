@@ -32,8 +32,7 @@
 #include "../misc.h"
 #include "../types.h"
 #include "../uci.h"
-#include "network.h"
-#include "nnue_accumulator.h"
+#include "nnue_dispatcher.h"
 
 namespace Stockfish::Eval::NNUE {
 
@@ -56,15 +55,15 @@ void format_cp_aligned_dot(Value v, std::stringstream& stream, const Position& p
 
 // Returns a string with the value of each piece on a board,
 // and a table for (PSQT, Layers) values bucket by bucket.
-std::string
-trace(Position& pos, const Eval::NNUE::Network& network, Eval::NNUE::AccumulatorCaches& caches) {
+std::string trace(Position&                     pos,
+                  const Eval::NNUE::AnyNetwork& network,
+                  Eval::NNUE::AnyAccumulator&   accumulator) {
 
     std::stringstream ss;
 
-    auto accumulators = std::make_unique<AccumulatorStack>();
-    accumulators->reset();
+    accumulator.reset();
 
-    auto t = network.trace_evaluate(pos, *accumulators, caches);
+    auto t = network.trace_evaluate(pos, accumulator);
 
     ss << "NNUE network contributions (Normalized, "
        << (pos.side_to_move() == WHITE ? "White to move)" : "Black to move)") << std::endl

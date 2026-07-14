@@ -234,7 +234,9 @@ def main() -> int:
             if "option name UCI_Variant type combo default atomic var atomic" not in uci:
                 raise AssertionError(f"UCI_Variant is not fixed to atomic: {uci}")
 
-            engine.setoption("Threads", "1")
+            # Exercise network replication and per-worker accumulator rebinding,
+            # not only the single-replica path.
+            engine.setoption("Threads", "4")
             engine.setoption("Hash", "16")
             # variantfishtest_new1.py always sends this option when variants.ini
             # is supplied. Atomic-only rules are compiled in, so even a missing
@@ -279,12 +281,15 @@ def main() -> int:
             for label, mutated in directed_invalid_networks:
                 require_rejected_network(engine, mutated, label)
                 engine.setoption("EvalFile", str(exported))
-                recovered = engine.search()
-                require_search(recovered, f"true after {label}")
-                if not any("NNUE evaluation using" in line for line in recovered):
-                    raise AssertionError(
-                        f"valid net was not reported after {label} rejection: {recovered}"
-                    )
+                for mode in ("true", "pure"):
+                    engine.setoption("Use NNUE", mode)
+                    recovered = engine.search()
+                    require_search(recovered, f"{mode} after {label}")
+                    if not any("NNUE evaluation using" in line for line in recovered):
+                        raise AssertionError(
+                            f"valid net was not reported after {label} rejection "
+                            f"in {mode}: {recovered}"
+                        )
 
             truncated = Path(temp_dir) / "truncated-valid-header.nnue"
             with eval_file.open("rb") as source, truncated.open("wb") as destination:

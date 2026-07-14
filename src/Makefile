@@ -91,7 +91,7 @@ HEADERS = atomic_init.h attacks.h benchmark.h bitboard.h evaluate.h misc.h moveg
 		api/atomic_fen.h api/atomic_notation.h api/atomic_outcome.h \
 		nnue/nnue_misc.h nnue/features/half_ka_v2_atomic.h \
 		nnue/layers/affine_transform.h nnue/layers/clipped_relu.h nnue/nnue_accumulator.h \
-		nnue/nnue_architecture.h nnue/nnue_common.h nnue/nnue_feature_transformer.h nnue/simd.h \
+		nnue/nnue_architecture.h nnue/nnue_common.h nnue/nnue_dispatcher.h nnue/nnue_feature_transformer.h nnue/simd.h \
 		position.h search.h syzygy/tbprobe.h thread.h thread_win32_osx.h timeman.h \
 		tt.h tune.h types.h uci.h uci_move.h ucioption.h xboard.h perft.h nnue/network.h engine.h score.h numa.h memory.h shm.h shm_linux.h
 

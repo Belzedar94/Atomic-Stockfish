@@ -28,7 +28,7 @@
 #include <sstream>
 
 #include "misc.h"
-#include "nnue/network.h"
+#include "nnue/nnue_dispatcher.h"
 #include "nnue/nnue_misc.h"
 #include "position.h"
 #include "types.h"
@@ -88,12 +88,11 @@ Value damp_for_atomic_rule50(Value value, const Position& pos) {
 
 // Evaluate is the evaluator for the outer world. It returns a static evaluation
 // of the position from the point of view of the side to move.
-Value Eval::evaluate(const Eval::NNUE::Network&     network,
-                      const Position&                pos,
-                      Eval::NNUE::AccumulatorStack&  accumulators,
-                      Eval::NNUE::AccumulatorCaches& caches,
-                      int                            optimism,
-                      UseNNUEMode                    mode) {
+Value Eval::evaluate(const Eval::NNUE::AnyNetwork& network,
+                     const Position&               pos,
+                     Eval::NNUE::AnyAccumulator&   accumulator,
+                     int                           optimism,
+                     UseNNUEMode                   mode) {
 
     if (!pos.has_king(pos.side_to_move()))
         return -VALUE_MATE;
@@ -112,8 +111,7 @@ Value Eval::evaluate(const Eval::NNUE::Network&     network,
         v = damp_for_atomic_rule50(classical_atomic(pos), pos);
     else
     {
-        const auto [rawPsqt, rawPositional] =
-          network.evaluate_raw(pos, accumulators, caches);
+        const auto [rawPsqt, rawPositional] = network.evaluate_raw(pos, accumulator);
 
         if (mode == UseNNUEMode::Pure)
             // Pure is the raw legacy network result: no compatibility scale,
@@ -154,7 +152,7 @@ Value Eval::evaluate(const Eval::NNUE::Network&     network,
 // a string (suitable for outputting to stdout) that contains the detailed
 // descriptions and values of each evaluation term. Useful for debugging.
 // Trace scores are from white's point of view
-std::string Eval::trace(Position& pos, const Eval::NNUE::Network& network, UseNNUEMode mode) {
+std::string Eval::trace(Position& pos, const Eval::NNUE::AnyNetwork& network, UseNNUEMode mode) {
 
     if (pos.is_atomic_terminal())
         return "Final evaluation: none (Atomic terminal)";
@@ -162,27 +160,26 @@ std::string Eval::trace(Position& pos, const Eval::NNUE::Network& network, UseNN
     if (pos.checkers())
         return "Final evaluation: none (in check)";
 
-    auto accumulators = std::make_unique<Eval::NNUE::AccumulatorStack>();
-    auto caches       = std::make_unique<Eval::NNUE::AccumulatorCaches>(network);
+    auto accumulator = std::make_unique<Eval::NNUE::AnyAccumulator>(network);
 
     std::stringstream ss;
     ss << std::showpoint << std::noshowpos << std::fixed << std::setprecision(2);
     if (mode != UseNNUEMode::False)
-        ss << '\n' << NNUE::trace(pos, network, *caches) << '\n';
+        ss << '\n' << NNUE::trace(pos, network, *accumulator) << '\n';
 
     ss << std::showpoint << std::showpos << std::fixed << std::setprecision(2) << std::setw(15);
 
     Value v;
     if (mode != UseNNUEMode::False)
     {
-        auto [rawPsqt, rawPositional] = network.evaluate_raw(pos, *accumulators, *caches);
+        auto [rawPsqt, rawPositional] = network.evaluate_raw(pos, *accumulator);
         v = Value((rawPsqt + rawPositional) / 16);
         ss << "NNUE evaluation          " << v << " (side to move, internal units)\n";
         v = pos.side_to_move() == WHITE ? v : -v;
         ss << "NNUE evaluation        " << double(v) / PawnValue << " (white side)\n";
     }
 
-    v = evaluate(network, pos, *accumulators, *caches, VALUE_ZERO, mode);
+    v = evaluate(network, pos, *accumulator, VALUE_ZERO, mode);
     v = pos.side_to_move() == WHITE ? v : -v;
 
     ss << "Final evaluation      ";

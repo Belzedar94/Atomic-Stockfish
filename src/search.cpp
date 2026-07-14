@@ -39,8 +39,7 @@
 #include "misc.h"
 #include "movegen.h"
 #include "movepick.h"
-#include "nnue/network.h"
-#include "nnue/nnue_accumulator.h"
+#include "nnue/nnue_dispatcher.h"
 #include "position.h"
 #include "syzygy/tbprobe.h"
 #include "thread.h"
@@ -185,7 +184,7 @@ Search::Worker::Worker(SharedState&                    sharedState,
     threads(sharedState.threads),
     tt(sharedState.tt),
     network(sharedState.network),
-    refreshTable(network[token]) {
+    accumulator(network[token]) {
     clear();
 }
 
@@ -197,7 +196,7 @@ void Search::Worker::ensure_network_replicated() {
 
 void Search::Worker::start_searching() {
 
-    accumulatorStack.reset();
+    accumulator.reset();
     useNnueMode = options["Use NNUE"] == "pure" ? Eval::UseNNUEMode::Pure
                 : options["Use NNUE"] == "true" ? Eval::UseNNUEMode::True
                                                 : Eval::UseNNUEMode::False;
@@ -286,7 +285,7 @@ Search::TrainingSearchResult Search::Worker::training_search(Position&          
     // would race independent searches running on the other workers.
     TrainingSearchResult result;
 
-    accumulatorStack.reset();
+    accumulator.reset();
     useNnueMode = options["Use NNUE"] == "pure" ? Eval::UseNNUEMode::Pure
                 : options["Use NNUE"] == "true" ? Eval::UseNNUEMode::True
                                                 : Eval::UseNNUEMode::False;
@@ -869,7 +868,7 @@ void Search::Worker::do_move(
     bool capture = pos.capture_stage(move);
     ++nodes;
 
-    DirtyPiece& dirtyPiece = accumulatorStack.push();
+    DirtyPiece& dirtyPiece = accumulator.push();
     pos.do_move(move, st, givesCheck, dirtyPiece, &tt, &sharedHistory);
 
 #ifndef NDEBUG
@@ -901,7 +900,7 @@ void Search::Worker::do_null_move(Position& pos, StateInfo& st, Stack* const ss)
 
 void Search::Worker::undo_move(Position& pos, const Move move) {
     pos.undo_move(move);
-    accumulatorStack.pop();
+    accumulator.pop();
 }
 
 void Search::Worker::undo_null_move(Position& pos) { pos.undo_null_move(); }
@@ -931,7 +930,7 @@ void Search::Worker::clear() {
     for (usize i = 1; i < reductions.size(); ++i)
         reductions[i] = int(2834 / 128.0 * std::log(i));
 
-    refreshTable.clear(network[numaAccessToken]);
+    accumulator.rebind(network[numaAccessToken]);
 }
 
 
@@ -2118,7 +2117,7 @@ TimePoint Search::Worker::elapsed() const {
 }
 
 Value Search::Worker::evaluate(const Position& pos) {
-    return Eval::evaluate(network[numaAccessToken], pos, accumulatorStack, refreshTable,
+    return Eval::evaluate(network[numaAccessToken], pos, accumulator,
                           optimism[pos.side_to_move()], useNnueMode);
 }
 
