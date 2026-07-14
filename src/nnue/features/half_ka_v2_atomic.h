@@ -40,16 +40,25 @@ class HalfKAv2Atomic {
     static constexpr IndexType PieceSquareDimensions = 11 * SQUARE_NB;
     static constexpr IndexType Dimensions            = SQUARE_NB * PieceSquareDimensions;
 
-    static constexpr IndexType MaxActiveDimensions = 32;
-    using IndexList                                = ValueList<IndexType, MaxActiveDimensions>;
-    using DiffType                                 = DirtyPiece;
+    static constexpr IndexType MaxActiveDimensions  = 32;
+    static constexpr IndexType MaxRemovedDimensions = 2 + DirtyPiece::MAX_ATOMIC_BLAST_PIECES;
+    static constexpr IndexType MaxAddedDimensions   = 2;
+
+    using ActiveIndexList  = ValueList<IndexType, MaxActiveDimensions>;
+    using RemovedIndexList = ValueList<IndexType, MaxRemovedDimensions>;
+    using AddedIndexList   = ValueList<IndexType, MaxAddedDimensions>;
+    using DiffType         = DirtyPiece;
 
     static IndexType make_index(Color perspective, Square s, Piece pc, Square ksq);
 
-    static void append_active_indices(const Position& pos, Color perspective, IndexList& active);
+    static void
+    append_active_indices(const Position& pos, Color perspective, ActiveIndexList& active);
 
-    static void append_changed_indices(
-      Color perspective, Square ksq, const DiffType& diff, IndexList& removed, IndexList& added);
+    static void append_changed_indices(Color             perspective,
+                                       Square            ksq,
+                                       const DiffType&   diff,
+                                       RemovedIndexList& removed,
+                                       AddedIndexList&   added);
 
     static bool requires_refresh(const DiffType& diff, Color perspective);
 
@@ -58,6 +67,13 @@ class HalfKAv2Atomic {
 };
 
 static_assert(HalfKAv2Atomic::Dimensions == 45056);
+static_assert(HalfKAv2Atomic::MaxActiveDimensions == 32);
+static_assert(HalfKAv2Atomic::MaxRemovedDimensions == 2 + DirtyPiece::MAX_ATOMIC_BLAST_PIECES);
+static_assert(HalfKAv2Atomic::MaxAddedDimensions == 2);
+static_assert(sizeof(HalfKAv2Atomic::AddedIndexList) < sizeof(HalfKAv2Atomic::RemovedIndexList));
+static_assert(sizeof(HalfKAv2Atomic::RemovedIndexList) < sizeof(HalfKAv2Atomic::ActiveIndexList));
+static_assert(sizeof(HalfKAv2Atomic::RemovedIndexList) + sizeof(HalfKAv2Atomic::AddedIndexList)
+              <= 72);
 
 }  // namespace Stockfish::Eval::NNUE::Features
 

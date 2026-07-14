@@ -32,6 +32,14 @@ static_assert(StateInfo::check_square_index(QUEEN) == StateInfo::CHECK_SQUARE_NB
 static_assert(offsetof(StateInfo, key)
               >= offsetof(StateInfo, atomicOpponentInCheck) + sizeof(bool));
 static_assert(offsetof(StateInfo, key) < offsetof(StateInfo, previous));
+static_assert(Eval::NNUE::FeatureSet::MaxActiveDimensions == 32);
+static_assert(Eval::NNUE::FeatureSet::MaxRemovedDimensions
+              == 2 + DirtyPiece::MAX_ATOMIC_BLAST_PIECES);
+static_assert(Eval::NNUE::FeatureSet::MaxAddedDimensions == 2);
+static_assert(sizeof(Eval::NNUE::FeatureSet::AddedIndexList)
+              < sizeof(Eval::NNUE::FeatureSet::RemovedIndexList));
+static_assert(sizeof(Eval::NNUE::FeatureSet::RemovedIndexList)
+              < sizeof(Eval::NNUE::FeatureSet::ActiveIndexList));
 
 struct SeeCase {
     std::string_view name;
@@ -368,6 +376,116 @@ bool same_incremental_state(const Position& actual, const Position& rebuilt) {
         && actual.non_pawn_material(BLACK) == rebuilt.non_pawn_material(BLACK)
         && actual.rule50_count() == rebuilt.rule50_count()
         && actual.ep_square() == rebuilt.ep_square();
+}
+
+bool expect_nnue_index_list_bounds() {
+    using FeatureSet = Eval::NNUE::FeatureSet;
+
+    Position  start;
+    StateInfo startState{};
+    if (start.set("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", false, &startState))
+    {
+        std::cerr << "FAIL NNUE index lists: invalid start-position fixture\n";
+        return false;
+    }
+
+    for (Color perspective : {WHITE, BLACK})
+    {
+        FeatureSet::ActiveIndexList active;
+        FeatureSet::append_active_indices(start, perspective, active);
+        if (active.size() != FeatureSet::MaxActiveDimensions)
+        {
+            std::cerr << "FAIL NNUE index lists: start position active=" << active.size()
+                      << " expected=" << FeatureSet::MaxActiveDimensions << '\n';
+            return false;
+        }
+    }
+    std::cout << "PASS NNUE active index boundary startpos=32\n";
+
+    struct IndexListCase {
+        std::string_view name;
+        std::string_view fen;
+        std::string_view move;
+        bool             chess960;
+        usize            blastCount;
+        usize            removedCount;
+        usize            addedCount;
+        usize            activeAfter;
+    };
+
+    constexpr std::array<IndexListCase, 6> tests = {{
+      {"maximum capture", "7k/8/8/2nnn3/2nrn3/2nnnN2/8/K7 w - - 0 1", "f3d4", false,
+       DirtyPiece::MAX_ATOMIC_BLAST_PIECES, 11, 1, 2},
+      {"maximum en passant", "7k/2n1n3/2n1n3/2npP3/8/8/8/K7 w - d6 0 2", "e5d6", false, 6, 8, 1, 2},
+      {"maximum capture promotion", "2nrn2k/2nnP3/8/8/8/8/8/K7 w - - 0 1", "e7d8q", false, 5, 7, 1,
+       2},
+      {"castling", "4k3/8/8/8/8/8/8/R3K2R w KQ - 0 1", "e1g1", false, 0, 2, 2, 4},
+      {"Atomic960 castling", "7k/8/8/8/8/8/8/1RK5 w Q - 0 1", "c1b1", true, 0, 2, 2, 3},
+      {"terminal king capture", "7k/7R/8/8/8/8/8/K7 w - - 0 1", "h7h8", false, 1, 3, 1, 1},
+    }};
+
+    bool ok = true;
+    for (const auto& test : tests)
+    {
+        Position  pos;
+        StateInfo rootState{};
+        StateInfo childState{};
+        if (pos.set(std::string(test.fen), test.chess960, &rootState))
+        {
+            std::cerr << "FAIL NNUE index lists " << test.name << ": invalid fixture\n";
+            ok = false;
+            continue;
+        }
+
+        const Move move = UCI::to_move(pos, std::string(test.move));
+        if (!move)
+        {
+            std::cerr << "FAIL NNUE index lists " << test.name << ": illegal fixture move\n";
+            ok = false;
+            continue;
+        }
+
+        const std::string rootFen = pos.fen();
+        const Key         rootKey = pos.key();
+        DirtyPiece        dirtyPiece{};
+        pos.do_move(move, childState, pos.gives_check(move), dirtyPiece, nullptr, nullptr);
+
+        FeatureSet::RemovedIndexList removed;
+        FeatureSet::AddedIndexList   added;
+        const Color                  perspective = pos.has_king(BLACK) ? BLACK : WHITE;
+        FeatureSet::append_changed_indices(perspective, pos.square<KING>(perspective), dirtyPiece,
+                                           removed, added);
+
+        bool matches = dirtyPiece.atomicBlast.size() == test.blastCount
+                    && removed.size() == test.removedCount && added.size() == test.addedCount;
+        for (Color activePerspective : {WHITE, BLACK})
+        {
+            FeatureSet::ActiveIndexList active;
+            FeatureSet::append_active_indices(pos, activePerspective, active);
+            matches &= active.size() == test.activeAfter;
+        }
+
+        if (!matches)
+        {
+            std::cerr << "FAIL NNUE index lists " << test.name
+                      << ": blast=" << dirtyPiece.atomicBlast.size()
+                      << " removed=" << removed.size() << " added=" << added.size()
+                      << " active=" << popcount(pos.pieces()) << '\n';
+            ok = false;
+        }
+        else
+            std::cout << "PASS NNUE index lists " << test.name << " removed=" << removed.size()
+                      << " added=" << added.size() << " active=" << test.activeAfter << '\n';
+
+        pos.undo_move(move);
+        if (pos.fen() != rootFen || pos.key() != rootKey)
+        {
+            std::cerr << "FAIL NNUE index lists " << test.name << ": undo mismatch\n";
+            ok = false;
+        }
+    }
+
+    return ok;
 }
 
 bool expect_make_undo_state() {
@@ -714,6 +832,7 @@ int main() {
     ok &= expect_non_orthodox_atomic_evasions();
     ok &= expect_state_info_layout_contract();
     ok &= expect_gives_check_matches_child();
+    ok &= expect_nnue_index_list_bounds();
     ok &= expect_make_undo_state();
     ok &= expect_repetition_state();
     ok &= expect_rule50_state();
@@ -725,7 +844,8 @@ int main() {
     if (!ok)
         return 1;
 
-    constexpr usize TestCount = SeeCases.size() + 3 + 7 + 8 + 14 + 2 + 3 + 6 + 7 + 6 + 2;
+    constexpr usize TestCount =
+      SeeCases.size() + 3 + 7 + 8 + 14 + 2 + 3 + 6 + 7 + 7 + 6 + 2;
     std::cout << "Atomic C++ unit tests passed: " << TestCount << "/" << TestCount << '\n';
     return 0;
 }

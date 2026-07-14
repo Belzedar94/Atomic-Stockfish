@@ -223,22 +223,37 @@ struct Fixture {
     bool             refreshWhite;
     bool             refreshBlack;
     usize            atomicBlastCount;
+    usize            removedCount;
+    usize            addedCount;
 };
 
 constexpr std::array FixedFixtures = {
-  Fixture{"quiet", StartFEN, "e2e4", false, false, false, 0},
+  Fixture{"quiet", StartFEN, "e2e4", false, false, false, 0, 1, 1},
   Fixture{"capture-king-explosion", "7k/6p1/8/8/8/8/8/K5R1 w - - 0 1", "g1g7", false, false, true,
-          2},
-  Fixture{"direct-king-capture", "7k/7R/8/8/8/8/8/K7 w - - 0 1", "h7h8", false, false, true, 1},
+          2, 4, 1},
+  Fixture{"direct-king-capture", "7k/7R/8/8/8/8/8/K7 w - - 0 1", "h7h8", false, false, true, 1, 3,
+          1},
   Fixture{"explosion-with-bycatch", "7k/8/8/2pBn3/3r4/2PQN3/8/K7 w - - 0 1", "d3d4", false, false,
-          false, 4},
+          false, 4, 6, 1},
   Fixture{"maximum-nine-piece-blast", "7k/8/8/2nnn3/2nrn3/2nnnN2/8/K7 w - - 0 1", "f3d4", false,
-          false, false, DirtyPiece::MAX_ATOMIC_BLAST_PIECES},
-  Fixture{"en-passant", "7k/8/2N1b3/2ppP3/8/8/8/K7 w - d6 0 2", "e5d6", false, false, false, 3},
-  Fixture{"promotion", "7k/P7/8/8/8/8/8/K7 w - - 0 1", "a7a8q", false, false, false, 0},
-  Fixture{"capture-promotion", "k5br/6P1/8/8/8/8/8/K7 w - - 0 1", "g7h8q", false, false, false, 2},
-  Fixture{"castling", "4k3/8/8/8/8/8/8/R3K2R w KQ - 0 1", "e1g1", false, true, false, 0},
-  Fixture{"atomic960-castling", "7k/8/8/8/8/8/8/1RK5 w Q - 0 1", "c1b1", true, true, false, 0},
+          false, false, DirtyPiece::MAX_ATOMIC_BLAST_PIECES, 11, 1},
+  Fixture{"en-passant", "7k/8/2N1b3/2ppP3/8/8/8/K7 w - d6 0 2", "e5d6", false, false, false, 3, 5,
+          1},
+  Fixture{"promotion", "7k/P7/8/8/8/8/8/K7 w - - 0 1", "a7a8q", false, false, false, 0, 1, 1},
+  Fixture{"capture-promotion", "k5br/6P1/8/8/8/8/8/K7 w - - 0 1", "g7h8q", false, false, false, 2,
+          4, 1},
+  Fixture{"castling", "4k3/8/8/8/8/8/8/R3K2R w KQ - 0 1", "e1g1", false, true, false, 0, 2, 2},
+  Fixture{"atomic960-castling", "7k/8/8/8/8/8/8/1RK5 w Q - 0 1", "c1b1", true, true, false, 0, 2,
+          2},
+};
+
+// Run these boundary fixtures through incremental and full-refresh evaluation,
+// but keep them outside the historical deterministic state signature.
+constexpr std::array BoundaryFixtures = {
+  Fixture{"maximum-en-passant-delta", "7k/2n1n3/2n1n3/2npP3/8/8/8/K7 w - d6 0 2", "e5d6", false,
+          false, false, 6, 8, 1},
+  Fixture{"maximum-capture-promotion-delta", "2nrn2k/2nnP3/8/8/8/8/8/K7 w - - 0 1", "e7d8q", false,
+          false, false, 5, 7, 1},
 };
 
 u64 run_fixed_fixture(const Fixture& fixture, const NNUE::Network& network) {
@@ -275,9 +290,21 @@ u64 run_fixed_fixture(const Fixture& fixture, const NNUE::Network& network) {
                         + std::to_string(fixture.atomicBlastCount)
                         + " got=" + std::to_string(dirtyPiece.atomicBlast.size()));
 
+    NNUE::Features::HalfKAv2Atomic::RemovedIndexList removed;
+    NNUE::Features::HalfKAv2Atomic::AddedIndexList   added;
+    const Color countPerspective = pos.has_king(BLACK) ? BLACK : WHITE;
+    NNUE::Features::HalfKAv2Atomic::append_changed_indices(
+      countPerspective, pos.square<KING>(countPerspective), dirtyPiece, removed, added);
+    if (removed.size() != fixture.removedCount || added.size() != fixture.addedCount)
+        fail(context, "unexpected feature delta sizes: expected removed="
+                        + std::to_string(fixture.removedCount)
+                        + " added=" + std::to_string(fixture.addedCount)
+                        + ", got removed=" + std::to_string(removed.size())
+                        + " added=" + std::to_string(added.size()));
+
     if (!pos.has_king(BLACK))
     {
-        NNUE::Features::HalfKAv2Atomic::IndexList active;
+        NNUE::Features::HalfKAv2Atomic::ActiveIndexList active;
         NNUE::Features::HalfKAv2Atomic::append_active_indices(pos, BLACK, active);
         // With only the white king on A1, black-oriented piece square A8 is 56,
         // KING uses the legacy COMMONER plane at 640, and the missing black
@@ -550,6 +577,9 @@ int main(int argc, char* argv[]) {
         die("failed to load a compatible Legacy Atomic V1 network: " + options.net.string());
 
     run_rule50_damping(*network);
+
+    for (const auto& fixture : BoundaryFixtures)
+        (void) run_fixed_fixture(fixture, *network);
 
     RandomStats totals;
     for (const auto& fixture : FixedFixtures)

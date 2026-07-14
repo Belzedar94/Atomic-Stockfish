@@ -69,9 +69,9 @@ IndexType HalfKAv2Atomic::make_index(Color perspective, Square s, Piece pc, Squa
          + IndexType(orient(perspective, ksq)) * PieceSquareDimensions;
 }
 
-void HalfKAv2Atomic::append_active_indices(const Position& pos,
-                                           Color           perspective,
-                                           IndexList&      active) {
+void HalfKAv2Atomic::append_active_indices(const Position&  pos,
+                                           Color            perspective,
+                                           ActiveIndexList& active) {
     const Square ksq = pos.has_king(perspective) ? pos.square<KING>(perspective) : SQ_NONE;
 
     Bitboard occupied = pos.pieces();
@@ -82,8 +82,11 @@ void HalfKAv2Atomic::append_active_indices(const Position& pos,
     }
 }
 
-void HalfKAv2Atomic::append_changed_indices(
-  Color perspective, Square ksq, const DiffType& diff, IndexList& removed, IndexList& added) {
+void HalfKAv2Atomic::append_changed_indices(Color             perspective,
+                                            Square            ksq,
+                                            const DiffType&   diff,
+                                            RemovedIndexList& removed,
+                                            AddedIndexList&   added) {
     assert(ksq != SQ_NONE);
 
     removed.push_back(make_index(perspective, diff.from, diff.pc, ksq));

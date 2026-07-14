@@ -402,3 +402,51 @@ noise, not a precise speed claim.
 
 Complete artifacts and every sample are in
 [`evidence/hito8-orthodox-evasions`](evidence/hito8-orthodox-evasions/README.md).
+
+## Rejected experiments after H8.3b
+
+Two safe changes were deliberately not merged because their isolated A/B
+measurements were negative: compacting the per-position castling-rights mask
+(-0.429%) and removing accumulator `DirtyPiece` zeroing (-0.215%). This keeps
+H8 performance work evidence-driven rather than accumulating cosmetically
+smaller layouts. Full results are in
+[`evidence/hito8-rejected-micro-optimizations`](evidence/hito8-rejected-micro-optimizations/README.md).
+
+## H8.4b - Compact NNUE feature-index lists
+
+H8.4b replaces the single 32-entry LegacyAtomicV1 list type with capacities
+that match the proven maximum for each operation: active 32, removed 11, and
+added 2. The two incremental lists shrink from 272 to 72 bytes combined. The
+optimized x86-64 update frames fall by 240 and 208 bytes, while all network,
+dataset, evaluation, and API formats remain byte-compatible.
+
+The measured source commit is
+`7a5ed472e5c1b1fad05f1c57f8f5399a26b84737`, based directly on H8.3b squash
+merge `dbb3b6898797850c4760bb3dcd4d79f7a3070652`.
+
+### Functional, platform, and artifact evidence
+
+- BMI2 executable: 4,256,122 bytes, SHA-256
+  `0F28C1ED18E95E21C43338068AFC1862143FD870E5057E23E40A0D906160A414`;
+  1,526 bytes smaller than H8.3b.
+- C++ units 74/74 in release and debug/assert; shared API 34/34.
+- Python `test.py` 22/22 and focused pytest 68/68.
+- Eight perfts, 19/19 focused rules, classical and LegacyAtomicV1 search
+  16/16, UCI, XBoard, NNUE modes, invalid-net rejection, and reprosearch.
+- Exact playing signature `338376` and one-million-operation accumulator
+  signature `0x8742E39B793C46AB`.
+- Frozen-Fairy differential 10,000/10,000 with zero final playing delta;
+  seven generator fixtures reproduced byte for byte.
+- Scalar SSE2, Board WASM CommonJS/ESM under Emscripten 3.1.46 and 4.0.10,
+  and full NNUE WASM release plus debug/assert/SAFE_HEAP all passed.
+
+### Serialized commit A/B
+
+Five isolated batches produced 25 samples per side. Pooled median was
+1,409,368 NPS for H8.4b and 1,401,775 for H8.3b, ratio `1.005417` (+0.542%).
+Four batches favored the candidate and one the control. Together with the
+measured hot-stack reduction and smaller binary, this is sufficient positive
+evidence to accept the block.
+
+Complete artifacts, platform hashes, caveats, and every sample are in
+[`evidence/hito8-compact-nnue-index-lists`](evidence/hito8-compact-nnue-index-lists/README.md).

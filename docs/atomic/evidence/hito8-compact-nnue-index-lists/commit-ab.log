@@ -1,0 +1,23 @@
+H8.4b candidate 0F28C1ED18E95E21C43338068AFC1862143FD870E5057E23E40A0D906160A414
+H8.3b control   B47DD600D41BC47AF996C4A3ABC6C8189F3EF89A91ACC032C4FD2B687EDC71F5
+corpus          2738065A8A70D61DA46FA3C75F95D645E50E601B43792DF0E7B3CC97B1D891A1
+network         99DC67EABF26A64FAEECA3A88B4C38597A840B8D4A874B9F2CF658C6F92A04A6
+configuration   threads=1 hash_mb=64 affinity=24 nodes_per_fen=100000 warmups=1 repetitions_per_batch=5
+
+batch 01 candidate=1398760,1413964,1412429,1409368,1398760 median=1409368
+batch 01 control=1413964,1410897,1418590,1409368,1421691 median=1413964 ratio=0.996750
+batch 02 candidate=1421691,1398760,1418590,1397258,1403287 median=1403287
+batch 02 control=1401775,1398760,1400266,1406321,1392770 median=1400266 ratio=1.002157
+batch 03 candidate=1386830,1401775,1412429,1409368,1412429 median=1409368
+batch 03 control=1403287,1395759,1401775,1370756,1407843 median=1401775 ratio=1.005417
+batch 04 candidate=1410897,1412429,1418590,1403287,1415503 median=1412429
+batch 04 control=1397258,1406321,1391280,1395759,1404802 median=1397258 ratio=1.010858
+batch 05 candidate=1395759,1388311,1418590,1392770,1373650 median=1392770
+batch 05 control=1372201,1378016,1404802,1392770,1353639 median=1378016 ratio=1.010707
+
+pooled candidate=1409368 control=1401775 ratio=1.005417 delta_pct=+0.542
+batch outcomes candidate/control/tie=4/1/0
+binary delta bytes=-1526
+OpenBench workload gate assignment roots=1; paused assignment roots=1 processes=55
+Inactive duplicate client had invalid session token and no workload; client roots after cleanup=1
+Final derived-line printer failed after all samples/postflights; integer samples above were recomputed independently

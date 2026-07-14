@@ -111,7 +111,7 @@ void AccumulatorStack::refresh(Color                     perspective,
     target.accumulation[perspective] = featureTransformer.biases;
     target.psqtAccumulation[perspective].fill(0);
 
-    FeatureSet::IndexList active;
+    FeatureSet::ActiveIndexList active;
     FeatureSet::append_active_indices(pos, perspective, active);
 
 #ifdef VECTOR
@@ -187,8 +187,8 @@ void AccumulatorStack::update(Color                     perspective,
                               const FeatureTransformer& featureTransformer,
                               const AccumulatorState&   source,
                               AccumulatorState&         target) noexcept {
-    FeatureSet::IndexList removed;
-    FeatureSet::IndexList added;
+    FeatureSet::RemovedIndexList removed;
+    FeatureSet::AddedIndexList   added;
     FeatureSet::append_changed_indices(perspective, ksq, target.dirtyPiece, removed, added);
 
 #ifdef VECTOR
