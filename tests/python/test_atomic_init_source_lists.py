@@ -73,9 +73,7 @@ def test_legacy_threat_delta_plumbing_is_not_reintroduced():
     assert "std::is_same_v<FeatureSet::DiffType, DirtyPiece>" in accumulator
 
 
-def test_legacy_atomic_v1_inventory_omits_unselected_modern_nnue_layers():
-    # AtomicNNUEV2 may legitimately add modern layers in H9. Its build graph
-    # must then split this LegacyAtomicV1 inventory guard by backend.
+def test_modern_nnue_layers_are_isolated_inside_atomic_v2_backend():
     makefile = (ROOT / "src" / "Makefile").read_text(encoding="utf-8")
     common = (ROOT / "src" / "nnue" / "nnue_common.h").read_text(encoding="utf-8")
     simd = (ROOT / "src" / "nnue" / "simd.h").read_text(encoding="utf-8")
@@ -92,6 +90,33 @@ def test_legacy_atomic_v1_inventory_omits_unselected_modern_nnue_layers():
     for token in ("FtMaxVal", "HiddenOneVal"):
         assert token not in common
     assert "vec_nnz" not in simd
+
+
+def test_native_and_nnue_wasm_link_both_atomic_backends_and_dispatcher():
+    makefile = (ROOT / "src" / "Makefile").read_text(encoding="utf-8")
+    wasm_build = (ROOT / "tests" / "wasm-engine" / "build.ps1").read_text(
+        encoding="utf-8"
+    )
+
+    for relative in (
+        "nnue/nnue_dispatcher.cpp",
+        "nnue/atomic_v2/atomic_v2_accumulator.cpp",
+        "nnue/atomic_v2/atomic_v2_network.cpp",
+    ):
+        assert relative in makefile
+        assert f"'{relative}'" in wasm_build
+        assert (ROOT / "src" / relative).exists()
+
+    assert "VPATH = api:syzygy:nnue:nnue/features:nnue/atomic_v2" in makefile
+
+    isolated = (
+        "nnue/atomic_v2/layers/affine_transform_sparse_input.h",
+        "nnue/atomic_v2/layers/sqr_clipped_relu.h",
+        "nnue/atomic_v2/nnz_helper.h",
+    )
+    for relative in isolated:
+        assert relative in makefile
+        assert (ROOT / "src" / relative).exists()
 
 
 def test_atomic_state_info_only_stores_live_check_metadata():

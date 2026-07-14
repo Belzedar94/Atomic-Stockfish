@@ -5,22 +5,30 @@ import path from 'node:path';
 import process from 'node:process';
 import { spawn } from 'node:child_process';
 
-const EXPECTED_NET_SHA256 =
+const DEFAULT_NET_SHA256 =
   '99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f92a04a6';
 
-function option(name) {
+function argument(name) {
   const index = process.argv.indexOf(name);
   if (index < 0 || index + 1 >= process.argv.length) {
     throw new Error(`Missing required ${name} argument`);
   }
-  return path.resolve(process.argv[index + 1]);
+  return process.argv[index + 1];
+}
+
+function option(name) {
+  return path.resolve(argument(name));
 }
 
 const engine = option('--engine');
 const net = option('--net');
+const expectedNetSha256 = process.argv.includes('--expected-net-sha256')
+  ? argument('--expected-net-sha256').toLowerCase()
+  : DEFAULT_NET_SHA256;
+assert.match(expectedNetSha256, /^[0-9a-f]{64}$/, 'invalid expected NNUE SHA-256');
 const netBytes = await readFile(net);
 const netSha256 = createHash('sha256').update(netBytes).digest('hex');
-assert.equal(netSha256, EXPECTED_NET_SHA256, 'the frozen Atomic NNUE SHA-256 changed');
+assert.equal(netSha256, expectedNetSha256, 'the requested Atomic NNUE SHA-256 changed');
 
 const manifest = JSON.parse(
   await readFile(path.join(path.dirname(engine), 'manifest.json'), 'utf8'),
@@ -30,6 +38,13 @@ assert.equal(manifest.generatedRuntimeGlue, 'atomic-stockfish-nnue.js');
 assert.equal(manifest.directRuntimeGlueSupported, false);
 assert.equal(manifest.stdinPump?.maxOutstandingPrivatePumps, 1);
 assert.equal(manifest.stdinPump?.preservesUserReadyok, true);
+if (manifest.schemaVersion >= 2) {
+  assert.deepEqual(manifest.supportedNetworkBackends, [
+    'Legacy Atomic V1',
+    'AtomicNNUEV2',
+  ]);
+  assert.deepEqual(manifest.networkFileVersions, ['0x7AF32F20', '0xA70C0002']);
+}
 const launcherArtifact = manifest.artifacts.find(
   (artifact) => artifact.name === path.basename(engine),
 );
@@ -160,7 +175,7 @@ try {
   // vectors instead of making go perft depend on EvalFile.
   child.stdin.write('position startpos\n');
   const nnueLoad = await command('go nodes 1', /bestmove\s+(?!\(none\))\S+/, 180_000);
-  assert.match(nnueLoad, /NNUE evaluation using .*atomic_run3b_e202_l05\.nnue/);
+  assert.match(nnueLoad, /NNUE evaluation using .*Legacy Atomic V1/);
 
   child.stdin.write('position startpos\n');
   await command('go perft 4', /Nodes searched: 197326/, 180_000);

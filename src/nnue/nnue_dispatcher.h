@@ -11,128 +11,306 @@
 #ifndef NNUE_DISPATCHER_H_INCLUDED
 #define NNUE_DISPATCHER_H_INCLUDED
 
+#include <cassert>
 #include <filesystem>
 #include <functional>
+#include <new>
 #include <optional>
 #include <string_view>
 #include <type_traits>
 #include <utility>
 
 #include "../types.h"
+#include "atomic_v2/backend.h"
 #include "network.h"
 #include "nnue_accumulator.h"
 
 namespace Stockfish::Eval::NNUE {
 
-// Keep the proven Legacy Atomic V1 implementation as an independently named
-// backend. H9.1 deliberately has exactly one compiled backend, so these aliases
-// add no storage and cannot change its wire format or evaluation arithmetic.
+// The released V1 reader, arithmetic, accumulator layout, and serializer stay
+// independently named. Loading V2 must never reinterpret or convert V1 bytes.
 namespace LegacyAtomicV1 {
 using Network           = ::Stockfish::Eval::NNUE::Network;
 using AccumulatorStack  = ::Stockfish::Eval::NNUE::AccumulatorStack;
 using AccumulatorCaches = ::Stockfish::Eval::NNUE::AccumulatorCaches;
+using AccumulatorState  = ::Stockfish::Eval::NNUE::AccumulatorState;
 }
 
 enum class NetworkBackend : u8 {
-    LegacyAtomicV1
+    LegacyAtomicV1,
+    AtomicNNUEV2
 };
-inline constexpr usize NetworkBackendCount = 1;
+inline constexpr usize NetworkBackendCount = 2;
+
+[[nodiscard]] constexpr std::string_view backend_name(NetworkBackend backend) noexcept {
+    switch (backend)
+    {
+    case NetworkBackend::LegacyAtomicV1 :
+        return "Legacy Atomic V1";
+    case NetworkBackend::AtomicNNUEV2 :
+        return "AtomicNNUEV2";
+    }
+    return "Unknown Atomic NNUE backend";
+}
 
 class AnyAccumulator;
 
-// Header-only, single-backend facade. The Legacy network remains stored inline
-// so NUMA shared-memory replication retains the same trivial-copy contract.
-// A later H9 block can extend this public seam without leaking concrete backend
-// objects into Engine, Search workers, evaluation, or protocol code.
+// Both backends remain inline and trivially copyable. This is intentionally a
+// tagged union rather than a virtual interface: NUMA replicas may be copied to
+// shared memory verbatim and evaluation pays only one predictable branch.
 class AnyNetwork {
    public:
-    static constexpr NetworkBackend backend() noexcept { return NetworkBackend::LegacyAtomicV1; }
+    AnyNetwork() = default;
 
-    void load(const std::filesystem::path& rootDirectory,
-              std::filesystem::path        evalfilePath,
-              EvalFile&                    evalFile) {
-        legacy_.load(rootDirectory, std::move(evalfilePath), evalFile);
+    AnyNetwork(const AnyNetwork&)            = default;
+    AnyNetwork(AnyNetwork&&)                 = default;
+    AnyNetwork& operator=(const AnyNetwork&) = default;
+    AnyNetwork& operator=(AnyNetwork&&)      = default;
+
+    [[nodiscard]] NetworkBackend   backend() const noexcept { return backend_; }
+    [[nodiscard]] std::string_view backend_name() const noexcept {
+        return NNUE::backend_name(backend_);
     }
 
-    bool save(const EvalFile&                             evalFile,
-              const std::optional<std::filesystem::path>& filename) const {
-        return legacy_.save(evalFile, filename);
-    }
+    // Load into this candidate object. Engine publishes the object only after
+    // success, so a malformed or incompatible file cannot mutate a live NUMA
+    // replica or its EvalFile metadata.
+    [[nodiscard]] bool load(const std::filesystem::path& rootDirectory,
+                            const std::filesystem::path& evalfilePath,
+                            EvalFile&                    evalFile);
 
-    usize get_content_hash() const { return legacy_.get_content_hash(); }
+    bool save(const EvalFile& evalFile, const std::optional<std::filesystem::path>& filename) const;
+
+    [[nodiscard]] usize get_content_hash() const;
 
     bool verify(const std::function<void(std::string_view)>& onVerify,
                 const EvalFile&                              evalFile,
-                std::filesystem::path                        evalfilePath) const {
-        return legacy_.verify(onVerify, evalFile, std::move(evalfilePath));
-    }
+                std::filesystem::path                        evalfilePath) const;
 
     NetworkOutput    evaluate(const Position&, AnyAccumulator&) const;
     RawNetworkOutput evaluate_raw(const Position&, AnyAccumulator&) const;
     NnueEvalTrace    trace_evaluate(const Position&, AnyAccumulator&) const;
 
    private:
-    LegacyAtomicV1::Network legacy_;
+    union Storage {
+        LegacyAtomicV1::Network legacy;
+        AtomicV2::Network       atomicV2;
+
+        Storage() :
+            legacy() {}
+        ~Storage() = default;
+    } storage_;
+
+    NetworkBackend backend_ = NetworkBackend::LegacyAtomicV1;
+
+    void activate_legacy() noexcept;
+    void activate_v2() noexcept;
 
     friend class AnyAccumulator;
 };
 
-// The worker-facing accumulator owns both Legacy objects. No pointer or
-// reference to a concrete NUMA replica is retained: rebind() receives the
-// current facade after every network replication and resets all cached state.
-class AnyAccumulator: private LegacyAtomicV1::AccumulatorCaches {
+class AnyAccumulator {
    public:
-    explicit AnyAccumulator(const AnyNetwork& network) :
-        LegacyAtomicV1::AccumulatorCaches(network.legacy_) {
-        stack_.reset();
+    explicit AnyAccumulator(const AnyNetwork& network) { construct(network); }
+
+    AnyAccumulator(const AnyAccumulator&)            = delete;
+    AnyAccumulator(AnyAccumulator&&)                 = delete;
+    AnyAccumulator& operator=(const AnyAccumulator&) = delete;
+    AnyAccumulator& operator=(AnyAccumulator&&)      = delete;
+
+    ~AnyAccumulator() { destroy(); }
+
+    [[nodiscard]] NetworkBackend backend() const noexcept { return backend_; }
+
+    void reset() noexcept {
+        switch (backend_)
+        {
+        case NetworkBackend::LegacyAtomicV1 :
+            storage_.legacy.stack.reset();
+            return;
+        case NetworkBackend::AtomicNNUEV2 :
+            storage_.atomicV2.stack.reset();
+            return;
+        }
+        assert(false);
     }
 
-    void reset() noexcept { stack_.reset(); }
+    DirtyPiece& push() noexcept {
+        switch (backend_)
+        {
+        case NetworkBackend::LegacyAtomicV1 :
+            return storage_.legacy.stack.push();
+        case NetworkBackend::AtomicNNUEV2 :
+            return storage_.atomicV2.stack.push();
+        }
+        assert(false);
+        return storage_.legacy.stack.push();
+    }
 
-    DirtyPiece& push() noexcept { return stack_.push(); }
-
-    void pop() noexcept { stack_.pop(); }
+    void pop() noexcept {
+        switch (backend_)
+        {
+        case NetworkBackend::LegacyAtomicV1 :
+            storage_.legacy.stack.pop();
+            return;
+        case NetworkBackend::AtomicNNUEV2 :
+            storage_.atomicV2.stack.pop();
+            return;
+        }
+        assert(false);
+    }
 
     void rebind(const AnyNetwork& network) noexcept {
-        stack_.reset();
-        caches().clear(network.legacy_);
+        if (backend_ != network.backend_)
+        {
+            destroy();
+            construct(network);
+            return;
+        }
+
+        switch (backend_)
+        {
+        case NetworkBackend::LegacyAtomicV1 :
+            storage_.legacy.stack.reset();
+            storage_.legacy.caches().clear(network.storage_.legacy);
+            return;
+        case NetworkBackend::AtomicNNUEV2 :
+            storage_.atomicV2.stack.reset();
+            storage_.atomicV2.caches.clear(network.storage_.atomicV2);
+            return;
+        }
+        assert(false);
     }
 
-    [[nodiscard]] const AccumulatorState& latest() const noexcept { return stack_.latest(); }
+    // Kept for the frozen Legacy incremental differential. V2 tests use the
+    // explicitly typed accessor so incompatible accumulator layouts can never
+    // be confused accidentally.
+    [[nodiscard]] const LegacyAtomicV1::AccumulatorState& latest() const noexcept {
+        assert(backend_ == NetworkBackend::LegacyAtomicV1);
+        return storage_.legacy.stack.latest();
+    }
+
+    [[nodiscard]] const AtomicV2::AccumulatorState& v2_latest() const noexcept {
+        assert(backend_ == NetworkBackend::AtomicNNUEV2);
+        return storage_.atomicV2.stack.latest();
+    }
 
    private:
-    LegacyAtomicV1::AccumulatorCaches& caches() noexcept { return *this; }
+    struct LegacyState: private LegacyAtomicV1::AccumulatorCaches {
+        explicit LegacyState(const LegacyAtomicV1::Network& network) :
+            LegacyAtomicV1::AccumulatorCaches(network) {
+            stack.reset();
+        }
 
-    LegacyAtomicV1::AccumulatorStack stack_;
+        LegacyAtomicV1::AccumulatorCaches& caches() noexcept { return *this; }
+
+        LegacyAtomicV1::AccumulatorStack stack;
+    };
+
+    struct AtomicV2State {
+        explicit AtomicV2State(const AtomicV2::Network& network) :
+            caches(network) {
+            stack.reset();
+        }
+
+        AtomicV2::AccumulatorCaches caches;
+        AtomicV2::AccumulatorStack  stack;
+    };
+
+    union Storage {
+        LegacyState   legacy;
+        AtomicV2State atomicV2;
+
+        Storage() {}
+        ~Storage() {}
+    } storage_;
+
+    NetworkBackend backend_ = NetworkBackend::LegacyAtomicV1;
+
+    void construct(const AnyNetwork& network) noexcept {
+        backend_ = network.backend_;
+        switch (backend_)
+        {
+        case NetworkBackend::LegacyAtomicV1 :
+            ::new (static_cast<void*>(&storage_.legacy)) LegacyState(network.storage_.legacy);
+            return;
+        case NetworkBackend::AtomicNNUEV2 :
+            ::new (static_cast<void*>(&storage_.atomicV2)) AtomicV2State(network.storage_.atomicV2);
+            return;
+        }
+        assert(false);
+    }
+
+    void destroy() noexcept {
+        switch (backend_)
+        {
+        case NetworkBackend::LegacyAtomicV1 :
+            storage_.legacy.~LegacyState();
+            return;
+        case NetworkBackend::AtomicNNUEV2 :
+            storage_.atomicV2.~AtomicV2State();
+            return;
+        }
+        assert(false);
+    }
 
     friend class AnyNetwork;
 };
 
 inline NetworkOutput AnyNetwork::evaluate(const Position& pos, AnyAccumulator& accumulator) const {
-    return legacy_.evaluate(pos, accumulator.stack_, accumulator.caches());
+    assert(backend_ == accumulator.backend_);
+    switch (backend_)
+    {
+    case NetworkBackend::LegacyAtomicV1 :
+        return storage_.legacy.evaluate(pos, accumulator.storage_.legacy.stack,
+                                        accumulator.storage_.legacy.caches());
+    case NetworkBackend::AtomicNNUEV2 :
+        return storage_.atomicV2.evaluate(pos, accumulator.storage_.atomicV2.stack,
+                                          accumulator.storage_.atomicV2.caches);
+    }
+    assert(false);
+    return {};
 }
 
 inline RawNetworkOutput AnyNetwork::evaluate_raw(const Position& pos,
                                                  AnyAccumulator& accumulator) const {
-    return legacy_.evaluate_raw(pos, accumulator.stack_, accumulator.caches());
+    assert(backend_ == accumulator.backend_);
+    switch (backend_)
+    {
+    case NetworkBackend::LegacyAtomicV1 :
+        return storage_.legacy.evaluate_raw(pos, accumulator.storage_.legacy.stack,
+                                            accumulator.storage_.legacy.caches());
+    case NetworkBackend::AtomicNNUEV2 :
+        return storage_.atomicV2.evaluate_raw(pos, accumulator.storage_.atomicV2.stack,
+                                              accumulator.storage_.atomicV2.caches);
+    }
+    assert(false);
+    return {};
 }
 
 inline NnueEvalTrace AnyNetwork::trace_evaluate(const Position& pos,
                                                 AnyAccumulator& accumulator) const {
-    return legacy_.trace_evaluate(pos, accumulator.stack_, accumulator.caches());
+    assert(backend_ == accumulator.backend_);
+    switch (backend_)
+    {
+    case NetworkBackend::LegacyAtomicV1 :
+        return storage_.legacy.trace_evaluate(pos, accumulator.storage_.legacy.stack,
+                                              accumulator.storage_.legacy.caches());
+    case NetworkBackend::AtomicNNUEV2 :
+        return storage_.atomicV2.trace_evaluate(pos, accumulator.storage_.atomicV2.stack,
+                                                accumulator.storage_.atomicV2.caches);
+    }
+    assert(false);
+    return {};
 }
 
-static_assert(AnyNetwork::backend() == NetworkBackend::LegacyAtomicV1);
-static_assert(NetworkBackendCount == 1);
-static_assert(sizeof(AnyNetwork) == sizeof(LegacyAtomicV1::Network));
-static_assert(alignof(AnyNetwork) == alignof(LegacyAtomicV1::Network));
+static_assert(NetworkBackendCount == 2);
 static_assert(std::is_trivially_copyable_v<AnyNetwork>);
 static_assert(std::is_trivially_copy_constructible_v<AnyNetwork>);
 static_assert(std::is_trivially_move_constructible_v<AnyNetwork>);
 static_assert(std::is_trivially_destructible_v<AnyNetwork>);
-static_assert(std::is_empty_v<LegacyAtomicV1::AccumulatorCaches>);
-static_assert(sizeof(AnyAccumulator) == sizeof(LegacyAtomicV1::AccumulatorStack));
-static_assert(alignof(AnyAccumulator) == alignof(LegacyAtomicV1::AccumulatorStack));
+static_assert(sizeof(AnyNetwork) >= sizeof(LegacyAtomicV1::Network));
+static_assert(sizeof(AnyNetwork) >= sizeof(AtomicV2::Network));
 
 }  // namespace Stockfish::Eval::NNUE
 

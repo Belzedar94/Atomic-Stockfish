@@ -87,15 +87,26 @@ Community history adds two Atomic-specific constraints:
     generation policy recorded in the manifest, not a model or wire-format
     property.
 
-## Training baseline
+## Control training and V3 handoff
 
-The first serious V2 training run will use the strongest measured Atomic data
-policy as an explicit experiment: qsearch threshold 32,000, capture and
-promotion filters enabled, check filter disabled, and the Atomic opening book
-recorded by checksum.  Community experiments found roughly +70 Elo from
-disabling the standard qsearch filter and roughly +50 Elo from capture
-filtering, later measured promotion filtering at about +15 Elo, and converged
-on the same combined configuration
+V2 receives only bounded smoke/control training sufficient to prove the full
+engine-generator-trainer pipeline and establish a reproducible ablation.  It
+does not receive the first large new training campaign: its SFNNv15 dense head
+still observes the historical 45,056 HalfKAv2Atomic inputs and therefore cannot
+attribute gains to a modern Atomic feature representation.
+
+The first serious new network is separately versioned AtomicNNUEV3.  V3 keeps
+the proven SFNNv15 head while experimentally adding horizontally mirrored
+HalfKAv2Atomic and blast-aware capture, collateral, en-passant and king
+relations.  V1, V2 and V3 retain independent file versions and hashes so every
+ablation remains reproducible and no compatible network is reinterpreted.
+
+V3's initial data baseline uses the strongest measured Atomic policy: qsearch
+threshold 32,000, capture and promotion filters enabled, check filter disabled,
+and the Atomic opening book recorded by checksum.  Community experiments found
+roughly +70 Elo from disabling the standard qsearch filter and roughly +50 Elo
+from capture filtering, later measured promotion filtering at about +15 Elo,
+and converged on the same combined configuration
 ([Discord: qsearch/capture results](https://discord.com/channels/779317816897699850/966610323987660830/1260883780911104110),
 [Discord: promotion result](https://discord.com/channels/779317816897699850/966610323987660830/1263386224064729158),
 [Discord: final configuration](https://discord.com/channels/779317816897699850/966610323987660830/1413933791491391620)).
@@ -103,8 +114,8 @@ Filtering remains in data generation, matching the maintainer's separation of
 generic training from variant-specific sampling
 ([Discord](https://discord.com/channels/779317816897699850/784418118503235625/879710963270549575)).
 
-These measurements motivate a baseline; they do not exempt the resulting net
-from OpenBench.
+These measurements motivate a baseline; they do not exempt any genuinely
+trained V2 control or V3 candidate from OpenBench.
 
 ## Required validation
 
@@ -122,9 +133,10 @@ from OpenBench.
   fixed 512 MiB memory budget.
 - Re-run every Legacy native, protocol, Python, JavaScript, WASM, generator and
   trainer gate without changing the frozen Legacy signatures.
-- Submit OpenBench STC and LTC fixed-game matches only after a genuinely trained
-  V2 network can alter move decisions.  Synthetic parser fixtures do not measure
-  playing strength.
+- Use a genuinely trained V2 network only as an optional control.  Submit V3
+  candidates to OpenBench STC and LTC fixed-game matches only after they can
+  alter move decisions.  Synthetic parser fixtures never measure playing
+  strength.
 
 ## Consequences
 

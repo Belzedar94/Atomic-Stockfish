@@ -53,8 +53,11 @@ $relativeSources = @(
     'engine.cpp',
     'syzygy/tbprobe.cpp',
     'nnue/nnue_accumulator.cpp',
+    'nnue/nnue_dispatcher.cpp',
     'nnue/nnue_misc.cpp',
     'nnue/network.cpp',
+    'nnue/atomic_v2/atomic_v2_accumulator.cpp',
+    'nnue/atomic_v2/atomic_v2_network.cpp',
     'nnue/features/half_ka_v2_atomic.cpp'
 )
 $sources = $relativeSources | ForEach-Object {
@@ -154,7 +157,7 @@ foreach ($artifact in $artifacts) {
 
 $compilerLine = (& $empp.Source --version | Select-Object -First 1)
 $manifest = [ordered]@{
-    schemaVersion = 1
+    schemaVersion = 2
     target = 'node-uci-nnue'
     debug = [bool]$Debug
     compiler = $compilerLine
@@ -164,6 +167,8 @@ $manifest = [ordered]@{
     supportedEntrypoint = 'atomic-stockfish-nnue-node.mjs'
     generatedRuntimeGlue = 'atomic-stockfish-nnue.js'
     directRuntimeGlueSupported = $false
+    supportedNetworkBackends = @('Legacy Atomic V1', 'AtomicNNUEV2')
+    networkFileVersions = @('0x7AF32F20', '0xA70C0002')
     stdinPump = [ordered]@{
         command = 'isready'
         response = 'readyok'

@@ -105,6 +105,40 @@ bool copy_with_trailing_byte(const fs::path& source, const fs::path& destination
     return bool(input) && bool(output);
 }
 
+constexpr std::array<i32, LayerStacks>   ExpectedRawByBucket   = {10587, 10662, 10737, 10812,
+                                                                  10887, 10962, 11037, 11112};
+constexpr std::array<Value, LayerStacks> ExpectedValueByBucket = {
+  Value(661), Value(666), Value(671), Value(675), Value(680), Value(685), Value(689), Value(694)};
+constexpr std::array<usize, 20> ExpectedNnzGroups = {
+  0, 3, 4, 7, 8, 15, 16, 63, 64, 127, 128, 131, 132, 135, 136, 143, 144, 191, 192, 255};
+
+bool exact_nnz_groups(const NNZInfo<L1>& info) {
+#if defined(USE_AVX512)
+    if (info.count != ExpectedNnzGroups.size())
+        return false;
+
+    std::array<usize, ExpectedNnzGroups.size()> actual{};
+    std::copy_n(info.nnz, actual.size(), actual.begin());
+    std::sort(actual.begin(), actual.end());
+    return std::equal(actual.begin(), actual.end(), ExpectedNnzGroups.begin());
+#elif defined(VECTOR) || defined(USE_RVV)
+    for (usize group = 0; group < L1 / 4; ++group)
+    {
+        const bool actual = ((info.bitset[group / 8] >> (group % 8)) & 1U) != 0;
+        const bool expected =
+          std::binary_search(ExpectedNnzGroups.begin(), ExpectedNnzGroups.end(), group);
+        if (actual != expected)
+            return false;
+    }
+    return true;
+#else
+    // Portable scalar propagation deliberately does not consume NNZInfo. The
+    // exact group assertion runs in every SIMD and WASM CI build.
+    (void) info;
+    return true;
+#endif
+}
+
 void test_strict_leb() {
     expect(round_trip_leb(std::array<i16, 7>{-32768, -129, -1, 0, 1, 127, 32767}),
            "canonical signed LEB round trip");
@@ -190,16 +224,65 @@ void test_controlled_network(const fs::path& fixture) {
     AccumulatorCaches caches(*network);
     const auto [rawPsqt, rawPositional] = network->evaluate_raw(pos, accumulator, caches);
     const auto [psqt, positional]       = network->evaluate(pos, accumulator, caches);
-    expect(rawPsqt == 0 && rawPositional == 9600, "controlled Atomic V2 raw output is (0, 9600)");
-    expect(psqt == VALUE_ZERO && positional == Value(600),
-           "controlled Atomic V2 public output is (0, 600)");
+    expect(rawPsqt == 0 && rawPositional == 11112, "controlled Atomic V2 raw output is (0, 11112)");
+    expect(psqt == VALUE_ZERO && positional == Value(694),
+           "controlled Atomic V2 public output is (0, 694)");
 
     const NnueEvalTrace trace      = network->trace_evaluate(pos, accumulator, caches);
     bool                traceExact = trace.correctBucket == 7;
     for (IndexType bucket = 0; bucket < LayerStacks; ++bucket)
-        traceExact =
-          traceExact && trace.psqt[bucket] == VALUE_ZERO && trace.positional[bucket] == Value(600);
-    expect(traceExact, "controlled Atomic V2 trace covers all eight buckets");
+        traceExact = traceExact && trace.psqt[bucket] == VALUE_ZERO
+                  && trace.positional[bucket] == ExpectedValueByBucket[bucket];
+    expect(traceExact, "controlled Atomic V2 trace distinguishes all eight buckets");
+
+    alignas(CacheLineSize) TransformedFeatureType transformed[FeatureTransformer::BufferSize]{};
+    NNZInfo<L1>                                   nnzInfo{};
+    network->feature_transformer().transform(pos, accumulator, caches, transformed, 7, nnzInfo);
+    expect(exact_nnz_groups(nnzInfo),
+           "controlled Atomic V2 sparse groups cover SIMD and bitset boundaries exactly");
+
+    struct BucketFixture {
+        std::string_view fen;
+        int              pieces;
+    };
+    constexpr std::array<BucketFixture, LayerStacks> BucketFixtures = {{
+      {"7k/8/8/8/8/8/P7/K7 w - - 0 1", 3},
+      {"7k/8/8/8/8/8/1PPP4/K7 w - - 0 1", 5},
+      {"7k/8/8/8/8/8/1PPPPPPP/K7 w - - 0 1", 9},
+      {"7k/1pppp3/8/8/8/8/1PPPPPPP/K7 w - - 0 1", 13},
+      {"7k/pppppppp/8/8/8/8/1PPPPPPP/K7 w - - 0 1", 17},
+      {"7k/pppppppp/8/8/8/8/1PPPPPPP/KNBRQ3 w - - 0 1", 21},
+      {"1nbrq2k/pppppppp/8/8/8/8/1PPPPPPP/KNBRQ3 w - - 0 1", 25},
+      {"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w - - 0 1", 32},
+    }};
+
+    for (IndexType bucket = 0; bucket < LayerStacks; ++bucket)
+    {
+        Position   bucketPos;
+        StateInfo  bucketState{};
+        const bool bucketInvalid =
+          bool(bucketPos.set(std::string(BucketFixtures[bucket].fen), false, &bucketState));
+        bool bucketExact = !bucketInvalid;
+        if (!bucketInvalid)
+        {
+            auto bucketAccumulator = std::make_unique<AccumulatorStack>();
+            auto bucketCaches      = std::make_unique<AccumulatorCaches>(*network);
+            bucketAccumulator->reset();
+            const auto [bucketPsqt, bucketRaw] =
+              network->evaluate_raw(bucketPos, *bucketAccumulator, *bucketCaches);
+            const NnueEvalTrace bucketTrace =
+              network->trace_evaluate(bucketPos, *bucketAccumulator, *bucketCaches);
+            bucketExact = bucketPos.count<ALL_PIECES>() == BucketFixtures[bucket].pieces
+                       && bucketRaw == ExpectedRawByBucket[bucket]
+                       && bucketTrace.correctBucket == bucket;
+            for (IndexType stack = 0; stack < LayerStacks; ++stack)
+                bucketExact =
+                  bucketExact && bucketTrace.positional[stack] == ExpectedValueByBucket[stack];
+            (void) bucketPsqt;
+        }
+        expect(bucketExact,
+               "controlled Atomic V2 runtime selects bucket " + std::to_string(bucket));
+    }
 
     {
         std::ofstream output(roundTrip, std::ios::binary | std::ios::trunc);
