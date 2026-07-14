@@ -454,6 +454,8 @@ jobs:
           tests/python/test_atomic_nnue_differential.py
           tests/python/test_atomic_nnue_incremental_wrapper.py
           tests/python/test_atomic_nnue_v2_contract.py
+          tests/python/test_atomic_nnue_v3_contract.py
+          tests/python/test_validate_atomic_v3_bundle.py
           tests/python/test_create_synthetic_atomic_v2_nnue.py
           tests/python/test_atomic_v2_generator_smoke.py
           tests/python/test_nnue_dispatcher_source.py

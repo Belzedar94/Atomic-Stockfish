@@ -1,0 +1,280 @@
+{
+  "schema_version": 1,
+  "schema_id": "atomic-trajectory-ledger-v1",
+  "contract_status": "provisional",
+  "variant": "atomic",
+  "byte_order": "little-endian",
+  "purpose": "Authenticate complete generated self-play trajectories and map every filtered atomic-bin-v2 record to exactly one trajectory without changing the 64-byte record.",
+  "header": {
+    "size": 160,
+    "magic_hex": "41545452414a3100",
+    "fields": [
+      {
+        "name": "magic",
+        "offset": 0,
+        "size": 8,
+        "storage": "bytes"
+      },
+      {
+        "name": "version",
+        "offset": 8,
+        "size": 2,
+        "storage": "uint16",
+        "required_value": 1
+      },
+      {
+        "name": "header_size",
+        "offset": 10,
+        "size": 2,
+        "storage": "uint16",
+        "required_value": 160
+      },
+      {
+        "name": "endian_marker",
+        "offset": 12,
+        "size": 4,
+        "storage": "uint32",
+        "required_value": 16909060
+      },
+      {
+        "name": "entry_size",
+        "offset": 16,
+        "size": 4,
+        "storage": "uint32",
+        "required_value": 112
+      },
+      {
+        "name": "role",
+        "offset": 20,
+        "size": 4,
+        "storage": "uint32",
+        "mapping": {
+          "train": 0,
+          "validation": 1
+        }
+      },
+      {
+        "name": "schema_sha256",
+        "offset": 24,
+        "size": 32,
+        "storage": "bytes",
+        "encoding": "raw-sha256-of-exact-schema-file"
+      },
+      {
+        "name": "dataset_manifest_sha256",
+        "offset": 56,
+        "size": 32,
+        "storage": "bytes",
+        "encoding": "raw-sha256-of-exact-canonical-atomic-bin-v2-manifest"
+      },
+      {
+        "name": "data_schema_sha256",
+        "offset": 88,
+        "size": 32,
+        "storage": "bytes",
+        "encoding": "raw-sha256-of-exact-atomic-bin-v2-schema-file"
+      },
+      {
+        "name": "record_count",
+        "offset": 120,
+        "size": 8,
+        "storage": "uint64",
+        "minimum": 1
+      },
+      {
+        "name": "trajectory_count",
+        "offset": 128,
+        "size": 8,
+        "storage": "uint64",
+        "minimum": 1
+      },
+      {
+        "name": "move_count",
+        "offset": 136,
+        "size": 8,
+        "storage": "uint64",
+        "minimum": 1
+      },
+      {
+        "name": "entries_offset",
+        "offset": 144,
+        "size": 8,
+        "storage": "uint64",
+        "required_value": 160
+      },
+      {
+        "name": "moves_offset",
+        "offset": 152,
+        "size": 8,
+        "storage": "uint64",
+        "formula": "160 + trajectory_count * 112"
+      }
+    ]
+  },
+  "entry": {
+    "size": 112,
+    "order": "strictly increasing first_record; ranges are contiguous and cover the logical manifest dataset exactly",
+    "fields": [
+      {
+        "name": "split_group_id",
+        "offset": 0,
+        "size": 32,
+        "storage": "bytes",
+        "encoding": "raw-sha256-by-split-group-id-formula",
+        "unique": true
+      },
+      {
+        "name": "root_position",
+        "offset": 32,
+        "size": 48,
+        "storage": "atomic-bin-v2-position"
+      },
+      {
+        "name": "first_record",
+        "offset": 80,
+        "size": 8,
+        "storage": "uint64",
+        "semantics": "zero-based logical record index after concatenating manifest shards in canonical array order"
+      },
+      {
+        "name": "record_count",
+        "offset": 88,
+        "size": 4,
+        "storage": "uint32",
+        "minimum": 1,
+        "semantics": "retained samples only; filters, the final target-count prefix and deterministic cross-split feature decontamination may omit other plies from the complete played trajectory"
+      },
+      {
+        "name": "move_count",
+        "offset": 92,
+        "size": 4,
+        "storage": "uint32",
+        "minimum": 1
+      },
+      {
+        "name": "first_move",
+        "offset": 96,
+        "size": 8,
+        "storage": "uint64",
+        "semantics": "zero-based index in the trailing move-wire array"
+      },
+      {
+        "name": "terminal_result",
+        "offset": 104,
+        "size": 1,
+        "storage": "int8",
+        "domain": [
+          -1,
+          0,
+          1
+        ],
+        "perspective": "white"
+      },
+      {
+        "name": "atomic960",
+        "offset": 105,
+        "size": 1,
+        "storage": "uint8",
+        "domain": [
+          0,
+          1
+        ]
+      },
+      {
+        "name": "stop_reason",
+        "offset": 106,
+        "size": 1,
+        "storage": "uint8",
+        "mapping": {
+          "atomic-explosion": 0,
+          "checkmate": 1,
+          "stalemate": 2,
+          "insufficient-material": 3,
+          "fifty-move-rule": 4,
+          "threefold-repetition": 5,
+          "maximum-ply-draw": 6,
+          "score-draw-adjudication": 7,
+          "evaluation-resignation": 8
+        }
+      },
+      {
+        "name": "reserved",
+        "offset": 107,
+        "size": 5,
+        "storage": "bytes",
+        "required_value": 0
+      }
+    ]
+  },
+  "move_stream": {
+    "offset": "header.moves_offset",
+    "element_size": 4,
+    "storage": "atomic-bin-v2-move uint32",
+    "order": "complete played move sequence for entry 0, then entry 1, with no holes or overlap",
+    "castling_semantics": "destination is the rook-origin square, exactly as atomic-bin-v2"
+  },
+  "split_group_id": {
+    "hash": "SHA-256",
+    "domain_ascii_hex": "61746f6d69632d73706c69742d67726f75702d763100",
+    "component_order": [
+      "root_position_bytes48",
+      "atomic960_u8",
+      "move_count_u64_le",
+      "complete_move_wires_u32_le"
+    ],
+    "component_encodings": {
+      "root_position_bytes48": "the exact canonical atomic-bin-v2 48-byte root position",
+      "atomic960_u8": "0 for orthodox initial geometry and 1 for Atomic960",
+      "move_count_u64_le": "number of complete move wires, widened to unsigned uint64 and encoded little-endian",
+      "complete_move_wires_u32_le": "exactly move_count canonical atomic-bin-v2 move wires, each encoded unsigned uint32 little-endian in played order"
+    },
+    "formula": "SHA256(domain || root_position[48] || atomic960_u8 || move_count_u64_le || complete_move_wires_u32_le)",
+    "label_free": "terminal_result and stop_reason are deliberately excluded so changing a label or adjudication cannot move the same position trajectory across train and validation",
+    "independent_of": [
+      "thread",
+      "shard boundaries",
+      "dataset role",
+      "split seed",
+      "record filters",
+      "record order outside this trajectory"
+    ]
+  },
+  "partition": {
+    "hash": "SHA-256",
+    "domain_ascii_hex": "61746f6d69632d73706c69742d763100",
+    "canonical_config_source": "the authenticated coverage-policy.partition object; both role statistics and the split audit repeat and verify its config hash, method, seed, threshold and generation provenance",
+    "component_order": [
+      "split_seed_u64_le",
+      "split_group_id_raw32"
+    ],
+    "formula": "u64_le(SHA256(domain || split_seed_u64_le || split_group_id)[0:8])",
+    "digest_selection": {
+      "offset": 0,
+      "size": 8,
+      "integer_decode": "unsigned-uint64-little-endian"
+    },
+    "validation": "partition_hash < validation_threshold",
+    "train": "partition_hash >= validation_threshold",
+    "publication": "buffer one complete generated trajectory, calculate its label-free split group ID and role, then publish every retained record as one logical batch to only that role"
+  },
+  "verification": {
+    "record_ranges": "first entry starts at record 0; every next first_record equals prior first_record + prior record_count; final range ends at header.record_count",
+    "move_ranges": "first entry starts at move 0; every next first_move equals prior first_move + prior move_count; final range ends at header.move_count",
+    "position_replay": "set root_position and replay the complete legal move stream; mapped record ply values are strictly increasing and below entry.move_count; record.ply selects the zero-based pre-move position and its canonical 48-byte position and Atomic960 flag must match",
+    "move_semantics": "the record move is the searched best move and may differ from the played move stream after randomization; both must independently be legal and must never be compared for equality",
+    "result_replay": "convert terminal_result from white perspective to each mapped record's side-to-move perspective and require exact equality",
+    "terminal_replay": "atomic-outcome must finish at a real Atomic terminal; every adjudicated reason must satisfy the authenticated generator policy in the dataset manifest",
+    "dataset_binding": "header record count and manifest hash must match; logical records use canonical manifest shard order",
+    "split_binding": "authenticate the one coverage policy, require both role statistics and the split audit to repeat its exact partition config and generation provenance, then recompute every label-free split group ID and partition hash using policy.partition.split_seed and policy.partition.validation_threshold_u64; the resulting role must equal the header role",
+    "overflow": "all offset, count, multiplication and file-size arithmetic is checked in uint64 before access",
+    "strict_eof": true
+  },
+  "file_policy": {
+    "extension": ".attraj",
+    "empty": "invalid",
+    "append": "forbidden",
+    "overwrite": "forbidden",
+    "file_size_formula": "160 + trajectory_count * 112 + move_count * 4",
+    "historical_atomic_bin_v2": "cannot be upgraded with a trusted trajectory ledger because filtered moves were not retained"
+  }
+}
