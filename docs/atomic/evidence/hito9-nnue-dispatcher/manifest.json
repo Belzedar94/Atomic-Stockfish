@@ -1,0 +1,139 @@
+{
+  "schema": "atomic-hito9-nnue-dispatcher-evidence-v1",
+  "block": "H9.1",
+  "source_commit": "2ab3d9c03f60817575d5ad3f7452cda4ab38d43b",
+  "source_tree": "5e6426abfe441e4c9ca959700bd2cd7ef539dec2",
+  "base_commit": "c0197b3bb2474265b95f81c30a8f855453af1b72",
+  "base_tree": "7070df1b4ca50660eeb89bd10c61767f1a630330",
+  "network_sha256": "99DC67EABF26A64FAEECA3A88B4C38597A840B8D4A874B9F2CF658C6F92A04A6",
+  "playing_signature": 338376,
+  "storage_contract": {
+    "network_exact_legacy_size": true,
+    "network_exact_legacy_alignment": true,
+    "network_trivially_copyable": true,
+    "accumulator_bytes": 537536,
+    "accumulator_exact_legacy_stack_size": true,
+    "accumulator_exact_legacy_stack_alignment": true,
+    "heap_or_virtual_dispatch": false
+  },
+  "assembly_contract": {
+    "eval_evaluate_candidate_instructions": 218,
+    "eval_evaluate_control_instructions": 218,
+    "worker_evaluate_candidate_instructions": 329,
+    "worker_evaluate_control_instructions": 329,
+    "extra_branch_call_or_indirection": false
+  },
+  "reproducible_candidate": {
+    "bytes": 4257944,
+    "sha256": "38ADC76C760257999A821C4023CBC10F83065B84DB93905C5FD6A8FC274BC4E8",
+    "independent_links": 2,
+    "byte_identical": true,
+    "target": "64bit BMI2 AVX2 SSE41 SSSE3 SSE2 POPCNT",
+    "compiler": "g++ (GNUC) 15.2.0",
+    "linker_flag": "-Wl,--no-insert-timestamp"
+  },
+  "control": {
+    "bytes": 4255610,
+    "sha256": "2F700AD6DC3A3A57F1247081B9A67610C165255B30CC17A52560E11C850B1EC9"
+  },
+  "native": {
+    "cpp_units": "87/87",
+    "api_units": "34/34",
+    "historical_perft": "8/8",
+    "rules_and_transitions": "19/19",
+    "search_classical": "16/16",
+    "search_nnue": "16/16",
+    "reprosearch": "12/12",
+    "uci": "pass",
+    "xboard": "pass",
+    "syzygy_driver": "5/5",
+    "release_bmi2": "pass",
+    "debug_avx2": "pass",
+    "portable_sse2": "pass"
+  },
+  "incremental": {
+    "operations": 1000000,
+    "makes": 500000,
+    "undos": 500000,
+    "captures": 18761,
+    "full_refresh_comparisons": 241087,
+    "capture_forced_refresh": 0,
+    "state_signature": "0x8742E39B793C46AB"
+  },
+  "frozen_fairy_differential": {
+    "positions": 10000,
+    "playing_max_delta": 0.0,
+    "pure_trace_max_delta": 0.005,
+    "rule50_damped": 866,
+    "corpus_sha256": "46C96F405BC15D468D94BC1E2186B577CE55128832E1108066581D35037FA2DE"
+  },
+  "bindings": {
+    "historical_python": "22/22",
+    "python_pytest": "588/588",
+    "pyffish": {
+      "bytes": 140288,
+      "sha256": "605C609DD39F781049128ABD50E3FFE6BB427C591A6F21C37A8689FBF36D2CD7"
+    },
+    "commonjs": "58/58",
+    "esm": "58/58",
+    "board_wasm": {
+      "bytes": 265342,
+      "sha256": "AC000FA85A609A98EA4B8ABE3B789EF6BE87F4BC7DB14F72C445ED23A192788C",
+      "byte_reproducible": true
+    },
+    "full_nnue_wasm": {
+      "wasm_bytes": 540004,
+      "wasm_sha256": "43EEE243E092460D3BAC36D52FE514108D6636BF15EA762A1AF83734302658A4",
+      "js_sha256": "D0BD0C360BB8ADC636952F6833F0DD280EC732D00D379D63F0FE99F8857DF0E5",
+      "worker_sha256": "C18C2918C9F8FEDF3009F4A260A1185E919B0C6D421FF5403CB918B61C358A24",
+      "launcher_sha256": "885E7A161EF8D447D41F54BD8ABE413DA3113B14E8B421C4848798C1B02D6DEB",
+      "manifest_sha256": "913AB738B71A5C8798DB6B490B0B26E399B4CBE83622B10E6BAA039A775CCD83",
+      "release": "pass",
+      "debug_assertions_safe_heap": "pass",
+      "byte_reproducible": true
+    }
+  },
+  "legacy_pipeline": {
+    "status": "passed",
+    "tools_commit": "521f841098eeee19c4234417181b0b441feb3499",
+    "trainer_commit": "350a28f2cee225c546333aded75b9db64caa526d",
+    "atomic_commit": "2ab3d9c03f60817575d5ad3f7452cda4ab38d43b",
+    "records": 8,
+    "data_sha256": "d95f5180c7d6319e8d838752b49c51f611c311aef728c30b42c2df02c2071639",
+    "candidate_nnue_sha256": "9c63d8a8a9fa9b80e9c1c39b12ade8f64d3ff8b6ff541d5defec5f0f5d7ef1ed",
+    "loss": 0.0431981348,
+    "bestmove": "b2b3",
+    "release_log_sha256": "08E1C5DD66BE827812A140BA3D798E757071AA1D02C10B56D346358117DB60D0"
+  },
+  "atomic_bin_v2_pipeline": {
+    "status": "passed",
+    "atomic_commit": "2ab3d9c03f60817575d5ad3f7452cda4ab38d43b",
+    "tools_commit": "40d2db224ef890f76b346ff4687e18fb33c98e23",
+    "trainer_commit": "3e5651a977eca1351d7ef101acb8ff5c45588b12",
+    "contract_engine_commit": "76764c3c01ce5965a793a65e4580dd5c95cd2916",
+    "global_step": 1,
+    "candidate_sha256": "f64731091875c4a1656e204a1064159ef368039edf2e29246e703d331047fbac",
+    "bestmove_nodes_1": "g1f3",
+    "train_manifest_sha256": "bbe36354c37cc1edb58d873986c53caee0d31936140fd2c37904ecd35c3e1237",
+    "validation_manifest_sha256": "783ad735cf833ecca8a4e0f53aa07147127a8f3a685ec5e4a72e1a99263f4b39",
+    "console_log_sha256": "8C58C1A1B6E56126865BE2B20380B4A292B98CC59F7988062004E42BB39CCEED",
+    "result_json_sha256": "E77629AC1EB447586F0BFF382339D020BE7A0DFB910EEC56740D5EA86EE5F172",
+    "hashes_json_sha256": "8293614FF54A5D292C3973D7FCB645E07B1FB10CD673C2E4EB15F36E1CD568F3",
+    "provenance_json_sha256": "D3BE0EFA83C23C781EBF7DE7C705559F21F649B4BDEE0EA1DF9B57BA2B6747E4"
+  },
+  "serialized_ab": {
+    "samples_per_side": 25,
+    "candidate_median_nps": 877173,
+    "control_median_nps": 880140,
+    "ratio": 0.996629,
+    "speed_delta_percent": -0.337,
+    "positive_batches": 2,
+    "negative_batches": 3,
+    "raw_log_sha256": "4B4E2F3B0F962E858A896451347DF640838451AB49F5CC2EE7A870D0F8D22CE8",
+    "interpretation": "throughput-neutral under noisy host scheduling; exact assembly is unchanged"
+  },
+  "openbench_strength_test": {
+    "submitted": false,
+    "reason": "exact playing signature and no search, evaluation, network or time-management change"
+  }
+}

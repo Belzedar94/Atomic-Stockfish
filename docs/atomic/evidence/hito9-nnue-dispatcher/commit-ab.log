@@ -1,0 +1,38 @@
+schema=atomic-hito9-commit-ab-v1
+block=H9.1
+candidate_commit=2ab3d9c03f60817575d5ad3f7452cda4ab38d43b
+control_commit=c0197b3bb2474265b95f81c30a8f855453af1b72
+candidate_sha256=38ADC76C760257999A821C4023CBC10F83065B84DB93905C5FD6A8FC274BC4E8
+control_sha256=2F700AD6DC3A3A57F1247081B9A67610C165255B30CC17A52560E11C850B1EC9
+network_sha256=99DC67EABF26A64FAEECA3A88B4C38597A840B8D4A874B9F2CF658C6F92A04A6
+corpus_sha256=2738065A8A70D61DA46FA3C75F95D645E50E601B43792DF0E7B3CC97B1D891A1
+threads=1
+hash_mb=64
+cpu_affinity=24
+nodes_per_fen=100000
+nodes_per_sample=1300847
+warmups_per_batch=1
+measured_repetitions_per_batch=5
+batches=5
+
+batch=1 candidate_median=858645 control_median=882528 ratio=0.972937
+batch=2 candidate_median=900864 control_median=884328 ratio=1.018699
+batch=3 candidate_median=880140 control_median=812014 ratio=1.083898
+batch=4 candidate_median=845255 control_median=903994 ratio=0.935023
+batch=5 candidate_median=899618 control_median=909683 ratio=0.988936
+
+pooled_samples_per_side=25
+candidate_pooled_median=877173
+control_pooled_median=880140
+pooled_ratio=0.996629
+speed_delta_percent=-0.337
+positive_batches=2
+negative_batches=3
+tied_batches=0
+candidate_bytes=4257944
+control_bytes=4255610
+binary_delta_bytes=2334
+playing_signature=338376
+workload_gate_assignment_roots=1
+raw_log_sha256=4B4E2F3B0F962E858A896451347DF640838451AB49F5CC2EE7A870D0F8D22CE8
+interpretation=throughput-neutral within noisy host scheduling; exact assembly is unchanged
