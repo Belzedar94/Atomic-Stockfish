@@ -42,8 +42,12 @@ or speed claim:
    bounded `DirtyPiece` alone;
 3. increment only the HM slice first, while all three relation slices refresh
    from the exact current snapshot;
-4. compare every published incremental intermediate and output bit-for-bit
-   with a fresh C++ evaluation and an independent Python implementation;
+4. compare every intermediate published by the frozen H9.3i-a event trace
+   bit-for-bit with both fresh C++ and independent Python; H9.3i-b then keeps
+   that trace unchanged, compares every stress evaluation with fresh C++ and
+   signs HM sources, distances, counters and outputs while relying on the
+   already independent Python differentials for each H9.3a-h feature/scalar
+   layer;
 5. test lazy make/undo chains, explosions and the no-stack-push null-move path,
    including parent EP, cleared EP under null and exact parent restoration;
 6. add SIMD and cache layers only after the scalar event trace is frozen, and

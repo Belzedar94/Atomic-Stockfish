@@ -333,6 +333,9 @@ IncrementalStatus IncrementalStack::evaluate(const Network&             network,
         return fail(result, IncrementalError::ScalarCompositionError, scalarStatus.featureError,
                     scalarStatus);
 
+    if (testFault_ == IncrementalFaultPoint::AfterCompositionBeforeCommit)
+        return fail(result, IncrementalError::InjectedFailure);
+
     candidateFrame.snapshotWhenComputed = snapshot;
     candidateFrame.epSquareWhenComputed = snapshot.epSquare;
     candidateFrame.snapshotComputed     = true;

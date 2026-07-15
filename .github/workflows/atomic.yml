@@ -65,6 +65,9 @@ jobs:
           make -j2 ARCH=x86-64 COMP=${{ matrix.comp }} COMPCXX=${{ matrix.cxx }} \
             ATOMIC_NNUE_V3_TEST_NET="$RUNNER_TEMP/atomic-v3-wire-v1.nnue" \
             atomic-v3-incremental-tests
+          make -j2 ARCH=x86-64 COMP=${{ matrix.comp }} COMPCXX=${{ matrix.cxx }} \
+            ATOMIC_NNUE_V3_TEST_NET="$RUNNER_TEMP/atomic-v3-wire-v1.nnue" \
+            atomic-v3-incremental-stress-tests
           make -j2 ARCH=x86-64 COMP=${{ matrix.comp }} COMPCXX=${{ matrix.cxx }} atomic-syzygy-driver
           make -j2 ARCH=x86-64 COMP=${{ matrix.comp }} COMPCXX=${{ matrix.cxx }} legacy-atomic-v1-tests
           make -j2 ARCH=x86-64 COMP=${{ matrix.comp }} COMPCXX=${{ matrix.cxx }} atomic-bin-v2-tests
@@ -163,6 +166,9 @@ jobs:
           make -C src -j2 ARCH=${{ matrix.arch }} \
             ATOMIC_NNUE_V3_TEST_NET="$RUNNER_TEMP/atomic-v3-wire-v1.nnue" \
             atomic-v3-incremental-tests
+          make -C src -j2 ARCH=${{ matrix.arch }} \
+            ATOMIC_NNUE_V3_TEST_NET="$RUNNER_TEMP/atomic-v3-wire-v1.nnue" \
+            atomic-v3-incremental-stress-tests
 
   nnue-v3-wire-policies:
     name: AtomicNNUEV3 wire policy ${{ matrix.policy }}
@@ -190,6 +196,93 @@ jobs:
             ATOMIC_V3_WIRE_TEST_POLICY=${{ matrix.policy }} \
             ATOMIC_NNUE_V3_TEST_NET="$RUNNER_TEMP/atomic-v3-wire-v1.nnue" \
             atomic-v3-incremental-tests
+          make -C src -j2 ARCH=general-64 \
+            ATOMIC_V3_WIRE_TEST_POLICY=${{ matrix.policy }} \
+            ATOMIC_NNUE_V3_TEST_NET="$RUNNER_TEMP/atomic-v3-wire-v1.nnue" \
+            atomic-v3-incremental-stress-tests
+
+  nnue-v3-incremental-stress:
+    name: AtomicNNUEV3 incremental stress ${{ matrix.compiler }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - compiler: GCC
+            comp: gcc
+            cxx: g++
+          - compiler: Clang
+            comp: clang
+            cxx: clang++
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Create authenticated AtomicNNUEV3 fixture
+        run: >-
+          python3 tests/create_synthetic_atomic_v3_nnue.py
+          --output "$RUNNER_TEMP/atomic-v3-wire-v1.nnue"
+      - name: Build private incremental stress runner
+        working-directory: src
+        run: >-
+          make -j2 ARCH=x86-64 COMP=${{ matrix.comp }} COMPCXX=${{ matrix.cxx }}
+          atomic-v3-incremental-stress-tests.bin
+      - name: Reject unauthenticated fixtures and explicit zero options
+        run: |
+          head -c 1024 "$RUNNER_TEMP/atomic-v3-wire-v1.nnue" > "$RUNNER_TEMP/atomic-v3-truncated.nnue"
+          if src/atomic-v3-incremental-stress-tests.bin \
+            --net "$RUNNER_TEMP/atomic-v3-truncated.nnue" > rejected.txt 2>&1; then
+            echo "truncated fixture was accepted" >&2
+            exit 1
+          fi
+          grep -F "fixture size mismatch" rejected.txt
+          fixture="$RUNNER_TEMP/atomic-v3-wire-v1.nnue"
+          flip_first_byte() {
+            python3 - "$fixture" <<'PY'
+          from pathlib import Path
+          import sys
+
+          path = Path(sys.argv[1])
+          with path.open("r+b") as stream:
+              first = stream.read(1)
+              if len(first) != 1:
+                  raise SystemExit("fixture is empty")
+              stream.seek(0)
+              stream.write(bytes((first[0] ^ 1,)))
+          PY
+          }
+          flip_first_byte
+          trap flip_first_byte EXIT
+          if src/atomic-v3-incremental-stress-tests.bin \
+            --net "$fixture" > rejected.txt 2>&1; then
+            echo "corrupted fixture was accepted" >&2
+            exit 1
+          fi
+          grep -F "fixture SHA-256 mismatch" rejected.txt
+          flip_first_byte
+          trap - EXIT
+          for option in --operations --full-refresh-interval --threads; do
+            if src/atomic-v3-incremental-stress-tests.bin \
+              --net "$RUNNER_TEMP/atomic-v3-wire-v1.nnue" "$option" 0 > rejected.txt 2>&1; then
+              echo "explicit zero was accepted for $option" >&2
+              exit 1
+            fi
+          done
+          rm -f rejected.txt
+      - name: Run frozen smoke profile with two scheduling workers
+        run: >-
+          python3 tests/atomic_v3_incremental_stress.py
+          --binary src/atomic-v3-incremental-stress-tests.bin
+          --net "$RUNNER_TEMP/atomic-v3-wire-v1.nnue"
+          --mode smoke
+          --threads 2
+      - name: Run frozen release stress profile
+        run: >-
+          python3 tests/atomic_v3_incremental_stress.py
+          --binary src/atomic-v3-incremental-stress-tests.bin
+          --net "$RUNNER_TEMP/atomic-v3-wire-v1.nnue"
+          --mode release
 
   debug:
     name: Debug and assertions
@@ -232,6 +325,9 @@ jobs:
           make -C src -j2 ARCH=x86-64 debug=yes optimize=no \
             ATOMIC_NNUE_V3_TEST_NET="$RUNNER_TEMP/atomic-v3-wire-v1.nnue" \
             atomic-v3-incremental-tests
+          make -C src -j2 ARCH=x86-64 debug=yes optimize=no \
+            ATOMIC_NNUE_V3_TEST_NET="$RUNNER_TEMP/atomic-v3-wire-v1.nnue" \
+            atomic-v3-incremental-stress-tests
           make -C src -j2 ARCH=x86-64 debug=yes optimize=no atomic-syzygy-driver
           make -C src -j2 ARCH=x86-64 debug=yes optimize=no legacy-atomic-v1-tests
           make -C src -j2 ARCH=x86-64 debug=yes optimize=no atomic-bin-v2-tests
@@ -301,6 +397,9 @@ jobs:
           make -C src -j2 ARCH=x86-64 COMP=mingw \
             ATOMIC_NNUE_V3_TEST_NET="$RUNNER_TEMP/atomic-v3-wire-v1.nnue" \
             atomic-v3-incremental-tests
+          make -C src -j2 ARCH=x86-64 COMP=mingw \
+            ATOMIC_NNUE_V3_TEST_NET="$RUNNER_TEMP/atomic-v3-wire-v1.nnue" \
+            atomic-v3-incremental-stress-tests
           python tests/nnue_v3_dispatch_reject.py \
             --engine src/atomic-stockfish.exe \
             --v3-net "$RUNNER_TEMP/atomic-v3-wire-v1.nnue"
@@ -366,6 +465,7 @@ jobs:
           make -j2 ARCH=x86-64-sse41-popcnt sanitize=${{ matrix.sanitizer }} debug=yes optimize=no atomic-v3-wire-tests.bin
           make -j2 ARCH=x86-64-sse41-popcnt sanitize=${{ matrix.sanitizer }} debug=yes optimize=no atomic-v3-scalar-tests.bin
           make -j2 ARCH=x86-64-sse41-popcnt sanitize=${{ matrix.sanitizer }} debug=yes optimize=no atomic-v3-incremental-tests.bin
+          make -j2 ARCH=x86-64-sse41-popcnt sanitize=${{ matrix.sanitizer }} debug=yes optimize=no atomic-v3-incremental-stress-tests.bin
           make -j2 ARCH=x86-64-sse41-popcnt sanitize=${{ matrix.sanitizer }} debug=yes optimize=no data-generator
           make -j2 ARCH=x86-64-sse41-popcnt sanitize=${{ matrix.sanitizer }} debug=yes optimize=no data-tools
       - name: Create authenticated Legacy V1 and AtomicNNUEV2 fixtures
@@ -382,13 +482,22 @@ jobs:
           UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
           TSAN_OPTIONS: halt_on_error=1:log_path=tsan-v3-wire
         run: |
+          stress_operations=512
+          if [ "${{ matrix.mode }}" = memory ]; then stress_operations=4096; fi
           set +e
           src/atomic-v3-numeric-tests.bin && \
           src/atomic-v3-wire-tests.bin inspect "$RUNNER_TEMP/atomic-v3-wire-v1.nnue" && \
           src/atomic-v3-scalar-tests.bin "$RUNNER_TEMP/atomic-v3-wire-v1.nnue" && \
           python3 tests/atomic_v3_incremental_differential.py \
             --oracle src/atomic-v3-incremental-tests.bin \
-            --fixture "$RUNNER_TEMP/atomic-v3-wire-v1.nnue"
+            --fixture "$RUNNER_TEMP/atomic-v3-wire-v1.nnue" && \
+          python3 tests/atomic_v3_incremental_stress.py \
+            --binary src/atomic-v3-incremental-stress-tests.bin \
+            --net "$RUNNER_TEMP/atomic-v3-wire-v1.nnue" \
+            --mode smoke \
+            --operations "$stress_operations" \
+            --full-refresh-interval 1 \
+            --threads 4
           status=$?
           if compgen -G 'tsan-v3-wire.*' > /dev/null; then
             cat tsan-v3-wire.*
@@ -618,6 +727,49 @@ jobs:
             --oracle "$RUNNER_TEMP/atomic-v3-incremental-valgrind" \
             --fixture "$RUNNER_TEMP/atomic-v3-wire-v1.nnue"
 
+  atomic-v3-incremental-stress-valgrind:
+    name: AtomicNNUE V3 incremental stress Valgrind
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Install Valgrind
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends valgrind
+      - name: Build isolated incremental stress runner
+        working-directory: src
+        run: >-
+          make -j2 ARCH=x86-64 COMP=gcc COMPCXX=g++
+          debug=yes optimize=no atomic-v3-incremental-stress-tests.bin
+      - name: Run directed and random stress under Valgrind
+        run: |
+          python3 tests/create_synthetic_atomic_v3_nnue.py \
+            --output "$RUNNER_TEMP/atomic-v3-wire-v1.nnue"
+          cat > "$RUNNER_TEMP/atomic-v3-incremental-stress-valgrind" <<'EOF'
+          #!/usr/bin/env bash
+          exec valgrind \
+            --error-exitcode=99 \
+            --quiet \
+            --leak-check=full \
+            --show-leak-kinds=all \
+            --errors-for-leak-kinds=all \
+            --track-origins=yes \
+            --num-callers=30 \
+            "$GITHUB_WORKSPACE/src/atomic-v3-incremental-stress-tests.bin" "$@"
+          EOF
+          chmod +x "$RUNNER_TEMP/atomic-v3-incremental-stress-valgrind"
+          python3 tests/atomic_v3_incremental_stress.py \
+            --binary "$RUNNER_TEMP/atomic-v3-incremental-stress-valgrind" \
+            --net "$RUNNER_TEMP/atomic-v3-wire-v1.nnue" \
+            --mode smoke \
+            --operations 256 \
+            --full-refresh-interval 1 \
+            --threads 1 \
+            --timeout 900
+
   atomic-v3-full-refresh-valgrind:
     name: AtomicNNUE V3 full refresh Valgrind
     runs-on: ubuntu-24.04
@@ -737,6 +889,7 @@ jobs:
           tests/python/test_atomic_v3_wire_reference.py
           tests/python/test_atomic_v3_scalar_oracle.py
           tests/python/test_atomic_v3_incremental_oracle.py
+          tests/python/test_atomic_v3_incremental_stress_wrapper.py
           tests/python/test_create_synthetic_atomic_v3_nnue.py
           tests/python/test_validate_atomic_v3_bundle.py
           tests/python/test_create_synthetic_atomic_v2_nnue.py

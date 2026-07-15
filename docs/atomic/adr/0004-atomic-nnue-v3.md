@@ -493,6 +493,33 @@ an independent full-board enumerator.
     H9.3i-a freezes scalar make/undo/null/lazy event traces; H9.3i-b adds the
     complete special-move, randomized, concurrency and fail-closed corpus
     before real SIMD.
+
+    H9.3i-b is a separate private stress target so its larger corpus cannot
+    weaken or silently renumber the frozen 39-event H9.3i-a differential. Its
+    directed cases include four orthodox and eleven Atomic960 castling layouts,
+    bilateral en passant, bilateral quiet/capture promotions, maximum Atomic blast geometry,
+    terminal king removal with exact undo, mirror and material-bucket
+    crossings, no-push null moves, lazy/deep stack restoration and network
+    reset/mismatch recovery. Deterministic legal trajectories cover both
+    Atomic and Atomic960 roots. Every successful incremental result is
+    bit-identical to the H9.3h full-refresh scalar diagnostic; every expected
+    failure—including injected faults after one perspective, before composition
+    and after successful composition but before commit—clears its diagnostic
+    and preserves the previously committed frame, depth and counters. Independent stacks may share one immutable
+    network concurrently, but one stack remains single-owner. Smoke, release,
+    instrumented and local soak profiles have frozen operation accounting and
+    state signatures. A signature commits not only to FEN, key and the scalar
+    output, but also to canonical HM-only accumulators, source kind/ply/distance,
+    row deltas, stack depth, same-frame EP diagnostics and per-call counters; a
+    backend that silently full-refreshes every frame therefore cannot satisfy
+    the stress contract. Random counters and the exact directed inventory are
+    published separately. The runner hashes one 77,349,879-byte fixture into an
+    owned buffer and constructs both network identities from those exact bytes,
+    closing the wrapper-to-loader check/use gap. GCC and MinGW compile the
+    scalar backend, incremental backend and isolated runner with a 128,000-byte
+    stack-usage error ceiling. The stress backend and runner remain
+    absent from search, protocols, bindings, WASM, generator and trainer build
+    graphs.
     A V3 Finny or relation cache is a separate measured layer after scalar and
     ISA equivalence, never a prerequisite for establishing correctness.
 
