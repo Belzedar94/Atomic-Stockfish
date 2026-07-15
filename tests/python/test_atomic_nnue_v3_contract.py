@@ -568,14 +568,71 @@ def test_atomic_relation_prototype_dimensions_and_semantic_orders_are_explicit()
         "QUEEN",
         "ADJACENT_PAWN_SURVIVES",
     ]
+    assert ring["physical_offset"] == 64844
     assert 64 * 2 * 2 * 8 * 5 == ring["physical_dimensions"] == 10240
-    assert "exact CapturePair candidate set" in ring["semantics"]["capturer_origin"]
-    assert "excluded only when it is the sole origin" in ring["semantics"][
+    assert ring["local_index_domain"] == {"minimum": 0, "maximum": 10239}
+    assert ring["physical_index_domain"] == {
+        "minimum": 64844,
+        "maximum": 75083,
+    }
+    assert ring["physical_index_formula"].endswith("64844 + local_index")
+    assert ring["index_formula"] == (
+        "((((oriented_center * 2 + actor_rel) * 2 + collateral_rel) * 8 + "
+        "offset) * 5 + collateral_class)"
+    )
+    assert ring["direction_vectors_after_orientation"] == {
+        "N": [0, 1, 8],
+        "NE": [1, 1, 9],
+        "E": [1, 0, 1],
+        "SE": [1, -1, -7],
+        "S": [0, -1, -8],
+        "SW": [-1, -1, -9],
+        "W": [-1, 0, -1],
+        "NW": [-1, 1, 7],
+    }
+    assert "group candidates by the pair" in ring["actor_relation_derivation"]
+    assert "never relative to the capture actor" in ring[
+        "collateral_relation_derivation"
+    ]
+    assert "exactly once" in ring["semantics"]["candidate_source"]
+    assert "never derive candidate centers" in ring["semantics"]["candidate_source"]
+    assert "empty AtomicBlastRing emission" in ring["semantics"][
+        "error_propagation"
+    ]
+    assert "count distinct oriented origins" in ring["semantics"]["grouping"]
+    assert "exactly one distinct origin" in ring["semantics"]["capturer_origin"]
+    assert "two or more distinct origins" in ring["semantics"][
         "capturer_origin"
     ]
-    assert "exclude oriented_center" in ring["semantics"][
+    assert "current piece and color" in ring["semantics"]["collateral_snapshot"]
+    assert "removes that non-pawn" in ring["semantics"]["non_pawn_classes"]
+    assert "emits no AtomicBlastRing row" in ring["semantics"]["kings"]
+    assert "pawns survive collateral blast" in ring["semantics"]["pawns"]
+    assert "landing square is the group center" in ring["semantics"][
+        "en_passant_center"
+    ]
+    assert "normal CapturePair groups" in ring["semantics"]["en_passant_center"]
+    assert "always exclude oriented_center" in ring["semantics"][
         "en_passant_captured_pawn"
     ]
+    assert "even when the group has two distinct origins" in ring["semantics"][
+        "en_passant_captured_pawn"
+    ]
+    assert "without promotion-choice multiplication" in ring["semantics"][
+        "promotion"
+    ]
+    assert "strictly ascending local index" in ring["emission_order"]
+    assert "caller-owned fixed output" in ring["enumeration_ownership"]
+    assert "pure and reentrant" in ring["thread_safety"]
+    assert "exact successful AtomicCapturePair emission" in ring[
+        "composition_seam_precondition"
+    ]
+    assert "do not authenticate completeness" in ring["composition_seam_precondition"]
+    assert "not an untrusted public input API" in ring[
+        "composition_seam_precondition"
+    ]
+    assert "without compaction or holes" in ring["full_rectangle_policy"]
+    assert "30 * 8 = 240" in ring["max_active_bound_proof"]
     assert ring["collateral_relation_frame"] == (
         "relative to the accumulator perspective, not the capture actor"
     )
@@ -584,6 +641,9 @@ def test_atomic_relation_prototype_dimensions_and_semantic_orders_are_explicit()
     ]
     assert "never rotate or mirror squares again" in ring["spatial_frame"]
     assert "including geometric EN_PASSANT" in ring["semantics"]["candidate_source"]
+    assert contract["dimensions"]["physical_total"] == 75084
+    assert "@0..10239" in ring["descriptor"]
+    assert "@64844..75083" in ring["descriptor"]
 
 
 def test_wire_keeps_v2_tail_but_makes_mixed_slices_unambiguous() -> None:

@@ -174,22 +174,62 @@ an independent full-board enumerator.
    CP to prove completeness; the combined V3 call graph owns that invariant.
 7. `AtomicBlastRing` is a boolean compact union over 64 centers, two actor
    relations, two collateral relations, eight offsets and five classes:
-   knight, bishop, rook, queen and an adjacent pawn that survives. Actor and
-   collateral OWN/OPP are relative to the accumulator perspective. Kings use the
-   king slice. The off-center pawn removed by EP is excluded. A collateral
-   square that is the only capture origin is excluded; if another origin from
-   the same unfiltered CapturePair set can capture the same center, that square
-   remains a possible collateral outcome.
-   This rule prevents a capturing pawn from being mislabeled as a surviving
-   adjacent pawn while preserving multiple-route information in CapturePair.
-   Spatially, `collateral_square = oriented_center + delta`; `N` means the
-   collateral square is one rank north of the center, with explicit board-edge
-   checks. Count distinct CP origins within the same center and actor relation.
-   An occupied adjacent pawn activates `ADJACENT_PAWN_SURVIVES` except when it is
-   the sole origin or the off-center EP pawn. In oriented coordinates that pawn
-   is at `center - (actor_rel == OWN ? 8 : -8)`, equivalently the orientation of
-   `raw_ep_center - pawn_push(actual_actor_color)`. It is removed before the
-   blast. No actor-relative square transform is applied.
+   knight, bishop, rook, queen and an adjacent pawn that survives. Its local
+   index is
+   `((((oriented_center * 2 + actor_rel) * 2 + collateral_rel) * 8 + offset) * 5 + class)`,
+   spanning 0 through 10,239; physical rows are 64,844 through 75,083 and the
+   next exclusive physical row is 75,084. The order is centers A1=0 through
+   H8=63, actor OWN/OPP, collateral OWN/OPP, offsets N, NE, E, SE, S, SW, W,
+   NW, then N, B, R, Q and `ADJACENT_PAWN_SURVIVES`. The full rectangle is
+   serialized without holes; off-board and structurally impossible rows remain
+   inactive.
+
+   BlastRing calls CapturePair exactly once and projects that exact successful
+   unfiltered emission. It never reconstructs candidate centers from attack
+   maps, legal moves or a second read of EP metadata. CP records are first
+   grouped by `(oriented_center, actor_rel)` and distinct origins are counted
+   for the complete group. A collateral square matching an origin is excluded
+   only when that group has exactly one distinct origin. If the group has two
+   or more origins, retain every adjacent origin: another CP outcome can capture
+   the same center while leaving that square as exploded collateral or as a
+   surviving pawn. This prevents a sole capturing pawn from being mislabeled
+   as a survivor without discarding multiple-route information. Duplicate
+   routes are idempotent and the boolean result is emitted in strict ascending
+   local-index order, independent of CapturePair traversal.
+
+   Inspect the eight occupied neighbors in the same jointly oriented
+   pre-capture snapshot. Actor and collateral OWN/OPP are both relative to the
+   accumulator perspective; collateral is never relative to the actor and
+   neither relation applies another transform. Spatially,
+   `collateral_square = oriented_center + delta`; `N` means one rank north,
+   with explicit file/rank edge checks. Current N, B, R and Q pieces activate
+   their class because the blast removes them. An adjacent pawn instead
+   activates `ADJACENT_PAWN_SURVIVES`, because pawns are immune to collateral
+   blast. An adjacent king emits no ring row because KingBlastEP owns all king
+   relations. Current snapshot type is authoritative, including promoted
+   pieces; promotion choices never multiply a relation.
+
+   For EP, the landing square is the center. The off-center captured pawn at
+   `center - (actor_rel == OWN ? 8 : -8)`, equivalently the orientation of
+   `raw_ep_center - pawn_push(actual_actor_color)`, is always excluded because
+   it is removed before the blast. This exclusion holds even when the group has
+   two origins. Malformed EP contributes no EP candidate while successful
+   normal CP groups and their ring projection remain unchanged. A CP error maps
+   to an empty BlastRing result with no partial projection; king-absent
+   explosion terminals are adjudicated before NNUE.
+
+   The reusable no-reenumeration projector is an internal trusted seam with the
+   same precondition as KingBlastEP: the exact successful CapturePair emission
+   for the same snapshot and perspective. Shape checks can reject corrupt
+   orientation, indices or records but cannot authenticate completeness of an
+   arbitrary caller-built subset. The emitter retains no Position or output
+   references, uses caller-owned fixed storage and is reentrant for concurrent
+   immutable reads. Its conservative active bound is `30 * 8 = 240`: at most
+   30 non-king collateral pieces, each adjacent to at most eight candidate
+   centers, with each center/collateral pair fixing one actor relation. Kings,
+   sole origins and off-center EP exclusions only reduce that count. Normative
+   engine evidence and auxiliary community history are catalogued in
+   `docs/atomic/evidence/hito9-3e-blast-ring/discord-research.md`.
 8. Serialize in this exact order after the standard outer header: transformer
    hash, i16 biases, HM i16 weights, CapturePair raw i8 weights, KingBlastEP i16
    weights, BlastRing raw i8 weights, HM-only i32 PSQT, eight V2 SFNNv15 stacks

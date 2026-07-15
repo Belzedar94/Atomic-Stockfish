@@ -94,7 +94,118 @@ bool add_feature(CapturePairEmission& result, const CapturePairFeature& feature)
     return true;
 }
 
+bool valid_board_piece(Piece piece) {
+    if (piece == NO_PIECE)
+        return true;
+    if (int(piece) >= PIECE_NB || (int(piece) >> 3) >= COLOR_NB)
+        return false;
+    const PieceType pieceType = type_of(piece);
+    return pieceType >= PAWN && pieceType <= KING;
+}
+
 }  // namespace
+
+namespace Detail {
+
+bool well_formed_capture_pair_emission(const CapturePairSnapshot& snapshot,
+                                       Color                      perspective,
+                                       const CapturePairEmission& emission) {
+    if ((perspective != WHITE && perspective != BLACK)
+        || (snapshot.sideToMove != WHITE && snapshot.sideToMove != BLACK)
+        || emission.orientation.perspective != perspective
+        || !is_canonical_joint_orientation(emission.orientation)
+        || emission.size > CapturePairMaximumActiveFeatures)
+        return false;
+
+    std::array<IndexType, COLOR_NB> pieceCounts{};
+    std::array<IndexType, COLOR_NB> kingCounts{};
+    std::array<Square, COLOR_NB>    kingSquares{SQ_NONE, SQ_NONE};
+    IndexType                       totalPieces = 0;
+    for (int squareIndex = 0; squareIndex < SQUARE_NB; ++squareIndex)
+    {
+        const Piece piece = snapshot.board[squareIndex];
+        if (!valid_board_piece(piece))
+            return false;
+        if (piece == NO_PIECE)
+            continue;
+
+        const Color color = color_of(piece);
+        ++pieceCounts[color];
+        ++totalPieces;
+        if (type_of(piece) == KING)
+        {
+            ++kingCounts[color];
+            kingSquares[color] = Square(squareIndex);
+        }
+    }
+    if (totalPieces < 2 || totalPieces > 32 || pieceCounts[WHITE] > 16 || pieceCounts[BLACK] > 16
+        || kingCounts[WHITE] != 1 || kingCounts[BLACK] != 1
+        || kingSquares[perspective] != emission.orientation.ownKing)
+        return false;
+
+    for (IndexType featureIndex = 0; featureIndex < emission.size; ++featureIndex)
+    {
+        const CapturePairFeature& feature = emission.features[featureIndex];
+        if (!valid_capture_pair_relation(feature.actorRelation) || !is_ok(feature.rawFrom)
+            || !is_ok(feature.rawCenter) || !is_ok(feature.rawCaptured)
+            || !is_ok(feature.orientedFrom) || !is_ok(feature.orientedCenter)
+            || !is_ok(feature.orientedCaptured)
+            || feature.physicalIndex != CapturePairPhysicalOffset + feature.localIndex
+            || (featureIndex
+                && emission.features[featureIndex - 1].localIndex >= feature.localIndex)
+            || feature.orientedFrom != emission.orientation.orient(feature.rawFrom)
+            || feature.orientedCenter != emission.orientation.orient(feature.rawCenter)
+            || feature.orientedCaptured != emission.orientation.orient(feature.rawCaptured)
+            || !valid_board_piece(feature.actor) || feature.actor == NO_PIECE
+            || type_of(feature.actor) > QUEEN || !valid_board_piece(feature.captured)
+            || feature.captured == NO_PIECE || snapshot.board[feature.rawFrom] != feature.actor
+            || snapshot.board[feature.rawCaptured] != feature.captured
+            || color_of(feature.captured) == color_of(feature.actor)
+            || feature.actorRelation
+                 != (color_of(feature.actor) == perspective ? CapturePairActorRelation::Own
+                                                            : CapturePairActorRelation::Opp))
+            return false;
+
+        IndexType expectedEdge = CapturePairGeometryDimensions;
+        if (!capture_pair_edge_ordinal(type_of(feature.actor), feature.actorRelation,
+                                       feature.orientedFrom, feature.orientedCenter, expectedEdge)
+            || feature.edgeOrdinal != expectedEdge)
+            return false;
+
+        IndexType expectedIndex = CapturePairPhysicalDimensions;
+        if (feature.enPassant)
+        {
+            const Square expectedRawCaptured =
+              Square(int(feature.rawCenter) - int(pawn_push(snapshot.sideToMove)));
+            IndexType expectedEp = CapturePairEpEdgesPerRelation;
+            if (feature.targetClass != CapturePairTargetClass::EnPassant
+                || type_of(feature.actor) != PAWN || type_of(feature.captured) != PAWN
+                || color_of(feature.actor) != snapshot.sideToMove
+                || feature.rawCenter != snapshot.epSquare || !is_ok(expectedRawCaptured)
+                || feature.rawCaptured != expectedRawCaptured
+                || snapshot.board[feature.rawCenter] != NO_PIECE
+                || !capture_pair_ep_ordinal(feature.actorRelation, feature.orientedFrom,
+                                            feature.orientedCenter, expectedEp)
+                || feature.epOrdinal != expectedEp
+                || !capture_pair_ep_index(feature.actorRelation, expectedEp, expectedIndex))
+                return false;
+        }
+        else if (feature.rawCenter != feature.rawCaptured || feature.epOrdinal != 0
+                 || snapshot.board[feature.rawCenter] != feature.captured
+                 || IndexType(feature.targetClass) >= CapturePairNormalTargetClasses
+                 || feature.targetClass
+                      != CapturePairTargetClass(int(type_of(feature.captured)) - int(PAWN))
+                 || !capture_pair_normal_index(feature.actorRelation, expectedEdge,
+                                               feature.targetClass, expectedIndex))
+            return false;
+
+        if (feature.localIndex != expectedIndex)
+            return false;
+    }
+    return true;
+}
+
+}  // namespace Detail
 
 CapturePairError emit_capture_pairs(const CapturePairSnapshot& snapshot,
                                     Color                      perspective,

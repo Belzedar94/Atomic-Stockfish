@@ -458,20 +458,86 @@
         "ADJACENT_PAWN_SURVIVES"
       ],
       "index_formula": "((((oriented_center * 2 + actor_rel) * 2 + collateral_rel) * 8 + offset) * 5 + collateral_class)",
+      "local_index_domain": {
+        "minimum": 0,
+        "maximum": 10239
+      },
+      "physical_index_domain": {
+        "minimum": 64844,
+        "maximum": 75083
+      },
+      "physical_index_formula": "physical_offset + local_index = 64844 + local_index",
+      "actor_relation_derivation": "actor_rel is OWN=0 exactly when the actual CapturePair actor color equals the accumulator perspective and OPP=1 otherwise; group candidates by the pair (oriented_center, actor_rel)",
+      "collateral_relation_derivation": "collateral_rel is OWN=0 exactly when the current occupied collateral piece color equals the accumulator perspective and OPP=1 otherwise; it is never relative to the capture actor",
+      "direction_vectors_after_orientation": {
+        "N": [
+          0,
+          1,
+          8
+        ],
+        "NE": [
+          1,
+          1,
+          9
+        ],
+        "E": [
+          1,
+          0,
+          1
+        ],
+        "SE": [
+          1,
+          -1,
+          -7
+        ],
+        "S": [
+          0,
+          -1,
+          -8
+        ],
+        "SW": [
+          -1,
+          -1,
+          -9
+        ],
+        "W": [
+          -1,
+          0,
+          -1
+        ],
+        "NW": [
+          -1,
+          1,
+          7
+        ]
+      },
       "spatial_relation_formula": "oriented_collateral_square = oriented_center + direction_deltas_after_orientation[offset], with exact file/rank adjacency and both squares on board; offset N therefore means the collateral square is one rank north of the center",
       "spatial_frame": "directions use the joint accumulator-perspective orientation; actor_rel and collateral_rel only select color relations and never rotate or mirror squares again",
+      "emission_order": "emit the boolean union in strictly ascending local index (therefore strictly ascending physical index), independent of semantic route traversal; duplicate semantic routes are idempotent, while the trusted composition seam still rejects duplicate or reordered non-canonical CapturePair input records",
+      "enumeration_ownership": "the emitter writes only caller-owned fixed output and scratch storage, retains no Position or output references after return and does not expose its CapturePair traversal order",
+      "thread_safety": "pure and reentrant for concurrent reads of immutable positions, with no mutable global, static or shared scratch state; callers synchronize any Position mutation",
+      "composition_seam_precondition": "the internal no-reenumeration projector accepts only the exact successful AtomicCapturePair emission produced for the same snapshot and perspective; its defensive canonical-shape checks detect corruption but do not authenticate completeness of an arbitrary caller-assembled subset, and the seam is not an untrusted public input API",
+      "full_rectangle_policy": "all 10240 center-by-actor-relation-by-collateral-relation-by-offset-by-class rows are serialized without compaction or holes; off-board and structurally impossible rows remain inactive",
       "semantics": {
         "activation": "boolean union of collateral outcomes for a capturable center and actor relation",
-        "candidate_source": "project exactly the unfiltered AtomicCapturePair candidate set by center and actor relation, including geometric EN_PASSANT candidates",
-        "capturer_origin": "within the same center and actor relation, count distinct origins in the exact CapturePair candidate set; a ring square is excluded only when it is the sole origin and remains a possible collateral when another origin can capture the same center",
-        "kings": "represented only by AtomicKingBlastEP",
-        "pawns": "an occupied adjacent pawn activates ADJACENT_PAWN_SURVIVES because collateral blast does not remove it, except when that square is excluded as the sole capture origin or as the off-center en-passant captured pawn",
-        "en_passant_captured_pawn": "for a CapturePair EN_PASSANT candidate, exclude oriented_center - (actor_rel == OWN ? 8 : -8), equivalently orient(raw_ep_center - pawn_push(actual_actor_color)), because that pawn is removed off-center before the blast",
-        "offboard_offsets": "never active"
+        "candidate_source": "call AtomicCapturePair exactly once and project its exact validated unfiltered emission by (oriented_center, actor_rel), including geometric EN_PASSANT candidates; never derive candidate centers from attack maps, legal move generation or an independent read of EP metadata",
+        "error_propagation": "if AtomicCapturePair rejects the snapshot, return its mapped error with an empty AtomicBlastRing emission; never retain a partial projection",
+        "grouping": "group the exact CapturePair records by (oriented_center, actor_rel) and count distinct oriented origins for the complete group before examining any adjacent collateral square",
+        "capturer_origin": "within one (oriented_center, actor_rel) group, exclude a collateral square matching an origin only when the group has exactly one distinct origin; when the group has two or more distinct origins, retain every adjacent origin because another CapturePair outcome can capture the same center and leave that origin as collateral or a surviving pawn",
+        "collateral_snapshot": "inspect the eight adjacent occupied squares in the same jointly oriented pre-capture snapshot; empty squares emit nothing, and classify occupied squares by their current piece and color rather than move history",
+        "non_pawn_classes": "an adjacent current KNIGHT, BISHOP, ROOK or QUEEN activates its matching class because Atomic removes that non-pawn in the center blast, subject to the capturer-origin and en-passant exclusions",
+        "kings": "an adjacent KING emits no AtomicBlastRing row because all center-to-king relations are represented only by AtomicKingBlastEP",
+        "pawns": "an occupied adjacent PAWN activates ADJACENT_PAWN_SURVIVES because pawns survive collateral blast, subject to the same sole-origin exclusion and the unconditional off-center en-passant captured-pawn exclusion",
+        "en_passant_center": "the CapturePair EN_PASSANT landing square is the group center; malformed EP metadata contributes no EP candidate while successful normal CapturePair groups and their ring projection remain unchanged",
+        "en_passant_captured_pawn": "for every group containing a validated CapturePair EN_PASSANT candidate, always exclude oriented_center - (actor_rel == OWN ? 8 : -8), equivalently orient(raw_ep_center - pawn_push(actual_actor_color)), even when the group has two distinct origins, because that off-center pawn is removed before the blast",
+        "promotion": "a CapturePair promotion capture is projected once without promotion-choice multiplication; adjacent pieces are classified by current snapshot type, so an already-promoted piece uses KNIGHT, BISHOP, ROOK or QUEEN",
+        "offboard_offsets": "never active; file and rank adjacency are validated before forming a local index",
+        "terminal_domain": "standalone enumeration requires exactly one king per color like CapturePair; king-absent explosion terminals are adjudicated before NNUE and return the mapped missing-king error with an empty emission"
       },
       "max_active_reachable_material": 240,
+      "max_active_bound_proof": "an evaluable position has at most 30 non-king collateral pieces; each can be adjacent to at most eight occupied-or-en-passant candidate centers, and each center/collateral pair fixes one actor relation, so at most 30 * 8 = 240 rows are active; king, sole-origin and off-center en-passant exclusions only reduce this total",
       "freeze_gate": "numeric goldens with center d4 and collateral d5 for every offset, a sole adjacent capturer, two attackers sharing a center, pawn immunity, both perspectives, both mirror branches, board edges and off-center EP removal",
-      "descriptor": "AtomicBlastRing|v1-provisional|offset=64844|axes=center:64;actor_rel_accumulator:OWN,OPP;collateral_rel_accumulator:OWN,OPP;offset:N,NE,E,SE,S,SW,W,NW;class:KNIGHT,BISHOP,ROOK,QUEEN,ADJACENT_PAWN_SURVIVES|physical=10240|orientation=per_perspective_black_xor56_mirror_if_pre_h_king_file_lt4_shared_all_slices|source=exact_unfiltered_cp_including_validated_geometric_ep|offset=collateral_minus_center_in_joint_frame|activation=boolean_capture_center_union|origin=exclude_only_sole_origin_same_center_actor_rel|pawn=adjacent_survives_except_sole_origin_or_ep_captured|ep_captured_pawn=oriented_center_minus_own8_or_opp_minus8_excluded|kings=separate|dtype=i8|wire=i8_raw_signed_twos_feature_major_output1024_contiguous_canonical_unpermuted_permute8_after_king_blast|psqt=none"
+      "descriptor": "AtomicBlastRing|v1-provisional|offset=64844|axes=center:64;actor_rel_accumulator:OWN,OPP;collateral_rel_accumulator:OWN,OPP;offset:N,NE,E,SE,S,SW,W,NW;class:KNIGHT,BISHOP,ROOK,QUEEN,ADJACENT_PAWN_SURVIVES|local=((((center*2+actor_rel)*2+collateral_rel)*8+offset)*5+class)@0..10239|physical=10240@64844..75083|orientation=per_perspective_black_xor56_mirror_if_pre_h_king_file_lt4_shared_all_slices|source=single_exact_unfiltered_cp_emission_including_validated_geometric_ep|group=center_actor_rel_distinct_origins|offset=collateral_minus_center_in_joint_frame_exact_dfdr|activation=boolean_sorted_unique_capture_center_union|origin=exclude_only_single_distinct_origin_group_retain_all_origins_if_multi|nonpawn=current_NBRQ_explodes|pawn=adjacent_survives_except_single_origin_or_ep_captured|ep=landing_center_malformed_omitted_normal_preserved|ep_captured_pawn=oriented_center_minus_own8_or_opp_minus8_always_excluded_even_multi|kings=separate|rectangle=full_no_holes|error=cp_mapped_empty_no_partial|ownership=caller_owned|thread=pure_reentrant_immutable_position|max=30x8_eq240|dtype=i8|wire=i8_raw_signed_twos_feature_major_output1024_contiguous_canonical_unpermuted_permute8_after_king_blast|psqt=none"
     }
   ],
   "active_feature_bounds": {
