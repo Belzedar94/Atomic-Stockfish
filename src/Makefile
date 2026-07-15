@@ -141,6 +141,13 @@ ATOMIC_V3_KING_BLAST_EP_TEST_OBJS = $(filter-out main.o,$(OBJS)) \
 ATOMIC_V3_KING_BLAST_EP_SRCS = nnue/atomic_v3/king_blast_ep.cpp \
 	nnue/atomic_v3/tests/king_blast_ep_cli.cpp
 ATOMIC_V3_KING_BLAST_EP_HEADERS = nnue/atomic_v3/king_blast_ep.h
+ATOMIC_V3_BLAST_RING_TEST_EXE  = atomic-v3-blast-ring-tests$(ATOMIC_TEST_EXE_SUFFIX)
+ATOMIC_V3_BLAST_RING_TEST_OBJS = $(filter-out main.o,$(OBJS)) \
+	atomic_v3_hm_oracle.o atomic_v3_capture_pair.o atomic_v3_blast_ring.o \
+	atomic_v3_blast_ring_tests.o
+ATOMIC_V3_BLAST_RING_SRCS = nnue/atomic_v3/blast_ring.cpp \
+	nnue/atomic_v3/tests/blast_ring_cli.cpp
+ATOMIC_V3_BLAST_RING_HEADERS = nnue/atomic_v3/blast_ring.h
 ATOMIC_LEGACY_V1_TEST_EXE  = legacy-atomic-v1-tests$(ATOMIC_TEST_EXE_SUFFIX)
 ATOMIC_LEGACY_V1_TEST_OBJS = attacks.o bitboard.o misc.o movegen.o position.o tbprobe.o \
 	uci_move.o ucioption.o atomic_data_generator_legacy_atomic_v1.o \
@@ -1168,6 +1175,7 @@ help:
 	echo "atomic-v3-hm-oracle-tests > verify/dump the isolated scalar AtomicNNUEV3 HM oracle" && \
 	echo "atomic-v3-capture-pair-tests > verify/dump the scalar AtomicNNUEV3 CapturePair oracle" && \
 	echo "atomic-v3-king-blast-ep-tests > verify/dump the scalar AtomicNNUEV3 KingBlastEP oracle" && \
+	echo "atomic-v3-blast-ring-tests > verify/dump the scalar AtomicNNUEV3 BlastRing oracle" && \
 	echo "legacy-atomic-v1-tests  > build and run the frozen 72-byte data codec tests" && \
 	echo "atomic-bin-v2-tests     > build and run the isolated 96/64-byte V2 codec tests" && \
 	echo "atomic-bin-v2-sink-tests > build and run the V2 sink/hash lifecycle tests" && \
@@ -1245,7 +1253,7 @@ ifneq ($(SUPPORTED_ARCH), true)
 endif
 
 
-.PHONY: help analyze build profile-build data-generator data-generator-tests data-tools data-tools-tests atomic-data-tools-json-tests atomic-unit-tests atomic-api-tests atomic-syzygy-driver atomic-nnue-incremental-tests atomic-v2-test-fixture atomic-v2-backend-core-tests atomic-v2-incremental-tests atomic-v3-hm-oracle-tests atomic-v3-capture-pair-tests atomic-v3-king-blast-ep-tests legacy-atomic-v1-tests atomic-bin-v2-tests atomic-bin-v2-sink-tests atomic-bin-v2-manifest-tests atomic-bin-v2-manifest-reader-tests atomic-bin-v2-reader-tests macos-lipo strip install clean net \
+.PHONY: help analyze build profile-build data-generator data-generator-tests data-tools data-tools-tests atomic-data-tools-json-tests atomic-unit-tests atomic-api-tests atomic-syzygy-driver atomic-nnue-incremental-tests atomic-v2-test-fixture atomic-v2-backend-core-tests atomic-v2-incremental-tests atomic-v3-hm-oracle-tests atomic-v3-capture-pair-tests atomic-v3-king-blast-ep-tests atomic-v3-blast-ring-tests legacy-atomic-v1-tests atomic-bin-v2-tests atomic-bin-v2-sink-tests atomic-bin-v2-manifest-tests atomic-bin-v2-manifest-reader-tests atomic-bin-v2-reader-tests macos-lipo strip install clean net \
 	objclean profileclean config-sanity \
 	icx-profile-use icx-profile-make \
 	gcc-profile-use gcc-profile-make \
@@ -1367,7 +1375,7 @@ clean: objclean profileclean universalclean
 
 # clean binaries and objects
 objclean:
-	@rm -f stockfish stockfish.exe atomic-stockfish atomic-stockfish.exe atomic-stockfish.js atomic-stockfish-data-generator atomic-stockfish-data-generator.exe atomic-stockfish-data-tools atomic-stockfish-data-tools.exe atomic-stockfish-data-tools.* atomic-data-tools-json-tests atomic-data-tools-json-tests.exe atomic-data-tools-json-tests.bin atomic-data-tools-json-tests.* atomic-unit-tests atomic-unit-tests.exe atomic-unit-tests.bin atomic-api-tests atomic-api-tests.exe atomic-api-tests.bin atomic-syzygy-driver* atomic-nnue-incremental-tests atomic-nnue-incremental-tests.exe atomic-nnue-incremental-tests.bin atomic-v2-backend-core-tests atomic-v2-backend-core-tests.exe atomic-v2-backend-core-tests.bin atomic-v2-backend-core-tests.* atomic-v2-incremental-tests atomic-v2-incremental-tests.exe atomic-v2-incremental-tests.bin atomic-v2-incremental-tests.* atomic-v3-hm-oracle-tests atomic-v3-hm-oracle-tests.exe atomic-v3-hm-oracle-tests.bin atomic-v3-hm-oracle-tests.* atomic-v3-capture-pair-tests atomic-v3-capture-pair-tests.exe atomic-v3-capture-pair-tests.bin atomic-v3-capture-pair-tests.* atomic-v3-king-blast-ep-tests atomic-v3-king-blast-ep-tests.exe atomic-v3-king-blast-ep-tests.bin atomic-v3-king-blast-ep-tests.* legacy-atomic-v1-tests legacy-atomic-v1-tests.exe legacy-atomic-v1-tests.bin atomic-bin-v2-tests atomic-bin-v2-tests.exe atomic-bin-v2-tests.bin atomic-bin-v2-tests.* atomic-bin-v2-sink-tests atomic-bin-v2-sink-tests.exe atomic-bin-v2-sink-tests.bin atomic-bin-v2-sink-tests.* atomic-bin-v2-manifest-tests atomic-bin-v2-manifest-tests.exe atomic-bin-v2-manifest-tests.bin atomic-bin-v2-manifest-tests.* atomic-bin-v2-manifest-reader-tests atomic-bin-v2-manifest-reader-tests.exe atomic-bin-v2-manifest-reader-tests.bin atomic-bin-v2-manifest-reader-tests.* atomic-bin-v2-reader-tests atomic-bin-v2-reader-tests.exe atomic-bin-v2-reader-tests.bin atomic-bin-v2-reader-tests.* *.o ./api/*.o ./syzygy/*.o ./nnue/*.o ./nnue/features/*.o $(BUILD_SHA_FILE) $(BUILD_FULL_SHA_FILE) $(BUILD_DATE_FILE)
+	@rm -f stockfish stockfish.exe atomic-stockfish atomic-stockfish.exe atomic-stockfish.js atomic-stockfish-data-generator atomic-stockfish-data-generator.exe atomic-stockfish-data-tools atomic-stockfish-data-tools.exe atomic-stockfish-data-tools.* atomic-data-tools-json-tests atomic-data-tools-json-tests.exe atomic-data-tools-json-tests.bin atomic-data-tools-json-tests.* atomic-unit-tests atomic-unit-tests.exe atomic-unit-tests.bin atomic-api-tests atomic-api-tests.exe atomic-api-tests.bin atomic-syzygy-driver* atomic-nnue-incremental-tests atomic-nnue-incremental-tests.exe atomic-nnue-incremental-tests.bin atomic-v2-backend-core-tests atomic-v2-backend-core-tests.exe atomic-v2-backend-core-tests.bin atomic-v2-backend-core-tests.* atomic-v2-incremental-tests atomic-v2-incremental-tests.exe atomic-v2-incremental-tests.bin atomic-v2-incremental-tests.* atomic-v3-hm-oracle-tests atomic-v3-hm-oracle-tests.exe atomic-v3-hm-oracle-tests.bin atomic-v3-hm-oracle-tests.* atomic-v3-capture-pair-tests atomic-v3-capture-pair-tests.exe atomic-v3-capture-pair-tests.bin atomic-v3-capture-pair-tests.* atomic-v3-king-blast-ep-tests atomic-v3-king-blast-ep-tests.exe atomic-v3-king-blast-ep-tests.bin atomic-v3-king-blast-ep-tests.* atomic-v3-blast-ring-tests atomic-v3-blast-ring-tests.exe atomic-v3-blast-ring-tests.bin atomic-v3-blast-ring-tests.* legacy-atomic-v1-tests legacy-atomic-v1-tests.exe legacy-atomic-v1-tests.bin atomic-bin-v2-tests atomic-bin-v2-tests.exe atomic-bin-v2-tests.bin atomic-bin-v2-tests.* atomic-bin-v2-sink-tests atomic-bin-v2-sink-tests.exe atomic-bin-v2-sink-tests.bin atomic-bin-v2-sink-tests.* atomic-bin-v2-manifest-tests atomic-bin-v2-manifest-tests.exe atomic-bin-v2-manifest-tests.bin atomic-bin-v2-manifest-tests.* atomic-bin-v2-manifest-reader-tests atomic-bin-v2-manifest-reader-tests.exe atomic-bin-v2-manifest-reader-tests.bin atomic-bin-v2-manifest-reader-tests.* atomic-bin-v2-reader-tests atomic-bin-v2-reader-tests.exe atomic-bin-v2-reader-tests.bin atomic-bin-v2-reader-tests.* *.o ./api/*.o ./syzygy/*.o ./nnue/*.o ./nnue/features/*.o $(BUILD_SHA_FILE) $(BUILD_FULL_SHA_FILE) $(BUILD_DATE_FILE)
 
 # clean auxiliary profiling files
 profileclean:
@@ -1390,7 +1398,7 @@ net:
 	@echo "Atomic NNUE networks are external; set EvalFile to a compatible Legacy Atomic V1 .nnue file."
 
 format:
-	$(CLANG-FORMAT) -i $(SRCS) $(ATOMIC_DATA_GENERATOR_SRCS) $(ATOMIC_DATA_TOOLS_SRCS) $(ATOMIC_V3_HM_ORACLE_SRCS) $(ATOMIC_V3_CAPTURE_PAIR_SRCS) $(ATOMIC_V3_KING_BLAST_EP_SRCS) $(OTHER_SRCS) $(HEADERS) $(ATOMIC_DATA_GENERATOR_HEADERS) $(ATOMIC_DATA_TOOLS_HEADERS) $(ATOMIC_V3_HM_ORACLE_HEADERS) $(ATOMIC_V3_CAPTURE_PAIR_HEADERS) $(ATOMIC_V3_KING_BLAST_EP_HEADERS) -style=file
+	$(CLANG-FORMAT) -i $(SRCS) $(ATOMIC_DATA_GENERATOR_SRCS) $(ATOMIC_DATA_TOOLS_SRCS) $(ATOMIC_V3_HM_ORACLE_SRCS) $(ATOMIC_V3_CAPTURE_PAIR_SRCS) $(ATOMIC_V3_KING_BLAST_EP_SRCS) $(ATOMIC_V3_BLAST_RING_SRCS) $(OTHER_SRCS) $(HEADERS) $(ATOMIC_DATA_GENERATOR_HEADERS) $(ATOMIC_DATA_TOOLS_HEADERS) $(ATOMIC_V3_HM_ORACLE_HEADERS) $(ATOMIC_V3_CAPTURE_PAIR_HEADERS) $(ATOMIC_V3_KING_BLAST_EP_HEADERS) $(ATOMIC_V3_BLAST_RING_HEADERS) -style=file
 
 ### ==========================================================================
 ### Section 5. Private Targets
@@ -1450,6 +1458,9 @@ atomic-v3-capture-pair-tests: config-sanity $(ATOMIC_V3_CAPTURE_PAIR_TEST_EXE)
 
 atomic-v3-king-blast-ep-tests: config-sanity $(ATOMIC_V3_KING_BLAST_EP_TEST_EXE)
 	./$(ATOMIC_V3_KING_BLAST_EP_TEST_EXE)
+
+atomic-v3-blast-ring-tests: config-sanity $(ATOMIC_V3_BLAST_RING_TEST_EXE)
+	./$(ATOMIC_V3_BLAST_RING_TEST_EXE)
 
 legacy-atomic-v1-tests: config-sanity $(ATOMIC_LEGACY_V1_TEST_EXE)
 	./$(ATOMIC_LEGACY_V1_TEST_EXE)
@@ -1597,6 +1608,9 @@ $(ATOMIC_V3_CAPTURE_PAIR_TEST_EXE): $(ATOMIC_V3_CAPTURE_PAIR_TEST_OBJS)
 $(ATOMIC_V3_KING_BLAST_EP_TEST_EXE): $(ATOMIC_V3_KING_BLAST_EP_TEST_OBJS)
 	+$(CXX) -o $@ $(ATOMIC_V3_KING_BLAST_EP_TEST_OBJS) $(LDFLAGS)
 
+$(ATOMIC_V3_BLAST_RING_TEST_EXE): $(ATOMIC_V3_BLAST_RING_TEST_OBJS)
+	+$(CXX) -o $@ $(ATOMIC_V3_BLAST_RING_TEST_OBJS) $(LDFLAGS)
+
 atomic_see_tests.o: ../tests/atomic_see.cpp
 	$(strip $(CXX) $(CPPFLAGS) $(CXXFLAGS)) -I. -c -o $@ $<
 
@@ -1634,6 +1648,12 @@ atomic_v3_king_blast_ep.o: nnue/atomic_v3/king_blast_ep.cpp nnue/atomic_v3/king_
 	$(strip $(CXX) $(CPPFLAGS) $(CXXFLAGS)) -I. -c -o $@ $<
 
 atomic_v3_king_blast_ep_tests.o: nnue/atomic_v3/tests/king_blast_ep_cli.cpp nnue/atomic_v3/king_blast_ep.h nnue/atomic_v3/capture_pair.h nnue/atomic_v3/hm_oracle.h nnue/atomic_v3/orientation.h
+	$(strip $(CXX) $(CPPFLAGS) $(CXXFLAGS)) -I. -c -o $@ $<
+
+atomic_v3_blast_ring.o: nnue/atomic_v3/blast_ring.cpp nnue/atomic_v3/blast_ring.h nnue/atomic_v3/king_blast_ep.h nnue/atomic_v3/capture_pair.h nnue/atomic_v3/hm_oracle.h nnue/atomic_v3/orientation.h
+	$(strip $(CXX) $(CPPFLAGS) $(CXXFLAGS)) -I. -c -o $@ $<
+
+atomic_v3_blast_ring_tests.o: nnue/atomic_v3/tests/blast_ring_cli.cpp nnue/atomic_v3/blast_ring.h nnue/atomic_v3/king_blast_ep.h nnue/atomic_v3/capture_pair.h nnue/atomic_v3/hm_oracle.h nnue/atomic_v3/orientation.h
 	$(strip $(CXX) $(CPPFLAGS) $(CXXFLAGS)) -I. -c -o $@ $<
 
 legacy_atomic_v1_tests.o: ../tests/legacy_atomic_v1.cpp $(ATOMIC_DATA_GENERATOR_HEADERS)

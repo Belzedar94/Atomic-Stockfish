@@ -221,6 +221,19 @@ capture_pair_ep_index(CapturePairActorRelation relation, IndexType epOrdinal, In
     return true;
 }
 
+namespace Detail {
+
+// Shared defensive validator for trusted projection seams. Precondition:
+// emission is the exact successful output of emit_capture_pairs(snapshot,
+// perspective). These checks authenticate its canonical representation and
+// snapshot domain, but deliberately do not re-enumerate CP and therefore
+// cannot prove that an arbitrary caller-supplied subset is complete.
+bool well_formed_capture_pair_emission(const CapturePairSnapshot& snapshot,
+                                       Color                      perspective,
+                                       const CapturePairEmission& emission);
+
+}  // namespace Detail
+
 CapturePairError emit_capture_pairs(const CapturePairSnapshot& snapshot,
                                     Color                      perspective,
                                     CapturePairEmission&       result);

@@ -105,3 +105,47 @@ V2 `.nnue` format, a dual inline network/accumulator backend and a separate
 trainer architecture while preserving Legacy `0x7AF32F20` byte-for-byte.
 `atomic-bin-v2` already contains the complete canonical position required by
 the new features and therefore remains frozen.
+
+## H9.3e AtomicBlastRing oracle
+
+H9.3e freezes the final scalar relation slice before the combined V3 backend.
+`AtomicBlastRing` occupies physical rows 64,844 through 75,083: 64 oriented
+capture centers, two accumulator-relative actor relations, two independent
+accumulator-relative collateral relations, eight joint-frame offsets and five
+current-piece classes. CapturePair is the sole candidate source and is emitted
+exactly once. The projector counts distinct origins per center/relation,
+excludes only a sole capturer, always excludes the off-center EP victim, omits
+kings, distinguishes exploding N/B/R/Q from surviving adjacent pawns and emits
+a sorted boolean union bounded by 240 rows.
+
+The trusted composition seam now shares one defensive CapturePair emission
+validator with KingBlastEP. It authenticates board codes, material bounds,
+orientation, indices, records and canonical order without pretending that a
+caller-supplied subset can be proven complete without re-enumeration. This is
+the boundary the combined refresh will use to feed KingBlastEP and BlastRing
+from one exact CapturePair result.
+
+Local acceptance on Windows passed:
+
+- the contract/oracle bundle: 200/200 Python tests;
+- the complete Python tree: 955/955, followed by historical `test.py` 22/22,
+  including its Atomic/Atomic960 perft coverage;
+- MinGW x86-64 release and debug/assert builds and selftests for both the
+  refactored KingBlastEP slice and the new BlastRing slice;
+- the unchanged KingBlastEP cross-language corpus: 265 FENs, 38 snapshots,
+  568 emissions and 952 records, SHA-256
+  `182e572028e3383544267fd786f763784dee82c6784f8aa141df1d51cfb5f4ae`;
+- the frozen BlastRing cross-language corpus: 266 FENs, 36 snapshots, 568
+  emissions and 4,340 records, SHA-256
+  `ed5ef5c5cb6389724253ad9cd7d2d4aaf9f0053fecdb2842f16d0864cf0affa4`;
+- Python 3.9 grammar, canonical JSON and `git diff --check`. The resulting V3
+  schema SHA-256 is
+  `40c1888cffd23621d3e6a87a1f1734f64267861c2d6614a5f3a89c08663ae4ec`.
+
+CI runs the same oracle and differential under GCC and Clang, debug/assert,
+MinGW, ASan, UBSan, TSan and Valgrind, plus the Python 3.9/3.12 matrix. H9.3e
+does not enter the playing network or search path, so it deliberately has no
+Elo/OpenBench claim; strength testing begins only after a trained combined V3
+backend can alter engine decisions. Community-history evidence used to select
+the pawn, bycatch, EP and threat regressions is recorded separately under
+`docs/atomic/evidence/hito9-3e-blast-ring/` and is non-normative.
