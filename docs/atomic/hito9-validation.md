@@ -211,3 +211,73 @@ changed. The next numeric milestone must prove accumulator range and compare
 incremental/SIMD updates bit-exactly against this full-refresh oracle before a
 V3 file can be accepted. Local Discord evidence motivating this sequencing is
 recorded under `docs/atomic/evidence/hito9-3f-full-refresh/`.
+
+## H9.3g frozen numeric and mixed-wire contract
+
+H9.3g freezes the first private AtomicNNUEV3 file identity and its checked
+integer arithmetic without making V3 a production backend. The wire header is
+version `0xA70C0003`; the HM, CapturePair, KingBlastEP and BlastRing descriptor
+hashes are respectively `0xA34A8666`, `0x9AEDB186`, `0xF5172BC0` and
+`0x38377946`. Their folded feature hash is `0xA3FBDBE8`. The 799-byte ASCII
+transformer descriptor hashes to `0xCC31067A`; the feature-transformer,
+architecture and complete-network hashes are `0x6FCAD592`, `0x63337116` and
+`0x0CF9A484`.
+
+The private reader and writer freeze little-endian headers, canonical signed
+LEB128 for i16/i32 tensors, raw two's-complement i8 tensors, strict EOF,
+transactional load, eight independently hashed dense stacks and the direct
+canonical-to-internal SIMD block permutations. Save uses an inverse copy and
+never mutates live parameters. The numeric contract uses checked i32 feature
+accumulators and i64 intermediates for PSQT, affine bounds and final scaling;
+malformed, non-canonical, truncated, overflowing or trailing input fails
+closed.
+
+The deterministic mixed-wire fixture is 77,349,879 bytes with SHA-256
+`00E46223822D06D7927E884EEC10739BA19EF8DD82A6E262F627D361658080C2`.
+Normal generation authenticates both pins and refuses overwrite; changing the
+identity requires the explicit measurement workflow. C++ and Python parse and
+round-trip the fixture byte-exactly and agree on the complete set of 248
+selected internal values, including signed LEB boundaries, raw i8 signs, SIMD
+block boundaries, the exact safe PSQT top-32 limit and eight distinguishable
+SFNNv15 stacks. The C++ round-trip acquires the destination directly with
+`O_EXCL`/`CREATE_NEW`, streams only through that owned descriptor, synchronizes
+and verifies it byte-exactly; a two-writer race with byte-distinct valid inputs
+proves exactly one winner without truncating a protected destination. The
+resulting V3 schema SHA-256 is
+`9D3C77A58E5E55AC1BC798DAB41977451EB523FCE1D6FD3EC3F7C1E574A78750`.
+
+Local acceptance on Windows passed:
+
+- MinGW x86-64 release, debug/assert, AVX2 and production BMI2 builds and
+  selftests for the isolated numeric and wire targets;
+- the exact C++/Python mixed-wire differential in release, debug/assert, AVX2
+  and BMI2, plus forced identity, AVX2/LASX and AVX512 permutation policies and
+  the five pre-existing V3 slice/full-refresh differentials;
+- 63 focused Python numeric, wire, fixture, contract and dispatcher tests, the
+  complete pytest tree `1010/1010`, and historical `test.py` `22/22`;
+- production dispatcher rejection of the V3 fixture with `Use NNUE=true` and
+  data-generation-only `Use NNUE=pure`, while `Use NNUE=false` remains
+  searchable; authenticated Legacy V1 and AtomicNNUEV2 search remain accepted;
+- UCI and XBoard protocol tests, Atomic/Atomic960 perft and rules tests with
+  `Use NNUE=false`, `true` and data-generation-only `pure` using the
+  authenticated V2 network, reprosearch, and playing signature `338376`;
+- Python 3.9 grammar, canonical JSON/YAML parsing,
+  `clang-format --dry-run --Werror` and `git diff --check`.
+
+CI builds and runs the isolated numeric and wire contracts across GCC, Clang,
+debug/assert and MinGW. A dedicated portable matrix recompiles and executes the
+same selftest, selected-value oracle, round-trip race and differential with the
+identity, AVX2/LASX and AVX512 policies forced independently. ASan, UBSan and
+TSan generate the authenticated fixture and execute both targets; the
+ASan/UBSan memory lane additionally runs the full wire selftest and
+differential. Valgrind runs the numeric target and a complete wire inspection.
+The production dispatcher rejection is also a CI gate, so accepting this
+private format cannot accidentally expose V3 through UCI or the existing
+bindings.
+
+H9.3g has no Elo/OpenBench claim. The V3 reader, writer and arithmetic contract
+remain unreachable from production evaluation, search and time management;
+the playing signature is unchanged. Strength testing becomes applicable only
+after an execution backend and trained V3 network can alter engine decisions.
+Compact reproducibility evidence is recorded under
+`docs/atomic/evidence/hito9-3g-v3-wire/`.
