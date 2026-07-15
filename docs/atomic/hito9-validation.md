@@ -332,3 +332,48 @@ H9.3h has no bench, Elo, LOS, OpenBench or training claim because no playing
 path can load V3. SIMD and incremental execution are deliberately deferred;
 this scalar diagnostic becomes their bit-exact oracle. Compact evidence is
 recorded under `docs/atomic/evidence/hito9-3h-v3-scalar/`.
+
+## H9.3i-a private scalar HM incremental execution
+
+H9.3i-a introduces a private frame stack that incrementally maintains the HM
+accumulator and HM PSQT only. It obtains sorted current HM rows from the exact
+post-move snapshot, removes old-only rows before adding new-only rows in i64
+scratch and publishes only after the frozen i32/PSQT range checks. A joint
+orientation change forces an HM rebuild from biases. CapturePair,
+KingBlastEP and BlastRing deliberately remain full-refresh slices.
+
+Null move is a no-push path. Before reusing an HM frame, the backend compares
+the complete snapshot and the EP square that produced it; relations always
+refresh and the current side to move always controls dense-tail ordering.
+Push/pop, lazy make/undo, restored parent EP, network identity changes and all
+failures are transactional. Forged oversize or crossed-orientation emissions
+are rejected before copy or iteration.
+
+The C++ runner freezes ten semantic blocks and a 39-event trace. An independent
+Python state machine rebuilds every snapshot from FEN and compares source
+selection, stack state, HM rows, accumulators, PSQT, four emissions, transform,
+dense intermediates, outputs and counters. Thirty-five events succeed and four
+fail closed as expected. The authenticated fixture remains 77,349,879 bytes
+with SHA-256
+`00E46223822D06D7927E884EEC10739BA19EF8DD82A6E262F627D361658080C2`;
+the unchanged H9.3h scalar fingerprint is `0x46F68EAB20FF9D50` and its corpus
+digest remains
+`22ae9a6188fa0ebdd0faff9b4a23c25d25380f9b47ebc0e9da2d1b28fe2441b6`.
+
+Local MinGW acceptance passed release, debug/assert, BMI2, AVX2 and forced
+identity, AVX2/LASX and AVX512 layouts. The complete Python tree passed
+`1030` tests and historical `test.py` passed `22/22` against this worktree's
+binding. Stack measurement keeps the conservative largest nested raw sum below
+the enforced 128,000-byte threshold; the runner allocates its frame stack on
+the heap and the evaluation path performs no dynamic allocation.
+
+A clean BMI2 production build retained exactly two registered NNUE backends:
+the V3 fixture was rejected for `true` and data-generation-only `pure`, while
+`false` remained searchable.
+
+CI covers GCC, Clang, debug/assert, MinGW, real AVX2, the three forced layouts,
+ASan, UBSan, TSan and Valgrind. Normal and instrumented legs execute the
+differential exactly once. V3 remains absent from every production and binding
+build graph, so no bench, Elo, LOS, OpenBench or training claim applies.
+Detailed evidence and the consulted local Discord records are under
+`docs/atomic/evidence/hito9-3i-v3-incremental/`.

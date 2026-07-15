@@ -605,6 +605,90 @@ void test_rejections(const Network& network) {
            "invalid side-to-move fails before transform indexing and clears outputs");
 }
 
+void test_composition_rejections(const Network& network) {
+    CapturePairSnapshot snapshot{};
+    snapshot.sideToMove   = WHITE;
+    snapshot.board[SQ_A1] = W_KING;
+    snapshot.board[SQ_H8] = B_KING;
+    snapshot.board[SQ_C3] = W_KNIGHT;
+    snapshot.board[SQ_F6] = B_KNIGHT;
+
+    std::array<FullRefreshEmission, COLOR_NB> emissions{};
+    std::array<ScalarHmPerspective, COLOR_NB> hmStates{};
+    bool                                      prepared = true;
+    for (const Color perspective : {WHITE, BLACK})
+    {
+        const std::size_t index = static_cast<std::size_t>(perspective);
+        prepared =
+          prepared
+          && emit_full_refresh(snapshot, perspective, emissions[index]) == FullRefreshError::None
+          && accumulate_hm_scalar(network, emissions[index].hm, hmStates[index])
+               == ScalarError::None;
+    }
+    expect(prepared, "composition rejection fixture prepares authenticated emissions");
+    if (!prepared)
+        return;
+
+    const auto rejects_transactionally = [&](const auto& forged, std::string_view label) {
+        ScalarDiagnostic output{};
+        output.sideToMove    = BLACK;
+        output.networkBucket = 7;
+        output.rawOutput     = 91;
+        output.transformed.fill(13);
+        output.perspectives[BLACK].accumulator.fill(9);
+        const ScalarStatus status =
+          compose_scalar_diagnostic(network, snapshot, forged, hmStates, output);
+        expect(!status && status.code == ScalarError::InvalidFeatureIndex
+                 && diagnostic_is_clear(output),
+               label);
+    };
+
+    {
+        auto forged           = emissions;
+        forged[WHITE].hm.size = HmMaximumActiveDimensions + 1;
+        rejects_transactionally(forged,
+                                "composition rejects oversized HM emission transactionally");
+    }
+    {
+        auto forged                     = emissions;
+        forged[WHITE].capturePairs.size = CapturePairMaximumActiveFeatures + 1;
+        rejects_transactionally(
+          forged, "composition rejects oversized CapturePair emission transactionally");
+    }
+    {
+        auto forged                    = emissions;
+        forged[WHITE].kingBlastEp.size = KingBlastEpMaximumActiveFeatures + 1;
+        rejects_transactionally(
+          forged, "composition rejects oversized KingBlastEP emission transactionally");
+    }
+    {
+        auto forged                  = emissions;
+        forged[WHITE].blastRing.size = BlastRingMaximumActiveFeatures + 1;
+        rejects_transactionally(forged,
+                                "composition rejects oversized BlastRing emission transactionally");
+    }
+
+    const JointOrientation crossed = emissions[BLACK].hm.orientation;
+    {
+        auto forged                            = emissions;
+        forged[WHITE].capturePairs.orientation = crossed;
+        rejects_transactionally(
+          forged, "composition rejects crossed CapturePair orientation transactionally");
+    }
+    {
+        auto forged                           = emissions;
+        forged[WHITE].kingBlastEp.orientation = crossed;
+        rejects_transactionally(
+          forged, "composition rejects crossed KingBlastEP orientation transactionally");
+    }
+    {
+        auto forged                         = emissions;
+        forged[WHITE].blastRing.orientation = crossed;
+        rejects_transactionally(
+          forged, "composition rejects crossed BlastRing orientation transactionally");
+    }
+}
+
 CapturePairSnapshot concurrency_snapshot() {
     CapturePairSnapshot snapshot{};
     snapshot.sideToMove   = WHITE;
@@ -1001,6 +1085,7 @@ int main(int argc, char* argv[]) {
     u64 corpusFingerprint = test_success_corpus(*loaded.network);
     test_adversarial_dense(corpusFingerprint);
     test_rejections(*loaded.network);
+    test_composition_rejections(*loaded.network);
     test_concurrent_reads(*loaded.network);
     test_evaluate_then_save(*loaded.network, loaded.resolvedPath);
 

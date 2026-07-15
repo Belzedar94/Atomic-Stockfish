@@ -51,6 +51,16 @@ struct ScalarPerspectiveDiagnostic {
     std::array<HmPsqtAccumulatorType, PsqtBuckets> psqt{};
 };
 
+// Canonical HM-only state shared by the H9.3h full-refresh oracle and the
+// private H9.3i incremental backend. Biases are included in accumulator;
+// relation rows are deliberately absent. Keeping this seam canonical makes an
+// incremental caller independent of the authenticated network's ISA-specific
+// in-memory permutation.
+struct ScalarHmPerspective {
+    std::array<i32, AccumulatorDimensions>         accumulator{};
+    std::array<HmPsqtAccumulatorType, PsqtBuckets> psqt{};
+};
+
 struct ScalarDenseDiagnostic {
     std::array<i32, Fc0Outputs> fc0{};
     std::array<u8, Fc0Outputs>  fc0Squared{};
@@ -95,6 +105,21 @@ struct ScalarDiagnostic {
 [[nodiscard]] NumericError propagate_dense_scalar(const DenseStackParameters&      stack,
                                                   const std::array<u8, Fc0Inputs>& transformed,
                                                   ScalarDenseResult&               result) noexcept;
+
+// Private composition seams for H9.3i. accumulate_hm_scalar() consumes the HM
+// rows already authenticated by emit_full_refresh(). compose_scalar_diagnostic()
+// layers the three relation slices over those HM-only states and then executes
+// the exact H9.3h transform and SFNNv15 tail. Both functions are transactional.
+[[nodiscard]] ScalarError accumulate_hm_scalar(const Network&       network,
+                                               const HmEmission&    emission,
+                                               ScalarHmPerspective& result) noexcept;
+
+[[nodiscard]] ScalarStatus
+compose_scalar_diagnostic(const Network&                                   network,
+                          const CapturePairSnapshot&                       snapshot,
+                          const std::array<FullRefreshEmission, COLOR_NB>& emissions,
+                          const std::array<ScalarHmPerspective, COLOR_NB>& hmStates,
+                          ScalarDiagnostic&                                result);
 
 // Both entry points are transactional: on every failure result is reset to a
 // bytewise/default-zero diagnostic. The returned status retains only the error

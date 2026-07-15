@@ -25,6 +25,15 @@ def function_body(source: str, signature: str, next_signature: str) -> str:
     return source[start:end]
 
 
+def workflow_job(workflow: str, job: str) -> str:
+    match = re.search(
+        rf"(?ms)^  {re.escape(job)}:\n.*?(?=^  [A-Za-z0-9_-]+:\n|\Z)",
+        workflow,
+    )
+    assert match is not None, f"missing workflow job: {job}"
+    return match.group(0)
+
+
 def test_dual_backend_facade_is_a_tagged_inline_union_without_indirection():
     dispatcher = compact(HEADER)
     assert (
@@ -203,6 +212,8 @@ def test_dispatcher_and_both_backend_contracts_are_wired_into_ci():
         "tests/nnue_v3_dispatch_reject.py",
         "tests/python/test_atomic_v3_wire_reference.py",
         "tests/python/test_create_synthetic_atomic_v3_nnue.py",
+        "tests/python/test_atomic_v3_incremental_oracle.py",
+        "tests/atomic_v3_incremental_differential.py",
     ):
         assert relative in workflow
 
@@ -253,9 +264,16 @@ def test_v3_wire_permutation_policies_are_isolated_and_ci_forces_each_path():
         in makefile
     )
     assert "Unsupported ATOMIC_V3_WIRE_TEST_POLICY" in makefile
-    assert makefile.count("$(ATOMIC_V3_WIRE_TEST_CPPFLAGS)") == 4
+    assert makefile.count("$(ATOMIC_V3_WIRE_TEST_CPPFLAGS)") == 6
     assert "atomic_v3_scalar_backend.o:" in makefile
     assert "atomic_v3_scalar_tests.o:" in makefile
+    assert "atomic_v3_incremental_backend.o:" in makefile
+    assert "atomic_v3_incremental_tests.o:" in makefile
+    assert (
+        "atomic-v3-incremental-tests: config-sanity "
+        "$(ATOMIC_V3_INCREMENTAL_TEST_EXE) atomic-v3-wire-test-fixture"
+        in makefile
+    )
     assert "CXXFLAGS += $(ATOMIC_V3_WIRE_TEST_CPPFLAGS)" not in makefile
 
     assert "nnue-v3-wire-policies:" in workflow
@@ -264,6 +282,121 @@ def test_v3_wire_permutation_policies_are_isolated_and_ci_forces_each_path():
     assert "ATOMIC_V3_WIRE_TEST_POLICY=${{ matrix.policy }}" in workflow
     assert "atomic-v3-wire-tests" in workflow
     assert "atomic-v3-scalar-tests" in workflow
+    assert "atomic-v3-incremental-tests" in workflow
+
+
+def test_v3_incremental_ci_covers_every_required_toolchain_and_stays_private():
+    workflow = (ROOT / ".github" / "workflows" / "atomic.yml").read_text(
+        encoding="utf-8"
+    )
+    makefile = (ROOT / "src" / "Makefile").read_text(encoding="utf-8")
+    generator = (
+        ROOT / "tests" / "create_synthetic_atomic_v3_nnue.py"
+    ).read_text(encoding="utf-8")
+    jobs = {
+        name: workflow_job(workflow, name)
+        for name in (
+            "native",
+            "nnue-v2-simd",
+            "nnue-v3-wire-policies",
+            "debug",
+            "data-generator-windows",
+            "sanitizers",
+            "nnue-v2-v3-valgrind",
+            "python",
+        )
+    }
+
+    target = "atomic-v3-incremental-tests"
+    differential = "tests/atomic_v3_incremental_differential.py"
+    fixture = "$RUNNER_TEMP/atomic-v3-wire-v1.nnue"
+    target_jobs = (
+        "native",
+        "nnue-v2-simd",
+        "nnue-v3-wire-policies",
+        "debug",
+        "data-generator-windows",
+    )
+    for name in target_jobs:
+        assert target in jobs[name], f"{name} omitted the incremental runner"
+        assert jobs[name].count(target) == 1, f"{name} duplicated the incremental runner"
+        assert fixture in jobs[name], f"{name} did not reuse the frozen fixture"
+
+    target_block = makefile.split(f"{target}:", 1)[1].split("\n\n", 1)[0]
+    assert f"../{differential}" in target_block
+    assert target_block.count(differential) == 1
+    assert '--oracle "./$(ATOMIC_V3_INCREMENTAL_TEST_EXE)"' in target_block
+    assert '--fixture "$(ATOMIC_NNUE_V3_TEST_NET)"' in target_block
+
+    instrumented_oracles = {
+        "sanitizers": "--oracle src/atomic-v3-incremental-tests.bin",
+        "nnue-v2-v3-valgrind": (
+            '--oracle "$RUNNER_TEMP/atomic-v3-incremental-valgrind"'
+        ),
+    }
+    for name, oracle_argument in instrumented_oracles.items():
+        assert target in jobs[name], f"{name} omitted the incremental runner"
+        assert differential in jobs[name], f"{name} omitted the differential"
+        assert jobs[name].count(differential) == 1
+        assert fixture in jobs[name], f"{name} did not reuse the frozen fixture"
+        assert f'--fixture "{fixture}"' in jobs[name]
+        assert oracle_argument in jobs[name]
+    assert workflow.count(differential) == len(instrumented_oracles)
+
+    assert "- compiler: GCC" in jobs["native"]
+    assert "- compiler: Clang" in jobs["native"]
+    assert "if: matrix.arch == 'x86-64-avx2'" in jobs["nnue-v2-simd"]
+    assert "policy: [identity, avx2-lasx, avx512]" in jobs[
+        "nnue-v3-wire-policies"
+    ]
+    assert "debug=yes optimize=no" in jobs["debug"]
+    assert "COMP=mingw" in jobs["data-generator-windows"]
+    assert "sanitizer: address,undefined" in jobs["sanitizers"]
+    assert "sanitizer: thread" in jobs["sanitizers"]
+    assert "atomic-v3-incremental-valgrind" in jobs["nnue-v2-v3-valgrind"]
+    assert "--error-exitcode=99" in jobs["nnue-v2-v3-valgrind"]
+    assert "tests/python/test_atomic_v3_incremental_oracle.py" in jobs["python"]
+
+    for name in ("native", "data-generator-windows"):
+        rejection = "tests/nnue_v3_dispatch_reject.py"
+        assert rejection in jobs[name]
+        assert jobs[name].index(target) < jobs[name].index(rejection)
+
+    assert "EXPECTED_SIZE: Optional[int] = 77_349_879" in generator
+    assert (
+        'EXPECTED_SHA256 = '
+        '"00E46223822D06D7927E884EEC10739BA19EF8DD82A6E262F627D361658080C2"'
+        in generator
+    )
+
+
+def test_v3_incremental_sources_remain_outside_every_production_build_graph():
+    makefile = (ROOT / "src" / "Makefile").read_text(encoding="utf-8")
+    setup = (ROOT / "setup.py").read_text(encoding="utf-8")
+    makefile_js = (ROOT / "src" / "Makefile_js").read_text(encoding="utf-8")
+    wasm_build = (
+        ROOT / "tests" / "wasm-engine" / "build.ps1"
+    ).read_text(encoding="utf-8")
+    wasm_builder = (
+        ROOT / "tests" / "wasm-engine" / "build.py"
+    ).read_text(encoding="utf-8")
+
+    source = "nnue/atomic_v3/incremental_backend.cpp"
+    header = "nnue/atomic_v3/incremental_backend.h"
+    production_sources = makefile.split("SRCS =", 1)[1].split("OTHER_SRCS =", 1)[0]
+    production_headers = makefile.split("HEADERS =", 1)[1].split("OBJS =", 1)[0]
+    assert source not in production_sources
+    assert header not in production_headers
+
+    for production_graph in (setup, makefile_js, wasm_build, wasm_builder):
+        assert source not in production_graph
+        assert header not in production_graph
+
+    assert f"ATOMIC_V3_INCREMENTAL_SRCS = {source}" in makefile
+    assert f"ATOMIC_V3_INCREMENTAL_HEADERS = {header}" in makefile
+    assert "atomic-v3-incremental-tests:" in makefile
+    assert makefile.count(source) == 2
+    assert makefile.count(header) == 1
 
 
 def test_v2_convenience_targets_generate_an_ignored_local_fixture():
