@@ -1,7 +1,8 @@
 {
   "schema_version": 1,
-  "schema_id": "atomic-nnue-v3-prototype-v1",
-  "contract_status": "provisional",
+  "schema_id": "atomic-nnue-v3-wire-v1",
+  "contract_status": "wire-frozen",
+  "runtime_backend_status": "private canonical reader/writer only; engine dispatcher must reject V3",
   "variant": "atomic",
   "backend": "AtomicNNUEV3",
   "file_version": "0xA70C0003",
@@ -152,7 +153,8 @@
       "weight_dtype": "i16",
       "psqt": true,
       "max_active_reachable_material": 32,
-      "descriptor": "HalfKAv2Atomic_hm|v1|square=A1_0_rank_major|offset=0|axes=king_bucket_h8_to_e1:32,piece_plane:OWN_P,OPP_P,OWN_N,OPP_N,OWN_B,OPP_B,OWN_R,OPP_R,OWN_Q,OPP_Q,MERGED_K,square:64|physical=22528|training_planes=OWN_P,OPP_P,OWN_N,OPP_N,OWN_B,OPP_B,OWN_R,OPP_R,OWN_Q,OPP_Q,OWN_K,OPP_K|training=24576|virtual=768|factor=bucket_plus_virtual_all_1032_then_export|king_merge=opp_then_own_king_square_all_1032|orientation=per_perspective_black_xor56_mirror_if_pre_h_king_file_lt4_shared_all_slices|royal=KING|dtype=i16|wire=i16_sleb_feature_major_output1024_contiguous_canonical_unpermuted_permute16|psqt=hm_only_i32_sleb_feature_major_bucket8_contiguous_after_relations"
+      "descriptor": "HalfKAv2Atomic_hm|v1|square=A1_0_rank_major|offset=0|axes=king_bucket_h8_to_e1:32,piece_plane:OWN_P,OPP_P,OWN_N,OPP_N,OWN_B,OPP_B,OWN_R,OPP_R,OWN_Q,OPP_Q,MERGED_K,square:64|physical=22528|training_planes=OWN_P,OPP_P,OWN_N,OPP_N,OWN_B,OPP_B,OWN_R,OPP_R,OWN_Q,OPP_Q,OWN_K,OPP_K|training=24576|virtual=768|factor=bucket_plus_virtual_all_1032_then_export|king_merge=opp_then_own_king_square_all_1032|orientation=per_perspective_black_xor56_mirror_if_pre_h_king_file_lt4_shared_all_slices|royal=KING|dtype=i16|wire=i16_sleb_feature_major_output1024_contiguous_canonical_unpermuted_permute16|psqt=hm_only_i32_sleb_feature_major_bucket8_contiguous_after_relations",
+      "descriptor_hash": "0xA34A8666"
     },
     {
       "id": "atomic-capture-pair",
@@ -303,7 +305,8 @@
         "duplicates": "impossible because every actor/from/to edge is unique"
       },
       "max_active_reachable_material": 240,
-      "descriptor": "AtomicCapturePair|v2-provisional-compact|square=A1_0_rank_major|offset=22528|axes=normal:actor_rel_accumulator:OWN,OPP;edge:PAWN84@0,KNIGHT336@84,BISHOP560@420,ROOK896@980,QUEEN1456@1876;target_enemy_of_actor:PAWN,KNIGHT,BISHOP,ROOK,QUEEN,KING;normal_local=((actor_rel*3332+edge)*6+target)@offset0_count39984;ep_tail=(actor_rel*14+ep_ordinal)@offset39984_count28;ep_edges=OWN_rank5_to6_OPP_rank4_to3_oriented_from_then_center_asc|physical=40012|physical_index=22528+local|orientation=per_perspective_black_xor56_mirror_if_pre_h_king_file_lt4_shared_all_slices|actor_rel=color_only|pawn_edge=OWN_north_OPP_south_no_extra_flip|occupancy=stop_first_occupied_emit_enemy|pins_checks_self_blast=unfiltered|promotion=one_pawn_relation_no_choice_expansion_current_piece_types|ep=validated_stm_geometric_cold_tail_fail_closed_source_for_kbr_ring|impossible_ep_rows=eliminated_no_holes|order=local_asc_unique|ownership=caller_owned|thread=pure_reentrant_immutable_position|king_actor=excluded|pawn_push=excluded|dtype=i8|wire=i8_raw_signed_twos_feature_major_output1024_contiguous_canonical_unpermuted_permute8_after_hm|psqt=none"
+      "descriptor": "AtomicCapturePair|v2-compact|square=A1_0_rank_major|offset=22528|axes=normal:actor_rel_accumulator:OWN,OPP;edge:PAWN84@0,KNIGHT336@84,BISHOP560@420,ROOK896@980,QUEEN1456@1876;target_enemy_of_actor:PAWN,KNIGHT,BISHOP,ROOK,QUEEN,KING;normal_local=((actor_rel*3332+edge)*6+target)@offset0_count39984;ep_tail=(actor_rel*14+ep_ordinal)@offset39984_count28;ep_edges=OWN_rank5_to6_OPP_rank4_to3_oriented_from_then_center_asc|physical=40012|physical_index=22528+local|orientation=per_perspective_black_xor56_mirror_if_pre_h_king_file_lt4_shared_all_slices|actor_rel=color_only|pawn_edge=OWN_north_OPP_south_no_extra_flip|occupancy=stop_first_occupied_emit_enemy|pins_checks_self_blast=unfiltered|promotion=one_pawn_relation_no_choice_expansion_current_piece_types|ep=validated_stm_geometric_cold_tail_fail_closed_source_for_kbr_ring|impossible_ep_rows=eliminated_no_holes|order=local_asc_unique|ownership=caller_owned|thread=pure_reentrant_immutable_position|king_actor=excluded|pawn_push=excluded|dtype=i8|wire=i8_raw_signed_twos_feature_major_output1024_contiguous_canonical_unpermuted_permute8_after_hm|psqt=none",
+      "descriptor_hash": "0x9AEDB186"
     },
     {
       "id": "atomic-king-blast-ep",
@@ -418,7 +421,8 @@
       "max_active_reachable_material": 35,
       "max_active_bound_proof": "for each actor relation, one enemy king can occupy the center or one of eight neighbors (9 rows) and one actor-own king can occupy one of eight neighbors (8 rows), for 17; two actor relations contribute at most 34, and the single raw EP center belongs to exactly one side-to-move actor relation for a fixed perspective, contributing at most one deduplicated marker: 17 * 2 + 1 = 35",
       "freeze_gate": "numeric goldens with center d4 and related king d5 for direct king target, every directional offset, self-blast, touching kings, simultaneous enemy/own blast relations, both perspectives, both mirror branches and EP adjacent to either king",
-      "descriptor": "AtomicKingBlastEP|v1-provisional|offset=62540|axes=center:64;actor_rel_accumulator:OWN,OPP;king_rel_actor:ENEMY_KING_CENTER,ENEMY_KING_N,ENEMY_KING_NE,ENEMY_KING_E,ENEMY_KING_SE,ENEMY_KING_S,ENEMY_KING_SW,ENEMY_KING_W,ENEMY_KING_NW,OWN_KING_N,OWN_KING_NE,OWN_KING_E,OWN_KING_SE,OWN_KING_S,OWN_KING_SW,OWN_KING_W,OWN_KING_NW;class:EN_PASSANT_MARKER|local=((center*2+actor_rel)*18+class)@0..2303|physical=2304@62540..64843|orientation=per_perspective_black_xor56_mirror_if_pre_h_king_file_lt4_shared_all_slices|source=single_exact_unfiltered_cp_emission_including_validated_geometric_ep|offset=related_king_minus_center_in_joint_frame_exact_dfdr|activation=boolean_sorted_unique_capture_center_set|ep=landing_center_dedup_offcenter_pawn_excluded_fail_closed|rectangle=full_no_holes|error=cp_mapped_empty_no_partial|ownership=caller_owned|thread=pure_reentrant_immutable_position|max=17x2_plus1_eq35|dtype=i16|wire=i16_sleb_feature_major_output1024_contiguous_canonical_unpermuted_permute16_after_capture_pair|psqt=none"
+      "descriptor": "AtomicKingBlastEP|v1|offset=62540|axes=center:64;actor_rel_accumulator:OWN,OPP;king_rel_actor:ENEMY_KING_CENTER,ENEMY_KING_N,ENEMY_KING_NE,ENEMY_KING_E,ENEMY_KING_SE,ENEMY_KING_S,ENEMY_KING_SW,ENEMY_KING_W,ENEMY_KING_NW,OWN_KING_N,OWN_KING_NE,OWN_KING_E,OWN_KING_SE,OWN_KING_S,OWN_KING_SW,OWN_KING_W,OWN_KING_NW;class:EN_PASSANT_MARKER|local=((center*2+actor_rel)*18+class)@0..2303|physical=2304@62540..64843|orientation=per_perspective_black_xor56_mirror_if_pre_h_king_file_lt4_shared_all_slices|source=single_exact_unfiltered_cp_emission_including_validated_geometric_ep|offset=related_king_minus_center_in_joint_frame_exact_dfdr|activation=boolean_sorted_unique_capture_center_set|ep=landing_center_dedup_offcenter_pawn_excluded_fail_closed|rectangle=full_no_holes|error=cp_mapped_empty_no_partial|ownership=caller_owned|thread=pure_reentrant_immutable_position|max=17x2_plus1_eq35|dtype=i16|wire=i16_sleb_feature_major_output1024_contiguous_canonical_unpermuted_permute16_after_capture_pair|psqt=none",
+      "descriptor_hash": "0xF5172BC0"
     },
     {
       "id": "atomic-blast-ring",
@@ -537,7 +541,8 @@
       "max_active_reachable_material": 240,
       "max_active_bound_proof": "an evaluable position has at most 30 non-king collateral pieces; each can be adjacent to at most eight occupied-or-en-passant candidate centers, and each center/collateral pair fixes one actor relation, so at most 30 * 8 = 240 rows are active; king, sole-origin and off-center en-passant exclusions only reduce this total",
       "freeze_gate": "numeric goldens with center d4 and collateral d5 for every offset, a sole adjacent capturer, two attackers sharing a center, pawn immunity, both perspectives, both mirror branches, board edges and off-center EP removal",
-      "descriptor": "AtomicBlastRing|v1-provisional|offset=64844|axes=center:64;actor_rel_accumulator:OWN,OPP;collateral_rel_accumulator:OWN,OPP;offset:N,NE,E,SE,S,SW,W,NW;class:KNIGHT,BISHOP,ROOK,QUEEN,ADJACENT_PAWN_SURVIVES|local=((((center*2+actor_rel)*2+collateral_rel)*8+offset)*5+class)@0..10239|physical=10240@64844..75083|orientation=per_perspective_black_xor56_mirror_if_pre_h_king_file_lt4_shared_all_slices|source=single_exact_unfiltered_cp_emission_including_validated_geometric_ep|group=center_actor_rel_distinct_origins|offset=collateral_minus_center_in_joint_frame_exact_dfdr|activation=boolean_sorted_unique_capture_center_union|origin=exclude_only_single_distinct_origin_group_retain_all_origins_if_multi|nonpawn=current_NBRQ_explodes|pawn=adjacent_survives_except_single_origin_or_ep_captured|ep=landing_center_malformed_omitted_normal_preserved|ep_captured_pawn=oriented_center_minus_own8_or_opp_minus8_always_excluded_even_multi|kings=separate|rectangle=full_no_holes|error=cp_mapped_empty_no_partial|ownership=caller_owned|thread=pure_reentrant_immutable_position|max=30x8_eq240|dtype=i8|wire=i8_raw_signed_twos_feature_major_output1024_contiguous_canonical_unpermuted_permute8_after_king_blast|psqt=none"
+      "descriptor": "AtomicBlastRing|v1|offset=64844|axes=center:64;actor_rel_accumulator:OWN,OPP;collateral_rel_accumulator:OWN,OPP;offset:N,NE,E,SE,S,SW,W,NW;class:KNIGHT,BISHOP,ROOK,QUEEN,ADJACENT_PAWN_SURVIVES|local=((((center*2+actor_rel)*2+collateral_rel)*8+offset)*5+class)@0..10239|physical=10240@64844..75083|orientation=per_perspective_black_xor56_mirror_if_pre_h_king_file_lt4_shared_all_slices|source=single_exact_unfiltered_cp_emission_including_validated_geometric_ep|group=center_actor_rel_distinct_origins|offset=collateral_minus_center_in_joint_frame_exact_dfdr|activation=boolean_sorted_unique_capture_center_union|origin=exclude_only_single_distinct_origin_group_retain_all_origins_if_multi|nonpawn=current_NBRQ_explodes|pawn=adjacent_survives_except_single_origin_or_ep_captured|ep=landing_center_malformed_omitted_normal_preserved|ep_captured_pawn=oriented_center_minus_own8_or_opp_minus8_always_excluded_even_multi|kings=separate|rectangle=full_no_holes|error=cp_mapped_empty_no_partial|ownership=caller_owned|thread=pure_reentrant_immutable_position|max=30x8_eq240|dtype=i8|wire=i8_raw_signed_twos_feature_major_output1024_contiguous_canonical_unpermuted_permute8_after_king_blast|psqt=none",
+      "descriptor_hash": "0x38377946"
     }
   ],
   "active_feature_bounds": {
@@ -650,13 +655,43 @@
   },
   "numeric_policy": {
     "oracle_accumulator_dtype": "i32",
-    "runtime_accumulator_policy": "unfrozen",
-    "runtime_candidates": [
-      "single i16 accumulator with a proven per-dimension bound",
-      "HM i16 plus relation i32 combined before clamp"
-    ],
-    "overflow_policy": "never saturate or wrap; refresh cannot truncate active features",
-    "freeze_gate": "adversarial active-count and per-dimension range proof for every accepted quantized network"
+    "runtime_accumulator_dtype": "i32",
+    "worst_case_envelope": {
+      "minimum": -2289664,
+      "maximum": 2289116,
+      "minimum_formula": "68 * -32768 + 480 * -128",
+      "maximum_formula": "68 * 32767 + 480 * 127",
+      "contributors": "one i16 bias plus at most 32 HM i16, 35 KingBlastEP i16, 240 CapturePair i8 and 240 BlastRing i8 values",
+      "scope": "conservative dtype-times-per-slice-maxima envelope; simultaneous legal reachability of every slice maximum is not claimed"
+    },
+    "psqt": {
+      "file_dtype": "i32",
+      "runtime_state_dtype": "i64",
+      "active_hm_maximum": 32,
+      "loader_gate": "for each of 8 buckets, promote before magnitude and require the sum of the 32 largest absolute values across 22528 HM rows to be <= INT32_MAX",
+      "int32_min_policy": "reject because promoted magnitude 2147483648 exceeds INT32_MAX",
+      "perspective_difference": "subtract perspective totals in i64, divide by exactly 2 with signed truncation toward zero, then checked-narrow to i32",
+      "network_output": "the checked PSQT raw result is subsequently divided by dense_tail.output_scaling.output_scale=16 with signed truncation toward zero"
+    },
+    "dense_tail": {
+      "activation_input_range": [
+        0,
+        127
+      ],
+      "affine_gate": "for every output of fc0, fc1 and fc2 in all 8 stacks, compute abs64(bias) + 127 * sum(abs64(weight)) and require <= INT32_MAX",
+      "signed_interval": "L = bias + 127 * sum(negative weights); U = bias + 127 * sum(positive weights), all in i64",
+      "skip_formula": "fwd = i64(fc2[0]) + i64(fc0[30]) - i64(fc0[31])",
+      "accepted_fwd_minimum": -3665038760,
+      "accepted_fwd_maximum": 3665038759,
+      "global_gate": "for each stack require L2 + L30 - U31 >= accepted_fwd_minimum and U2 + U30 - L31 <= accepted_fwd_maximum",
+      "scale_numerator": 9600,
+      "scale_denominator": 16384,
+      "division": "signed integer truncation toward zero",
+      "result": "compute multiply and divide in i64, then checked-narrow to i32"
+    },
+    "validation_order": "parse the complete canonical candidate, check strict EOF, apply every PSQT and dense gate, then permute and publish transactionally",
+    "overflow_policy": "never saturate, wrap, truncate an active feature list or cast after an overflowing expression",
+    "freeze_status": "frozen"
   },
   "trainer_policy": {
     "feature_transformer": "V3-specific mixed feature transformer; the generic upstream ComposedFeatureTransformer is not wire-compatible",
@@ -750,14 +785,46 @@
       "save_direction": "unpermute a copy of the active parameters before writing canonical bytes",
       "biases_hm_and_king_blast_ep": "16-byte output blocks",
       "capture_pair_and_blast_ring": "8-byte output blocks",
-      "psqt": "not permuted"
+      "psqt": "not permuted",
+      "orders": {
+        "avx512": [
+          0,
+          2,
+          4,
+          6,
+          1,
+          3,
+          5,
+          7
+        ],
+        "avx2_lasx": [
+          0,
+          2,
+          1,
+          3,
+          4,
+          6,
+          5,
+          7
+        ],
+        "other": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ]
+      }
     },
     "psqt_scope": "HalfKAv2Atomic_hm only",
     "psqt_export_mapping": "the 22528 by 8 PSQT tensor uses the same virtual-factor coalesce and per-bucket 12-to-11 king-plane mapping as the HM accumulator weights before serialization",
-    "dense_tail": "exactly the top-level dense_tail object, copied from atomic-nnue-v2"
+    "dense_tail": "exactly the AtomicNNUEV2 SFNNv15 dense wire tail: eight architecture-hash-prefixed stacks with identical pairwise multiply, topology and parameter order"
   },
   "hashing": {
-    "status": "not frozen",
+    "status": "frozen",
     "descriptor_encoding": "ASCII",
     "slice_hash": "FNV-1a-32 over the exact descriptor bytes",
     "fnv_offset_basis": "0x811C9DC5",
@@ -769,30 +836,29 @@
       "atomic-blast-ring"
     ],
     "feature_fold": "start at zero; rotate the current u32 left by one bit; XOR the next slice hash",
-    "transformer_descriptor": "AtomicNNUEV3Transformer|v2-provisional-compact-cp|wire=bias_i16_sleb[1024],hm_i16_sleb[22528x1024],cp_i8_raw[40012x1024],kbr_i16_sleb[2304x1024],ring_i8_raw[10240x1024],hm_psqt_i32_sleb[22528x8],8x_sfnnv15|tensor=feature_major_outputs_contiguous_psqt_buckets_contiguous|file=canonical_unpermuted|raw_i8=signed_twos|load=permute16_i16_permute8_i8|save=unpermute_copy|psqt=hm_only_same_factor_and_12to11_mapping|strict_eof=true",
+    "transformer_descriptor": "AtomicNNUEV3Transformer|v1|wire=biases:i16_sleb[1024],hm:i16_sleb[22528x1024],cp:i8_raw[40012x1024],kbr:i16_sleb[2304x1024],ring:i8_raw[10240x1024],hm_psqt:i32_sleb[22528x8],dense:8x(architecture_hash_u32=0x63337116,sfnnv15)|layout=each_feature_slice_feature_major_output1024_contiguous;hm_psqt_feature_major_bucket8_contiguous|sleb=COMPRESSED_LEB128_then_u32_le_byte_count_canonical_signed|file=canonical_unpermuted|raw_i8=signed_twos_complement|load_permute=biases,hm,kbr:i16_block16;cp,ring:i8_block8;hm_psqt:none|permute_order=avx512[0,2,4,6,1,3,5,7],avx2_lasx[0,2,1,3,4,6,5,7],other[0,1,2,3,4,5,6,7]|save=unpermute_copy_inverse_order_no_live_mutation|psqt=hm_only_same_virtual_factor_coalesce_and_12to11_export|dense_tail=byte_identical_atomic_v2_sfnnv15_architecture_0x63337116|strict_eof=true",
     "transformer_descriptor_hash": "FNV-1a-32 over transformer_descriptor",
     "feature_transformer_hash": "feature_hash XOR 2048 XOR transformer_descriptor_hash",
     "architecture_hash": "0x63337116",
     "network_hash": "feature_transformer_hash XOR architecture_hash",
-    "feature_hash_value": null,
-    "transformer_descriptor_hash_value": null,
-    "feature_transformer_hash_value": null,
-    "network_hash_value": null,
-    "semantic_decision_blockers": [
-      "per-perspective joint orientation golden semantics",
-      "HM virtual-factor coalesce and 12-to-11 accumulator and PSQT export goldens",
-      "AtomicCapturePair compact normal/EP split, edge ordinals, malformed-EP rejection and geometric en-passant goldens",
-      "AtomicKingBlastEP center-to-king offset and en-passant goldens",
-      "AtomicBlastRing center-to-collateral, multiple-origin, pawn-immunity and en-passant goldens",
-      "HM-only versus relation PSQT ablation decision",
-      "runtime accumulator arithmetic bound"
-    ],
-    "freeze_gates": [
-      "all semantic decision blockers resolved",
-      "golden indices for every class, edge, perspective, independent WHITE/BLACK mirror branch, center-to-related-square direction and HM factorized 12-to-11 accumulator and PSQT export mapping",
-      "mixed-wire canonical read, write, corruption and byte-exact round trip fixture",
-      "bit-exact C++ and Python descriptors, dimensions, offsets and hash generation",
-      "runtime loader still rejects V3 until every numeric hash is non-null and tested"
+    "slice_hash_values": {
+      "half-ka-v2-atomic-hm": "0xA34A8666",
+      "atomic-capture-pair": "0x9AEDB186",
+      "atomic-king-blast-ep": "0xF5172BC0",
+      "atomic-blast-ring": "0x38377946"
+    },
+    "feature_hash_value": "0xA3FBDBE8",
+    "transformer_descriptor_hash_value": "0xCC31067A",
+    "feature_transformer_hash_value": "0x6FCAD592",
+    "network_hash_value": "0x0CF9A484",
+    "semantic_decision_blockers": [],
+    "freeze_evidence": [
+      "numeric goldens and independent C++/Python differentials cover every frozen slice semantic decision",
+      "HM-only PSQT is the V3 wire-v1 engineering decision; adding relation PSQT requires a new descriptor and network hash",
+      "the conservative i32 accumulator envelope and per-network PSQT/dense loader gates are frozen",
+      "mixed-wire canonical read, write, corruption and byte-exact round trip are mandatory",
+      "C++, JSON and Python derive every descriptor hash independently from exact ASCII bytes",
+      "the engine dispatcher continues to reject V3 until the runtime backend milestone"
     ]
   },
   "ablation_profiles": {

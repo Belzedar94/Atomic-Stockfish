@@ -1,6 +1,6 @@
 # ADR 0004: Design AtomicNNUEV3 as a blast-aware SFNNv15 backend
 
-- Status: proposed; prototype contract, hashes not frozen
+- Status: accepted; wire v1 frozen, runtime backend pending
 - Date: 2026-07-14
 
 ## Context
@@ -125,7 +125,7 @@ an independent full-board enumerator.
    exact CP set is the sole candidate source for the two downstream relation
    slices.
 6. `AtomicKingBlastEP` is a boolean set over 64 centers, two actor relations
-   and 18 provisional classes relative to the capture actor: enemy king at the
+   and 18 frozen classes relative to the capture actor: enemy king at the
    center, eight enemy-king blast offsets, eight actor-own-king/self-blast
    offsets and an EP marker. Its local index is
    `((oriented_center * 2 + actor_rel) * 18 + class)`, spanning 0 through
@@ -285,23 +285,50 @@ an independent full-board enumerator.
    permutation. The transformer hash is feature-hash XOR 2,048 XOR global
    descriptor-hash; XOR the unchanged architecture hash for the network hash.
    Do not use `std::hash` or serialized JSON as a wire identity.
-   Before freezing, the descriptors must authenticate the independent
+   The frozen descriptors authenticate the independent
    per-perspective mirror rule, virtual-factor coalesce and 12-to-11 mapping,
    CP segment bases and geometric EP rule, center-to-related-square polarity,
    BlastRing origin/pawn rules and the exact PSQT shape/order. A golden alone
    does not change a wire identity.
-11. Do not freeze the four resulting numeric hashes yet. The machine-readable
-    contract explicitly lists the remaining freeze blockers: all orientation,
-    factorized HM export, CP/EP, king-offset and BlastRing semantic goldens;
-    HM-only versus relation PSQT; and the runtime accumulator range proof. The
-    version is reserved, but no production loader accepts V3 until those gates
-    close.
-12. Use an independent full-refresh oracle with i32 temporaries. It enumerates
+11. Freeze wire v1 only from reproducible exact descriptor bytes. The slice
+    hashes are HM `0xA34A8666`, CapturePair `0x9AEDB186`, KingBlastEP
+    `0xF5172BC0` and BlastRing `0x38377946`; their ordered fold is
+    `0xA3FBDBE8`. The 799-byte global transformer descriptor is copied exactly
+    in C++, JSON and Python and hashes to `0xCC31067A`, giving feature
+    transformer hash `0x6FCAD592` and network hash `0x0CF9A484` with the
+    unchanged architecture `0x63337116`. File version `0xA70C0003` is frozen.
+    The previously proposed descriptor hash `0x74198ECE` and its derived
+    hashes are rejected because no exact descriptor bytes reproduce it.
+
+    H9.3g supplies a private transactional canonical reader/writer and fixture,
+    but the engine dispatcher still recognizes only V1 and V2. A production
+    V3 loader is forbidden until the scalar backend is bit-exact against the
+    full-refresh oracle. HM-only PSQT is the wire-v1 engineering decision;
+    adding relation PSQT requires a new descriptor and network identity.
+12. Use an independent full-refresh oracle and the runtime accumulator with i32
+    state. It enumerates
     semantic indices directly from the board, adds i8 weights with sign
     extension, checks range before any narrowing, and compares index sets,
-    accumulators, PSQT, transformed bytes and raw output. Product code may use a
-    single proven-safe i16 accumulator or separate HM-i16/relation-i32 state;
-    it may never wrap, saturate silently or truncate an active list.
+    accumulators, PSQT, transformed bytes and raw output. The conservative
+    dtype-times-active-maxima envelope is `[-2,289,664, +2,289,116]`, so i16 is
+    not a valid representation and i32 is safe without claiming that one legal
+    position simultaneously reaches every per-slice maximum.
+
+    PSQT state is i64. For each bucket the reader promotes before taking a
+    magnitude and requires the sum of the 32 largest absolute HM PSQT weights
+    to be at most `INT32_MAX`; this rejects `INT32_MIN` without overflowing
+    `abs(i32)`. Every dense output independently requires
+    `abs64(bias) + 127 * sum(abs64(weight)) <= INT32_MAX`. In addition, each
+    stack derives signed intervals and gates `fc2 + fc0[30] - fc0[31]` to
+    `[-3,665,038,760, +3,665,038,759]`, the exact asymmetric pre-scale range
+    whose `* 9600 / 16384` result fits i32 under truncation toward zero. The
+    skip, multiplication and division all execute in i64 before a checked
+    narrow. The inherited PSQT convention is frozen as
+    `(first_perspective - second_perspective) / 2`, also in i64 with signed
+    truncation toward zero before the checked i32 raw result; the network output
+    then applies the inherited `/ 16` output scale, again truncating toward
+    zero. Product code may never wrap, saturate,
+    cast after an overflowing expression or truncate an active list.
 13. Treat EP state as accumulator input. A search null move clears `epSquare`
     without pushing the NNUE accumulator, so V3 state stores the EP square used
     for its last computation and refreshes both perspectives when the current
@@ -455,10 +482,11 @@ an independent full-board enumerator.
   collateral d5 to freeze `collateral = center + N`.
 - Mixed-wire fixtures assert every declared tensor shape, including feature-major
   `[22528][8]` HM PSQT with contiguous buckets and the same factor/king export.
-- A decision on relation PSQT based on an isolated ablation. Changing PSQT
-  scope after freeze requires another wire identity.
-- A proved arithmetic bound for every accepted quantized network. If an i16
-  relation accumulator is not provably safe, relations remain i32.
+- HM-only PSQT is frozen for wire v1. Any relation-PSQT experiment uses another
+  descriptor and wire identity rather than silently changing this network.
+- The i32 accumulator envelope and the per-network PSQT, affine and global
+  dense-output gates are tested at their exact inclusive boundaries and at one
+  value beyond each boundary.
 - Bit-exact C++/Python descriptor, dimensions, offsets and hash generation.
 - A streaming structural scanner must authenticate every manifest, shard and
   ledger byte without retaining multi-billion-record artifacts in memory. A
@@ -482,12 +510,12 @@ an independent full-board enumerator.
 
 ## Implementation sequence
 
-1. Land this provisional ADR, JSON contract and dimension/hash tests without a
+1. Land the initial ADR, JSON contract and dimension/hash tests without a
    runtime loader.
 2. Implement the joint orientation and HM emitter, including factorized trainer
    export and mirror metamorphic tests.
 3. Add independent CapturePair, KingBlastEP and BlastRing emitters with numeric
-   goldens; resolve the provisional semantic gates.
+   goldens; resolve the semantic gates.
 4. Compose all four slices through the scalar single-snapshot full-refresh
    oracle, sharing one HM and one CapturePair emission and keeping the runtime
    dispatcher untouched.

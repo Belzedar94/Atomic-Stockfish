@@ -144,11 +144,14 @@ def _king_bucket(oriented_king: int) -> int:
     return (7 - rank_index) * 4 + (7 - file_index)
 
 
-def test_contract_is_explicitly_provisional_and_reserves_only_v3_version() -> None:
+def test_contract_freezes_wire_v1_without_enabling_the_runtime_backend() -> None:
     contract = _load_contract()
     assert contract["schema_version"] == 1
-    assert contract["schema_id"] == "atomic-nnue-v3-prototype-v1"
-    assert contract["contract_status"] == "provisional"
+    assert contract["schema_id"] == "atomic-nnue-v3-wire-v1"
+    assert contract["contract_status"] == "wire-frozen"
+    assert contract["runtime_backend_status"] == (
+        "private canonical reader/writer only; engine dispatcher must reject V3"
+    )
     assert contract["variant"] == "atomic"
     assert contract["backend"] == "AtomicNNUEV3"
     assert _u32(contract["file_version"]) == 0xA70C0003
@@ -526,9 +529,7 @@ def test_capture_pair_geometry_is_derived_instead_of_magic() -> None:
         "policy"
     ]
     assert "sole candidate source" in capture["semantics"]["relation_source"]
-    assert capture["descriptor"].startswith(
-        "AtomicCapturePair|v2-provisional-compact|"
-    )
+    assert capture["descriptor"].startswith("AtomicCapturePair|v2-compact|")
     assert "normal_local=((actor_rel*3332+edge)*6+target)@offset0_count39984" in capture[
         "descriptor"
     ]
@@ -715,7 +716,9 @@ def test_wire_keeps_v2_tail_but_makes_mixed_slices_unambiguous() -> None:
     assert "8 PSQT buckets contiguous" in wire["tensor_order"]
     assert "same virtual-factor coalesce" in wire["psqt_export_mapping"]
     assert wire["dense_tail"] == (
-        "exactly the top-level dense_tail object, copied from atomic-nnue-v2"
+        "exactly the AtomicNNUEV2 SFNNv15 dense wire tail: eight "
+        "architecture-hash-prefixed stacks with identical pairwise multiply, topology "
+        "and parameter order"
     )
     assert wire["sleb128_framing"] == (
         "COMPRESSED_LEB128 followed by a little-endian u32 compressed byte count "
@@ -751,56 +754,59 @@ def test_wire_keeps_v2_tail_but_makes_mixed_slices_unambiguous() -> None:
     assert "not wire-compatible" in trainer["feature_transformer"]
 
 
-def test_hash_recipe_is_deterministic_but_production_values_remain_unfrozen() -> None:
+def test_wire_v1_hashes_are_derived_from_exact_ascii_descriptors() -> None:
     contract = _load_contract()
     hashing = contract["hashing"]
     slices = {item["id"]: item for item in contract["feature_slices"]}
 
-    assert hashing["status"] == "not frozen"
-    assert "cp_i8_raw[40012x1024]" in hashing["transformer_descriptor"]
-    assert "cp_i8_raw[46648x1024]" not in hashing["transformer_descriptor"]
+    assert hashing["status"] == "frozen"
+    assert "cp:i8_raw[40012x1024]" in hashing["transformer_descriptor"]
+    assert "cp:i8_raw[46648x1024]" not in hashing["transformer_descriptor"]
+    assert "provisional" not in hashing["transformer_descriptor"]
+    assert all("provisional" not in item["descriptor"] for item in slices.values())
     assert hashing["descriptor_encoding"] == "ASCII"
     assert _u32(hashing["fnv_offset_basis"]) == 0x811C9DC5
     assert _u32(hashing["fnv_prime"]) == 0x01000193
     assert _fnv1a32(b"hello") == 0x4F9F2CAB
     assert hashing["feature_fold_order"] == list(slices)
-    provisional_slice_hashes = [
+    slice_hashes = [
         _fnv1a32(slices[slice_id]["descriptor"].encode("ascii"))
         for slice_id in hashing["feature_fold_order"]
     ]
-    provisional_feature_hash = _fold_hashes(provisional_slice_hashes)
+    assert slice_hashes == [0xA34A8666, 0x9AEDB186, 0xF5172BC0, 0x38377946]
+    for slice_id, actual in zip(hashing["feature_fold_order"], slice_hashes):
+        assert _u32(slices[slice_id]["descriptor_hash"]) == actual
+        assert _u32(hashing["slice_hash_values"][slice_id]) == actual
+
+    feature_hash = _fold_hashes(slice_hashes)
+    assert feature_hash == 0xA3FBDBE8
     transformer_descriptor_hash = _fnv1a32(
         hashing["transformer_descriptor"].encode("ascii")
     )
-    provisional_transformer_hash = (
-        provisional_feature_hash ^ 2048 ^ transformer_descriptor_hash
-    )
-    assert provisional_feature_hash != 0
-    assert provisional_feature_hash == _fold_hashes(provisional_slice_hashes)
-    assert provisional_transformer_hash != 0
+    assert len(hashing["transformer_descriptor"].encode("ascii")) == 799
+    assert transformer_descriptor_hash == 0xCC31067A
+    feature_transformer_hash = feature_hash ^ 2048 ^ transformer_descriptor_hash
+    assert feature_transformer_hash == 0x6FCAD592
+    network_hash = feature_transformer_hash ^ _u32(hashing["architecture_hash"])
+    assert network_hash == 0x0CF9A484
     assert hashing["feature_transformer_hash"] == (
         "feature_hash XOR 2048 XOR transformer_descriptor_hash"
     )
-    assert hashing["feature_hash_value"] is None
-    assert hashing["transformer_descriptor_hash_value"] is None
-    assert hashing["feature_transformer_hash_value"] is None
-    assert hashing["network_hash_value"] is None
-    assert hashing["semantic_decision_blockers"] == [
-        "per-perspective joint orientation golden semantics",
-        "HM virtual-factor coalesce and 12-to-11 accumulator and PSQT export goldens",
-        "AtomicCapturePair compact normal/EP split, edge ordinals, malformed-EP rejection and geometric en-passant goldens",
-        "AtomicKingBlastEP center-to-king offset and en-passant goldens",
-        "AtomicBlastRing center-to-collateral, multiple-origin, pawn-immunity and en-passant goldens",
-        "HM-only versus relation PSQT ablation decision",
-        "runtime accumulator arithmetic bound",
-    ]
-    assert hashing["freeze_gates"] == [
-        "all semantic decision blockers resolved",
-        "golden indices for every class, edge, perspective, independent WHITE/BLACK mirror branch, center-to-related-square direction and HM factorized 12-to-11 accumulator and PSQT export mapping",
-        "mixed-wire canonical read, write, corruption and byte-exact round trip fixture",
-        "bit-exact C++ and Python descriptors, dimensions, offsets and hash generation",
-        "runtime loader still rejects V3 until every numeric hash is non-null and tested",
-    ]
+    assert _u32(hashing["feature_hash_value"]) == feature_hash
+    assert _u32(hashing["transformer_descriptor_hash_value"]) == (
+        transformer_descriptor_hash
+    )
+    assert _u32(hashing["feature_transformer_hash_value"]) == feature_transformer_hash
+    assert _u32(hashing["network_hash_value"]) == network_hash
+    assert hashing["semantic_decision_blockers"] == []
+    assert len(hashing["freeze_evidence"]) == 6
+    assert "new descriptor and network hash" in hashing["freeze_evidence"][1]
+    assert "dispatcher continues to reject V3" in hashing["freeze_evidence"][-1]
+
+    serialized = json.dumps(contract, sort_keys=True)
+    assert "74198ECE" not in serialized
+    assert "D7E25D26" not in serialized
+    assert "B4D12C30" not in serialized
 
     dispatcher_sources = "\n".join(
         path.read_text(encoding="utf-8")
@@ -1285,8 +1291,30 @@ def test_numeric_and_null_move_policies_fail_safe() -> None:
     overpopulated = contract["dataset_statistics"]["overpopulated_fen_policy"]
 
     assert numeric["oracle_accumulator_dtype"] == "i32"
-    assert numeric["runtime_accumulator_policy"] == "unfrozen"
-    assert "never saturate or wrap" in numeric["overflow_policy"]
+    assert numeric["runtime_accumulator_dtype"] == "i32"
+    assert numeric["freeze_status"] == "frozen"
+    assert numeric["worst_case_envelope"]["minimum"] == -2_289_664
+    assert numeric["worst_case_envelope"]["maximum"] == 2_289_116
+    assert "simultaneous legal reachability" in numeric["worst_case_envelope"]["scope"]
+    assert numeric["psqt"]["runtime_state_dtype"] == "i64"
+    assert numeric["psqt"]["active_hm_maximum"] == 32
+    assert "2147483648" in numeric["psqt"]["int32_min_policy"]
+    assert numeric["psqt"]["perspective_difference"] == (
+        "subtract perspective totals in i64, divide by exactly 2 with signed truncation "
+        "toward zero, then checked-narrow to i32"
+    )
+    assert numeric["psqt"]["network_output"] == (
+        "the checked PSQT raw result is subsequently divided by "
+        "dense_tail.output_scaling.output_scale=16 with signed truncation toward zero"
+    )
+    dense = numeric["dense_tail"]
+    assert dense["activation_input_range"] == [0, 127]
+    assert dense["accepted_fwd_minimum"] == -3_665_038_760
+    assert dense["accepted_fwd_maximum"] == 3_665_038_759
+    assert dense["scale_numerator"] == 9600
+    assert dense["scale_denominator"] == 16384
+    assert "checked-narrow" in dense["result"]
+    assert "never saturate, wrap" in numeric["overflow_policy"]
     assert contract["dimensions"]["full_refresh_enumerator"].startswith(
         "streaming visitor"
     )

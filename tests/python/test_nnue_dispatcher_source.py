@@ -36,6 +36,10 @@ def test_dual_backend_facade_is_a_tagged_inline_union_without_indirection():
     assert "LegacyAtomicV1::Network legacy;" in dispatcher
     assert "AtomicV2::Network atomicV2;" in dispatcher
     assert "NetworkBackend backend_" in HEADER
+    assert "AtomicNNUEV3" not in HEADER
+    assert "AtomicNNUEV3" not in SOURCE
+    assert "atomic_v3" not in HEADER
+    assert "atomic_v3" not in SOURCE
 
     code = without_cpp_comments(HEADER)
     for forbidden in (
@@ -196,6 +200,9 @@ def test_dispatcher_and_both_backend_contracts_are_wired_into_ci():
         "tests/python/test_create_synthetic_atomic_v2_nnue.py",
         "tests/python/test_atomic_nnue_incremental_wrapper.py",
         "tests/nnue_v2_modes.py",
+        "tests/nnue_v3_dispatch_reject.py",
+        "tests/python/test_atomic_v3_wire_reference.py",
+        "tests/python/test_create_synthetic_atomic_v3_nnue.py",
     ):
         assert relative in workflow
 
@@ -210,6 +217,50 @@ def test_v2_ci_covers_scalar_bmi2_avx2_and_authenticates_perft_network():
     assert "NNUE evaluation using AtomicNNUEV2" in atomic_gate
     assert "go nodes 1" in atomic_gate
     assert atomic_gate.index("go nodes 1") < atomic_gate.index("for eval_mode in")
+
+
+def test_v3_wire_permutation_policies_are_isolated_and_ci_forces_each_path():
+    wire_io = (ROOT / "src" / "nnue" / "atomic_v3" / "wire_io.h").read_text(
+        encoding="utf-8"
+    )
+    makefile = (ROOT / "src" / "Makefile").read_text(encoding="utf-8")
+    workflow = (ROOT / ".github" / "workflows" / "atomic.yml").read_text(
+        encoding="utf-8"
+    )
+
+    for override in (
+        "ATOMIC_V3_WIRE_TEST_FORCE_IDENTITY",
+        "ATOMIC_V3_WIRE_TEST_FORCE_AVX2_LASX",
+        "ATOMIC_V3_WIRE_TEST_FORCE_AVX512",
+    ):
+        assert f"defined({override})" in wire_io
+    assert "wire test permutation overrides are mutually exclusive" in wire_io
+    compact_wire_io = compact(wire_io.replace("\\\n", ""))
+    assert compact_wire_io.count(
+        "#elif defined(ATOMIC_V3_WIRE_TEST_FORCE_AVX512) || "
+        "defined(USE_AVX512)"
+    ) == 2
+    assert compact_wire_io.count(
+        "#elif defined(ATOMIC_V3_WIRE_TEST_FORCE_AVX2_LASX) || "
+        "defined(USE_AVX2) || defined(USE_LASX)"
+    ) == 2
+    assert "#elif defined(USE_AVX512)" not in wire_io
+    assert "#elif defined(USE_AVX2)" not in wire_io
+
+    assert "ATOMIC_V3_WIRE_TEST_POLICY ?= native" in makefile
+    assert (
+        "ATOMIC_V3_WIRE_TEST_POLICIES := native identity avx2-lasx avx512"
+        in makefile
+    )
+    assert "Unsupported ATOMIC_V3_WIRE_TEST_POLICY" in makefile
+    assert makefile.count("$(ATOMIC_V3_WIRE_TEST_CPPFLAGS)") == 2
+    assert "CXXFLAGS += $(ATOMIC_V3_WIRE_TEST_CPPFLAGS)" not in makefile
+
+    assert "nnue-v3-wire-policies:" in workflow
+    assert "policy: [identity, avx2-lasx, avx512]" in workflow
+    assert "ARCH=general-64" in workflow
+    assert "ATOMIC_V3_WIRE_TEST_POLICY=${{ matrix.policy }}" in workflow
+    assert "atomic-v3-wire-tests" in workflow
 
 
 def test_v2_convenience_targets_generate_an_ignored_local_fixture():
