@@ -288,6 +288,45 @@ def test_active_feature_bounds_are_machine_readable_and_capacity_safe() -> None:
     )
 
 
+def test_scalar_full_refresh_composes_hm_once_and_capture_pair_once() -> None:
+    composition = _load_contract()["scalar_full_refresh_composition"]
+    assert composition["status"].startswith("frozen scalar composition oracle")
+    assert composition["call_graph"] == [
+        "emit HalfKAv2Atomic_hm exactly once",
+        (
+            "emit AtomicCapturePair exactly once from that exact successful HM "
+            "orientation through an internal trusted seam"
+        ),
+        (
+            "project AtomicKingBlastEP exactly once from the same immutable "
+            "CapturePair emission"
+        ),
+        (
+            "project AtomicBlastRing exactly once from the same immutable "
+            "CapturePair emission"
+        ),
+    ]
+    assert "exactly one immutable CapturePairSnapshot" in composition["position_adapter"]
+    assert "do not authenticate completeness" in composition[
+        "trusted_hm_to_capture_pair_precondition"
+    ]
+    assert composition["orientation_invariant"].endswith(
+        "identical canonical JointOrientation"
+    )
+    assert composition["error_domain"].startswith("CapturePairError")
+    assert "zero the entire four-slice bundle" in composition["failure_policy"]
+    assert "normal projections preserved" in composition["malformed_ep_policy"]
+    assert "missing-king error" in composition["terminal_policy"]
+    assert "caller-owned" in composition["ownership"]
+    assert "pure and reentrant" in composition["thread_safety"]
+    assert composition["active_feature_bound"] == 547
+    assert composition["active_feature_bound_formula"] == (
+        "32 HM + 240 CapturePair + 35 KingBlastEP + 240 BlastRing"
+    )
+    assert "loader" in composition["runtime_boundary"]
+    assert "WASM" in composition["runtime_boundary"]
+
+
 def test_hm_orientation_plane_order_buckets_and_king_merge_are_unambiguous() -> None:
     contract = _load_contract()
     hm = _slice(contract, "half-ka-v2-atomic-hm")

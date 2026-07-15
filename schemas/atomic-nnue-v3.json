@@ -626,6 +626,28 @@
     "max_active_factorized_training_parameter_rows": 579,
     "full_refresh_enumerator": "streaming visitor; no fixed active-list truncation"
   },
+  "scalar_full_refresh_composition": {
+    "status": "frozen scalar composition oracle; runtime backend intentionally absent",
+    "scope": "one evaluable nonterminal position and one accumulator perspective",
+    "position_adapter": "copy board, side-to-move and EP square into exactly one immutable CapturePairSnapshot before enumerating any slice",
+    "call_graph": [
+      "emit HalfKAv2Atomic_hm exactly once",
+      "emit AtomicCapturePair exactly once from that exact successful HM orientation through an internal trusted seam",
+      "project AtomicKingBlastEP exactly once from the same immutable CapturePair emission",
+      "project AtomicBlastRing exactly once from the same immutable CapturePair emission"
+    ],
+    "trusted_hm_to_capture_pair_precondition": "the seam accepts only the exact successful HM emission for the same snapshot and perspective; bounded shape and canonical-orientation checks detect corruption but do not authenticate completeness of an arbitrary caller-built subset",
+    "orientation_invariant": "HM, CapturePair, KingBlastEP and BlastRing outputs carry the identical canonical JointOrientation",
+    "error_domain": "CapturePairError is the lossless superset; every HM error is mapped exactly and downstream projectors already share this domain",
+    "failure_policy": "zero the entire four-slice bundle on any HM, CapturePair, KingBlastEP or BlastRing error; never expose a successful prefix",
+    "malformed_ep_policy": "successful composition with ordinary HM, normal CapturePair and their downstream normal projections preserved while EP rows are absent",
+    "terminal_policy": "king-absent explosion terminals are adjudicated before NNUE; direct scalar calls return the mapped missing-king error and an empty bundle",
+    "ownership": "caller-owned fixed typed emissions and local scratch only; no Position, input-emission or output reference is retained",
+    "thread_safety": "pure and reentrant for concurrent reads of immutable positions; callers synchronize mutation",
+    "active_feature_bound": 547,
+    "active_feature_bound_formula": "32 HM + 240 CapturePair + 35 KingBlastEP + 240 BlastRing",
+    "runtime_boundary": "does not define quantized weights, accumulator arithmetic, incremental updates, SIMD, loader, serialization, dispatcher, UCI, WASM, generator or trainer integration"
+  },
   "numeric_policy": {
     "oracle_accumulator_dtype": "i32",
     "runtime_accumulator_policy": "unfrozen",

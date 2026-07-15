@@ -229,11 +229,44 @@ def _validate_candidate(
         raise KingBlastEPContractError("CapturePair candidate center orientation is inconsistent")
     if orientation.orient(candidate.raw_captured) != candidate.oriented_captured:
         raise KingBlastEPContractError("CapturePair captured-square orientation is inconsistent")
+
+    try:
+        expected_edge = capture_pair.edge_ordinal(
+            actor.kind,
+            candidate.actor_rel,
+            candidate.oriented_from,
+            candidate.oriented_to,
+        )
+    except capture_pair.CapturePairContractError as error:
+        raise KingBlastEPContractError(
+            "CapturePair candidate geometry is inconsistent"
+        ) from error
+    if candidate.edge_ordinal != expected_edge:
+        raise KingBlastEPContractError("CapturePair candidate edge ordinal is inconsistent")
+
     if candidate.en_passant:
-        if candidate.target_class != "EN_PASSANT":
-            raise KingBlastEPContractError("CapturePair EP candidate has a non-EP target class")
-        if captured.kind != capture_pair.PAWN or captured.color == actor.color:
-            raise KingBlastEPContractError("CapturePair EP captured pawn is inconsistent")
+        actor_push = 8 if actor.color == WHITE else -8
+        if (
+            candidate.target_class != "EN_PASSANT"
+            or actor.kind != capture_pair.PAWN
+            or actor.color != position.side_to_move
+            or position.ep_square != candidate.raw_to
+            or candidate.raw_to in occupied
+            or candidate.raw_captured != candidate.raw_to - actor_push
+            or captured.kind != capture_pair.PAWN
+            or captured.color == actor.color
+        ):
+            raise KingBlastEPContractError("CapturePair EP candidate is inconsistent")
+        try:
+            expected_index = capture_pair.en_passant_index(
+                candidate.actor_rel,
+                candidate.oriented_from,
+                candidate.oriented_to,
+            )
+        except capture_pair.CapturePairContractError as error:
+            raise KingBlastEPContractError(
+                "CapturePair EP index is inconsistent"
+            ) from error
     else:
         target = occupied.get(candidate.raw_to)
         if (
@@ -243,13 +276,29 @@ def _validate_candidate(
             or candidate.raw_captured != candidate.raw_to
         ):
             raise KingBlastEPContractError("CapturePair normal target is inconsistent")
+        try:
+            expected_index = capture_pair.normal_index(
+                candidate.actor_rel,
+                actor.kind,
+                candidate.oriented_from,
+                candidate.oriented_to,
+                target.kind,
+            )
+        except capture_pair.CapturePairContractError as error:
+            raise KingBlastEPContractError(
+                "CapturePair normal index is inconsistent"
+            ) from error
+    if candidate.local_index != expected_index:
+        raise KingBlastEPContractError("CapturePair candidate local index is inconsistent")
     return actor
 
 
-def enumerate_king_blast_ep(
-    position: capture_pair.CapturePosition, perspective: str
+def project_king_blast_ep(
+    position: capture_pair.CapturePosition,
+    perspective: str,
+    candidates: Tuple[capture_pair.CapturePairActivation, ...],
 ) -> Tuple[KingBlastEPActivation, ...]:
-    """Project the exact CapturePair candidate set into boolean KBR/EP rows."""
+    """Project one exact trusted CapturePair emission without re-enumerating it."""
 
     if not isinstance(position, capture_pair.CapturePosition):
         raise KingBlastEPContractError("position must be a CapturePosition")
@@ -301,13 +350,19 @@ def enumerate_king_blast_ep(
                 "two KingBlastEP coordinates alias one compact row"
             )
 
-    # No board geometry below creates a candidate.  Every iteration originates
-    # in the independent CapturePair oracle, including the validated EP tail.
-    candidates = capture_pair.enumerate_capture_pairs(position, perspective)
+    # No board geometry below creates a candidate. Every iteration must come
+    # from the caller's exact CapturePair emission for this position and
+    # perspective, including the validated EP tail.
+    previous_candidate_index = -1
     for candidate in candidates:
         actor = _validate_candidate(
             position, perspective, candidate, occupied, orientation
         )
+        if candidate.local_index <= previous_candidate_index:
+            raise KingBlastEPContractError(
+                "CapturePair candidates must use strict canonical order"
+            )
+        previous_candidate_index = candidate.local_index
         actor_color = actor.color
         enemy_color = _opposite(actor_color)
         raw_center = candidate.raw_to
@@ -368,6 +423,19 @@ def enumerate_king_blast_ep(
     if any(not 0 <= index < PHYSICAL_DIMENSIONS for index in indices):
         raise AssertionError("KingBlastEP emitted an out-of-range local row")
     return result
+
+
+def enumerate_king_blast_ep(
+    position: capture_pair.CapturePosition, perspective: str
+) -> Tuple[KingBlastEPActivation, ...]:
+    """Enumerate CapturePair once, then project its exact boolean KBR/EP rows."""
+
+    if not isinstance(position, capture_pair.CapturePosition):
+        raise KingBlastEPContractError("position must be a CapturePosition")
+    if perspective not in COLORS:
+        raise KingBlastEPContractError("perspective must be WHITE or BLACK")
+    candidates = capture_pair.enumerate_capture_pairs(position, perspective)
+    return project_king_blast_ep(position, perspective, candidates)
 
 
 if len(CLASS_ORDER) != CLASS_DIMENSIONS or len(set(CLASS_ORDER)) != CLASS_DIMENSIONS:

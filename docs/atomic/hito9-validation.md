@@ -149,3 +149,65 @@ Elo/OpenBench claim; strength testing begins only after a trained combined V3
 backend can alter engine decisions. Community-history evidence used to select
 the pawn, bycatch, EP and threat regressions is recorded separately under
 `docs/atomic/evidence/hito9-3e-blast-ring/` and is non-normative.
+
+## H9.3f scalar full-refresh composition oracle
+
+H9.3f composes the four scalar slice contracts without introducing a network
+backend. For each perspective the Position adapter takes one immutable
+board/side-to-move/EP snapshot, HM is emitted exactly once, CapturePair is
+emitted exactly once through a trusted HM-to-CP seam, and the same immutable CP
+emission is supplied to both KingBlastEP and BlastRing. The standalone slice
+APIs remain unchanged and are compared record-for-record against the combined
+bundle.
+
+The combined error domain is `CapturePairError`. HM errors map losslessly and
+any failure clears all four slices. King-absent terminals therefore remain an
+empty mapped error at this isolated boundary, while malformed optional EP is a
+successful composition that preserves every normal relation. All slice
+orientations must be identical and the conservative aggregate bound is
+`32 + 240 + 35 + 240 = 547` active physical rows.
+
+The frozen cross-language corpus contains 102 positions and both
+perspectives, including independent mirror branches, valid and malformed EP,
+promotion geometry, touching kings, self-blast relations and an Atomic960
+layout. Its SHA-256 is
+`22ae9a6188fa0ebdd0faff9b4a23c25d25380f9b47ebc0e9da2d1b28fe2441b6`.
+The C++ selftest and Python reference additionally replay immutable inputs at
+1, 2, 4 and 8 threads/workers. A source-contract gate rejects any future
+combined implementation that calls HM or CP more than once, calls a public
+downstream emitter, takes more than one Position snapshot, or fails to pass
+the same CP object to both projectors.
+
+Local acceptance on Windows passed:
+
+- MinGW 15.2 x86-64 release and debug/assert builds and selftests for HM,
+  CapturePair, KingBlastEP, BlastRing and FullRefresh;
+- all five C++/Python differentials in both builds, including the 204-case
+  FullRefresh corpus above and four exact missing/multiple-king fail-closed
+  snapshots;
+- the complete Python tree against a `pyffish` extension rebuilt from this
+  exact worktree: 975/975, followed by historical `test.py` 22/22 with its
+  Atomic and Atomic960 perft coverage;
+- Python 3.9 grammar, `py_compile`, canonical YAML/JSON parsing,
+  `clang-format --dry-run --Werror` and `git diff --check`.
+
+The CLI wire reports the HM king-orientation bucket and the material-selected
+network bucket as separate fields; the differential validates both so these
+unrelated bucket domains cannot be conflated. The resulting V3 schema SHA-256
+is `c81d8f777b7390beebf37bab4b285f29dfc5614d13987df6846dc5d5375dbde4`.
+
+CI adds the combined selftest and differential to GCC, Clang, debug/assert and
+MinGW, and executes the selftest under ASan, UBSan and TSan. Valgrind uses a
+separate 20-minute job rather than extending the existing V2 plus isolated-V3
+lane, whose observed runtime was already close enough to its 25-minute budget
+to make silent expansion unsafe. Python 3.9 and 3.12 execute the composition,
+ownership, malformed-EP, concurrency and source-contract gates.
+
+H9.3f intentionally does not touch quantized weights, runtime accumulator
+arithmetic, incremental updates, SIMD, network hashes, loader, serializer,
+dispatcher, UCI, WASM, data generator or trainer. Engine bench, signature and
+OpenBench/Elo are therefore not applicable: no reachable playing decision has
+changed. The next numeric milestone must prove accumulator range and compare
+incremental/SIMD updates bit-exactly against this full-refresh oracle before a
+V3 file can be accepted. Local Discord evidence motivating this sequencing is
+recorded under `docs/atomic/evidence/hito9-3f-full-refresh/`.
