@@ -89,15 +89,6 @@ CapturePairSnapshot make_snapshot(std::initializer_list<BoardPiece> pieces,
     return result;
 }
 
-CapturePairSnapshot snapshot_from_position(const Position& position) {
-    CapturePairSnapshot result{};
-    result.sideToMove = position.side_to_move();
-    result.epSquare   = position.ep_square();
-    for (int squareIndex = 0; squareIndex < SQUARE_NB; ++squareIndex)
-        result.board[squareIndex] = position.piece_on(Square(squareIndex));
-    return result;
-}
-
 bool same_orientation(const JointOrientation& lhs, const JointOrientation& rhs) {
     return lhs.perspective == rhs.perspective && lhs.ownKing == rhs.ownKing
         && lhs.orientedOwnKing == rhs.orientedOwnKing && lhs.verticalXor == rhs.verticalXor
@@ -329,7 +320,7 @@ void test_position_adapter_and_threads() {
             adapter =
               adapter
               && emit_full_refresh(position, perspective, fromPosition) == CapturePairError::None
-              && emit_full_refresh(snapshot_from_position(position), perspective, fromSnapshot)
+              && emit_full_refresh(make_capture_pair_snapshot(position), perspective, fromSnapshot)
                    == CapturePairError::None
               && same_full_refresh(fromPosition, fromSnapshot);
         }
@@ -515,7 +506,7 @@ int dump_fen(const std::string& fen, bool chess960) {
         std::cerr << error->what() << '\n';
         return EXIT_FAILURE;
     }
-    const CapturePairSnapshot snapshot = snapshot_from_position(position);
+    const CapturePairSnapshot snapshot = make_capture_pair_snapshot(position);
     for (Color perspective : {WHITE, BLACK})
     {
         FullRefreshEmission    emission{};

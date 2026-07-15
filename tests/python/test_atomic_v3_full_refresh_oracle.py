@@ -239,6 +239,12 @@ def test_python_39_grammar() -> None:
 
 def test_cpp_source_contract_proves_single_enumeration_and_shared_cp() -> None:
     source = (ROOT / "src/nnue/atomic_v3/full_refresh.cpp").read_text(encoding="utf-8")
+    capture_source = (ROOT / "src/nnue/atomic_v3/capture_pair.cpp").read_text(
+        encoding="utf-8"
+    )
+    scalar_source = (ROOT / "src/nnue/atomic_v3/scalar_backend.cpp").read_text(
+        encoding="utf-8"
+    )
     assert len(re.findall(r"\bemit_hm_features\s*\(", source)) == 1
     assert len(re.findall(r"\bemit_capture_pairs_from_hm\s*\(", source)) == 1
     assert not re.search(r"(?<!from_hm)\bemit_capture_pairs\s*\(", source)
@@ -256,7 +262,9 @@ def test_cpp_source_contract_proves_single_enumeration_and_shared_cp() -> None:
         re.DOTALL,
     )
     assert king_call is not None and ring_call is not None
-    assert source.count("position.piece_on(Square(squareIndex))") == 1
+    assert source.count("make_capture_pair_snapshot(position)") == 1
+    assert scalar_source.count("make_capture_pair_snapshot(position)") == 1
+    assert capture_source.count("position.piece_on(Square(squareIndex))") == 1
     assert "nnue_dispatcher" not in source
     assert "load_candidate" not in source
 

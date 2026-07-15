@@ -397,14 +397,18 @@ CapturePairError emit_capture_pairs(const CapturePairSnapshot& snapshot,
     return Detail::emit_capture_pairs_from_hm(snapshot, perspective, hm, result);
 }
 
-CapturePairError
-emit_capture_pairs(const Position& position, Color perspective, CapturePairEmission& result) {
+CapturePairSnapshot make_capture_pair_snapshot(const Position& position) {
     CapturePairSnapshot snapshot{};
     snapshot.sideToMove = position.side_to_move();
     snapshot.epSquare   = position.ep_square();
     for (int squareIndex = 0; squareIndex < SQUARE_NB; ++squareIndex)
         snapshot.board[squareIndex] = position.piece_on(Square(squareIndex));
-    return emit_capture_pairs(snapshot, perspective, result);
+    return snapshot;
+}
+
+CapturePairError
+emit_capture_pairs(const Position& position, Color perspective, CapturePairEmission& result) {
+    return emit_capture_pairs(make_capture_pair_snapshot(position), perspective, result);
 }
 
 const char* capture_pair_error_message(CapturePairError error) {

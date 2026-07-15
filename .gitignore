@@ -24,6 +24,7 @@ src/atomic-v3-blast-ring-tests*
 src/atomic-v3-full-refresh-tests*
 src/atomic-v3-numeric-tests*
 src/atomic-v3-wire-tests*
+src/atomic-v3-scalar-tests*
 src/legacy-atomic-v1-tests*
 src/atomic-bin-v2-tests*
 src/atomic-bin-v2-sink-tests*

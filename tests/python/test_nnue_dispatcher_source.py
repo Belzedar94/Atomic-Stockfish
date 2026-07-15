@@ -253,7 +253,9 @@ def test_v3_wire_permutation_policies_are_isolated_and_ci_forces_each_path():
         in makefile
     )
     assert "Unsupported ATOMIC_V3_WIRE_TEST_POLICY" in makefile
-    assert makefile.count("$(ATOMIC_V3_WIRE_TEST_CPPFLAGS)") == 2
+    assert makefile.count("$(ATOMIC_V3_WIRE_TEST_CPPFLAGS)") == 4
+    assert "atomic_v3_scalar_backend.o:" in makefile
+    assert "atomic_v3_scalar_tests.o:" in makefile
     assert "CXXFLAGS += $(ATOMIC_V3_WIRE_TEST_CPPFLAGS)" not in makefile
 
     assert "nnue-v3-wire-policies:" in workflow
@@ -261,6 +263,7 @@ def test_v3_wire_permutation_policies_are_isolated_and_ci_forces_each_path():
     assert "ARCH=general-64" in workflow
     assert "ATOMIC_V3_WIRE_TEST_POLICY=${{ matrix.policy }}" in workflow
     assert "atomic-v3-wire-tests" in workflow
+    assert "atomic-v3-scalar-tests" in workflow
 
 
 def test_v2_convenience_targets_generate_an_ignored_local_fixture():

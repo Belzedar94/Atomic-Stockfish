@@ -70,6 +70,11 @@ struct CapturePairSnapshot {
     Square  epSquare   = SQ_NONE;
 };
 
+// Takes the sole immutable board/side/EP snapshot used by every Position
+// adapter in the V3 full-refresh path. Castling rights and Atomic960 metadata
+// are intentionally absent because no frozen V3 feature consumes them.
+CapturePairSnapshot make_capture_pair_snapshot(const Position& position);
+
 struct CapturePairFeature {
     Square                   rawFrom          = SQ_NONE;
     Square                   rawCenter        = SQ_NONE;

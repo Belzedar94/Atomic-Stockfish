@@ -281,3 +281,54 @@ the playing signature is unchanged. Strength testing becomes applicable only
 after an execution backend and trained V3 network can alter engine decisions.
 Compact reproducibility evidence is recorded under
 `docs/atomic/evidence/hito9-3g-v3-wire/`.
+
+## H9.3h private scalar execution backend
+
+H9.3h executes the authenticated H9.3g network for the first time, but only
+through a private full-refresh correctness backend. The production dispatcher
+continues to recognize V1 and V2 only: V3 remains unreachable from UCI,
+XBoard, search, bindings, WASM, the generator and the trainer.
+
+For each perspective, one shared immutable Position snapshot feeds the H9.3f
+full-refresh oracle. The backend accumulates the i16 HM and KingBlastEP rows
+and sign-extends the i8 CapturePair and BlastRing rows into i64 scratch, checks
+the frozen i32 envelope, then publishes canonical logical coordinates after
+undoing the authenticated runtime permutation. HM PSQT remains i64 and uses
+the inherited `(stm - opponent) / 2`, followed by the public `/ 16` output
+scale; both signed divisions truncate toward zero.
+
+The scalar transform and dense tail reproduce SFNNv15 exactly. Each
+perspective multiplies its clipped `[0, 255]` accumulator halves and divides by
+512; side-to-move precedes opponent. The output-major FC0, FC1 and FC2 affine
+layers use i64 sums with checked i32 publication. Their squared/clipped paths
+use shifts `21/7` and `19/6`; final composition is
+`fc2 + fc0[30] - fc0[31]`, followed by checked `* 9600 / 16384` and `/ 16`.
+Every failure clears the complete public diagnostic.
+
+The frozen C++ corpus covers all eight material buckets, both sides to move,
+both king-orientation branches, valid and malformed EP, orthodox and
+Atomic960 castling layouts, captures, promotions, touching kings and invalid
+king/side states. It also proves immutable concurrent reads at 1, 2, 4 and 8
+threads and evaluate-then-save byte identity. Adversarial dense vectors place
+nonzero signed weights on FC0, FC1 and FC2 block boundaries, exercise the
+skip outputs and both output signs, and distinguish an affine i32 overflow
+from a valid-affine final-composition overflow. The cross-policy diagnostic
+fingerprint is `0x46F68EAB20FF9D50` for identity, AVX2/LASX and AVX512
+permutations.
+
+An independent Python decoder authenticates the 77,349,879-byte H9.3g fixture,
+decodes its canonical wire spans directly and compares accumulators, all eight
+PSQT lanes, transformed bytes, every dense intermediate, raw/scaled outputs
+and public values for the frozen full-refresh corpus and targeted nonzero
+rows. It does not import the fixture generator's selected-value map.
+
+CI adds the scalar selftest and differential to GCC, Clang, debug/assert,
+MinGW, real AVX2 and the three forced permutation policies. The private backend
+also runs under ASan, UBSan and TSan; Valgrind loads the complete authenticated
+network and evaluates a targeted snapshot. The production-dispatch rejection
+gate remains mandatory.
+
+H9.3h has no bench, Elo, LOS, OpenBench or training claim because no playing
+path can load V3. SIMD and incremental execution are deliberately deferred;
+this scalar diagnostic becomes their bit-exact oracle. Compact evidence is
+recorded under `docs/atomic/evidence/hito9-3h-v3-scalar/`.
