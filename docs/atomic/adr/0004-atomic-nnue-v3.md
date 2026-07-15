@@ -230,7 +230,31 @@ an independent full-board enumerator.
    sole origins and off-center EP exclusions only reduce that count. Normative
    engine evidence and auxiliary community history are catalogued in
    `docs/atomic/evidence/hito9-3e-blast-ring/discord-research.md`.
-8. Serialize in this exact order after the standard outer header: transformer
+8. Before introducing any weights, compose the four scalar slices through one
+   fail-closed full-refresh oracle per perspective. The Position adapter takes
+   one immutable board/side-to-move/EP snapshot. HM is emitted exactly once;
+   an internal trusted HM-to-CapturePair seam emits CP exactly once using that
+   exact orientation; the same immutable CP object is then passed by reference
+   to the KingBlastEP and BlastRing projectors. The composer never calls the
+   three standalone relation APIs, because doing so would enumerate HM four
+   times and CapturePair three times.
+
+   `CapturePairError` is the lossless combined error domain. Any HM, CP,
+   KingBlastEP or BlastRing error clears the whole typed bundle, so callers
+   never observe a successful prefix. Missing-king terminals remain errors at
+   this isolated boundary and must be adjudicated before engine evaluation.
+   Malformed optional EP remains successful and preserves all normal rows.
+   Every slice must carry the identical `JointOrientation`, the aggregate
+   active count must not exceed `32 + 240 + 35 + 240 = 547`, and all scratch
+   and results remain caller-owned and reentrant for immutable concurrent
+   reads. Defensive trusted-seam validation does not claim to prove an
+   arbitrary caller-built subset complete without re-enumeration.
+
+   This step is deliberately not a network backend. It changes no weights,
+   numeric accumulator policy, SIMD, incremental state, loader, serializer,
+   dispatcher, UCI, WASM, generator or trainer surface. Those remain blocked
+   on the numeric range proof and frozen hashes below.
+9. Serialize in this exact order after the standard outer header: transformer
    hash, i16 biases, HM i16 weights, CapturePair raw i8 weights, KingBlastEP i16
    weights, BlastRing raw i8 weights, HM-only i32 PSQT, eight V2 SFNNv15 stacks
    and strict EOF. i16/i32 arrays use the canonical V2 SLEB framing, whose u32
@@ -254,7 +278,7 @@ an independent full-board enumerator.
    initializing generic relation-PSQT columns to zero is incorrect because the
    upstream composed forward would train them and make export differ from
    inference.
-9. Compute every slice hash with FNV-1a-32 over one exact ASCII descriptor, then
+10. Compute every slice hash with FNV-1a-32 over one exact ASCII descriptor, then
    combine the ordered HM, CapturePair, KingBlastEP and BlastRing hashes with
    the official rotate-left/XOR fold. Separately hash the global transformer
    descriptor, which authenticates mixed dtypes, wire order and SIMD
@@ -266,19 +290,19 @@ an independent full-board enumerator.
    CP segment bases and geometric EP rule, center-to-related-square polarity,
    BlastRing origin/pawn rules and the exact PSQT shape/order. A golden alone
    does not change a wire identity.
-10. Do not freeze the four resulting numeric hashes yet. The machine-readable
+11. Do not freeze the four resulting numeric hashes yet. The machine-readable
     contract explicitly lists the remaining freeze blockers: all orientation,
     factorized HM export, CP/EP, king-offset and BlastRing semantic goldens;
     HM-only versus relation PSQT; and the runtime accumulator range proof. The
     version is reserved, but no production loader accepts V3 until those gates
     close.
-11. Use an independent full-refresh oracle with i32 temporaries. It enumerates
+12. Use an independent full-refresh oracle with i32 temporaries. It enumerates
     semantic indices directly from the board, adds i8 weights with sign
     extension, checks range before any narrowing, and compares index sets,
     accumulators, PSQT, transformed bytes and raw output. Product code may use a
     single proven-safe i16 accumulator or separate HM-i16/relation-i32 state;
     it may never wrap, saturate silently or truncate an active list.
-12. Treat EP state as accumulator input. A search null move clears `epSquare`
+13. Treat EP state as accumulator input. A search null move clears `epSquare`
     without pushing the NNUE accumulator, so V3 state stores the EP square used
     for its last computation and refreshes both perspectives when the current
     position differs. This guard runs before any `computed` early return.
@@ -291,7 +315,7 @@ an independent full-board enumerator.
     changes the EP key back and forces a second two-perspective relation refresh;
     the final accumulators, PSQT, transformed bytes and raw output must be
     bit-identical to their pre-null values.
-13. `atomic-bin-v2` remains the dataset format. It already stores the full
+14. `atomic-bin-v2` remains the dataset format. It already stores the full
     canonical position needed to derive every V3 slice. V3 adds an authenticated
     statistics layer and feature-schema SHA to the training-run manifest, not a
     third position record format. Because bin-v2 records intentionally contain
@@ -407,7 +431,7 @@ an independent full-board enumerator.
     bin-v2 manifests use the same canonical wire with their separate 64 MiB
     shard-list bound, and all later provenance checks consume the already
     authenticated in-memory summary rather than reopening the pathname.
-14. Keep orthodox `FullThreats` only as an ablation control. The serious order
+15. Keep orthodox `FullThreats` only as an ablation control. The serious order
     is HM, then CapturePair, then KingBlast/EP, then BlastRing. Every comparison
     uses the same dataset, seed, training budget and dense head.
 
@@ -464,13 +488,16 @@ an independent full-board enumerator.
    export and mirror metamorphic tests.
 3. Add independent CapturePair, KingBlastEP and BlastRing emitters with numeric
    goldens; resolve the provisional semantic gates.
-4. Freeze descriptors, PSQT scope and hashes, then add a mixed-wire synthetic
+4. Compose all four slices through the scalar single-snapshot full-refresh
+   oracle, sharing one HM and one CapturePair emission and keeping the runtime
+   dispatcher untouched.
+5. Freeze descriptors, PSQT scope and hashes, then add a mixed-wire synthetic
    fixture and strict reader/writer.
-5. Add the scalar full-refresh backend and independent oracle before exposing
-   V3 through the dispatcher.
-6. Add SIMD and safe incremental updates by slice. Overflow always forces
+6. Add the scalar network backend and compare its arithmetic against the
+   independent full-refresh oracle before exposing V3 through the dispatcher.
+7. Add SIMD and safe incremental updates by slice. Overflow always forces
    refresh; BlastRing remains refresh-only until its full delta is proved.
-7. Extend transactional V1/V2/V3 loading, UCI/XBoard, Python, JavaScript, WASM,
+8. Extend transactional V1/V2/V3 loading, UCI/XBoard, Python, JavaScript, WASM,
    generator and trainer gates. Generation publishes role-separated bin-v2
    manifests, trajectory ledgers, per-index coverage, stats and split audit as
    one transaction. Add producer/manifest evidence for
@@ -478,7 +505,7 @@ an independent full-board enumerator.
    the engine-backed replay and feature-input-key scanner before publication.
    The fixed 512 MiB WASM heap and the H9.2 large-page adoption path remain
    mandatory.
-8. Run controlled ablations, then 2-3 billion serious records and OpenBench STC
+9. Run controlled ablations, then 2-3 billion serious records and OpenBench STC
    and LTC only with networks capable of changing moves.
 
 ## Consequences

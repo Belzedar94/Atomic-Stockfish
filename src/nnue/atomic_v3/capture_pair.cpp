@@ -103,9 +103,48 @@ bool valid_board_piece(Piece piece) {
     return pieceType >= PAWN && pieceType <= KING;
 }
 
+bool compatible_hm_emission(const CapturePairSnapshot& snapshot,
+                            Color                      perspective,
+                            const HmEmission&          hm) {
+    std::array<IndexType, COLOR_NB> pieceCounts{};
+    std::array<IndexType, COLOR_NB> kingCounts{};
+    std::array<Square, COLOR_NB>    kingSquares{SQ_NONE, SQ_NONE};
+    IndexType                       totalPieces = 0;
+    for (int squareIndex = 0; squareIndex < SQUARE_NB; ++squareIndex)
+    {
+        const Piece piece = snapshot.board[squareIndex];
+        if (!valid_board_piece(piece))
+            return false;
+        if (piece == NO_PIECE)
+            continue;
+
+        const Color color = color_of(piece);
+        ++pieceCounts[color];
+        ++totalPieces;
+        if (type_of(piece) == KING)
+        {
+            ++kingCounts[color];
+            kingSquares[color] = Square(squareIndex);
+        }
+    }
+
+    IndexType networkBucket = 0;
+    return (perspective == WHITE || perspective == BLACK)
+        && hm.orientation.perspective == perspective
+        && is_canonical_joint_orientation(hm.orientation) && hm.size >= 2
+        && hm.size <= HmMaximumActiveDimensions && hm.size <= hm.features.size()
+        && totalPieces == hm.size && pieceCounts[WHITE] <= HmMaximumPiecesPerColor
+        && pieceCounts[BLACK] <= HmMaximumPiecesPerColor && kingCounts[WHITE] == 1
+        && kingCounts[BLACK] == 1 && kingSquares[perspective] == hm.orientation.ownKing
+        && hm_network_bucket(hm.size, networkBucket) && hm.networkBucket == networkBucket
+        && is_ok(hm.orientation.ownKing);
+}
+
 }  // namespace
 
 namespace Detail {
+
+CapturePairError capture_pair_error_from_hm(HmOracleError error) { return map_hm_error(error); }
 
 bool well_formed_capture_pair_emission(const CapturePairSnapshot& snapshot,
                                        Color                      perspective,
@@ -207,15 +246,14 @@ bool well_formed_capture_pair_emission(const CapturePairSnapshot& snapshot,
 
 }  // namespace Detail
 
-CapturePairError emit_capture_pairs(const CapturePairSnapshot& snapshot,
-                                    Color                      perspective,
-                                    CapturePairEmission&       result) {
+CapturePairError Detail::emit_capture_pairs_from_hm(const CapturePairSnapshot& snapshot,
+                                                    Color                      perspective,
+                                                    const HmEmission&          hm,
+                                                    CapturePairEmission&       result) {
     result = {};
 
-    HmEmission          hm{};
-    const HmOracleError hmError = emit_hm_features(snapshot.board, perspective, hm);
-    if (hmError != HmOracleError::None)
-        return map_hm_error(hmError);
+    if (!compatible_hm_emission(snapshot, perspective, hm))
+        return CapturePairError::NonCanonicalOrder;
     if (snapshot.sideToMove != WHITE && snapshot.sideToMove != BLACK)
         return CapturePairError::InvalidSideToMove;
 
@@ -345,6 +383,18 @@ CapturePairError emit_capture_pairs(const CapturePairSnapshot& snapshot,
     }
 
     return CapturePairError::None;
+}
+
+CapturePairError emit_capture_pairs(const CapturePairSnapshot& snapshot,
+                                    Color                      perspective,
+                                    CapturePairEmission&       result) {
+    result = {};
+
+    HmEmission          hm{};
+    const HmOracleError hmError = emit_hm_features(snapshot.board, perspective, hm);
+    if (hmError != HmOracleError::None)
+        return Detail::capture_pair_error_from_hm(hmError);
+    return Detail::emit_capture_pairs_from_hm(snapshot, perspective, hm, result);
 }
 
 CapturePairError

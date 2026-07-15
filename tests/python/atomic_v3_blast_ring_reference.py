@@ -316,10 +316,12 @@ def _collateral_class(piece: capture_pair.Piece) -> Optional[str]:
     return piece.kind
 
 
-def enumerate_blast_ring(
-    position: capture_pair.CapturePosition, perspective: str
+def project_blast_ring(
+    position: capture_pair.CapturePosition,
+    perspective: str,
+    candidates: Tuple[capture_pair.CapturePairActivation, ...],
 ) -> Tuple[BlastRingActivation, ...]:
-    """Project exact CapturePair centers into sorted boolean collateral rows."""
+    """Project one exact trusted CapturePair emission without re-enumerating it."""
 
     _validate_position_domain(position, perspective)
     orientation = capture_pair.orientation_for(position, perspective)
@@ -327,10 +329,8 @@ def enumerate_blast_ring(
         piece.square: piece for piece in position.pieces
     }
 
-    # CapturePair is intentionally called once.  The grouped set of distinct
-    # origins is part of the BlastRing semantics and must not be reconstructed
-    # from attacks or legal moves.
-    candidates = capture_pair.enumerate_capture_pairs(position, perspective)
+    # The grouped set of distinct origins is part of the BlastRing semantics
+    # and must not be reconstructed from attacks or legal moves.
     groups: Dict[Tuple[int, str], _CaptureCenter] = {}
     previous_candidate_index = -1
     for candidate in candidates:
@@ -422,6 +422,16 @@ def enumerate_blast_ring(
     if any(not 0 <= index < PHYSICAL_DIMENSIONS for index in indices):
         raise AssertionError("BlastRing emitted an out-of-range local row")
     return result
+
+
+def enumerate_blast_ring(
+    position: capture_pair.CapturePosition, perspective: str
+) -> Tuple[BlastRingActivation, ...]:
+    """Enumerate CapturePair once, then project its exact collateral rows."""
+
+    _validate_position_domain(position, perspective)
+    candidates = capture_pair.enumerate_capture_pairs(position, perspective)
+    return project_blast_ring(position, perspective, candidates)
 
 
 if len(DIRECTION_ORDER) != OFFSET_DIMENSIONS or len(set(DIRECTION_ORDER)) != 8:

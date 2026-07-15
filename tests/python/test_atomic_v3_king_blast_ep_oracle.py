@@ -508,7 +508,7 @@ def test_capture_pair_is_the_sole_candidate_source(monkeypatch: object) -> None:
     assert calls == [(value, cp.WHITE)]
 
 
-def test_reordered_and_duplicated_capture_pair_source_stays_sorted_unique(
+def test_reordered_or_duplicated_capture_pair_source_fails_closed(
     monkeypatch: object,
 ) -> None:
     value = position(
@@ -519,14 +519,20 @@ def test_reordered_and_duplicated_capture_pair_source_stays_sorted_unique(
         piece(cp.WHITE, cp.ROOK, "a4"),
         piece(cp.BLACK, cp.BISHOP, "a6"),
     )
-    baseline = kb.enumerate_king_blast_ep(value, cp.WHITE)
     candidates = cp.enumerate_capture_pairs(value, cp.WHITE)
-    reordered = tuple(reversed(candidates)) + candidates + tuple(reversed(candidates))
-    monkeypatch.setattr(cp, "enumerate_capture_pairs", lambda *_: reordered)  # type: ignore[attr-defined]
-    actual = kb.enumerate_king_blast_ep(value, cp.WHITE)
-    assert actual == baseline
-    indices = [row.local_index for row in actual]
-    assert indices == sorted(set(indices))
+    assert len(candidates) > 1
+
+    monkeypatch.setattr(  # type: ignore[attr-defined]
+        cp, "enumerate_capture_pairs", lambda *_: tuple(reversed(candidates))
+    )
+    with pytest.raises(kb.KingBlastEPContractError, match="canonical order"):
+        kb.enumerate_king_blast_ep(value, cp.WHITE)
+
+    monkeypatch.setattr(  # type: ignore[attr-defined]
+        cp, "enumerate_capture_pairs", lambda *_: candidates + candidates[-1:]
+    )
+    with pytest.raises(kb.KingBlastEPContractError, match="canonical order"):
+        kb.enumerate_king_blast_ep(value, cp.WHITE)
 
 
 def test_promotion_candidate_is_not_multiplied_and_current_type_is_history_free() -> None:
@@ -703,13 +709,43 @@ def test_projection_domain_and_inconsistent_candidate_fail_closed(
     with pytest.raises(kb.KingBlastEPContractError, match="exactly one black king"):
         kb.enumerate_king_blast_ep(missing_black, cp.WHITE)
 
+    enumerate_capture_pairs = cp.enumerate_capture_pairs
     value = _direction_position("N", enemy=True)
-    candidates = cp.enumerate_capture_pairs(value, cp.WHITE)
+    candidates = enumerate_capture_pairs(value, cp.WHITE)
     selected = next(row for row in candidates if row.raw_to == cp.square("d4"))
     forged = replace(selected, actor_rel=cp.OPP)
     monkeypatch.setattr(cp, "enumerate_capture_pairs", lambda *_: (forged,))  # type: ignore[attr-defined]
     with pytest.raises(kb.KingBlastEPContractError, match="actor relation"):
         kb.enumerate_king_blast_ep(value, cp.WHITE)
+
+    forged = replace(selected, edge_ordinal=selected.edge_ordinal + 1)
+    monkeypatch.setattr(cp, "enumerate_capture_pairs", lambda *_: (forged,))  # type: ignore[attr-defined]
+    with pytest.raises(kb.KingBlastEPContractError, match="edge ordinal"):
+        kb.enumerate_king_blast_ep(value, cp.WHITE)
+
+    forged = replace(selected, index=selected.index + 1)
+    monkeypatch.setattr(cp, "enumerate_capture_pairs", lambda *_: (forged,))  # type: ignore[attr-defined]
+    with pytest.raises(kb.KingBlastEPContractError, match="local index"):
+        kb.enumerate_king_blast_ep(value, cp.WHITE)
+
+    ep_position = position(
+        piece(cp.WHITE, cp.KING, "h1"),
+        piece(cp.BLACK, cp.KING, "e7"),
+        piece(cp.WHITE, cp.PAWN, "d5"),
+        piece(cp.BLACK, cp.PAWN, "e5"),
+        side_to_move=cp.WHITE,
+        ep_square="e6",
+    )
+    ep_candidate = next(
+        row for row in enumerate_capture_pairs(ep_position, cp.WHITE) if row.en_passant
+    )
+    missing_ep_metadata = cp.CapturePosition(
+        ep_position.pieces,
+        side_to_move=ep_position.side_to_move,
+        ep_square=None,
+    )
+    with pytest.raises(kb.KingBlastEPContractError, match="EP candidate"):
+        kb.project_king_blast_ep(missing_ep_metadata, cp.WHITE, (ep_candidate,))
 
 
 def test_bound_violation_fails_without_returning_a_partial_projection(

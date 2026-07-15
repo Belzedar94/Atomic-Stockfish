@@ -223,6 +223,21 @@ capture_pair_ep_index(CapturePairActorRelation relation, IndexType epOrdinal, In
 
 namespace Detail {
 
+// Lossless translation into the superset error domain used by CapturePair and
+// every downstream V3 relation slice.
+CapturePairError capture_pair_error_from_hm(HmOracleError error);
+
+// Internal trusted composition seam. Precondition: hm is the exact successful
+// output of emit_hm_features(snapshot.board, perspective), not an arbitrary
+// caller-assembled subset. Defensive checks authenticate its orientation and
+// bounded shape but deliberately do not enumerate HM again and therefore
+// cannot prove completeness. The full-refresh composer uses this seam so HM
+// and CapturePair are each enumerated exactly once per perspective.
+CapturePairError emit_capture_pairs_from_hm(const CapturePairSnapshot& snapshot,
+                                            Color                      perspective,
+                                            const HmEmission&          hm,
+                                            CapturePairEmission&       result);
+
 // Shared defensive validator for trusted projection seams. Precondition:
 // emission is the exact successful output of emit_capture_pairs(snapshot,
 // perspective). These checks authenticate its canonical representation and
