@@ -46,7 +46,8 @@ enum class IncrementalError : u8 {
 enum class IncrementalFaultPoint : u8 {
     None,
     AfterFirstPerspective,
-    BeforeComposition
+    BeforeComposition,
+    AfterCompositionBeforeCommit
 };
 
 struct IncrementalStatus {

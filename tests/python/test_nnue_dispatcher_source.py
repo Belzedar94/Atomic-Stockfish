@@ -214,6 +214,8 @@ def test_dispatcher_and_both_backend_contracts_are_wired_into_ci():
         "tests/python/test_create_synthetic_atomic_v3_nnue.py",
         "tests/python/test_atomic_v3_incremental_oracle.py",
         "tests/atomic_v3_incremental_differential.py",
+        "tests/python/test_atomic_v3_incremental_stress_wrapper.py",
+        "tests/atomic_v3_incremental_stress.py",
     ):
         assert relative in workflow
 
@@ -264,14 +266,26 @@ def test_v3_wire_permutation_policies_are_isolated_and_ci_forces_each_path():
         in makefile
     )
     assert "Unsupported ATOMIC_V3_WIRE_TEST_POLICY" in makefile
-    assert makefile.count("$(ATOMIC_V3_WIRE_TEST_CPPFLAGS)") == 6
+    assert makefile.count("$(ATOMIC_V3_WIRE_TEST_CPPFLAGS)") == 7
     assert "atomic_v3_scalar_backend.o:" in makefile
     assert "atomic_v3_scalar_tests.o:" in makefile
     assert "atomic_v3_incremental_backend.o:" in makefile
     assert "atomic_v3_incremental_tests.o:" in makefile
+    assert "atomic_v3_incremental_stress_tests.o:" in makefile
+    assert (
+        "ATOMIC_V3_STACK_GUARD_FLAGS = "
+        "$(if $(filter gcc mingw,$(COMP)),-Werror=stack-usage=128000)"
+        in makefile
+    )
+    assert makefile.count("$(ATOMIC_V3_STACK_GUARD_FLAGS)") == 3
     assert (
         "atomic-v3-incremental-tests: config-sanity "
         "$(ATOMIC_V3_INCREMENTAL_TEST_EXE) atomic-v3-wire-test-fixture"
+        in makefile
+    )
+    assert (
+        "atomic-v3-incremental-stress-tests: config-sanity "
+        "$(ATOMIC_V3_INCREMENTAL_STRESS_TEST_EXE) atomic-v3-wire-test-fixture"
         in makefile
     )
     assert "CXXFLAGS += $(ATOMIC_V3_WIRE_TEST_CPPFLAGS)" not in makefile
@@ -383,20 +397,135 @@ def test_v3_incremental_sources_remain_outside_every_production_build_graph():
 
     source = "nnue/atomic_v3/incremental_backend.cpp"
     header = "nnue/atomic_v3/incremental_backend.h"
+    stress_source = "nnue/atomic_v3/tests/incremental_stress.cpp"
     production_sources = makefile.split("SRCS =", 1)[1].split("OTHER_SRCS =", 1)[0]
     production_headers = makefile.split("HEADERS =", 1)[1].split("OBJS =", 1)[0]
     assert source not in production_sources
     assert header not in production_headers
+    assert stress_source not in production_sources
 
     for production_graph in (setup, makefile_js, wasm_build, wasm_builder):
         assert source not in production_graph
         assert header not in production_graph
+        assert stress_source not in production_graph
 
     assert f"ATOMIC_V3_INCREMENTAL_SRCS = {source}" in makefile
     assert f"ATOMIC_V3_INCREMENTAL_HEADERS = {header}" in makefile
+    assert f"ATOMIC_V3_INCREMENTAL_STRESS_SRCS = {stress_source}" in makefile
     assert "atomic-v3-incremental-tests:" in makefile
+    assert "atomic-v3-incremental-stress-tests:" in makefile
     assert makefile.count(source) == 2
     assert makefile.count(header) == 1
+    assert makefile.count(stress_source) == 2
+
+
+def test_v3_incremental_stress_is_cross_platform_instrumented_and_private():
+    workflow = (ROOT / ".github" / "workflows" / "atomic.yml").read_text(
+        encoding="utf-8"
+    )
+    makefile = (ROOT / "src" / "Makefile").read_text(encoding="utf-8")
+    wrapper = (ROOT / "tests" / "atomic_v3_incremental_stress.py").read_text(
+        encoding="utf-8"
+    )
+
+    target = "atomic-v3-incremental-stress-tests"
+    script = "tests/atomic_v3_incremental_stress.py"
+    fixture = "$RUNNER_TEMP/atomic-v3-wire-v1.nnue"
+    for name in (
+        "native",
+        "nnue-v2-simd",
+        "nnue-v3-wire-policies",
+        "debug",
+        "data-generator-windows",
+    ):
+        job = workflow_job(workflow, name)
+        assert target in job, f"{name} omitted the private stress gate"
+        assert job.count(target) == 1, f"{name} duplicated the private stress gate"
+        assert fixture in job
+
+    release = workflow_job(workflow, "nnue-v3-incremental-stress")
+    assert "compiler: GCC" in release
+    assert "compiler: Clang" in release
+    assert target + ".bin" in release
+    assert script in release
+    assert "--mode smoke" in release
+    assert "--threads 2" in release
+    assert "--mode release" in release
+    assert "fixture size mismatch" in release
+    assert "fixture SHA-256 mismatch" in release
+    assert "flip_first_byte" in release
+    assert "atomic-v3-corrupt.nnue" not in release
+    assert "--operations --full-refresh-interval --threads" in release
+
+    sanitizers = workflow_job(workflow, "sanitizers")
+    assert target + ".bin" in sanitizers
+    assert script in sanitizers
+    assert '--threads 4' in sanitizers
+    assert "sanitizer: address,undefined" in sanitizers
+    assert "sanitizer: thread" in sanitizers
+
+    valgrind = workflow_job(workflow, "atomic-v3-incremental-stress-valgrind")
+    assert target + ".bin" in valgrind
+    assert script in valgrind
+    assert "--error-exitcode=99" in valgrind
+    assert "--operations 256" in valgrind
+
+    python_job = workflow_job(workflow, "python")
+    assert "tests/python/test_atomic_v3_incremental_stress_wrapper.py" in python_job
+
+    target_block = makefile.split(f"{target}:", 1)[1].split("\n\n", 1)[0]
+    assert "../" + script in target_block
+    assert 'ATOMIC_V3_INCREMENTAL_STRESS_TEST_EXE' in target_block
+    assert '--mode smoke' in target_block
+    assert "Profile(4_096, 1, 1" in wrapper
+    assert "Profile(65_536, 1, 8" in wrapper
+    assert "Profile(1_048_576, 1, 8" in wrapper
+
+    combined = "\n".join((release, sanitizers, valgrind, target_block))
+    for forbidden in ("OpenBench", "variantfishtest", "training"):
+        assert forbidden not in combined
+
+
+def test_v3_incremental_stress_freezes_real_incremental_and_atomic_coverage():
+    source = (
+        ROOT / "src" / "nnue" / "atomic_v3" / "tests" / "incremental_stress.cpp"
+    ).read_text(encoding="utf-8")
+
+    for marker in (
+        "append_incremental_signature",
+        "counters_advanced_by",
+        "successful evaluation published impossible HM/relation accounting",
+        "std::array<DirectedMoveFixture, DirectedMoveCount>",
+        '"max-nine-piece-blast"',
+        '"white-max-en-passant-blast"',
+        '"black-max-en-passant-blast"',
+        '"capture-promotion-n"',
+        '"black-capture-promotion-n"',
+        '"capture-promotion-missing-white"',
+        '"white-king-mirror-crossing"',
+        '"material-bucket-crossing"',
+        "do_null_move",
+        "IncrementalStack::MaxSize - 1",
+        "IncrementalFaultPoint::AfterFirstPerspective",
+        "IncrementalFaultPoint::BeforeComposition",
+        "IncrementalFaultPoint::AfterCompositionBeforeCommit",
+        "IncrementalError::NetworkMismatch",
+        "FullRefreshError::TooManyPiecesPerColor",
+        '"directed-too-many-black-pieces"',
+        "read_authenticated_fixture",
+        "load_authenticated_fixture(fixtureBytes)",
+        "std::vector<std::thread>",
+        "maxSourceDistance == IncrementalStack::MaxSize - 1",
+    ):
+        assert marker in source
+
+    assert source.count("run_castling_fixture(network, false") == 4
+    assert source.count("run_castling_fixture(network, true") == 11
+    assert source.count("load_authenticated_fixture(fixtureBytes)") == 2
+    assert "DirectedMoveCount            = 32" in source
+    assert "DirectedCaptureCount         = 23" in source
+    assert "hmRefreshes > 0 && totals.hmDeltas > 0 && totals.hmReuses > 0" in source
+    assert "snapshotMismatches >= 2 && totals.epSquareMismatches >= 2" in source
 
 
 def test_v2_convenience_targets_generate_an_ignored_local_fixture():
