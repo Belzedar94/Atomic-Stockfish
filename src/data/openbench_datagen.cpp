@@ -10,6 +10,8 @@
 
 #include "openbench_datagen.h"
 
+#include <cerrno>
+#include <cstdint>
 #include <filesystem>
 #include <iostream>
 #include <limits>
@@ -23,6 +25,20 @@
 #include "engine.h"
 #include "openbench_bundle.h"
 #include "training_data_generator.h"
+
+#ifdef _WIN32
+    #ifndef NOMINMAX
+        #define NOMINMAX
+    #endif
+    #ifndef WIN32_LEAN_AND_MEAN
+        #define WIN32_LEAN_AND_MEAN
+    #endif
+    #include <windows.h>
+#else
+    #include <fcntl.h>
+    #include <sys/stat.h>
+    #include <unistd.h>
+#endif
 
 namespace Stockfish::Data {
 namespace {
@@ -232,6 +248,207 @@ void set_option(Engine& engine, std::string_view name, const std::string& value)
     engine.get_options().setoption(command);
 }
 
+class OwnedSidecar {
+   public:
+    enum class CleanupResult {
+        SUCCESS,
+        PATH_REPLACED,
+        INSPECTION_FAILED,
+        REMOVE_FAILED,
+        CLOSE_FAILED
+    };
+
+    struct CleanupStatus {
+        CleanupResult result = CleanupResult::SUCCESS;
+        int           error  = 0;
+    };
+
+    explicit OwnedSidecar(std::filesystem::path sidecarPath) :
+        path(std::move(sidecarPath)) {}
+
+    OwnedSidecar(const OwnedSidecar&)            = delete;
+    OwnedSidecar& operator=(const OwnedSidecar&) = delete;
+
+    ~OwnedSidecar() { cleanup(); }
+
+    const std::filesystem::path& output_path() const noexcept { return path; }
+
+    bool capture(std::string& error) {
+#ifdef _WIN32
+        const HANDLE handle = ::CreateFileW(
+          path.c_str(), FILE_READ_ATTRIBUTES,
+          FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
+          FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
+        if (handle == INVALID_HANDLE_VALUE)
+        {
+            const unsigned long nativeError = ::GetLastError();
+            error = "Cannot take ownership of generated OpenBench sidecar " + path.string() + ": "
+                  + std::system_category().message(int(nativeError));
+            return false;
+        }
+
+        BY_HANDLE_FILE_INFORMATION information{};
+        const bool inspected = bool(::GetFileInformationByHandle(handle, &information));
+        if (!inspected
+            || (information.dwFileAttributes
+                & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)))
+        {
+            const unsigned long nativeError = inspected ? ERROR_SUCCESS : ::GetLastError();
+            ::CloseHandle(handle);
+            error = "Generated OpenBench sidecar is not an owned regular file: " + path.string();
+            if (nativeError != ERROR_SUCCESS)
+                error += ": " + std::system_category().message(int(nativeError));
+            return false;
+        }
+        identityDevice = std::uint64_t(information.dwVolumeSerialNumber);
+        identityFile =
+          (std::uint64_t(information.nFileIndexHigh) << 32) | information.nFileIndexLow;
+        if (!::CloseHandle(handle))
+        {
+            const unsigned long nativeError = ::GetLastError();
+            error = "Cannot close generated OpenBench sidecar identity handle " + path.string()
+                  + ": " + std::system_category().message(int(nativeError));
+            return false;
+        }
+#else
+        int flags = O_RDONLY;
+    #ifdef O_CLOEXEC
+        flags |= O_CLOEXEC;
+    #endif
+    #ifdef O_NOFOLLOW
+        flags |= O_NOFOLLOW;
+    #endif
+        descriptor = ::open(path.c_str(), flags);
+        if (descriptor == -1)
+        {
+            const int nativeError = errno;
+            error = "Cannot take ownership of generated OpenBench sidecar " + path.string() + ": "
+                  + std::generic_category().message(nativeError ? nativeError : EIO);
+            return false;
+        }
+
+        struct stat status{};
+        if (::fstat(descriptor, &status) != 0 || !S_ISREG(status.st_mode))
+        {
+            const int nativeError = errno;
+            ::close(descriptor);
+            descriptor = -1;
+            error = "Generated OpenBench sidecar is not an owned regular file: " + path.string();
+            if (nativeError)
+                error += ": " + std::generic_category().message(nativeError);
+            return false;
+        }
+        identityDevice = std::uint64_t(status.st_dev);
+        identityFile   = std::uint64_t(status.st_ino);
+#endif
+        active = true;
+        return true;
+    }
+
+    CleanupStatus cleanup() noexcept {
+        if (!active)
+            return {};
+
+        CleanupStatus status;
+#ifdef _WIN32
+        const HANDLE handle = ::CreateFileW(
+          path.c_str(), FILE_READ_ATTRIBUTES | DELETE,
+          FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
+          FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
+        if (handle == INVALID_HANDLE_VALUE)
+        {
+            const unsigned long nativeError = ::GetLastError();
+            if (nativeError != ERROR_FILE_NOT_FOUND && nativeError != ERROR_PATH_NOT_FOUND)
+            {
+                status.result = CleanupResult::INSPECTION_FAILED;
+                status.error  = int(nativeError);
+            }
+            active = false;
+            return status;
+        }
+
+        BY_HANDLE_FILE_INFORMATION information{};
+        if (!::GetFileInformationByHandle(handle, &information))
+        {
+            status.result = CleanupResult::INSPECTION_FAILED;
+            status.error  = int(::GetLastError());
+        }
+        else
+        {
+            const std::uint64_t device = information.dwVolumeSerialNumber;
+            const std::uint64_t file =
+              (std::uint64_t(information.nFileIndexHigh) << 32) | information.nFileIndexLow;
+            if ((information.dwFileAttributes
+                 & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT))
+                || device != identityDevice || file != identityFile)
+                status.result = CleanupResult::PATH_REPLACED;
+            else
+            {
+                FILE_DISPOSITION_INFO disposition{TRUE};
+                if (!::SetFileInformationByHandle(handle, FileDispositionInfo, &disposition,
+                                                  sizeof(disposition)))
+                {
+                    status.result = CleanupResult::REMOVE_FAILED;
+                    status.error  = int(::GetLastError());
+                }
+            }
+        }
+
+        if (!::CloseHandle(handle) && status.result == CleanupResult::SUCCESS)
+        {
+            status.result = CleanupResult::CLOSE_FAILED;
+            status.error  = int(::GetLastError());
+        }
+        active = false;
+#else
+        struct stat current{};
+        errno = 0;
+        if (::lstat(path.c_str(), &current) != 0)
+        {
+            if (errno != ENOENT)
+            {
+                status.result = CleanupResult::INSPECTION_FAILED;
+                status.error  = errno;
+            }
+        }
+        else if (std::uint64_t(current.st_dev) != identityDevice
+                 || std::uint64_t(current.st_ino) != identityFile)
+            status.result = CleanupResult::PATH_REPLACED;
+        else if (::unlink(path.c_str()) != 0 && errno != ENOENT)
+        {
+            status.result = CleanupResult::REMOVE_FAILED;
+            status.error  = errno;
+        }
+
+        // POSIX has no portable unlink-if-inode primitive. Keeping the owned
+        // descriptor open and revalidating with lstat immediately before
+        // unlink prevents ordinary path replacement from deleting a foreign
+        // file. A hostile writer with directory access is outside this bridge's
+        // threat model, matching AtomicBinV2Sink's rollback contract.
+        if (::close(descriptor) != 0 && status.result == CleanupResult::SUCCESS)
+        {
+            status.result = CleanupResult::CLOSE_FAILED;
+            status.error  = errno;
+        }
+        descriptor = -1;
+#endif
+        active = false;
+        return status;
+    }
+
+   private:
+    std::filesystem::path path;
+    bool                  active = false;
+#ifdef _WIN32
+    std::uint64_t identityDevice = 0;
+    std::uint64_t identityFile   = 0;
+#else
+    int           descriptor     = -1;
+    std::uint64_t identityDevice = 0;
+    std::uint64_t identityFile   = 0;
+#endif
+};
+
 class GeneratedSidecars {
    public:
     GeneratedSidecars(std::filesystem::path shardPath, std::filesystem::path manifestPath) :
@@ -240,8 +457,9 @@ class GeneratedSidecars {
 
     bool preflight(std::string& error) {
         std::error_code ec;
-        for (const auto& path : {shard, manifest})
+        for (const auto* sidecar : {&shard, &manifest})
         {
+            const auto& path = sidecar->output_path();
             ec.clear();
             const auto status = std::filesystem::symlink_status(path, ec);
             if (ec == std::errc::no_such_file_or_directory)
@@ -260,23 +478,39 @@ class GeneratedSidecars {
         return true;
     }
 
-    ~GeneratedSidecars() { cleanup(); }
+    ~GeneratedSidecars() = default;
 
-    void take_ownership() noexcept { owned = true; }
+    bool take_ownership(std::string& error) {
+        return shard.capture(error) && manifest.capture(error);
+    }
 
-    void cleanup() noexcept {
-        if (!owned)
-            return;
-        std::error_code ignored;
-        std::filesystem::remove(manifest, ignored);
-        std::filesystem::remove(shard, ignored);
-        owned = false;
+    bool cleanup(std::string& error) {
+        const auto manifestStatus = manifest.cleanup();
+        const auto shardStatus    = shard.cleanup();
+        const auto report         = [&](const OwnedSidecar&         sidecar,
+                                OwnedSidecar::CleanupStatus status) -> bool {
+            using Result = OwnedSidecar::CleanupResult;
+            if (status.result == Result::SUCCESS)
+                return true;
+            error = "Cannot remove generated OpenBench sidecar " + sidecar.output_path().string();
+            if (status.result == Result::PATH_REPLACED)
+                error += " because its path was replaced";
+            else
+            {
+#ifdef _WIN32
+                error += ": " + std::system_category().message(status.error);
+#else
+                error += ": " + std::generic_category().message(status.error ? status.error : EIO);
+#endif
+            }
+            return false;
+        };
+        return report(manifest, manifestStatus) && report(shard, shardStatus);
     }
 
    private:
-    std::filesystem::path shard;
-    std::filesystem::path manifest;
-    bool                  owned = false;
+    OwnedSidecar shard;
+    OwnedSidecar manifest;
 };
 
 void print_error(std::string_view message) { std::cout << "ERROR: " << message << std::endl; }
@@ -347,7 +581,11 @@ bool openbench_generate_training_data(Engine& engine, std::istream& input) {
     std::istringstream generatorInput(command.str());
     if (!generate_training_data(engine, generatorInput))
         return false;
-    sidecars.take_ownership();
+    if (!sidecars.take_ownership(error))
+    {
+        print_error(error);
+        return false;
+    }
 
     AtomicBinV2Manifest authenticatedManifest;
     if (DataResult loaded = load_atomic_bin_v2_manifest(manifest, authenticatedManifest); !loaded)
@@ -371,6 +609,11 @@ bool openbench_generate_training_data(Engine& engine, std::istream& input) {
     if (DataResult bundled = write_openbench_datagen_bundle(output, shard, manifest); !bundled)
     {
         print_error(bundled.message);
+        return false;
+    }
+    if (!sidecars.cleanup(error))
+    {
+        print_error(error);
         return false;
     }
 

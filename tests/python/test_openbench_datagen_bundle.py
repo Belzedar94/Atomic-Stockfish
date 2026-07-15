@@ -5,6 +5,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+from typing import Callable
 
 import pytest
 
@@ -21,18 +22,67 @@ def put(header: bytearray, offset: int, value: int, size: int) -> None:
     header[offset : offset + size] = value.to_bytes(size, "little")
 
 
-def build_bundle(path: Path, *, corrupt: bool = False) -> None:
+def build_bundle(
+    path: Path,
+    *,
+    corrupt: bool = False,
+    shard_mutator: Callable[[bytearray], None] | None = None,
+    manifest_mutator: Callable[[dict[str, object]], None] | None = None,
+    manifest_bytes_mutator: Callable[[bytes], bytes] | None = None,
+) -> None:
     shard = bytearray(96 + 64)
     shard[:8] = b"ATBINV2\0"
     shard[8:10] = (2).to_bytes(2, "little")
     shard[10:12] = (96).to_bytes(2, "little")
     shard[12:16] = (0x01020304).to_bytes(4, "little")
     shard[16:20] = (64).to_bytes(4, "little")
+    shard[20:24] = (0).to_bytes(4, "little")
+    shard[24:56] = bytes.fromhex(VALIDATOR.DATA_SCHEMA_SHA256)
     shard[56:64] = (1).to_bytes(8, "little")
+    if shard_mutator is not None:
+        shard_mutator(shard)
     shard_sha = hashlib.sha256(shard).hexdigest()
     manifest = {
+        "manifest_version": 1,
+        "manifest_schema_sha256": VALIDATOR.MANIFEST_SCHEMA_SHA256,
+        "data_schema_sha256": VALIDATOR.DATA_SCHEMA_SHA256,
         "format": "atomic-bin-v2",
-        "generation": {"use_nnue": "pure", "atomic960": False},
+        "engine": {"commit": "a" * 40, "version": "Atomic-Stockfish test"},
+        "network": {"file": "atomic.nnue", "sha256": "b" * 64},
+        "book": {"kind": "file", "file": "atomic.epd", "sha256": "c" * 64},
+        "generation": {
+            "resolved_seed": "202607150500000",
+            "atomic960": False,
+            "threads": 30,
+            "hash_mb": "512",
+            "use_nnue": "pure",
+            "options": {
+                "search_depth_min": 6,
+                "search_depth_max": 6,
+                "nodes": "0",
+                "requested_records": "1",
+                "records_per_shard": "1",
+                "eval_limit": 10000,
+                "eval_diff_limit": 32000,
+                "random_move_min_ply": 1,
+                "random_move_max_ply": 20,
+                "random_move_count": 8,
+                "random_move_like_apery": 0,
+                "random_multi_pv": 4,
+                "random_multi_pv_diff": 200,
+                "random_multi_pv_depth": 6,
+                "write_min_ply": 5,
+                "write_max_ply": 400,
+                "keep_draws": "1",
+                "adjudicate_draws_by_score": True,
+                "adjudicate_insufficient": True,
+                "filter_captures": True,
+                "filter_checks": False,
+                "filter_promotions": True,
+                "random_file_name": False,
+                "set_recommended_uci_options_seen": True,
+            },
+        },
         "statistics": {"records": "1", "draws": "0"},
         "shards": [
             {
@@ -44,9 +94,19 @@ def build_bundle(path: Path, *, corrupt: bool = False) -> None:
             }
         ],
     }
+    if manifest_mutator is not None:
+        manifest_mutator(manifest)
     manifest_bytes = (
-        json.dumps(manifest, sort_keys=True, separators=(",", ":")) + "\n"
+        json.dumps(
+            manifest,
+            allow_nan=False,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        + "\n"
     ).encode()
+    if manifest_bytes_mutator is not None:
+        manifest_bytes = manifest_bytes_mutator(manifest_bytes)
     manifest_sha = hashlib.sha256(manifest_bytes).digest()
     payload_offset = (256 + len(manifest_bytes) + 63) & ~63
 
@@ -131,3 +191,93 @@ def test_extractor_refuses_symlink_without_touching_target(tmp_path: Path) -> No
 def test_frozen_bundle_schema_hash_matches_tracked_file() -> None:
     schema = ROOT / "schemas" / "atomic-openbench-datagen-bundle-v1.json"
     assert hashlib.sha256(schema.read_bytes()).hexdigest() == VALIDATOR.BUNDLE_SCHEMA_SHA256
+
+
+@pytest.mark.parametrize(
+    "shard_mutator",
+    [
+        lambda shard: shard.__setitem__(slice(0, 8), b"BADBINV2"),
+        lambda shard: put(shard, 8, 999, 2),
+        lambda shard: put(shard, 10, 95, 2),
+        lambda shard: put(shard, 12, 0x04030201, 4),
+        lambda shard: put(shard, 16, 63, 4),
+        lambda shard: put(shard, 20, 1, 4),
+        lambda shard: shard.__setitem__(24, shard[24] ^ 1),
+        lambda shard: shard.__setitem__(64, 1),
+    ],
+    ids=(
+        "magic",
+        "version-999",
+        "header-size",
+        "endian",
+        "record-size",
+        "flags",
+        "schema",
+        "reserved",
+    ),
+)
+def test_validator_rejects_every_noncanonical_inner_header_field(
+    tmp_path: Path, shard_mutator: Callable[[bytearray], None]
+) -> None:
+    bundle = tmp_path / "bad-inner-header.bin"
+    build_bundle(bundle, shard_mutator=shard_mutator)
+    with pytest.raises(VALIDATOR.BundleError, match="Atomic BIN V2|framing"):
+        VALIDATOR.validate_bundle(bundle)
+
+
+def test_validator_rejects_inner_record_count_mismatch(tmp_path: Path) -> None:
+    bundle = tmp_path / "bad-count.bin"
+    build_bundle(bundle, shard_mutator=lambda shard: put(shard, 56, 2, 8))
+    with pytest.raises(VALIDATOR.BundleError, match="count/size"):
+        VALIDATOR.validate_bundle(bundle)
+
+
+def test_validator_rejects_duplicate_manifest_keys(tmp_path: Path) -> None:
+    bundle = tmp_path / "duplicate-manifest-key.bin"
+
+    def duplicate_format(payload: bytes) -> bytes:
+        needle = b'"format":"atomic-bin-v2"'
+        return payload.replace(needle, needle + b',"format":"atomic-bin-v2"', 1)
+
+    build_bundle(bundle, manifest_bytes_mutator=duplicate_format)
+    with pytest.raises(VALIDATOR.BundleError, match="duplicate JSON key"):
+        VALIDATOR.validate_bundle(bundle)
+
+
+def test_validator_rejects_noncanonical_manifest_bytes(tmp_path: Path) -> None:
+    bundle = tmp_path / "noncanonical-manifest.bin"
+    build_bundle(
+        bundle,
+        manifest_bytes_mutator=lambda payload: payload.replace(b',"engine"', b', "engine"', 1),
+    )
+    with pytest.raises(VALIDATOR.BundleError, match="byte-exact canonical JSON"):
+        VALIDATOR.validate_bundle(bundle)
+
+
+@pytest.mark.parametrize(
+    "manifest_mutator",
+    [
+        lambda manifest: manifest.pop("engine"),
+        lambda manifest: manifest["network"].pop("sha256"),
+        lambda manifest: manifest["book"].pop("sha256"),
+        lambda manifest: manifest["generation"]["options"].pop("random_multi_pv_diff"),
+    ],
+    ids=("source", "teacher", "book", "generation-option"),
+)
+def test_validator_rejects_incomplete_provenance_manifest(
+    tmp_path: Path, manifest_mutator: Callable[[dict[str, object]], None]
+) -> None:
+    bundle = tmp_path / "incomplete-manifest.bin"
+    build_bundle(bundle, manifest_mutator=manifest_mutator)
+    with pytest.raises(VALIDATOR.BundleError, match="frozen contract"):
+        VALIDATOR.validate_bundle(bundle)
+
+
+def test_validator_rejects_unauthenticated_source_commit(tmp_path: Path) -> None:
+    bundle = tmp_path / "unknown-source.bin"
+    build_bundle(
+        bundle,
+        manifest_mutator=lambda manifest: manifest["engine"].__setitem__("commit", "unknown"),
+    )
+    with pytest.raises(VALIDATOR.BundleError, match="engine.commit"):
+        VALIDATOR.validate_bundle(bundle)
