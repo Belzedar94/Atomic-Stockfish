@@ -13,6 +13,60 @@ make -j data-generator ARCH=x86-64-bmi2
 ./atomic-stockfish-data-generator
 ```
 
+## Distributed OpenBench build and command
+
+OpenBench selects the isolated BMI2 generator by adding
+`OPENBENCH_DATAGEN=1` to its ordinary build invocation:
+
+```text
+make -j EXE=<worker-output> EVALFILE=<authenticated-network> OPENBENCH_DATAGEN=1
+```
+
+The build embeds OpenBench's authenticated network only so the worker can move
+the executable out of its temporary checkout and run the ordinary bench. The
+datagen command must still receive `{NETWORK}` plus its complete SHA-256. The
+bridge forcibly reloads that external file, and the V2 manifest authenticates
+only those exact external bytes as the `Use NNUE=pure` teacher.
+
+The worker sends one command line. The bridge configures `Threads`, `Hash`,
+`EvalFile`, `Use NNUE=pure`, `UCI_Chess960=false` and an empty `SyzygyPath`
+before delegating all generation options to the isolated generator:
+
+```text
+openbench_generate_training_data threads {THREADS} hash 512 network {NETWORK} network_sha256 99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f92a04a6 count {COUNT} seed {SEED} book {BOOK} out {OUT} depth 6 random_multi_pv 4 random_multi_pv_diff 200
+```
+
+`threads`, `hash`, `network`, `network_sha256`, `count`, `seed`, `book`, and
+`out` are mandatory. `network_sha256` is a full 64-digit gate, independent of
+OpenBench's shorter display prefix. `book_sha256` is optional but, when
+provided, must match the selected book. Both supplied SHA gates are checked
+before self-play and authenticated again in the generated manifest. `book NONE`
+selects the built-in start position and must not be combined with
+`book_sha256`.
+The accepted generator options are `depth`, `min_depth`, `max_depth`, `nodes`,
+`eval_limit`, `eval_diff_limit`, all `random_move_*` and `random_multi_pv_*`
+options, `write_min_ply`, `write_max_ply`, `keep_draws`, both draw-adjudication
+options, all three filters, and `set_recommended_uci_options`. Output format,
+sharding, random filenames and Atomic960 are intentionally fixed by the bridge.
+
+The bridge forces `save_every=count`, so every worker chunk contains exactly
+one shard, and publishes exactly `{OUT}`. Its deterministic `ATOBNDL1` wire is
+frozen by `schemas/atomic-openbench-datagen-bundle-v1.json`: a 256-byte
+little-endian header authenticates the bundle, data and manifest schemas;
+records the manifest/shard sizes, offsets, SHA-256 values and record count; and
+leaves 32 reserved zero bytes. The canonical manifest starts at byte 256, zero
+padding aligns the payload to 64 bytes, and the `.atbin` payload named by that
+manifest follows. All sizes and offsets are `u64`, so chunks over
+4 GiB remain representable and are copied with bounded streaming buffers.
+
+The mandatory sidecar therefore travels with its shard while OpenBench still
+sees one artifact. Validate or safely extract it with:
+
+```text
+python tools/validate_openbench_datagen_bundle.py <OUT>
+python tools/validate_openbench_datagen_bundle.py <OUT> --extract-dir <DIR>
+```
+
 The output executable is `atomic-stockfish-data-generator` (with `.exe` on
 Windows). Its `atomic_data_schema` command reports the exact write capability:
 
