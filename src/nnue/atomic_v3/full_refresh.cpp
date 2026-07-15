@@ -76,12 +76,7 @@ FullRefreshError emit_full_refresh(const CapturePairSnapshot& snapshot,
 
 FullRefreshError
 emit_full_refresh(const Position& position, Color perspective, FullRefreshEmission& result) {
-    CapturePairSnapshot snapshot{};
-    snapshot.sideToMove = position.side_to_move();
-    snapshot.epSquare   = position.ep_square();
-    for (int squareIndex = 0; squareIndex < SQUARE_NB; ++squareIndex)
-        snapshot.board[squareIndex] = position.piece_on(Square(squareIndex));
-    return emit_full_refresh(snapshot, perspective, result);
+    return emit_full_refresh(make_capture_pair_snapshot(position), perspective, result);
 }
 
 const char* full_refresh_error_message(FullRefreshError error) {

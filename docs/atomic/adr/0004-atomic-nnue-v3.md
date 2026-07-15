@@ -329,6 +329,17 @@ an independent full-board enumerator.
     then applies the inherited `/ 16` output scale, again truncating toward
     zero. Product code may never wrap, saturate,
     cast after an overflowing expression or truncate an active list.
+
+    H9.3h implements this contract as a private scalar full-refresh backend.
+    It consumes the strict H9.3g `Network`, publishes canonical i32
+    accumulators and i64 PSQT diagnostics, executes the exact SFNNv15 transform
+    and every dense intermediate, and fails transactionally. Its frozen
+    identity/AVX2-LASX/AVX512 diagnostic fingerprint is
+    `0x46F68EAB20FF9D50`. A separate adversarial dense seam covers signed block
+    boundaries, skip outputs, affine narrowing and the reachable post-layer
+    raw-composition rejection. This satisfies the scalar-oracle precondition;
+    it does not authorize dispatcher, SIMD, incremental, protocol or training
+    integration.
 13. Treat EP state as accumulator input. A search null move clears `epSquare`
     without pushing the NNUE accumulator, so V3 state stores the EP square used
     for its last computation and refreshes both perspectives when the current

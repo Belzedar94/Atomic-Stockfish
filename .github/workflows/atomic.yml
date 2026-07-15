@@ -59,6 +59,9 @@ jobs:
           make -j2 ARCH=x86-64 COMP=${{ matrix.comp }} COMPCXX=${{ matrix.cxx }} \
             ATOMIC_NNUE_V3_TEST_NET="$RUNNER_TEMP/atomic-v3-wire-v1.nnue" \
             atomic-v3-wire-tests
+          make -j2 ARCH=x86-64 COMP=${{ matrix.comp }} COMPCXX=${{ matrix.cxx }} \
+            ATOMIC_NNUE_V3_TEST_NET="$RUNNER_TEMP/atomic-v3-wire-v1.nnue" \
+            atomic-v3-scalar-tests
           make -j2 ARCH=x86-64 COMP=${{ matrix.comp }} COMPCXX=${{ matrix.cxx }} atomic-syzygy-driver
           make -j2 ARCH=x86-64 COMP=${{ matrix.comp }} COMPCXX=${{ matrix.cxx }} legacy-atomic-v1-tests
           make -j2 ARCH=x86-64 COMP=${{ matrix.comp }} COMPCXX=${{ matrix.cxx }} atomic-bin-v2-tests
@@ -147,10 +150,13 @@ jobs:
             --timeout 180
       - name: AtomicNNUEV3 AVX2 wire permutation gate
         if: matrix.arch == 'x86-64-avx2'
-        run: >-
-          make -C src -j2 ARCH=${{ matrix.arch }}
-          ATOMIC_NNUE_V3_TEST_NET="$RUNNER_TEMP/atomic-v3-wire-v1.nnue"
-          atomic-v3-wire-tests
+        run: |
+          make -C src -j2 ARCH=${{ matrix.arch }} \
+            ATOMIC_NNUE_V3_TEST_NET="$RUNNER_TEMP/atomic-v3-wire-v1.nnue" \
+            atomic-v3-wire-tests
+          make -C src -j2 ARCH=${{ matrix.arch }} \
+            ATOMIC_NNUE_V3_TEST_NET="$RUNNER_TEMP/atomic-v3-wire-v1.nnue" \
+            atomic-v3-scalar-tests
 
   nnue-v3-wire-policies:
     name: AtomicNNUEV3 wire policy ${{ matrix.policy }}
@@ -164,12 +170,16 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
-      - name: Forced portable wire selftest and differential
-        run: >-
-          make -C src -j2 ARCH=general-64
-          ATOMIC_V3_WIRE_TEST_POLICY=${{ matrix.policy }}
-          ATOMIC_NNUE_V3_TEST_NET="$RUNNER_TEMP/atomic-v3-wire-v1.nnue"
-          atomic-v3-wire-tests
+      - name: Forced portable wire and scalar selftests and differentials
+        run: |
+          make -C src -j2 ARCH=general-64 \
+            ATOMIC_V3_WIRE_TEST_POLICY=${{ matrix.policy }} \
+            ATOMIC_NNUE_V3_TEST_NET="$RUNNER_TEMP/atomic-v3-wire-v1.nnue" \
+            atomic-v3-wire-tests
+          make -C src -j2 ARCH=general-64 \
+            ATOMIC_V3_WIRE_TEST_POLICY=${{ matrix.policy }} \
+            ATOMIC_NNUE_V3_TEST_NET="$RUNNER_TEMP/atomic-v3-wire-v1.nnue" \
+            atomic-v3-scalar-tests
 
   debug:
     name: Debug and assertions
@@ -206,6 +216,9 @@ jobs:
           make -C src -j2 ARCH=x86-64 debug=yes optimize=no \
             ATOMIC_NNUE_V3_TEST_NET="$RUNNER_TEMP/atomic-v3-wire-v1.nnue" \
             atomic-v3-wire-tests
+          make -C src -j2 ARCH=x86-64 debug=yes optimize=no \
+            ATOMIC_NNUE_V3_TEST_NET="$RUNNER_TEMP/atomic-v3-wire-v1.nnue" \
+            atomic-v3-scalar-tests
           make -C src -j2 ARCH=x86-64 debug=yes optimize=no atomic-syzygy-driver
           make -C src -j2 ARCH=x86-64 debug=yes optimize=no legacy-atomic-v1-tests
           make -C src -j2 ARCH=x86-64 debug=yes optimize=no atomic-bin-v2-tests
@@ -269,6 +282,9 @@ jobs:
           python tests/atomic_v3_wire_differential.py \
             --oracle src/atomic-v3-wire-tests.exe \
             --fixture "$RUNNER_TEMP/atomic-v3-wire-v1.nnue"
+          make -C src -j2 ARCH=x86-64 COMP=mingw \
+            ATOMIC_NNUE_V3_TEST_NET="$RUNNER_TEMP/atomic-v3-wire-v1.nnue" \
+            atomic-v3-scalar-tests
           python tests/nnue_v3_dispatch_reject.py \
             --engine src/atomic-stockfish.exe \
             --v3-net "$RUNNER_TEMP/atomic-v3-wire-v1.nnue"
@@ -332,6 +348,7 @@ jobs:
           make -j2 ARCH=x86-64-sse41-popcnt sanitize=${{ matrix.sanitizer }} debug=yes optimize=no atomic-v3-full-refresh-tests.bin
           make -j2 ARCH=x86-64-sse41-popcnt sanitize=${{ matrix.sanitizer }} debug=yes optimize=no atomic-v3-numeric-tests.bin
           make -j2 ARCH=x86-64-sse41-popcnt sanitize=${{ matrix.sanitizer }} debug=yes optimize=no atomic-v3-wire-tests.bin
+          make -j2 ARCH=x86-64-sse41-popcnt sanitize=${{ matrix.sanitizer }} debug=yes optimize=no atomic-v3-scalar-tests.bin
           make -j2 ARCH=x86-64-sse41-popcnt sanitize=${{ matrix.sanitizer }} debug=yes optimize=no data-generator
           make -j2 ARCH=x86-64-sse41-popcnt sanitize=${{ matrix.sanitizer }} debug=yes optimize=no data-tools
       - name: Create authenticated Legacy V1 and AtomicNNUEV2 fixtures
@@ -342,7 +359,7 @@ jobs:
         run: >-
           python3 tests/create_synthetic_atomic_v3_nnue.py
           --output "$RUNNER_TEMP/atomic-v3-wire-v1.nnue"
-      - name: Instrumented AtomicNNUEV3 numeric and private wire reader
+      - name: Instrumented AtomicNNUEV3 numeric, wire reader and scalar backend
         env:
           ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
           UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
@@ -350,7 +367,8 @@ jobs:
         run: |
           set +e
           src/atomic-v3-numeric-tests.bin && \
-          src/atomic-v3-wire-tests.bin inspect "$RUNNER_TEMP/atomic-v3-wire-v1.nnue"
+          src/atomic-v3-wire-tests.bin inspect "$RUNNER_TEMP/atomic-v3-wire-v1.nnue" && \
+          src/atomic-v3-scalar-tests.bin "$RUNNER_TEMP/atomic-v3-wire-v1.nnue"
           status=$?
           if compgen -G 'tsan-v3-wire.*' > /dev/null; then
             cat tsan-v3-wire.*
@@ -374,6 +392,9 @@ jobs:
           src/atomic-v3-wire-tests.bin selftest "$RUNNER_TEMP/atomic-v3-wire-v1.nnue"
           python3 tests/atomic_v3_wire_differential.py \
             --oracle src/atomic-v3-wire-tests.bin \
+            --fixture "$RUNNER_TEMP/atomic-v3-wire-v1.nnue"
+          python3 tests/atomic_v3_scalar_differential.py \
+            --oracle src/atomic-v3-scalar-tests.bin \
             --fixture "$RUNNER_TEMP/atomic-v3-wire-v1.nnue"
           ATOMIC_PERFT_NET="$RUNNER_TEMP/atomic-v2.nnue" bash tests/perft.sh src/atomic-stockfish
       - name: Instrumented AtomicNNUEV2 core, incremental, reload and threading
@@ -471,6 +492,8 @@ jobs:
             debug=yes optimize=no atomic-v3-numeric-tests.bin
           make -j2 ARCH=x86-64 COMP=gcc COMPCXX=g++ \
             debug=yes optimize=no atomic-v3-wire-tests.bin
+          make -j2 ARCH=x86-64 COMP=gcc COMPCXX=g++ \
+            debug=yes optimize=no atomic-v3-scalar-tests.bin
       - name: Run AtomicNNUEV2 and AtomicNNUEV3 isolated tests under Valgrind
         run: |
           python3 tests/create_synthetic_atomic_v2_nnue.py \
@@ -546,6 +569,16 @@ jobs:
             --num-callers=30 \
             src/atomic-v3-wire-tests.bin inspect \
             "$RUNNER_TEMP/atomic-v3-wire-v1.nnue"
+          valgrind \
+            --error-exitcode=99 \
+            --leak-check=full \
+            --show-leak-kinds=all \
+            --errors-for-leak-kinds=all \
+            --track-origins=yes \
+            --num-callers=30 \
+            src/atomic-v3-scalar-tests.bin \
+            "$RUNNER_TEMP/atomic-v3-wire-v1.nnue" \
+            --snapshot white d6 "7k/3b4/8/2RPp3/8/8/8/K7"
 
   atomic-v3-full-refresh-valgrind:
     name: AtomicNNUE V3 full refresh Valgrind
@@ -664,6 +697,7 @@ jobs:
           tests/python/test_atomic_v3_blast_ring_oracle.py
           tests/python/test_atomic_v3_full_refresh_oracle.py
           tests/python/test_atomic_v3_wire_reference.py
+          tests/python/test_atomic_v3_scalar_oracle.py
           tests/python/test_create_synthetic_atomic_v3_nnue.py
           tests/python/test_validate_atomic_v3_bundle.py
           tests/python/test_create_synthetic_atomic_v2_nnue.py
