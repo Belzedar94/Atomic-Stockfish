@@ -472,6 +472,29 @@ an independent full-board enumerator.
 15. Keep orthodox `FullThreats` only as an ablation control. The serious order
     is HM, then CapturePair, then KingBlast/EP, then BlastRing. Every comparison
     uses the same dataset, seed, training budget and dense head.
+16. Stage incremental execution by slice and keep it private until every event
+    is bit-identical to H9.3h. The first scalar stack incrementally maintains
+    only HM and HM PSQT. It derives sorted active HM rows from the immutable
+    post-move snapshot, subtracts the old-only rows before adding the new-only
+    rows in i64 scratch, publishes i32 only after the frozen range check and
+    rebuilds from biases when the joint orientation changes. `DirtyPiece` may
+    retain stack/API compatibility, but it is not an oracle for global Atomic
+    relations: a quiet blocker move can change distant CapturePair,
+    KingBlastEP and BlastRing rows. Those three slices therefore refresh from
+    the exact current full emission and are combined only in temporary output.
+
+    Search null moves remain a no-stack-push path. The stack compares the
+    current EP square with `epSquareWhenComputed` before any same-frame reuse,
+    refreshes both relation perspectives for parent EP, cleared null EP and
+    restored parent EP, and always composes the dense input using the current
+    side to move. A failed feature, numeric, network-identity or scalar
+    composition publishes zero and leaves the prior frame unchanged. Stack
+    depth itself retains Stockfish's asserted `MAX_PLY + 1` caller contract.
+    H9.3i-a freezes scalar make/undo/null/lazy event traces; H9.3i-b adds the
+    complete special-move, randomized, concurrency and fail-closed corpus
+    before real SIMD.
+    A V3 Finny or relation cache is a separate measured layer after scalar and
+    ISA equivalence, never a prerequisite for establishing correctness.
 
 ## Contract freeze gates
 
@@ -534,8 +557,10 @@ an independent full-board enumerator.
    fixture and strict reader/writer.
 6. Add the scalar network backend and compare its arithmetic against the
    independent full-refresh oracle before exposing V3 through the dispatcher.
-7. Add SIMD and safe incremental updates by slice. Overflow always forces
-   refresh; BlastRing remains refresh-only until its full delta is proved.
+7. Add the private scalar HM incremental stack, then its complete stress and
+   fail-closed corpus. Add real-ISA SIMD only after the per-event scalar trace
+   is frozen; overflow always forces refresh. CapturePair, KingBlastEP and
+   BlastRing remain refresh-only until each full delta is proved independently.
 8. Extend transactional V1/V2/V3 loading, UCI/XBoard, Python, JavaScript, WASM,
    generator and trainer gates. Generation publishes role-separated bin-v2
    manifests, trajectory ledgers, per-index coverage, stats and split audit as

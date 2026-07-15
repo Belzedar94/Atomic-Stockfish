@@ -36,6 +36,25 @@ static_assert(AccumulatorDimensions % (8 * 8) == 0);
 
 constexpr std::size_t color_index(Color color) noexcept { return static_cast<std::size_t>(color); }
 
+constexpr bool same_orientation(const JointOrientation& lhs, const JointOrientation& rhs) noexcept {
+    return lhs.perspective == rhs.perspective && lhs.ownKing == rhs.ownKing
+        && lhs.orientedOwnKing == rhs.orientedOwnKing && lhs.verticalXor == rhs.verticalXor
+        && lhs.horizontalXor == rhs.horizontalXor && lhs.kingBucket == rhs.kingBucket;
+}
+
+constexpr bool valid_composition_emission(const FullRefreshEmission& emission,
+                                          Color                      perspective) noexcept {
+    return emission.hm.size <= HmMaximumActiveDimensions
+        && emission.capturePairs.size <= CapturePairMaximumActiveFeatures
+        && emission.kingBlastEp.size <= KingBlastEpMaximumActiveFeatures
+        && emission.blastRing.size <= BlastRingMaximumActiveFeatures
+        && is_canonical_joint_orientation(emission.hm.orientation)
+        && emission.hm.orientation.perspective == perspective
+        && same_orientation(emission.hm.orientation, emission.capturePairs.orientation)
+        && same_orientation(emission.hm.orientation, emission.kingBlastEp.orientation)
+        && same_orientation(emission.hm.orientation, emission.blastRing.orientation);
+}
+
 ScalarStatus fail(ScalarDiagnostic& result,
                   ScalarError       error,
                   FullRefreshError  featureError = FullRefreshError::None,
@@ -58,74 +77,53 @@ bool add_internal_row(InternalAccumulator& accumulator,
     return true;
 }
 
-ScalarError build_perspective(const Network&               network,
-                              const CapturePairSnapshot&   snapshot,
-                              Color                        perspective,
-                              ScalarPerspectiveDiagnostic& destination,
-                              FullRefreshError&            featureError) {
-    destination             = {};
-    destination.perspective = perspective;
-    featureError            = emit_full_refresh(snapshot, perspective, destination.emission);
-    if (featureError != FullRefreshError::None)
-        return ScalarError::FeatureOracleError;
+template<typename WeightType, std::size_t BlockBytes>
+bool add_canonical_row(InternalAccumulator& accumulator,
+                       const WeightType*    weights,
+                       std::size_t          row,
+                       std::size_t          rowCount) noexcept {
+    if (!weights || row >= rowCount)
+        return false;
 
-    InternalAccumulator internal{};
-    for (std::size_t output = 0; output < internal.size(); ++output)
-        internal[output] = network.biases()[output];
-
-    for (IndexType index = 0; index < destination.emission.hm.size; ++index)
-    {
-        const std::size_t row = destination.emission.hm.features[index].physicalIndex;
-        if (!add_internal_row(internal, network.hm_weights(), row, HmPhysicalDimensions))
-            return ScalarError::InvalidFeatureIndex;
-        for (IndexType bucket = 0; bucket < PsqtBuckets; ++bucket)
-            destination.psqt[bucket] += network.hm_psqt_weights()[row * PsqtBuckets + bucket];
-    }
-
-    for (IndexType index = 0; index < destination.emission.capturePairs.size; ++index)
-    {
-        const std::size_t physical =
-          destination.emission.capturePairs.features[index].physicalIndex;
-        if (physical < CapturePairPhysicalOffset
-            || !add_internal_row(internal, network.capture_pair_weights(),
-                                 physical - CapturePairPhysicalOffset,
-                                 CapturePairPhysicalDimensions))
-            return ScalarError::InvalidFeatureIndex;
-    }
-
-    for (IndexType index = 0; index < destination.emission.kingBlastEp.size; ++index)
-    {
-        const std::size_t physical = destination.emission.kingBlastEp.features[index].physicalIndex;
-        if (physical < KingBlastEpPhysicalOffset
-            || !add_internal_row(internal, network.king_blast_ep_weights(),
-                                 physical - KingBlastEpPhysicalOffset,
-                                 KingBlastEpPhysicalDimensions))
-            return ScalarError::InvalidFeatureIndex;
-    }
-
-    for (IndexType index = 0; index < destination.emission.blastRing.size; ++index)
-    {
-        const std::size_t physical = destination.emission.blastRing.features[index].physicalIndex;
-        if (physical < BlastRingPhysicalOffset
-            || !add_internal_row(internal, network.blast_ring_weights(),
-                                 physical - BlastRingPhysicalOffset, BlastRingPhysicalDimensions))
-            return ScalarError::InvalidFeatureIndex;
-    }
-
-    // All mixed tensors have eight values per wire permutation block, so one
-    // contiguous internal accumulation is valid for i16 and i8 slices alike.
-    // Publish only canonical logical coordinates.
+    const WeightType* const source = weights + row * AccumulatorDimensions;
     for (std::size_t canonical = 0; canonical < AccumulatorDimensions; ++canonical)
+        accumulator[canonical] +=
+          source[WireIO::internal_index_from_canonical<WeightType, BlockBytes>(canonical)];
+    return true;
+}
+
+ScalarError add_relation_rows(const Network&             network,
+                              const FullRefreshEmission& emission,
+                              InternalAccumulator&       accumulator) noexcept {
+    for (IndexType index = 0; index < emission.capturePairs.size; ++index)
     {
-        const std::size_t internalIndex = WireIO::internal_index_from_canonical<i16, 16>(canonical);
-        if (!feature_transformer_accumulator_in_range(internal[internalIndex]))
-            return ScalarError::FeatureAccumulatorOutOfRange;
-        destination.accumulator[canonical] = static_cast<i32>(internal[internalIndex]);
+        const std::size_t physical = emission.capturePairs.features[index].physicalIndex;
+        if (physical < CapturePairPhysicalOffset
+            || !add_canonical_row<i8, 8>(accumulator, network.capture_pair_weights(),
+                                         physical - CapturePairPhysicalOffset,
+                                         CapturePairPhysicalDimensions))
+            return ScalarError::InvalidFeatureIndex;
     }
 
-    for (const HmPsqtAccumulatorType value : destination.psqt)
-        if (value < std::numeric_limits<i32>::min() || value > std::numeric_limits<i32>::max())
-            return ScalarError::PsqtAccumulatorOutOfRange;
+    for (IndexType index = 0; index < emission.kingBlastEp.size; ++index)
+    {
+        const std::size_t physical = emission.kingBlastEp.features[index].physicalIndex;
+        if (physical < KingBlastEpPhysicalOffset
+            || !add_canonical_row<i16, 16>(accumulator, network.king_blast_ep_weights(),
+                                           physical - KingBlastEpPhysicalOffset,
+                                           KingBlastEpPhysicalDimensions))
+            return ScalarError::InvalidFeatureIndex;
+    }
+
+    for (IndexType index = 0; index < emission.blastRing.size; ++index)
+    {
+        const std::size_t physical = emission.blastRing.features[index].physicalIndex;
+        if (physical < BlastRingPhysicalOffset
+            || !add_canonical_row<i8, 8>(accumulator, network.blast_ring_weights(),
+                                         physical - BlastRingPhysicalOffset,
+                                         BlastRingPhysicalDimensions))
+            return ScalarError::InvalidFeatureIndex;
+    }
 
     return ScalarError::None;
 }
@@ -224,21 +222,114 @@ ScalarStatus evaluate_impl(const Network&             network,
                            const CapturePairSnapshot& snapshot,
                            ScalarDiagnostic&          result) {
     result = {};
+    std::array<FullRefreshEmission, COLOR_NB> emissions{};
+    std::array<ScalarHmPerspective, COLOR_NB> hmStates{};
+
+    for (const Color perspective : {WHITE, BLACK})
+    {
+        const std::size_t index        = color_index(perspective);
+        const auto        featureError = emit_full_refresh(snapshot, perspective, emissions[index]);
+        if (featureError != FullRefreshError::None)
+            return fail(result, ScalarError::FeatureOracleError, featureError);
+
+        const ScalarError hmError =
+          accumulate_hm_scalar(network, emissions[index].hm, hmStates[index]);
+        if (hmError != ScalarError::None)
+            return fail(result, hmError);
+    }
+
+    return compose_scalar_diagnostic(network, snapshot, emissions, hmStates, result);
+}
+
+}  // namespace
+
+ScalarError accumulate_hm_scalar(const Network&       network,
+                                 const HmEmission&    emission,
+                                 ScalarHmPerspective& result) noexcept {
+    result = {};
+    ScalarHmPerspective candidate{};
+
+    if (!network.biases() || !network.hm_weights() || !network.hm_psqt_weights()
+        || emission.size > HmMaximumActiveDimensions
+        || !is_canonical_joint_orientation(emission.orientation)
+        || emission.networkBucket >= LayerStacks)
+        return ScalarError::InvalidFeatureIndex;
+
+    InternalAccumulator internal{};
+    for (std::size_t output = 0; output < internal.size(); ++output)
+        internal[output] = network.biases()[output];
+
+    for (IndexType index = 0; index < emission.size; ++index)
+    {
+        const std::size_t row = emission.features[index].physicalIndex;
+        if (!add_internal_row(internal, network.hm_weights(), row, HmPhysicalDimensions))
+            return ScalarError::InvalidFeatureIndex;
+
+        for (IndexType bucket = 0; bucket < PsqtBuckets; ++bucket)
+            candidate.psqt[bucket] += network.hm_psqt_weights()[row * PsqtBuckets + bucket];
+    }
+
+    for (std::size_t canonical = 0; canonical < AccumulatorDimensions; ++canonical)
+    {
+        const std::size_t internalIndex = WireIO::internal_index_from_canonical<i16, 16>(canonical);
+        if (!feature_transformer_accumulator_in_range(internal[internalIndex]))
+            return ScalarError::FeatureAccumulatorOutOfRange;
+        candidate.accumulator[canonical] = static_cast<i32>(internal[internalIndex]);
+    }
+
+    for (const HmPsqtAccumulatorType value : candidate.psqt)
+        if (value < std::numeric_limits<i32>::min() || value > std::numeric_limits<i32>::max())
+            return ScalarError::PsqtAccumulatorOutOfRange;
+
+    result = candidate;
+    return ScalarError::None;
+}
+
+ScalarStatus compose_scalar_diagnostic(const Network&                                   network,
+                                       const CapturePairSnapshot&                       snapshot,
+                                       const std::array<FullRefreshEmission, COLOR_NB>& emissions,
+                                       const std::array<ScalarHmPerspective, COLOR_NB>& hmStates,
+                                       ScalarDiagnostic&                                result) {
+    result = {};
+    if (snapshot.sideToMove != WHITE && snapshot.sideToMove != BLACK)
+        return fail(result, ScalarError::FeatureOracleError, FullRefreshError::InvalidSideToMove);
+
     ScalarDiagnostic candidate{};
     candidate.sideToMove = snapshot.sideToMove;
 
     for (const Color perspective : {WHITE, BLACK})
     {
-        FullRefreshError  featureError = FullRefreshError::None;
-        const ScalarError perspectiveError =
-          build_perspective(network, snapshot, perspective,
-                            candidate.perspectives[color_index(perspective)], featureError);
-        if (perspectiveError != ScalarError::None)
+        const std::size_t index       = color_index(perspective);
+        const auto&       emission    = emissions[index];
+        const auto&       hm          = hmStates[index];
+        auto&             destination = candidate.perspectives[index];
+
+        if (!valid_composition_emission(emission, perspective)
+            || emission.hm.networkBucket >= LayerStacks)
+            return fail(result, ScalarError::InvalidFeatureIndex);
+
+        destination.perspective = perspective;
+        destination.emission    = emission;
+        destination.psqt        = hm.psqt;
+
+        InternalAccumulator combined{};
+        for (std::size_t output = 0; output < AccumulatorDimensions; ++output)
+            combined[output] = hm.accumulator[output];
+
+        const ScalarError relationError = add_relation_rows(network, emission, combined);
+        if (relationError != ScalarError::None)
+            return fail(result, relationError);
+
+        for (std::size_t output = 0; output < AccumulatorDimensions; ++output)
         {
-            if (featureError != FullRefreshError::None)
-                return fail(result, ScalarError::FeatureOracleError, featureError);
-            return fail(result, perspectiveError);
+            if (!feature_transformer_accumulator_in_range(combined[output]))
+                return fail(result, ScalarError::FeatureAccumulatorOutOfRange);
+            destination.accumulator[output] = static_cast<i32>(combined[output]);
         }
+
+        for (const HmPsqtAccumulatorType value : destination.psqt)
+            if (value < std::numeric_limits<i32>::min() || value > std::numeric_limits<i32>::max())
+                return fail(result, ScalarError::PsqtAccumulatorOutOfRange);
     }
 
     const auto& white = candidate.perspectives[color_index(WHITE)];
@@ -272,8 +363,6 @@ ScalarStatus evaluate_impl(const Network&             network,
     result = std::move(candidate);
     return {};
 }
-
-}  // namespace
 
 NumericError propagate_dense_scalar(const DenseStackParameters&      stack,
                                     const std::array<u8, Fc0Inputs>& transformed,
