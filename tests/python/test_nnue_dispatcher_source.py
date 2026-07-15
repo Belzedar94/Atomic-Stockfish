@@ -666,7 +666,13 @@ def test_v3_full_refresh_simd_target_is_fail_closed_and_private():
     assert "add_i8_scalar" in source
     assert "SimdError::UnsupportedIsa" in source
     assert "if (!simd_isa_available(requestedIsa))" in source
-    assert "candidate.executedIsa  = requestedIsa;" in source
+    assert "result.executedIsa  = requestedIsa;" in source
+    assert "std::array<FullRefreshEmission, COLOR_NB> emissions{};" in header
+    assert "std::array<ScalarHmPerspective, COLOR_NB> completeStates{};" in header
+    assert "auto& emissions      = scratch.emissions;" in source
+    assert "auto& completeStates = scratch.completeStates;" in source
+    assert "SimdDiagnostic candidate{};" not in source
+    assert "ScalarDiagnostic   scalar{};" not in source
     assert "ATOMIC_V3_NOINLINE" in source
     for symbol in (
         "atomic_v3_add_i16_sse41_kernel",

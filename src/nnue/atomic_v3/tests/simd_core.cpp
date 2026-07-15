@@ -19,6 +19,7 @@
 #include <iomanip>
 #include <iostream>
 #include <limits>
+#include <memory>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -720,6 +721,9 @@ int run_batch(const Network& network, SimdIsa requestedIsa) {
     unsigned     comparisons       = 0;
     u64          corpusFingerprint = FnvOffset;
     SimdCounters totals{};
+    auto         scratch = std::make_unique<SimdScratch>();
+    auto         scalar  = std::make_unique<ScalarDiagnostic>();
+    auto         simd    = std::make_unique<SimdDiagnostic>();
 
     while (true)
     {
@@ -753,39 +757,37 @@ int run_batch(const Network& network, SimdIsa requestedIsa) {
         if (!parse_fen_snapshot(fen, snapshot))
             die("invalid six-field FEN in case " + std::to_string(caseIndex));
 
-        ScalarDiagnostic   scalar{};
-        const ScalarStatus scalarStatus = evaluate_scalar(network, snapshot, scalar);
-        SimdScratch        scratch{};
-        SimdDiagnostic     simd{};
-        const SimdStatus simdStatus = evaluate_simd(network, snapshot, requestedIsa, scratch, simd);
+        const ScalarStatus scalarStatus = evaluate_scalar(network, snapshot, *scalar);
+        const SimdStatus   simdStatus =
+          evaluate_simd(network, snapshot, requestedIsa, *scratch, *simd);
         if (!scalarStatus)
             die("scalar oracle rejected case " + std::to_string(caseIndex));
         if (!simdStatus)
             die("SIMD backend rejected case " + std::to_string(caseIndex) + ": "
                 + simd_error_message(simdStatus.error));
-        const std::string difference = scalar_difference(simd.scalar, scalar);
+        const std::string difference = scalar_difference(simd->scalar, *scalar);
         if (!difference.empty())
             die("case " + std::to_string(caseIndex) + ": " + difference);
 
-        const u64 scalarFingerprint = fingerprint(scalar);
-        const u64 simdFingerprint   = fingerprint(simd.scalar);
-        if (scalarFingerprint != simdFingerprint || simd.requestedIsa != requestedIsa
-            || simd.executedIsa != requestedIsa)
+        const u64 scalarFingerprint = fingerprint(*scalar);
+        const u64 simdFingerprint   = fingerprint(simd->scalar);
+        if (scalarFingerprint != simdFingerprint || simd->requestedIsa != requestedIsa
+            || simd->executedIsa != requestedIsa)
             die("case identity or fingerprint mismatch");
         fingerprint_integer(corpusFingerprint, caseIndex);
         fingerprint_integer(corpusFingerprint, scalarFingerprint);
-        add_counters(totals, simd.counters);
+        add_counters(totals, simd->counters);
 
         std::cout << "record=simd_case\n"
                   << "case=" << caseIndex << '\n'
                   << "chess960=" << (chess960 ? 1 : 0) << '\n'
                   << "fen=" << fen << '\n'
                   << "status=ok\n"
-                  << "isa.requested=" << simd_isa_name(simd.requestedIsa) << '\n'
-                  << "isa.executed=" << simd_isa_name(simd.executedIsa) << '\n';
-        print_diagnostic("scalar", scalar);
-        print_diagnostic("simd", simd.scalar);
-        print_counters("simd.counters", simd.counters, requestedIsa);
+                  << "isa.requested=" << simd_isa_name(simd->requestedIsa) << '\n'
+                  << "isa.executed=" << simd_isa_name(simd->executedIsa) << '\n';
+        print_diagnostic("scalar", *scalar);
+        print_diagnostic("simd", simd->scalar);
+        print_counters("simd.counters", simd->counters, requestedIsa);
         std::cout << "comparison.exact=1\n"
                   << "end_case=" << caseIndex << '\n';
         ++caseIndex;

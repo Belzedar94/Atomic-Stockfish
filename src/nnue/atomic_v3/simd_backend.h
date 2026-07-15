@@ -76,8 +76,12 @@ struct SimdCounters {
 
 // One scratch object belongs to one caller/thread. It is never retained by the
 // immutable Network and its contents are unspecified after evaluate_simd().
+// The emissions and canonical completion states live here instead of in the
+// evaluator frame so instrumented builds keep the reviewed stack bound.
 struct alignas(64) SimdScratch {
-    std::array<i32, AccumulatorDimensions> internalAccumulator{};
+    std::array<i32, AccumulatorDimensions>    internalAccumulator{};
+    std::array<FullRefreshEmission, COLOR_NB> emissions{};
+    std::array<ScalarHmPerspective, COLOR_NB> completeStates{};
 };
 
 struct SimdDiagnostic {

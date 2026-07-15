@@ -12,7 +12,6 @@
 
 #include <algorithm>
 #include <limits>
-#include <utility>
 
 #if defined(USE_AVX2) || defined(USE_AVX512)
     #include <immintrin.h>
@@ -133,9 +132,8 @@ SimdStatus evaluate_impl(const Network&             network,
     if (!simd_isa_available(requestedIsa))
         return fail(result, SimdError::UnsupportedIsa);
 
-    SimdDiagnostic candidate{};
-    candidate.requestedIsa = requestedIsa;
-    candidate.executedIsa  = requestedIsa;
+    result.requestedIsa = requestedIsa;
+    result.executedIsa  = requestedIsa;
 
     if (!network.biases() || !network.hm_weights() || !network.capture_pair_weights()
         || !network.king_blast_ep_weights() || !network.blast_ring_weights()
@@ -143,8 +141,10 @@ SimdStatus evaluate_impl(const Network&             network,
         return fail(result, SimdError::InvalidFeatureIndex,
                     scalar_failure(ScalarError::InvalidFeatureIndex));
 
-    std::array<FullRefreshEmission, COLOR_NB> emissions{};
-    std::array<ScalarHmPerspective, COLOR_NB> completeStates{};
+    auto& emissions      = scratch.emissions;
+    auto& completeStates = scratch.completeStates;
+    emissions            = {};
+    completeStates       = {};
 
     for (const Color perspective : {WHITE, BLACK})
     {
@@ -159,9 +159,8 @@ SimdStatus evaluate_impl(const Network&             network,
         auto&       internal = scratch.internalAccumulator;
         internal.fill(0);
 
-        add_i16(requestedIsa, internal.data(), network.biases(), internal.size(),
-                candidate.counters);
-        ++candidate.counters.biasI16Rows;
+        add_i16(requestedIsa, internal.data(), network.biases(), internal.size(), result.counters);
+        ++result.counters.biasI16Rows;
 
         for (IndexType feature = 0; feature < emission.hm.size; ++feature)
         {
@@ -172,8 +171,8 @@ SimdStatus evaluate_impl(const Network&             network,
 
             add_i16(requestedIsa, internal.data(),
                     network.hm_weights() + row * AccumulatorDimensions, internal.size(),
-                    candidate.counters);
-            ++candidate.counters.hmI16Rows;
+                    result.counters);
+            ++result.counters.hmI16Rows;
             for (IndexType bucket = 0; bucket < PsqtBuckets; ++bucket)
                 complete.psqt[bucket] += network.hm_psqt_weights()[row * PsqtBuckets + bucket];
         }
@@ -188,8 +187,8 @@ SimdStatus evaluate_impl(const Network&             network,
             const std::size_t row = physical - CapturePairPhysicalOffset;
             add_i8(requestedIsa, internal.data(),
                    network.capture_pair_weights() + row * AccumulatorDimensions, internal.size(),
-                   candidate.counters);
-            ++candidate.counters.capturePairI8Rows;
+                   result.counters);
+            ++result.counters.capturePairI8Rows;
         }
 
         for (IndexType feature = 0; feature < emission.kingBlastEp.size; ++feature)
@@ -202,8 +201,8 @@ SimdStatus evaluate_impl(const Network&             network,
             const std::size_t row = physical - KingBlastEpPhysicalOffset;
             add_i16(requestedIsa, internal.data(),
                     network.king_blast_ep_weights() + row * AccumulatorDimensions, internal.size(),
-                    candidate.counters);
-            ++candidate.counters.kingBlastEpI16Rows;
+                    result.counters);
+            ++result.counters.kingBlastEpI16Rows;
         }
 
         for (IndexType feature = 0; feature < emission.blastRing.size; ++feature)
@@ -216,8 +215,8 @@ SimdStatus evaluate_impl(const Network&             network,
             const std::size_t row = physical - BlastRingPhysicalOffset;
             add_i8(requestedIsa, internal.data(),
                    network.blast_ring_weights() + row * AccumulatorDimensions, internal.size(),
-                   candidate.counters);
-            ++candidate.counters.blastRingI8Rows;
+                   result.counters);
+            ++result.counters.blastRingI8Rows;
         }
 
         for (std::size_t canonical = 0; canonical < AccumulatorDimensions; ++canonical)
@@ -237,14 +236,11 @@ SimdStatus evaluate_impl(const Network&             network,
                             scalar_failure(ScalarError::PsqtAccumulatorOutOfRange));
     }
 
-    ScalarDiagnostic   scalar{};
     const ScalarStatus scalarStatus =
-      finalize_scalar_diagnostic(network, snapshot, emissions, completeStates, scalar);
+      finalize_scalar_diagnostic(network, snapshot, emissions, completeStates, result.scalar);
     if (!scalarStatus)
         return fail(result, SimdError::ScalarCompositionError, scalarStatus);
 
-    candidate.scalar = std::move(scalar);
-    result           = std::move(candidate);
     return {};
 }
 
