@@ -377,3 +377,61 @@ differential exactly once. V3 remains absent from every production and binding
 build graph, so no bench, Elo, LOS, OpenBench or training claim applies.
 Detailed evidence and the consulted local Discord records are under
 `docs/atomic/evidence/hito9-3i-v3-incremental/`.
+
+## H9.3j-a private SIMD full-refresh accumulation
+
+H9.3j-a is limited to real SSE4.1 and AVX2 implementations of full-refresh
+i32 feature-row accumulation. A forced scalar implementation remains the
+oracle and an explicitly selectable path; H9.3j-a does not automatically
+dispatch or fall back between ISAs. Feature emission, HM PSQT, transform and
+the SFNNv15 dense tail stay scalar; incremental SIMD, caches, production
+dispatch and all playing paths remain out of scope. The network is immutable
+and shareable, scratch is caller-owned, each evaluation stack is single-owner
+and the hot kernel may not allocate.
+
+Wire and ISA policy remain separate. The canonical V3 bytes, descriptors,
+offsets and hashes do not change. Each kernel consumes the authenticated
+load-time tensor layout, while all public diagnostics are converted back to
+canonical logical coordinates. Forced identity, AVX2/LASX and AVX512 layouts
+must retain the H9.3h scalar diagnostic fingerprint
+`0x46F68EAB20FF9D50`. The separate H9.3j-a 109-position batch aggregate is
+`0x4FBDB31B354FC080`; these fingerprints cover different transcripts and are
+not interchangeable. H9.3j-a has no runtime CPUID dispatcher: an exact ISA
+request that was not compiled into the ARCH-specific test binary is rejected,
+and the scalar path remains explicitly requestable in every compatible build.
+
+Acceptance requires bit-exact scalar/SSE4.1/AVX2 equality for both
+perspectives over the complete frozen corpus, including all special and
+invalid cases. The comparison covers all four slice emissions, canonical i32
+accumulators, i64 PSQT, transformed bytes, dense intermediates, raw/scaled
+outputs, public values and cleared diagnostics on failure. The existing scalar
+numeric contract must reject values outside the frozen i32 envelope before
+publication; no SIMD narrowing, wrapping or partial output is permitted.
+Concurrent readers of one immutable network must reproduce the single-thread
+result with independent scratch.
+
+Only after exactness passes may the isolated accumulation kernel be measured.
+The runner first loads the authenticated 77,349,879-byte fixture to prove the
+private V3 build identity, but the timed data is deliberately synthetic: one
+deterministic 1,024-lane i16 row and one deterministic 1,024-lane i8 row are
+each accumulated 8,192 times. No fixture weight row or empty, sparse, ordinary
+or explosion-heavy active-row distribution is measured. The runner performs
+one warm-up and five measured trials, alternating scalar/SIMD order between
+trials, and reports the raw nanosecond samples, their medians and the median
+scalar/SIMD ratio. The scalar comparator is a volatile scalar loop intended to
+prevent compiler autovectorization. Transform, dense-tail, full evaluation and
+search time are excluded, so the result is only a kernel microbenchmark.
+
+`--benchmark` is report-only. The opt-in local `--promotion-gate` requires a
+median ratio strictly greater than `1.000` independently for SSE4.1 and AVX2;
+scalar is not a promotion target. CI checks exactness and real instructions but
+does not invoke the benchmark or enforce a noisy speed threshold. CPU affinity
+and host isolation belong to the external local measurement procedure rather
+than being capabilities claimed by this runner. A kernel that does not pass
+local promotion remains available only for differential coverage or is
+removed; it cannot justify widening the scope.
+
+Because V3 remains absent from search, UCI, XBoard, Python, JavaScript, WASM,
+the generator and the trainer, H9.3j-a has no engine bench, OpenBench, Elo, LOS
+or training claim. Evidence belongs under
+`docs/atomic/evidence/hito9-3j-a-v3-simd/`.

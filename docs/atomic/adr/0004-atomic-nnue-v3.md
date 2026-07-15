@@ -522,6 +522,43 @@ an independent full-board enumerator.
     graphs.
     A V3 Finny or relation cache is a separate measured layer after scalar and
     ISA equivalence, never a prerequisite for establishing correctness.
+17. Introduce H9.3j-a as a private real-ISA full-refresh seam. Only addition of
+    active feature rows into the frozen i32 accumulators is vectorized, with
+    SSE4.1 and AVX2 kernels plus an explicitly selectable scalar oracle. Feature
+    emission, HM PSQT, transform and the dense tail remain scalar. Incremental
+    SIMD, caches and production dispatch are explicitly outside this block;
+    there is no automatic fallback between ISAs. The immutable network may be
+    shared between threads, but scratch is owned by the caller/evaluation
+    stack, one stack remains single-owner and the hot kernel performs no dynamic
+    allocation. This private seam has no runtime CPUID dispatch: an exact ISA
+    request absent from the ARCH-specific binary is rejected, while scalar
+    remains explicitly requestable in compatible builds.
+
+    ISA policy cannot change the V3 wire identity. Canonical serialized bytes,
+    descriptors, offsets and hashes remain frozen; an authenticated load-time
+    permutation is an execution policy, not a new format. SIMD kernels consume
+    the already permuted live tensors and publish diagnostics in canonical
+    logical coordinates. Identity, AVX2/LASX and AVX512 forced layouts must
+    retain the H9.3h scalar diagnostic fingerprint `0x46F68EAB20FF9D50`.
+    H9.3j-a separately freezes its 109-position batch aggregate as
+    `0x4FBDB31B354FC080`; the two fingerprints cover different transcripts.
+
+    SSE4.1 and AVX2 must be bit-identical to scalar for all four slice
+    emissions, both canonical i32 accumulators, i64 PSQT, transform, dense
+    intermediates and final diagnostics across both perspectives and every
+    frozen valid, special-move and invalid case. Exactness and fail-closed
+    behavior gate measurement. The runner authenticates and loads the frozen
+    fixture, then isolates synthetic row-addition arithmetic: one 1,024-lane
+    i16 row and one 1,024-lane i8 row, each repeated 8,192 times. It uses one
+    warm-up plus five trials with alternating scalar/SIMD order and reports raw
+    nanoseconds, medians and the ratio against a volatile scalar loop. It does
+    not measure fixture rows, active-row mixes, full evaluation or search.
+    Plain `--benchmark` is report-only; the explicit local promotion gate needs
+    a ratio strictly greater than `1.000`. CI never enforces that noisy speed
+    threshold. Failure grants no promotion, and no speed claim is made.
+    V3 remains unreachable from search, protocols, bindings, WASM, generator
+    and trainer, so H9.3j-a has no engine bench, OpenBench, Elo, LOS or
+    playing-strength gate.
 
 ## Contract freeze gates
 

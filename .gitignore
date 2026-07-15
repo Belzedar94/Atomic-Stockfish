@@ -27,6 +27,7 @@ src/atomic-v3-wire-tests*
 src/atomic-v3-scalar-tests*
 src/atomic-v3-incremental-tests*
 src/atomic-v3-incremental-stress-tests*
+src/atomic-v3-simd-tests*
 src/legacy-atomic-v1-tests*
 src/atomic-bin-v2-tests*
 src/atomic-bin-v2-sink-tests*

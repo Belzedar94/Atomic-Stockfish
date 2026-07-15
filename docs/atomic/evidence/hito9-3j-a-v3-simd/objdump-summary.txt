@@ -1,0 +1,37 @@
+H9.3j-a post-fix object-code audit (MinGW x86-64)
+
+Command template:
+C:\msys64\mingw64\bin\objdump.exe -M intel --disassemble=<symbol> <runner>
+
+SSE4.1 runner: build/atomic-v3-simd-tests-sse41.exe
+SHA-256: D6B0F2298F44173D1421FBAD15E75A973481A41D8719A83028B8D74857DCDA8F
+
+0000000140031ba0 <atomic_v3_add_i16_sse41_kernel>:
+   140031bdc: 66 0f 38 23 c8        pmovsxwd xmm1,xmm0
+   140031bea: 66 0f 38 23 e0        pmovsxwd xmm4,xmm0
+   140031bef: 66 0f fe ca           paddd  xmm1,xmm2
+   140031bf3: 66 0f fe e3           paddd  xmm4,xmm3
+
+0000000140032bb0 <atomic_v3_add_i8_sse41_kernel>:
+   140032c0e: 66 0f 38 21 d8        pmovsxbd xmm3,xmm0
+   140032c21: 66 0f fe dc           paddd  xmm3,xmm4
+   140032c25: 66 0f 38 21 d2        pmovsxbd xmm2,xmm2
+   140032c39: 66 0f fe d5           paddd  xmm2,xmm5
+
+AVX2 runner: build/atomic-v3-simd-tests-avx2.exe
+SHA-256: 7394A93FACABD5628E6B03AD998A2709E66C23F98C6A05788A6F5B41A2D47920
+
+0000000140033c10 <atomic_v3_add_i16_avx2_kernel>:
+   140033c2c: c4 e2 7d 23 02        vpmovsxwd ymm0,XMMWORD PTR [rdx]
+   140033c35: c5 fd fe 09           vpaddd ymm1,ymm0,YMMWORD PTR [rcx]
+   140033c89: c4 e2 7d 23 52 10     vpmovsxwd ymm2,XMMWORD PTR [rdx+0x10]
+   140033c8f: c5 ed fe 59 20        vpaddd ymm3,ymm2,YMMWORD PTR [rcx+0x20]
+
+0000000140033f90 <atomic_v3_add_i8_avx2_kernel>:
+   140033fac: c4 e2 7d 21 02        vpmovsxbd ymm0,QWORD PTR [rdx]
+   140033fb5: c5 fd fe 09           vpaddd ymm1,ymm0,YMMWORD PTR [rcx]
+   140034009: c4 e2 7d 21 52 08     vpmovsxbd ymm2,QWORD PTR [rdx+0x8]
+   14003400f: c5 ed fe 59 20        vpaddd ymm3,ymm2,YMMWORD PTR [rcx+0x20]
+
+Result: PASS. All four stable symbols are present and contain the required
+signed widening plus i32 addition instructions.
