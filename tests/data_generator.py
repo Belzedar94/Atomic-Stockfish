@@ -8,6 +8,7 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -1497,6 +1498,54 @@ def main(argv: Sequence[str] | None = None) -> int:
             if trainer_root is not None:
                 for dataset, records in datasets:
                     validate_with_trainer(trainer_root, dataset, records)
+
+            # OpenBench sends exactly one line and uploads exactly {OUT}. Prove
+            # the bridge can bootstrap from its embedded bench network, reload
+            # an external full-SHA teacher, map book NONE to startpos, publish
+            # one authenticated bundle, and clean the worker-visible sidecars.
+            bridge_net = root / "openbench-teacher.nnue"
+            shutil.copyfile(net, bridge_net)
+            bridge_bundle = root / "openbench-chunk.bin"
+            bridge_command = (
+                "openbench_generate_training_data threads 1 hash 16 "
+                f"network {bridge_net} network_sha256 {net_sha256} "
+                "count 2 seed openbench-integration book NONE "
+                f"out {bridge_bundle} depth 1 write_min_ply 0 write_max_ply 2 "
+                "random_move_count 0 keep_draws 1 eval_limit 32000 "
+                "eval_diff_limit 32000 filter_captures false "
+                "filter_checks false filter_promotions false"
+            )
+            bridge_output = run_engine(
+                generator, (bridge_command, "quit"), expect_success=True
+            )
+            if "openbench_generate_training_data finished" not in bridge_output:
+                raise AssertionError(
+                    f"OpenBench bridge did not report completion:\n{bridge_output}"
+                )
+            if not bridge_bundle.is_file() or bridge_bundle.read_bytes()[:8] != b"ATOBNDL1":
+                raise AssertionError("OpenBench bridge did not publish the frozen bundle")
+            for sidecar in (
+                Path(str(bridge_bundle) + ".atbin"),
+                Path(str(bridge_bundle) + ".atbin.manifest.json"),
+            ):
+                if sidecar.exists() or sidecar.is_symlink():
+                    raise AssertionError(f"OpenBench bridge retained sidecar {sidecar}")
+            validator = REPO_ROOT / "tools" / "validate_openbench_datagen_bundle.py"
+            validated = subprocess.run(
+                [sys.executable, str(validator), str(bridge_bundle)],
+                text=True,
+                encoding="utf-8",
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=TIMEOUT_SECONDS,
+                check=False,
+            )
+            if validated.returncode != 0 or '"records":2' not in validated.stdout:
+                raise AssertionError(
+                    "OpenBench bundle validator rejected bridge output:\n"
+                    + validated.stdout
+                    + validated.stderr
+                )
 
         print(
             "Atomic data-generator tests passed "

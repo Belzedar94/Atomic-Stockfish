@@ -32,6 +32,7 @@
 #include "benchmark.h"
 #ifdef ATOMIC_DATA_GENERATOR
     #include "data/legacy_atomic_v1.h"
+    #include "data/openbench_datagen.h"
     #include "data/training_data_generator.h"
 #endif
 #include "engine.h"
@@ -155,6 +156,11 @@ void UCIEngine::loop() {
         else if (token == "generate_training_data")
         {
             if (!Data::generate_training_data(engine, is))
+                std::exit(EXIT_FAILURE);
+        }
+        else if (token == "openbench_generate_training_data")
+        {
+            if (!Data::openbench_generate_training_data(engine, is))
                 std::exit(EXIT_FAILURE);
         }
 #endif

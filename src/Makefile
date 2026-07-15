@@ -277,9 +277,10 @@ endif
 # with ATOMIC_DATA_GENERATOR enabled, so a generator build can never change or
 # reuse the normal uci.o/search.o objects.
 ATOMIC_DATA_GENERATOR_SRCS = data/legacy_atomic_v1.cpp data/training_data_generator.cpp \
-	$(ATOMIC_BIN_V2_SRCS)
+	data/openbench_datagen.cpp data/openbench_bundle.cpp $(ATOMIC_BIN_V2_SRCS)
 ATOMIC_DATA_GENERATOR_HEADERS = data/legacy_atomic_v1.h data/random_seed.h \
-	data/training_data.h data/training_data_generator.h $(ATOMIC_BIN_V2_HEADERS)
+	data/training_data.h data/training_data_generator.h data/openbench_datagen.h \
+	data/openbench_bundle.h $(ATOMIC_BIN_V2_HEADERS)
 ATOMIC_DATA_GENERATOR_DATA_OBJS = \
 	$(patsubst data/%.cpp,atomic_data_generator_%.o,$(ATOMIC_DATA_GENERATOR_SRCS))
 ATOMIC_DATA_GENERATOR_OBJS = $(filter-out uci.o search.o,$(OBJS)) \
@@ -2230,7 +2231,7 @@ else
     OPENBENCH_COMP = gcc
 endif
 
-.PHONY: openbench
+.PHONY: openbench openbench-datagen
 openbench:
 ifndef EVALFILE
 	@echo "ERROR: OpenBench Atomic builds require EVALFILE=<Legacy Atomic V1 network>." >&2
@@ -2244,6 +2245,29 @@ else
 		EXTRACXXFLAGS='$(EXTRACXXFLAGS) -DATOMIC_NNUE_EMBEDDING'
 endif
 
+# Distributed generation needs the isolated generator, not the playing-engine
+# source list. Embed the build-time network only so OpenBench can move the EXE
+# out of its temporary checkout and run its ordinary bench. The generation
+# bridge always reloads and authenticates the external {NETWORK}; only those
+# external bytes are recorded as the Use NNUE=pure teacher in Atomic BIN V2.
+openbench-datagen:
+ifndef EVALFILE
+	@echo "ERROR: OpenBench Atomic datagen builds require EVALFILE=<Legacy Atomic V1 network>." >&2
+	@exit 2
+else
+	@test -f "$(EVALFILE)" || { echo "ERROR: OpenBench EVALFILE does not exist: $(EVALFILE)" >&2; exit 2; }
+	@cp "$(EVALFILE)" "$(OPENBENCH_NET).tmp"
+	@mv "$(OPENBENCH_NET).tmp" "$(OPENBENCH_NET)"
+	+$(MAKE) data-generator EXE=atomic-openbench-playing-unused \
+		ATOMIC_DATA_GENERATOR_EXE="$(EXE)" CXX="$(CXX)" \
+		ARCH=x86-64-bmi2 COMP=$(OPENBENCH_COMP) \
+		EXTRACXXFLAGS='$(EXTRACXXFLAGS) -DATOMIC_NNUE_EMBEDDING'
+endif
+
 ifneq ($(strip $(EVALFILE)),)
+ifeq ($(OPENBENCH_DATAGEN),1)
+.DEFAULT_GOAL := openbench-datagen
+else
 .DEFAULT_GOAL := openbench
+endif
 endif

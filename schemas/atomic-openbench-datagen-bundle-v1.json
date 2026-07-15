@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:atomic-stockfish:wire:openbench-datagen-bundle:1",
+  "title": "Atomic OpenBench datagen bundle v1",
+  "description": "Frozen binary envelope carrying one canonical Atomic BIN V2 manifest followed by its one authenticated shard.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "magic",
+    "version",
+    "header_size",
+    "endian_marker",
+    "alignment",
+    "manifest_first",
+    "payload"
+  ],
+  "properties": {
+    "magic": {
+      "const": "ATOBNDL1"
+    },
+    "version": {
+      "const": 1
+    },
+    "header_size": {
+      "const": 256
+    },
+    "endian_marker": {
+      "const": 16909060
+    },
+    "alignment": {
+      "const": 64
+    },
+    "manifest_first": {
+      "const": true
+    },
+    "payload": {
+      "const": "single-atomic-bin-v2-shard"
+    }
+  },
+  "x-header-fields": [
+    "magic:u8[8]",
+    "version:u16le",
+    "header_size:u16le",
+    "endian_marker:u32le",
+    "flags:u32le",
+    "entry_count:u32le",
+    "bundle_schema_sha256:u8[32]",
+    "data_schema_sha256:u8[32]",
+    "manifest_schema_sha256:u8[32]",
+    "manifest_offset:u64le",
+    "manifest_bytes:u64le",
+    "manifest_sha256:u8[32]",
+    "payload_offset:u64le",
+    "payload_bytes:u64le",
+    "payload_sha256:u8[32]",
+    "records:u64le",
+    "reserved:u8[32]"
+  ]
+}
