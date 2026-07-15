@@ -22,6 +22,7 @@
 #include <string_view>
 #include <system_error>
 #include <type_traits>
+#include <vector>
 
 #include "atomic_bin_v2.h"
 #include "atomic_bin_v2_manifest.h"
@@ -236,9 +237,9 @@ DataResult copy_authenticated(ExclusiveOutput&             output,
         return DataResult::failure(DataError::OPEN_FAILED,
                                    "Cannot open OpenBench bundle source " + source.string());
 
-    Sha256                           digest;
-    std::array<char, CopyBufferSize> buffer{};
-    u64                              remaining = expectedBytes;
+    Sha256            digest;
+    std::vector<char> buffer(CopyBufferSize);
+    u64               remaining = expectedBytes;
     while (remaining)
     {
         const auto block = std::size_t(std::min<u64>(remaining, buffer.size()));

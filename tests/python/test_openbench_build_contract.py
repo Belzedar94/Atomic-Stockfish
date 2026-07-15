@@ -7,6 +7,12 @@ import re
 ROOT = Path(__file__).resolve().parents[2]
 MAKEFILE = (ROOT / "src" / "Makefile").read_text(encoding="utf-8")
 OPENBENCH = MAKEFILE.split("### Section 12. OpenBench build shim", 1)[1]
+BUNDLE_SOURCE = (ROOT / "src" / "data" / "openbench_bundle.cpp").read_text(
+    encoding="utf-8"
+)
+BRIDGE_SOURCE = (ROOT / "src" / "data" / "openbench_datagen.cpp").read_text(
+    encoding="utf-8"
+)
 
 
 def test_openbench_selects_playing_or_datagen_default_only_with_evalfile():
@@ -68,3 +74,22 @@ def test_openbench_bridge_objects_belong_only_to_generator_source_list():
     playing_sources = MAKEFILE.split("SRCS =", 1)[1].split("OTHER_SRCS", 1)[0]
     assert "openbench_datagen" not in playing_sources
     assert "openbench_bundle" not in playing_sources
+
+
+def test_openbench_bundle_copy_buffer_is_heap_allocated():
+    assert "std::vector<char> buffer(CopyBufferSize);" in BUNDLE_SOURCE
+    assert "std::array<char, CopyBufferSize>" not in BUNDLE_SOURCE
+
+
+def test_openbench_authenticates_supplied_sha_gates_before_self_play():
+    preflight = BRIDGE_SOURCE.index(
+        "authenticate_sha256_gate(path_from_utf8(params.network)"
+    )
+    generation = BRIDGE_SOURCE.index("generate_training_data(engine, generatorInput)")
+    assert preflight < generation
+    assert (
+        'authenticate_sha256_gate(path_from_utf8(params.book), params.bookSha256, "book"'
+        in BRIDGE_SOURCE
+    )
+    assert 'authenticate_sha256_gate(path_from_utf8(params.network)' in BRIDGE_SOURCE
+    assert 'const auto output = path_from_utf8(params.output)' in BRIDGE_SOURCE

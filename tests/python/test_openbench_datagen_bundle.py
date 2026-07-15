@@ -281,3 +281,44 @@ def test_validator_rejects_unauthenticated_source_commit(tmp_path: Path) -> None
     )
     with pytest.raises(VALIDATOR.BundleError, match="engine.commit"):
         VALIDATOR.validate_bundle(bundle)
+
+
+@pytest.mark.parametrize(
+    "keep_draws",
+    (
+        "0.10000000000000001",
+        "0.333333333333333333333333333333333333",
+    ),
+)
+def test_validator_rejects_keep_draws_that_cpp_cannot_round_trip(
+    tmp_path: Path, keep_draws: str
+) -> None:
+    bundle = tmp_path / "non-round-tripping-keep-draws.bin"
+    build_bundle(
+        bundle,
+        manifest_mutator=lambda manifest: manifest["generation"]["options"].__setitem__(
+            "keep_draws", keep_draws
+        ),
+    )
+    with pytest.raises(VALIDATOR.BundleError, match="does not round-trip exactly"):
+        VALIDATOR.validate_bundle(bundle)
+
+
+def test_validator_reports_escaped_lone_surrogate_as_bundle_error(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    bundle = tmp_path / "lone-surrogate.bin"
+
+    def inject_surrogate(payload: bytes) -> bytes:
+        return payload.replace(
+            b'"version":"Atomic-Stockfish test"', b'"version":"\\ud800"', 1
+        )
+
+    build_bundle(bundle, manifest_bytes_mutator=inject_surrogate)
+    with pytest.raises(VALIDATOR.BundleError, match="cannot be serialized canonically"):
+        VALIDATOR.validate_bundle(bundle)
+
+    assert VALIDATOR.main([str(bundle)]) == 2
+    captured = capsys.readouterr()
+    assert "ERROR: embedded manifest cannot be serialized canonically" in captured.err
+    assert "Traceback" not in captured.err

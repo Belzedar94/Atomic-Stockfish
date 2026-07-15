@@ -1515,6 +1515,53 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "eval_diff_limit 32000 filter_captures false "
                 "filter_checks false filter_promotions false"
             )
+
+            # SHA gates are a preflight: a typo must not spend a long chunk on
+            # self-play or leave even a transient generated sidecar behind.
+            for label, gated_book, sha_option in (
+                ("network", "NONE", "network_sha256 " + "0" * 64),
+                (
+                    "book",
+                    str(multi_book),
+                    "network_sha256 "
+                    + net_sha256
+                    + " book_sha256 "
+                    + "0" * 64,
+                ),
+            ):
+                rejected_bundle = root / f"openbench-bad-{label}-sha.bin"
+                rejected_command = (
+                    "openbench_generate_training_data threads 1 hash 16 "
+                    f"network {bridge_net} {sha_option} count 2 "
+                    f"seed openbench-bad-{label}-sha book {gated_book} "
+                    f"out {rejected_bundle} depth 1 write_min_ply 0 write_max_ply 2 "
+                    "random_move_count 0 keep_draws 1 eval_limit 32000 "
+                    "eval_diff_limit 32000 filter_captures false "
+                    "filter_checks false filter_promotions false"
+                )
+                rejected_output = run_engine(
+                    generator, (rejected_command, "quit"), expect_success=False
+                )
+                if "supplied pre-generation gate" not in rejected_output:
+                    raise AssertionError(
+                        f"OpenBench {label} SHA was not rejected in preflight:\n"
+                        f"{rejected_output}"
+                    )
+                if "generate_training_data finished" in rejected_output:
+                    raise AssertionError(
+                        f"OpenBench {label} SHA rejection ran self-play before failing"
+                    )
+                for rejected_output_path in (
+                    rejected_bundle,
+                    Path(str(rejected_bundle) + ".atbin"),
+                    Path(str(rejected_bundle) + ".atbin.manifest.json"),
+                ):
+                    if rejected_output_path.exists() or rejected_output_path.is_symlink():
+                        raise AssertionError(
+                            "OpenBench SHA preflight retained an output: "
+                            f"{rejected_output_path}"
+                        )
+
             bridge_output = run_engine(
                 generator, (bridge_command, "quit"), expect_success=True
             )

@@ -23,7 +23,9 @@
 
 #include "atomic_bin_v2_manifest.h"
 #include "engine.h"
+#include "misc.h"
 #include "openbench_bundle.h"
+#include "sha256.h"
 #include "training_data_generator.h"
 
 #ifdef _WIN32
@@ -246,6 +248,27 @@ bool parse_bridge_params(std::istream& input, BridgeParams& params, std::string&
 void set_option(Engine& engine, std::string_view name, const std::string& value) {
     std::istringstream command("name " + std::string(name) + " value " + value);
     engine.get_options().setoption(command);
+}
+
+bool authenticate_sha256_gate(const std::filesystem::path& path,
+                              std::string_view             expectedSha256,
+                              std::string_view             label,
+                              std::string&                 error) {
+    std::string actualSha256;
+    u64         bytes = 0;
+    if (DataResult hashed = sha256_file(path, actualSha256, bytes); !hashed)
+    {
+        error = "Cannot authenticate OpenBench " + std::string(label)
+              + " before generation: " + hashed.message;
+        return false;
+    }
+    if (actualSha256 != expectedSha256)
+    {
+        error = "OpenBench " + std::string(label)
+              + " SHA-256 differs from the supplied pre-generation gate";
+        return false;
+    }
+    return true;
 }
 
 class OwnedSidecar {
@@ -526,7 +549,7 @@ bool openbench_generate_training_data(Engine& engine, std::istream& input) {
         return false;
     }
 
-    const auto output = std::filesystem::path(params.output).lexically_normal();
+    const auto output = path_from_utf8(params.output).lexically_normal();
     if (output.empty() || output.filename().empty())
     {
         print_error("OpenBench bundle output must name a file");
@@ -548,6 +571,19 @@ bool openbench_generate_training_data(Engine& engine, std::istream& input) {
     const auto        manifest = atomic_bin_v2_manifest_path(shard);
     GeneratedSidecars sidecars(shard, manifest);
     if (!sidecars.preflight(error))
+    {
+        print_error(error);
+        return false;
+    }
+
+    // Fail cheap before starting a production-sized self-play chunk. The
+    // generator authenticates the same files again while loading them and the
+    // manifest checks below close the remaining change-after-check window.
+    if (!authenticate_sha256_gate(path_from_utf8(params.network), params.networkSha256, "network",
+                                  error)
+        || (params.book != "NONE" && !params.bookSha256.empty()
+            && !authenticate_sha256_gate(path_from_utf8(params.book), params.bookSha256, "book",
+                                         error)))
     {
         print_error(error);
         return false;

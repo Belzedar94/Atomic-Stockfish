@@ -39,8 +39,10 @@ openbench_generate_training_data threads {THREADS} hash 512 network {NETWORK} ne
 `threads`, `hash`, `network`, `network_sha256`, `count`, `seed`, `book`, and
 `out` are mandatory. `network_sha256` is a full 64-digit gate, independent of
 OpenBench's shorter display prefix. `book_sha256` is optional but, when
-provided, must match the generated manifest exactly. `book NONE` selects the
-built-in start position and must not be combined with `book_sha256`.
+provided, must match the selected book. Both supplied SHA gates are checked
+before self-play and authenticated again in the generated manifest. `book NONE`
+selects the built-in start position and must not be combined with
+`book_sha256`.
 The accepted generator options are `depth`, `min_depth`, `max_depth`, `nodes`,
 `eval_limit`, `eval_diff_limit`, all `random_move_*` and `random_multi_pv_*`
 options, `write_min_ply`, `write_max_ply`, `keep_draws`, both draw-adjudication

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from decimal import Decimal, InvalidOperation
 import hashlib
 import json
 import os
@@ -234,9 +235,31 @@ def canonical_manifest_bytes(manifest: Mapping[str, object]) -> bytes:
         rendered = json.dumps(
             ordered, allow_nan=False, ensure_ascii=False, separators=(",", ":")
         )
+        return (rendered + "\n").encode("utf-8")
     except (TypeError, ValueError) as exc:
         raise BundleError("embedded manifest cannot be serialized canonically") from exc
-    return rendered.encode("utf-8") + b"\n"
+
+
+def require_keep_draws(value: object, label: str) -> str:
+    text = require_string(value, label)
+    if len(text) > 4096 or CANONICAL_PROBABILITY.fullmatch(text) is None:
+        raise BundleError(f"embedded manifest {label} is not canonical")
+
+    # The C++ producer parses into IEEE-754 binary64, renders the shortest
+    # round-tripping decimal, expands it canonically, and requires that exact
+    # decimal value to equal the requested token. Python's float/repr pair has
+    # the same binary64/shortest-round-trip contract; Decimal keeps this final
+    # comparison exact instead of rounding it a second time.
+    try:
+        effective = Decimal(repr(float(text)))
+        requested = Decimal(text)
+    except (InvalidOperation, OverflowError, ValueError) as exc:
+        raise BundleError(f"embedded manifest {label} is not a finite binary64 value") from exc
+    if effective != requested:
+        raise BundleError(
+            f"embedded manifest {label} does not round-trip exactly through the producer"
+        )
+    return text
 
 
 def validate_manifest_payload(
@@ -309,9 +332,7 @@ def validate_manifest_payload(
         key: require_uint64_decimal(options[key], f"generation.options.{key}")
         for key in OPTION_UINT64_KEYS
     }
-    keep_draws = require_string(options["keep_draws"], "generation.options.keep_draws")
-    if len(keep_draws) > 4096 or CANONICAL_PROBABILITY.fullmatch(keep_draws) is None:
-        raise BundleError("embedded manifest generation.options.keep_draws is not canonical")
+    require_keep_draws(options["keep_draws"], "generation.options.keep_draws")
     for key in OPTION_BOOL_KEYS:
         require_bool(options[key], f"generation.options.{key}")
 
