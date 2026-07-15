@@ -127,18 +127,51 @@ an independent full-board enumerator.
 6. `AtomicKingBlastEP` is a boolean set over 64 centers, two actor relations
    and 18 provisional classes relative to the capture actor: enemy king at the
    center, eight enemy-king blast offsets, eight actor-own-king/self-blast
-   offsets and an EP marker. Several
-   attackers of one center never multiply the same relation weight. When both
+   offsets and an EP marker. Its local index is
+   `((oriented_center * 2 + actor_rel) * 18 + class)`, spanning 0 through
+   2,303; physical rows are 62,540 through 64,843. The full rectangle is
+   serialized without holes, while off-board directional rows remain inactive.
+   Several attackers of one center never multiply the same relation weight.
+   Emission is the sorted, unique boolean union, so its result never depends on
+   CapturePair traversal order. When both
    king-offset classes are present, that center would explode both kings and
-   the candidate is illegal because it is self-blasting. Touching kings and
+   the candidate is illegal because it is self-blasting, but remains emitted
+   because CapturePair is deliberately unfiltered. Touching kings and
    their mutual king immunity are represented by HM; kings are not CP actors.
    For every directional class, `related_king = oriented_center + delta`; for
    example, `ENEMY_KING_N` means the enemy king is one rank north of the center.
    File/rank adjacency is checked explicitly to prevent edge wrap. Enemy/own is
    relative to the capture actor, but the delta remains in the joint
    accumulator-perspective frame. The EP marker is active exactly when the CP
-   set contains at least one geometric `EN_PASSANT` candidate for that center
-   and actor relation.
+   set contains at least one validated geometric `EN_PASSANT` candidate for
+   that landing center and actor relation. Two possible EP origins deduplicate
+   to one marker; the captured pawn off-center is never treated as the center.
+   Malformed EP metadata is not a global CP error: normal CP/KBR projection is
+   preserved and only the EP tail and marker are absent. The marker may coexist
+   with either king-offset class. `ENEMY_KING_CENTER`
+   is instead restricted to a normal CP target `KING`; it describes a direct
+   enemy-king pseudocapture target, not a legal-check predicate.
+
+   KingBlastEP calls CapturePair once and projects that exact output. It does
+   not construct candidates from attack maps, legal move generation or an
+   independent EP read. CP errors propagate with an empty output, including
+   missing-king terminal snapshots that the engine adjudicates before NNUE.
+   Pinned, checked, self-blasting and otherwise illegal candidates stay present
+   because this is a learned relation, not a legality filter. The maximum of 35
+   active rows follows from 17 king relations per actor relation (nine enemy
+   center/neighbor positions plus eight own neighbors), twice, plus one EP
+   marker belonging to the single side-to-move actor relation. The emitter uses
+   only caller-owned fixed storage and is reentrant for concurrent immutable
+   Position reads; callers synchronize mutation. Historical Fairy-Stockfish
+   implementation evidence motivating the full-refresh oracle, EP gates and
+   separation from check semantics is catalogued in
+   `docs/atomic/evidence/hito9-3d-king-blast-ep/discord-research.md`.
+
+   The reusable no-reenumeration projector is an internal trusted seam, not an
+   untrusted input API. Its precondition is the exact successful CapturePair
+   emission for the same snapshot and perspective. Defensive checks validate
+   orientation, indices and record shape, but deliberately do not reenumerate
+   CP to prove completeness; the combined V3 call graph owns that invariant.
 7. `AtomicBlastRing` is a boolean compact union over 64 centers, two actor
    relations, two collateral relations, eight offsets and five classes:
    knight, bishop, rook, queen and an adjacent pawn that survives. Actor and

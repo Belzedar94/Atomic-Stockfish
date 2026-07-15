@@ -511,6 +511,22 @@ def test_atomic_relation_prototype_dimensions_and_semantic_orders_are_explicit()
         + ["EN_PASSANT_MARKER"]
     )
     assert 64 * 2 * len(king["class_order"]) == king["physical_dimensions"] == 2304
+    assert king["local_index_domain"] == {"minimum": 0, "maximum": 2303}
+    assert king["physical_index_domain"] == {
+        "minimum": 62540,
+        "maximum": 64843,
+    }
+    assert king["physical_index_formula"].endswith("62540 + local_index")
+    assert king["direction_vectors_after_orientation"] == {
+        "N": [0, 1, 8],
+        "NE": [1, 1, 9],
+        "E": [1, 0, 1],
+        "SE": [1, -1, -7],
+        "S": [0, -1, -8],
+        "SW": [-1, -1, -9],
+        "W": [-1, 0, -1],
+        "NW": [-1, 1, 7],
+    }
     assert king["semantics"]["activation"].startswith("boolean set")
     assert "therefore illegal" in king["semantics"]["simultaneous_king_blast"]
     assert "encoded by HM" in king["semantics"]["touching_kings"]
@@ -524,6 +540,25 @@ def test_atomic_relation_prototype_dimensions_and_semantic_orders_are_explicit()
     assert 27 + contract["orientation"]["direction_deltas_after_orientation"]["N"] == 35
     assert "never rotates or mirrors squares again" in king["spatial_frame"]
     assert "including geometric EN_PASSANT" in king["semantics"]["candidate_source"]
+    assert "exactly once" in king["semantics"]["candidate_source"]
+    assert "empty KingBlastEP emission" in king["semantics"]["error_propagation"]
+    assert "pseudocapture relation" in king["semantics"][
+        "direct_enemy_king_target"
+    ]
+    assert "two origins deduplicate" in king["semantics"]["en_passant"]
+    assert "off-center captured pawn" in king["semantics"]["en_passant"]
+    assert "king-absent explosion terminals" in king["semantics"]["terminal_domain"]
+    assert "strictly ascending local index" in king["emission_order"]
+    assert "caller-owned fixed output" in king["enumeration_ownership"]
+    assert "pure and reentrant" in king["thread_safety"]
+    assert "exact successful AtomicCapturePair emission" in king[
+        "composition_seam_precondition"
+    ]
+    assert "do not authenticate completeness" in king["composition_seam_precondition"]
+    assert "not an untrusted public input API" in king["composition_seam_precondition"]
+    assert "without compaction or holes" in king["full_rectangle_policy"]
+    assert "17 * 2 + 1 = 35" in king["max_active_bound_proof"]
+    assert "local=((center*2+actor_rel)*18+class)@0..2303" in king["descriptor"]
 
     assert ring["offset_order"] == compass
     assert ring["class_order"] == [

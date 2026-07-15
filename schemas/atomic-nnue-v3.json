@@ -342,22 +342,83 @@
         "EN_PASSANT_MARKER"
       ],
       "index_formula": "((oriented_center * 2 + actor_rel) * 18 + relation_class)",
+      "local_index_domain": {
+        "minimum": 0,
+        "maximum": 2303
+      },
+      "physical_index_domain": {
+        "minimum": 62540,
+        "maximum": 64843
+      },
+      "physical_index_formula": "physical_offset + local_index = 62540 + local_index",
+      "actor_relation_derivation": "actor_rel is OWN=0 exactly when the actual CapturePair actor color equals the accumulator perspective and OPP=1 otherwise; actor_color is perspective for OWN and the opposite color for OPP",
+      "direction_vectors_after_orientation": {
+        "N": [
+          0,
+          1,
+          8
+        ],
+        "NE": [
+          1,
+          1,
+          9
+        ],
+        "E": [
+          1,
+          0,
+          1
+        ],
+        "SE": [
+          1,
+          -1,
+          -7
+        ],
+        "S": [
+          0,
+          -1,
+          -8
+        ],
+        "SW": [
+          -1,
+          -1,
+          -9
+        ],
+        "W": [
+          -1,
+          0,
+          -1
+        ],
+        "NW": [
+          -1,
+          1,
+          7
+        ]
+      },
       "spatial_relation_formula": "for a directional class, oriented_related_king_square = oriented_center + direction_deltas_after_orientation[class_suffix], with exact file/rank adjacency and both squares on board; ENEMY_KING_N therefore means the enemy king is one rank north of the center",
       "spatial_frame": "directions use the joint accumulator-perspective orientation; capture-actor relation selects ENEMY_KING versus OWN_KING but never rotates or mirrors squares again",
+      "emission_order": "emit the boolean union in strictly ascending local index (therefore strictly ascending physical index), independent of CapturePair traversal order; duplicate attackers and duplicate EP origins are idempotent",
+      "enumeration_ownership": "the emitter writes only caller-owned fixed output and scratch storage, retains no Position or output references after return and does not expose its CapturePair traversal order",
+      "thread_safety": "pure and reentrant for concurrent reads of immutable positions, with no mutable global, static or shared scratch state; callers synchronize any Position mutation",
+      "composition_seam_precondition": "the internal no-reenumeration projector accepts only the exact successful AtomicCapturePair emission produced for the same snapshot and perspective; its defensive canonical-shape checks detect corruption but do not authenticate completeness of an arbitrary caller-assembled subset, and the seam is not an untrusted public input API",
+      "full_rectangle_policy": "all 2304 center-by-actor-relation-by-class rows are serialized without compaction or holes; off-board and structurally impossible directional rows remain inactive",
       "semantics": {
         "activation": "boolean set per oriented center, actor relation and class",
-        "candidate_source": "project exactly the unfiltered AtomicCapturePair candidate set by center and actor relation, including geometric EN_PASSANT candidates",
+        "candidate_source": "call AtomicCapturePair exactly once and project its exact validated unfiltered emission by center and actor relation, including geometric EN_PASSANT candidates; never derive candidates from attack maps, legal move generation or an independent read of EP metadata",
+        "error_propagation": "if AtomicCapturePair rejects the snapshot, return its mapped error with an empty KingBlastEP emission; never retain a partial projection",
         "multiple_attackers": "never add the same relation more than once",
-        "direct_check": "ENEMY_KING_CENTER together with CapturePair target KING",
+        "direct_enemy_king_target": "ENEMY_KING_CENTER is active only for a normal CapturePair target KING at the center; it is a pseudocapture relation rather than a legal-check signal and EN_PASSANT can never activate it",
         "blast_threat": "enemy king on one of the eight adjacent offsets",
         "self_blast": "own king on one of the eight adjacent offsets",
         "simultaneous_king_blast": "enemy-blast and self-blast relations may be active simultaneously when a center is adjacent to both kings; the candidate is self-blasting and therefore illegal",
         "touching_kings": "king adjacency and mutual king immunity are encoded by HM; kings are excluded as CapturePair actors",
-        "en_passant": "EN_PASSANT_MARKER is active exactly when at least one CapturePair EN_PASSANT candidate exists for the same center and actor relation"
+        "en_passant": "EN_PASSANT_MARKER is active exactly once when at least one validated CapturePair EN_PASSANT candidate exists for the same landing center and actor relation; two origins deduplicate, the off-center captured pawn is not a center, the marker may coexist with adjacent-king classes, and malformed metadata contributes no EP marker while preserving the successful normal CapturePair projection",
+        "promotion": "projection is independent of actor type: one CapturePair pawn promotion-capture candidate remains one center relation without promotion-choice multiplication, while already-promoted pieces use their current type upstream",
+        "terminal_domain": "standalone enumeration requires exactly one king per color like CapturePair; king-absent explosion terminals are adjudicated before NNUE and return the mapped missing-king error with an empty emission, while preterminal king-blast threats remain represented"
       },
       "max_active_reachable_material": 35,
+      "max_active_bound_proof": "for each actor relation, one enemy king can occupy the center or one of eight neighbors (9 rows) and one actor-own king can occupy one of eight neighbors (8 rows), for 17; two actor relations contribute at most 34, and the single raw EP center belongs to exactly one side-to-move actor relation for a fixed perspective, contributing at most one deduplicated marker: 17 * 2 + 1 = 35",
       "freeze_gate": "numeric goldens with center d4 and related king d5 for direct king target, every directional offset, self-blast, touching kings, simultaneous enemy/own blast relations, both perspectives, both mirror branches and EP adjacent to either king",
-      "descriptor": "AtomicKingBlastEP|v1-provisional|offset=62540|axes=center:64;actor_rel_accumulator:OWN,OPP;king_rel_actor:ENEMY_KING_CENTER,ENEMY_KING_N,ENEMY_KING_NE,ENEMY_KING_E,ENEMY_KING_SE,ENEMY_KING_S,ENEMY_KING_SW,ENEMY_KING_W,ENEMY_KING_NW,OWN_KING_N,OWN_KING_NE,OWN_KING_E,OWN_KING_SE,OWN_KING_S,OWN_KING_SW,OWN_KING_W,OWN_KING_NW;class:EN_PASSANT_MARKER|physical=2304|orientation=per_perspective_black_xor56_mirror_if_pre_h_king_file_lt4_shared_all_slices|source=exact_unfiltered_cp_including_validated_geometric_ep|offset=related_king_minus_center_in_joint_frame|activation=boolean_capture_center_set|dtype=i16|wire=i16_sleb_feature_major_output1024_contiguous_canonical_unpermuted_permute16_after_capture_pair|psqt=none"
+      "descriptor": "AtomicKingBlastEP|v1-provisional|offset=62540|axes=center:64;actor_rel_accumulator:OWN,OPP;king_rel_actor:ENEMY_KING_CENTER,ENEMY_KING_N,ENEMY_KING_NE,ENEMY_KING_E,ENEMY_KING_SE,ENEMY_KING_S,ENEMY_KING_SW,ENEMY_KING_W,ENEMY_KING_NW,OWN_KING_N,OWN_KING_NE,OWN_KING_E,OWN_KING_SE,OWN_KING_S,OWN_KING_SW,OWN_KING_W,OWN_KING_NW;class:EN_PASSANT_MARKER|local=((center*2+actor_rel)*18+class)@0..2303|physical=2304@62540..64843|orientation=per_perspective_black_xor56_mirror_if_pre_h_king_file_lt4_shared_all_slices|source=single_exact_unfiltered_cp_emission_including_validated_geometric_ep|offset=related_king_minus_center_in_joint_frame_exact_dfdr|activation=boolean_sorted_unique_capture_center_set|ep=landing_center_dedup_offcenter_pawn_excluded_fail_closed|rectangle=full_no_holes|error=cp_mapped_empty_no_partial|ownership=caller_owned|thread=pure_reentrant_immutable_position|max=17x2_plus1_eq35|dtype=i16|wire=i16_sleb_feature_major_output1024_contiguous_canonical_unpermuted_permute16_after_capture_pair|psqt=none"
     },
     {
       "id": "atomic-blast-ring",

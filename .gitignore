@@ -19,6 +19,7 @@ src/atomic-v2-backend-core-tests*
 src/atomic-v2-incremental-tests*
 src/atomic-v3-hm-oracle-tests*
 src/atomic-v3-capture-pair-tests*
+src/atomic-v3-king-blast-ep-tests*
 src/legacy-atomic-v1-tests*
 src/atomic-bin-v2-tests*
 src/atomic-bin-v2-sink-tests*
