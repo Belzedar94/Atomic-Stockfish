@@ -332,9 +332,15 @@ bool diagnostic_is_clear(const IncrementalDiagnostic& value) {
             return false;
     }
     const auto& counters = value.eventCounters;
+    const auto& delta    = value.hmDelta;
     return !counters.hmRefreshes && !counters.hmDeltas && !counters.hmReuses
         && !counters.relationRefreshes && !counters.snapshotMismatches
-        && !counters.epSquareMismatches && !value.ply && !value.sameFrameSnapshotMismatch
+        && !counters.epSquareMismatches && !delta.enabled && delta.requestedIsa == SimdIsa::Scalar
+        && delta.executedIsa == SimdIsa::Scalar && !delta.counters.removedRows
+        && !delta.counters.addedRows && !delta.counters.i16Lanes
+        && !delta.counters.sourcePermutationLanes && !delta.counters.publishPermutationLanes
+        && !delta.counters.scalarKernelCalls && !delta.counters.sse41KernelCalls
+        && !delta.counters.avx2KernelCalls && !value.ply && !value.sameFrameSnapshotMismatch
         && !value.epSquareMismatch && value.previousEpSquare == SQ_NONE
         && value.currentEpSquare == SQ_NONE && value.previousSideToMove == WHITE
         && value.currentSideToMove == WHITE;
@@ -358,32 +364,128 @@ bool counters_advanced_by(const IncrementalCounters& after,
         && after.epSquareMismatches == before.epSquareMismatches + delta.epSquareMismatches;
 }
 
+bool hm_delta_counters_equal(const HmDeltaCounters& lhs, const HmDeltaCounters& rhs) {
+    return lhs.removedRows == rhs.removedRows && lhs.addedRows == rhs.addedRows
+        && lhs.i16Lanes == rhs.i16Lanes && lhs.sourcePermutationLanes == rhs.sourcePermutationLanes
+        && lhs.publishPermutationLanes == rhs.publishPermutationLanes
+        && lhs.scalarKernelCalls == rhs.scalarKernelCalls
+        && lhs.sse41KernelCalls == rhs.sse41KernelCalls
+        && lhs.avx2KernelCalls == rhs.avx2KernelCalls;
+}
+
+bool hm_delta_counters_advanced_by(const HmDeltaCounters& after,
+                                   const HmDeltaCounters& before,
+                                   const HmDeltaCounters& delta) {
+    return after.removedRows == before.removedRows + delta.removedRows
+        && after.addedRows == before.addedRows + delta.addedRows
+        && after.i16Lanes == before.i16Lanes + delta.i16Lanes
+        && after.sourcePermutationLanes
+             == before.sourcePermutationLanes + delta.sourcePermutationLanes
+        && after.publishPermutationLanes
+             == before.publishPermutationLanes + delta.publishPermutationLanes
+        && after.scalarKernelCalls == before.scalarKernelCalls + delta.scalarKernelCalls
+        && after.sse41KernelCalls == before.sse41KernelCalls + delta.sse41KernelCalls
+        && after.avx2KernelCalls == before.avx2KernelCalls + delta.avx2KernelCalls;
+}
+
+void add_hm_delta_counters(HmDeltaCounters& destination, const HmDeltaCounters& source) {
+    destination.removedRows += source.removedRows;
+    destination.addedRows += source.addedRows;
+    destination.i16Lanes += source.i16Lanes;
+    destination.sourcePermutationLanes += source.sourcePermutationLanes;
+    destination.publishPermutationLanes += source.publishPermutationLanes;
+    destination.scalarKernelCalls += source.scalarKernelCalls;
+    destination.sse41KernelCalls += source.sse41KernelCalls;
+    destination.avx2KernelCalls += source.avx2KernelCalls;
+}
+
+void require_exact_isa_configuration(const IncrementalStack& stack,
+                                     SimdIsa                 requiredIsa,
+                                     const Context&          context) {
+    require(stack.hm_delta_execution_enabled() && stack.requested_isa() == requiredIsa, context,
+            "incremental stack did not retain the exact required ISA policy");
+}
+
+void require_hm_delta_event(const IncrementalStack&      stack,
+                            const HmDeltaCounters&       before,
+                            const IncrementalDiagnostic& diagnostic,
+                            const Context&               context) {
+    const SimdIsa requestedIsa = stack.requested_isa();
+    const auto&   delta        = diagnostic.hmDelta;
+    require(stack.hm_delta_execution_enabled(), context,
+            "incremental HM delta execution was not enabled explicitly");
+    require(delta.enabled && delta.requestedIsa == requestedIsa
+              && delta.executedIsa == requestedIsa,
+            context, "incremental HM delta diagnostic did not execute the exact requested ISA");
+    require(hm_delta_counters_advanced_by(stack.hm_delta_counters(), before, delta.counters),
+            context, "incremental HM delta cumulative counters diverged from the event delta");
+
+    u64 expectedRemovedRows = 0;
+    u64 expectedAddedRows   = 0;
+    u64 deltaPerspectives   = 0;
+    for (const auto& update : diagnostic.hmUpdates)
+    {
+        if (update.source == HmSourceKind::StackDelta)
+        {
+            expectedRemovedRows += update.removedRows;
+            expectedAddedRows += update.addedRows;
+            ++deltaPerspectives;
+        }
+        else
+            require(!update.removedRows && !update.addedRows, context,
+                    "non-delta HM source published delta row accounting");
+    }
+    const u64 expectedKernelCalls = expectedRemovedRows + expectedAddedRows;
+    require(delta.counters.removedRows == expectedRemovedRows
+              && delta.counters.addedRows == expectedAddedRows,
+            context, "incremental HM delta row accounting diverged from HM update diagnostics");
+    require(delta.counters.kernel_calls() == expectedKernelCalls
+              && delta.counters.i16Lanes == expectedKernelCalls * AccumulatorDimensions,
+            context, "incremental HM delta kernel/lane accounting was inconsistent");
+    require(delta.counters.sourcePermutationLanes == deltaPerspectives * AccumulatorDimensions
+              && delta.counters.publishPermutationLanes
+                   == deltaPerspectives * AccumulatorDimensions,
+            context, "incremental HM delta permutation accounting was inconsistent");
+    require(delta.counters.fallback_calls(requestedIsa) == 0, context,
+            "incremental HM delta exact-ISA execution used a scalar fallback");
+
+    const u64 scalarCalls = requestedIsa == SimdIsa::Scalar ? expectedKernelCalls : 0;
+    const u64 sse41Calls  = requestedIsa == SimdIsa::Sse41 ? expectedKernelCalls : 0;
+    const u64 avx2Calls   = requestedIsa == SimdIsa::Avx2 ? expectedKernelCalls : 0;
+    require(delta.counters.scalarKernelCalls == scalarCalls
+              && delta.counters.sse41KernelCalls == sse41Calls
+              && delta.counters.avx2KernelCalls == avx2Calls,
+            context, "incremental HM delta kernel inventory was not exact-ISA only");
+}
+
 struct Stats {
-    u64   operations{};
-    u64   makes{};
-    u64   undos{};
-    u64   evaluations{};
-    u64   fullRefreshComparisons{};
-    u64   captures{};
-    u64   terminalFailures{};
-    u64   standardCastles{};
-    u64   atomic960Castles{};
-    u64   directedMoves{};
-    u64   directedCaptures{};
-    u64   directedTerminalFailures{};
-    u64   directedPromotions{};
-    u64   directedEnPassants{};
-    u64   directedStandardCastles{};
-    u64   directedAtomic960Castles{};
-    usize directedMaxBlast{};
-    u64   hmRefreshes{};
-    u64   hmDeltas{};
-    u64   hmReuses{};
-    u64   relationRefreshes{};
-    u64   snapshotMismatches{};
-    u64   epSquareMismatches{};
-    usize maxSourceDistance{};
-    u64   signature = SignatureOffset;
+    u64             operations{};
+    u64             makes{};
+    u64             undos{};
+    u64             evaluations{};
+    u64             fullRefreshComparisons{};
+    u64             captures{};
+    u64             terminalFailures{};
+    u64             standardCastles{};
+    u64             atomic960Castles{};
+    u64             directedMoves{};
+    u64             directedCaptures{};
+    u64             directedTerminalFailures{};
+    u64             directedPromotions{};
+    u64             directedEnPassants{};
+    u64             directedStandardCastles{};
+    u64             directedAtomic960Castles{};
+    usize           directedMaxBlast{};
+    u64             hmRefreshes{};
+    u64             hmDeltas{};
+    u64             hmReuses{};
+    u64             relationRefreshes{};
+    u64             snapshotMismatches{};
+    u64             epSquareMismatches{};
+    usize           maxSourceDistance{};
+    HmDeltaCounters hmDelta{};
+    u64             hmDeltaPerspectives{};
+    u64             signature = SignatureOffset;
 };
 
 void record_incremental_coverage(Stats& stats, const IncrementalDiagnostic& value) {
@@ -394,7 +496,13 @@ void record_incremental_coverage(Stats& stats, const IncrementalDiagnostic& valu
     stats.snapshotMismatches += value.eventCounters.snapshotMismatches;
     stats.epSquareMismatches += value.eventCounters.epSquareMismatches;
     for (const auto& update : value.hmUpdates)
+    {
         stats.maxSourceDistance = std::max(stats.maxSourceDistance, update.sourceDistance);
+        stats.hmDeltaPerspectives += update.source == HmSourceKind::StackDelta;
+    }
+    // Execution-policy evidence is deliberately not appended to the state
+    // signature: scalar/SSE4.1/AVX2 must retain the frozen semantic signature.
+    add_hm_delta_counters(stats.hmDelta, value.hmDelta.counters);
 }
 
 void merge_coverage(Stats& destination, const Stats& source) {
@@ -406,6 +514,8 @@ void merge_coverage(Stats& destination, const Stats& source) {
     destination.epSquareMismatches += source.epSquareMismatches;
     destination.maxSourceDistance =
       std::max(destination.maxSourceDistance, source.maxSourceDistance);
+    add_hm_delta_counters(destination.hmDelta, source.hmDelta);
+    destination.hmDeltaPerspectives += source.hmDeltaPerspectives;
 }
 
 void evaluate_state(IncrementalStack&      stack,
@@ -421,10 +531,11 @@ void evaluate_state(IncrementalStack&      stack,
         owned    = std::make_unique<IncrementalDiagnostic>();
         observed = owned.get();
     }
-    const IncrementalCounters before   = stack.counters();
-    const IncrementalStatus   status   = stack.evaluate(network, position, *observed);
-    const bool                hasWhite = position.has_king(WHITE);
-    const bool                hasBlack = position.has_king(BLACK);
+    const IncrementalCounters before        = stack.counters();
+    const HmDeltaCounters     hmDeltaBefore = stack.hm_delta_counters();
+    const IncrementalStatus   status        = stack.evaluate(network, position, *observed);
+    const bool                hasWhite      = position.has_king(WHITE);
+    const bool                hasBlack      = position.has_king(BLACK);
 
     append_bytes(stats.signature, static_cast<u8>(status.error), 1);
     append_bytes(stats.signature, static_cast<u8>(status.featureError), 1);
@@ -438,6 +549,7 @@ void evaluate_state(IncrementalStack&      stack,
                   + std::string(incremental_error_message(status.error)));
         require(counters_advanced_by(stack.counters(), before, observed->eventCounters), context,
                 "successful evaluation counters do not equal the published event delta");
+        require_hm_delta_event(stack, hmDeltaBefore, *observed, context);
         const auto& event = observed->eventCounters;
         require(event.hmRefreshes + event.hmDeltas + event.hmReuses == COLOR_NB
                   && event.relationRefreshes == COLOR_NB,
@@ -476,6 +588,8 @@ void evaluate_state(IncrementalStack&      stack,
                 "terminal failure published a partial incremental diagnostic");
         require(counters_equal(stack.counters(), before), context,
                 "terminal failure mutated cumulative incremental counters");
+        require(hm_delta_counters_equal(stack.hm_delta_counters(), hmDeltaBefore), context,
+                "terminal failure mutated cumulative HM delta counters");
         if (compareFresh)
         {
             auto               fresh       = std::make_unique<ScalarDiagnostic>();
@@ -544,15 +658,20 @@ struct DirectedMoveFixture {
     int              childWhiteMirror = -1;
 };
 
-void run_move_fixture(const Network& network, const DirectedMoveFixture& fixture, Stats& totals) {
+void run_move_fixture(const Network&             network,
+                      SimdIsa                    requiredIsa,
+                      const DirectedMoveFixture& fixture,
+                      Stats&                     totals) {
     Position                 position;
     std::array<StateInfo, 2> states{};
     set_position(position, states[0], fixture.fen, fixture.chess960, fixture.label);
     const std::string rootFen = position.fen();
     const Key         rootKey = position.key();
-    auto              stack   = std::make_unique<IncrementalStack>(network);
-    Stats             local;
-    auto              root = std::make_unique<IncrementalDiagnostic>();
+    auto              stack   = std::make_unique<IncrementalStack>(network, requiredIsa);
+    require_exact_isa_configuration(
+      *stack, requiredIsa, {0, std::string(fixture.label) + "-configuration", position.fen(), {}});
+    Stats local;
+    auto  root = std::make_unique<IncrementalDiagnostic>();
     evaluate_state(
       *stack, network, position, true, local,
       {0, std::string(fixture.label) + "-root", position.fen(), std::string(fixture.uci)},
@@ -687,6 +806,7 @@ void run_move_fixture(const Network& network, const DirectedMoveFixture& fixture
 }
 
 void run_castling_fixture(const Network&   network,
+                          SimdIsa          requiredIsa,
                           bool             chess960,
                           std::string_view fen,
                           std::string_view uci,
@@ -696,9 +816,11 @@ void run_castling_fixture(const Network&   network,
     set_position(position, states[0], fen, chess960, chess960 ? "Atomic960 castling" : "castling");
     const std::string rootFen = position.fen();
     const Key         rootKey = position.key();
-    auto              stack   = std::make_unique<IncrementalStack>(network);
-    Stats             local;
-    auto              root = std::make_unique<IncrementalDiagnostic>();
+    auto              stack   = std::make_unique<IncrementalStack>(network, requiredIsa);
+    require_exact_isa_configuration(*stack, requiredIsa,
+                                    {0, "directed-castle-configuration", position.fen(), {}});
+    Stats local;
+    auto  root = std::make_unique<IncrementalDiagnostic>();
     evaluate_state(*stack, network, position, true, local,
                    {0, "directed-castle-root", position.fen(), std::string(uci)}, root.get());
     require_source(*root, WHITE, HmSourceKind::FullRefresh,
@@ -748,7 +870,7 @@ void run_castling_fixture(const Network&   network,
     std::cout << "PASS directed " << (chess960 ? "Atomic960" : "standard") << " castling\n";
 }
 
-void run_directed_move_fixtures(const Network& network, Stats& totals) {
+void run_directed_move_fixtures(const Network& network, SimdIsa requiredIsa, Stats& totals) {
     constexpr FullRefreshError NoTerminal = FullRefreshError::None;
     constexpr HmSourceKind     Delta      = HmSourceKind::StackDelta;
     constexpr std::array<DirectedMoveFixture, DirectedMoveCount> Fixtures{{
@@ -819,16 +941,18 @@ void run_directed_move_fixtures(const Network& network, Stats& totals) {
     }};
 
     for (const auto& fixture : Fixtures)
-        run_move_fixture(network, fixture, totals);
+        run_move_fixture(network, requiredIsa, fixture, totals);
 }
 
-void run_null_ep_fixture(const Network& network, Stats& totals) {
+void run_null_ep_fixture(const Network& network, SimdIsa requiredIsa, Stats& totals) {
     constexpr std::string_view Fen = "7k/8/2N1b3/2ppP3/8/8/8/K7 w - d6 0 2";
     Position                   position;
     std::array<StateInfo, 2>   states{};
     set_position(position, states[0], Fen, false, "null EP");
-    auto  stack = std::make_unique<IncrementalStack>(network);
+    auto  stack = std::make_unique<IncrementalStack>(network, requiredIsa);
     Stats local;
+    require_exact_isa_configuration(*stack, requiredIsa,
+                                    {0, "directed-null-ep-configuration", position.fen(), {}});
 
     auto root = std::make_unique<IncrementalDiagnostic>();
     evaluate_state(*stack, network, position, true, local,
@@ -873,7 +997,7 @@ void run_null_ep_fixture(const Network& network, Stats& totals) {
     std::cout << "PASS directed null EP same-frame invalidation/restoration\n";
 }
 
-void run_deep_stack_fixture(const Network& network, Stats& totals) {
+void run_deep_stack_fixture(const Network& network, SimdIsa requiredIsa, Stats& totals) {
     constexpr usize Depth = IncrementalStack::MaxSize - 1;
     Position        position;
     auto            states = std::make_unique<std::array<StateInfo, IncrementalStack::MaxSize>>();
@@ -881,8 +1005,10 @@ void run_deep_stack_fixture(const Network& network, Stats& totals) {
     set_position(position, (*states)[0], StartFEN, false, "deep stack");
     const std::string rootFen = position.fen();
     const Key         rootKey = position.key();
-    auto              stack   = std::make_unique<IncrementalStack>(network);
+    auto              stack   = std::make_unique<IncrementalStack>(network, requiredIsa);
     Stats             local;
+    require_exact_isa_configuration(*stack, requiredIsa,
+                                    {0, "directed-deep-configuration", position.fen(), {}});
 
     auto root = std::make_unique<IncrementalDiagnostic>();
     evaluate_state(*stack, network, position, true, local,
@@ -945,13 +1071,18 @@ void expect_failure(IncrementalStack&          stack,
                     FullRefreshError           expectedFeatureError,
                     Stats&                     stats,
                     const Context&             context) {
-    auto diagnostic                       = std::make_unique<IncrementalDiagnostic>();
-    diagnostic->ply                       = 99;
-    diagnostic->scalar.rawOutput          = 0x12345678;
-    diagnostic->sameFrameSnapshotMismatch = true;
-    const IncrementalCounters before      = stack.counters();
-    const usize               sizeBefore  = stack.size();
-    const IncrementalStatus   status      = stack.evaluate(network, snapshot, *diagnostic);
+    auto diagnostic                          = std::make_unique<IncrementalDiagnostic>();
+    diagnostic->ply                          = 99;
+    diagnostic->scalar.rawOutput             = 0x12345678;
+    diagnostic->sameFrameSnapshotMismatch    = true;
+    diagnostic->hmDelta.enabled              = true;
+    diagnostic->hmDelta.requestedIsa         = SimdIsa::Avx2;
+    diagnostic->hmDelta.executedIsa          = SimdIsa::Avx2;
+    diagnostic->hmDelta.counters.removedRows = 1;
+    const IncrementalCounters before         = stack.counters();
+    const HmDeltaCounters     hmDeltaBefore  = stack.hm_delta_counters();
+    const usize               sizeBefore     = stack.size();
+    const IncrementalStatus   status         = stack.evaluate(network, snapshot, *diagnostic);
 
     require(status.error == expectedError && status.featureError == expectedFeatureError, context,
             "expected failure returned the wrong error domain");
@@ -959,6 +1090,8 @@ void expect_failure(IncrementalStack&          stack,
             "expected failure published a partial incremental diagnostic");
     require(counters_equal(stack.counters(), before) && stack.size() == sizeBefore, context,
             "expected failure mutated committed counters or stack depth");
+    require(hm_delta_counters_equal(stack.hm_delta_counters(), hmDeltaBefore), context,
+            "expected failure mutated committed HM delta counters");
     append_bytes(stats.signature, static_cast<u8>(status.error), 1);
     append_bytes(stats.signature, static_cast<u8>(status.featureError), 1);
     append_snapshot_signature(stats.signature, snapshot);
@@ -968,13 +1101,16 @@ void expect_failure(IncrementalStack&          stack,
 
 void run_failure_recovery_fixture(const Network& network,
                                   const Network& secondNetwork,
+                                  SimdIsa        requiredIsa,
                                   Stats&         totals) {
     Position  position;
     StateInfo state{};
     set_position(position, state, StartFEN, false, "failure recovery");
-    auto  stack = std::make_unique<IncrementalStack>(network);
+    auto  stack = std::make_unique<IncrementalStack>(network, requiredIsa);
     Stats local;
-    auto  baseline = std::make_unique<IncrementalDiagnostic>();
+    require_exact_isa_configuration(*stack, requiredIsa,
+                                    {0, "directed-failure-configuration", position.fen(), {}});
+    auto baseline = std::make_unique<IncrementalDiagnostic>();
     evaluate_state(*stack, network, position, true, local,
                    {0, "directed-failure-root", position.fen(), {}}, baseline.get());
     const CapturePairSnapshot valid = make_capture_pair_snapshot(position);
@@ -1074,7 +1210,9 @@ void run_failure_recovery_fixture(const Network& network,
     malformed("directed-too-many-black-pieces", tooManyBlack,
               FullRefreshError::TooManyPiecesPerColor);
 
-    stack->reset(secondNetwork);
+    stack->reset(secondNetwork, requiredIsa);
+    require_exact_isa_configuration(*stack, requiredIsa,
+                                    {0, "directed-reset-second-network", position.fen(), {}});
     auto resetSecond = std::make_unique<IncrementalDiagnostic>();
     evaluate_state(*stack, secondNetwork, position, true, local,
                    {0, "directed-reset-second-network", position.fen(), {}}, resetSecond.get());
@@ -1085,7 +1223,9 @@ void run_failure_recovery_fixture(const Network& network,
                    {0, "directed-reset-second-network", position.fen(), {}}, "network reset");
     require_source(*resetSecond, BLACK, HmSourceKind::FullRefresh,
                    {0, "directed-reset-second-network", position.fen(), {}}, "network reset");
-    stack->reset(network);
+    stack->reset(network, requiredIsa);
+    require_exact_isa_configuration(*stack, requiredIsa,
+                                    {0, "directed-reset-original-network", position.fen(), {}});
     auto resetOriginal = std::make_unique<IncrementalDiagnostic>();
     evaluate_state(*stack, network, position, true, local,
                    {0, "directed-reset-original-network", position.fen(), {}}, resetOriginal.get());
@@ -1121,14 +1261,17 @@ constexpr std::array<RandomSequence, RootCount> RandomSequences{{
 
 Stats run_random_sequence(const RandomSequence& sequence,
                           const Network&        network,
+                          SimdIsa               requiredIsa,
                           u64                   operations,
                           u64                   fullRefreshInterval) {
     Position          position;
     auto              states = std::make_unique<std::array<StateInfo, MaxDepth + 1>>();
     std::vector<Move> path;
-    auto              stack = std::make_unique<IncrementalStack>(network);
+    auto              stack = std::make_unique<IncrementalStack>(network, requiredIsa);
     PRNG              rng(sequence.seed);
     Stats             stats;
+    require_exact_isa_configuration(
+      *stack, requiredIsa, {sequence.seed, "random-configuration", std::string(sequence.fen), {}});
 
     set_position(position, (*states)[0], sequence.fen, sequence.chess960, "random root");
     const std::string rootFen = position.fen();
@@ -1210,18 +1353,23 @@ Stats run_random_sequence(const RandomSequence& sequence,
               && stats.epSquareMismatches == counters.epSquareMismatches,
             {sequence.seed, "random-counter-accounting", position.fen(), {}},
             "random sequence Stats diverged from the stack cumulative counters");
+    require(hm_delta_counters_equal(stats.hmDelta, stack->hm_delta_counters()),
+            {sequence.seed, "random-delta-counter-accounting", position.fen(), {}},
+            "random sequence HM delta Stats diverged from the stack cumulative counters");
     return stats;
 }
 
 struct Options {
     std::filesystem::path net;
-    std::string           mode = "smoke";
+    std::string           mode        = "smoke";
+    SimdIsa               requiredIsa = SimdIsa::Scalar;
     u64                   operations{};
     u64                   fullRefreshInterval{};
     u64                   threads{};
     bool                  operationsSpecified{};
     bool                  fullRefreshIntervalSpecified{};
     bool                  threadsSpecified{};
+    bool                  isaSpecified{};
 };
 
 u64 parse_u64(std::string_view text, std::string_view option) {
@@ -1240,6 +1388,18 @@ u64 parse_u64(std::string_view text, std::string_view option) {
     return value;
 }
 
+bool parse_isa(std::string_view text, SimdIsa& result) {
+    if (text == "scalar")
+        result = SimdIsa::Scalar;
+    else if (text == "sse41")
+        result = SimdIsa::Sse41;
+    else if (text == "avx2")
+        result = SimdIsa::Avx2;
+    else
+        return false;
+    return true;
+}
+
 Options parse_options(int argc, char* argv[]) {
     Options options;
     for (int index = 1; index < argc; ++index)
@@ -1254,6 +1414,15 @@ Options parse_options(int argc, char* argv[]) {
             options.net = requireValue(argument);
         else if (argument == "--mode")
             options.mode = requireValue(argument);
+        else if (argument == "--require-isa")
+        {
+            if (options.isaSpecified)
+                die("duplicate --require-isa");
+            const std::string value = requireValue(argument);
+            if (!parse_isa(value, options.requiredIsa))
+                die("--require-isa expects scalar, sse41 or avx2");
+            options.isaSpecified = true;
+        }
         else if (argument == "--operations")
         {
             options.operations          = parse_u64(requireValue(argument), argument);
@@ -1272,6 +1441,7 @@ Options parse_options(int argc, char* argv[]) {
         else if (argument == "--help" || argument == "-h")
         {
             std::cout << "Usage: atomic-v3-incremental-stress-tests --net FILE "
+                         "--require-isa scalar|sse41|avx2 "
                          "[--mode smoke|release|soak] [--operations N] "
                          "[--full-refresh-interval N] [--threads 1|2|4|8]\n";
             std::exit(EXIT_SUCCESS);
@@ -1282,6 +1452,8 @@ Options parse_options(int argc, char* argv[]) {
 
     if (options.net.empty())
         die("--net is required");
+    if (!options.isaSpecified)
+        die("--require-isa is required");
     if (options.mode != "smoke" && options.mode != "release" && options.mode != "soak")
         die("--mode must be smoke, release or soak");
     if (!options.operationsSpecified)
@@ -1316,6 +1488,8 @@ int main(int argc, char* argv[]) {
     using namespace Stockfish::Eval::NNUE::AtomicV3;
 
     const Options options = parse_options(argc, argv);
+    if (!simd_isa_available(options.requiredIsa))
+        die("required ISA is not compiled into this binary; refusing fallback");
     Bitboards::init();
     Attacks::init();
     Position::init();
@@ -1330,27 +1504,42 @@ int main(int argc, char* argv[]) {
         die("failed to load second AtomicNNUEV3 fixture instance: " + second.error);
 
     Stats totals;
-    run_castling_fixture(network, false, "4k3/8/8/8/8/8/8/R3K2R w KQ - 0 1", "e1g1", totals);
-    run_castling_fixture(network, false, "4k3/8/8/8/8/8/8/R3K2R w KQ - 0 1", "e1c1", totals);
-    run_castling_fixture(network, false, "r3k2r/8/8/8/8/8/8/4K3 b kq - 0 1", "e8g8", totals);
-    run_castling_fixture(network, false, "r3k2r/8/8/8/8/8/8/4K3 b kq - 0 1", "e8c8", totals);
+    run_castling_fixture(network, options.requiredIsa, false, "4k3/8/8/8/8/8/8/R3K2R w KQ - 0 1",
+                         "e1g1", totals);
+    run_castling_fixture(network, options.requiredIsa, false, "4k3/8/8/8/8/8/8/R3K2R w KQ - 0 1",
+                         "e1c1", totals);
+    run_castling_fixture(network, options.requiredIsa, false, "r3k2r/8/8/8/8/8/8/4K3 b kq - 0 1",
+                         "e8g8", totals);
+    run_castling_fixture(network, options.requiredIsa, false, "r3k2r/8/8/8/8/8/8/4K3 b kq - 0 1",
+                         "e8c8", totals);
 
-    run_castling_fixture(network, true, "7k/8/8/8/8/8/8/1RK5 w B - 0 1", "c1b1", totals);
-    run_castling_fixture(network, true, "7k/8/8/8/8/8/8/3RK3 w D - 0 1", "e1d1", totals);
-    run_castling_fixture(network, true, "7k/8/8/8/8/8/8/2RK4 w C - 0 1", "d1c1", totals);
-    run_castling_fixture(network, true, "k7/8/8/8/8/8/8/6KR w H - 0 1", "g1h1", totals);
-    run_castling_fixture(network, true, "k7/8/8/8/8/8/8/4KR2 w F - 0 1", "e1f1", totals);
-    run_castling_fixture(network, true, "k7/8/8/8/8/8/8/5K1R w H - 0 1", "f1h1", totals);
-    run_castling_fixture(network, true, "k7/8/8/8/8/8/8/4K1R1 w G - 0 1", "e1g1", totals);
-    run_castling_fixture(network, true, "k7/8/8/8/8/8/8/5KR1 w G - 0 1", "f1g1", totals);
-    run_castling_fixture(network, true, "1rk5/8/8/8/8/8/8/7K b b - 0 1", "c8b8", totals);
-    run_castling_fixture(network, true, "3rk3/8/8/8/8/8/8/7K b d - 0 1", "e8d8", totals);
-    run_castling_fixture(network, true, "2rk4/8/8/8/8/8/8/7K b c - 0 1", "d8c8", totals);
+    run_castling_fixture(network, options.requiredIsa, true, "7k/8/8/8/8/8/8/1RK5 w B - 0 1",
+                         "c1b1", totals);
+    run_castling_fixture(network, options.requiredIsa, true, "7k/8/8/8/8/8/8/3RK3 w D - 0 1",
+                         "e1d1", totals);
+    run_castling_fixture(network, options.requiredIsa, true, "7k/8/8/8/8/8/8/2RK4 w C - 0 1",
+                         "d1c1", totals);
+    run_castling_fixture(network, options.requiredIsa, true, "k7/8/8/8/8/8/8/6KR w H - 0 1", "g1h1",
+                         totals);
+    run_castling_fixture(network, options.requiredIsa, true, "k7/8/8/8/8/8/8/4KR2 w F - 0 1",
+                         "e1f1", totals);
+    run_castling_fixture(network, options.requiredIsa, true, "k7/8/8/8/8/8/8/5K1R w H - 0 1",
+                         "f1h1", totals);
+    run_castling_fixture(network, options.requiredIsa, true, "k7/8/8/8/8/8/8/4K1R1 w G - 0 1",
+                         "e1g1", totals);
+    run_castling_fixture(network, options.requiredIsa, true, "k7/8/8/8/8/8/8/5KR1 w G - 0 1",
+                         "f1g1", totals);
+    run_castling_fixture(network, options.requiredIsa, true, "1rk5/8/8/8/8/8/8/7K b b - 0 1",
+                         "c8b8", totals);
+    run_castling_fixture(network, options.requiredIsa, true, "3rk3/8/8/8/8/8/8/7K b d - 0 1",
+                         "e8d8", totals);
+    run_castling_fixture(network, options.requiredIsa, true, "2rk4/8/8/8/8/8/8/7K b c - 0 1",
+                         "d8c8", totals);
 
-    run_directed_move_fixtures(network, totals);
-    run_null_ep_fixture(network, totals);
-    run_deep_stack_fixture(network, totals);
-    run_failure_recovery_fixture(network, *second.network, totals);
+    run_directed_move_fixtures(network, options.requiredIsa, totals);
+    run_null_ep_fixture(network, options.requiredIsa, totals);
+    run_deep_stack_fixture(network, options.requiredIsa, totals);
+    run_failure_recovery_fixture(network, *second.network, options.requiredIsa, totals);
 
     const u64                    perSequence = options.operations / RootCount;
     std::array<Stats, RootCount> randomStats{};
@@ -1359,8 +1548,9 @@ int main(int argc, char* argv[]) {
     for (u64 worker = 0; worker < options.threads; ++worker)
         workers.emplace_back([&, worker] {
             for (usize index = worker; index < RootCount; index += options.threads)
-                randomStats[index] = run_random_sequence(RandomSequences[index], network,
-                                                         perSequence, options.fullRefreshInterval);
+                randomStats[index] =
+                  run_random_sequence(RandomSequences[index], network, options.requiredIsa,
+                                      perSequence, options.fullRefreshInterval);
         });
     for (auto& worker : workers)
         worker.join();
@@ -1415,7 +1605,31 @@ int main(int argc, char* argv[]) {
     require(totals.maxSourceDistance == IncrementalStack::MaxSize - 1, {},
             "MAX_PLY lazy source-distance coverage was not observed exactly");
 
+    const auto& hmDelta             = totals.hmDelta;
+    const u64   expectedKernelCalls = hmDelta.removedRows + hmDelta.addedRows;
+    const u64   expectedScalarCalls =
+      options.requiredIsa == SimdIsa::Scalar ? expectedKernelCalls : 0;
+    const u64 expectedSse41Calls = options.requiredIsa == SimdIsa::Sse41 ? expectedKernelCalls : 0;
+    const u64 expectedAvx2Calls  = options.requiredIsa == SimdIsa::Avx2 ? expectedKernelCalls : 0;
+    require(hmDelta.removedRows > 0 && hmDelta.addedRows > 0
+              && totals.hmDeltaPerspectives == totals.hmDeltas,
+            {}, "aggregate incremental HM delta coverage/accounting was incomplete");
+    require(hmDelta.kernel_calls() == expectedKernelCalls
+              && hmDelta.i16Lanes == expectedKernelCalls * AccumulatorDimensions,
+            {}, "aggregate incremental HM delta kernel/lane accounting was inconsistent");
+    require(hmDelta.sourcePermutationLanes == totals.hmDeltaPerspectives * AccumulatorDimensions
+              && hmDelta.publishPermutationLanes
+                   == totals.hmDeltaPerspectives * AccumulatorDimensions,
+            {}, "aggregate incremental HM delta permutation accounting was inconsistent");
+    require(hmDelta.scalarKernelCalls == expectedScalarCalls
+              && hmDelta.sse41KernelCalls == expectedSse41Calls
+              && hmDelta.avx2KernelCalls == expectedAvx2Calls
+              && hmDelta.fallback_calls(options.requiredIsa) == 0,
+            {}, "aggregate incremental HM delta execution was not exact-ISA only");
+
     std::cout << "AtomicNNUEV3 incremental stress gate passed: mode=" << options.mode
+              << " isa-requested=" << simd_isa_name(options.requiredIsa)
+              << " isa-executed=" << simd_isa_name(options.requiredIsa)
               << " requested-operations=" << options.operations
               << " actual-operations=" << totals.operations << " makes=" << totals.makes
               << " undos=" << totals.undos << " evaluations=" << totals.evaluations
@@ -1432,6 +1646,17 @@ int main(int argc, char* argv[]) {
               << " directed-standard-castles=" << totals.directedStandardCastles
               << " directed-atomic960-castles=" << totals.directedAtomic960Castles
               << " directed-max-blast=" << totals.directedMaxBlast << " threads=" << options.threads
+              << " hm-delta-perspectives=" << totals.hmDeltaPerspectives
+              << " hm-delta-removed-rows=" << hmDelta.removedRows
+              << " hm-delta-added-rows=" << hmDelta.addedRows
+              << " hm-delta-i16-lanes=" << hmDelta.i16Lanes
+              << " hm-delta-source-permutation-lanes=" << hmDelta.sourcePermutationLanes
+              << " hm-delta-publish-permutation-lanes=" << hmDelta.publishPermutationLanes
+              << " hm-delta-kernel-calls=" << hmDelta.kernel_calls()
+              << " hm-delta-scalar-kernel-calls=" << hmDelta.scalarKernelCalls
+              << " hm-delta-sse41-kernel-calls=" << hmDelta.sse41KernelCalls
+              << " hm-delta-avx2-kernel-calls=" << hmDelta.avx2KernelCalls
+              << " hm-delta-fallback-calls=" << hmDelta.fallback_calls(options.requiredIsa)
               << " state-signature=0x" << std::hex << std::uppercase << std::setw(16)
               << std::setfill('0') << totals.signature << std::setfill(' ') << std::dec << '\n';
     return EXIT_SUCCESS;

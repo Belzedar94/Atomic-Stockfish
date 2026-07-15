@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Independent cross-language differential for AtomicNNUEV3 H9.3i-a.
+"""Independent cross-language differential for AtomicNNUEV3 H9.3i-a/H9.3j-b.
 
 The C++ runner owns only the observed sequence.  Python authenticates the
 frozen H9.3h fixture, reconstructs every immutable snapshot from FEN, and uses
@@ -30,6 +30,19 @@ import atomic_v3_scalar_reference as scalar  # noqa: E402
 
 SEQUENCE_EVENTS = 39
 SQ_NONE = 64
+REQUIRED_ISAS = ("scalar", "sse41", "avx2")
+HM_DELTA_COUNTER_NAMES = (
+    "removed_rows",
+    "added_rows",
+    "i16_lanes",
+    "source_permutation_lanes",
+    "publish_permutation_lanes",
+    "scalar_kernel_calls",
+    "sse41_kernel_calls",
+    "avx2_kernel_calls",
+    "kernel_calls",
+    "fallback_calls",
+)
 
 EXPECTED_SEQUENCE = (
     ("quiet-root", "reset_root", 0),
@@ -209,7 +222,7 @@ class ExpectedUpdate:
     added_rows: int
 
 
-def _expected_keys() -> set[str]:
+def _expected_keys(require_isa: Optional[str] = None) -> set[str]:
     keys = {
         "label",
         "action",
@@ -304,13 +317,28 @@ def _expected_keys() -> set[str]:
             keys.update({f"{base}.size", f"{base}.rows"})
             keys.update(f"{base}.orientation.{name}" for name in orientation)
         keys.add(f"incremental.scalar.{side}.hm.network_bucket")
+    if require_isa is not None:
+        keys.update(
+            {
+                "incremental.hm_delta.enabled",
+                "incremental.hm_delta.requested_isa",
+                "incremental.hm_delta.executed_isa",
+            }
+        )
+        keys.update(
+            f"incremental.hm_delta.counters.{name}"
+            for name in HM_DELTA_COUNTER_NAMES
+        )
     return keys
 
 
 EXPECTED_KEYS = _expected_keys()
 
 
-def _parse_dump(output: str) -> Tuple[Tuple[DumpEvent, ...], int]:
+def _parse_dump(
+    output: str, require_isa: Optional[str] = None
+) -> Tuple[Tuple[DumpEvent, ...], int]:
+    expected_keys = EXPECTED_KEYS if require_isa is None else _expected_keys(require_isa)
     lines = output.splitlines()
     events = []
     cursor = 0
@@ -337,11 +365,11 @@ def _parse_dump(output: str) -> Tuple[Tuple[DumpEvent, ...], int]:
         if cursor >= len(lines):
             raise DifferentialFailure(f"event {index} is truncated")
         cursor += 1
-        if set(fields) != EXPECTED_KEYS:
+        if set(fields) != expected_keys:
             raise DifferentialFailure(
                 f"event {index} field inventory differs: "
-                f"missing={sorted(EXPECTED_KEYS - set(fields))} "
-                f"extra={sorted(set(fields) - EXPECTED_KEYS)}"
+                f"missing={sorted(expected_keys - set(fields))} "
+                f"extra={sorted(set(fields) - expected_keys)}"
             )
         events.append(DumpEvent(index, fields))
 
@@ -743,11 +771,58 @@ def _verify_scalar(
         _expect_array(event, f"{prefix}.psqt", result[f"{side}.psqt"])
 
 
+def _verify_hm_delta_accounting(
+    event: DumpEvent,
+    updates: Mapping[str, ExpectedUpdate],
+    require_isa: str,
+) -> None:
+    delta_updates = tuple(
+        update for update in updates.values() if update.source == "stack_delta"
+    )
+    removed_rows = sum(update.removed_rows for update in delta_updates)
+    added_rows = sum(update.added_rows for update in delta_updates)
+    row_operations = removed_rows + added_rows
+    permutation_lanes = len(delta_updates) * 1024
+    kernel_calls = {
+        isa: row_operations if isa == require_isa else 0 for isa in REQUIRED_ISAS
+    }
+    expected = {
+        "removed_rows": removed_rows,
+        "added_rows": added_rows,
+        "i16_lanes": row_operations * 1024,
+        "source_permutation_lanes": permutation_lanes,
+        "publish_permutation_lanes": permutation_lanes,
+        "scalar_kernel_calls": kernel_calls["scalar"],
+        "sse41_kernel_calls": kernel_calls["sse41"],
+        "avx2_kernel_calls": kernel_calls["avx2"],
+        "kernel_calls": row_operations,
+        "fallback_calls": 0,
+    }
+
+    _expect_int(event, "incremental.hm_delta.enabled", 1)
+    _expect_text(event, "incremental.hm_delta.requested_isa", require_isa)
+    _expect_text(event, "incremental.hm_delta.executed_isa", require_isa)
+    for name, value in expected.items():
+        _expect_int(event, f"incremental.hm_delta.counters.{name}", value)
+
+    observed_kernel_calls = sum(
+        _integer(event, f"incremental.hm_delta.counters.{isa}_kernel_calls")
+        for isa in REQUIRED_ISAS
+    )
+    if observed_kernel_calls != _integer(
+        event, "incremental.hm_delta.counters.kernel_calls"
+    ):
+        raise DifferentialFailure(
+            f"event {event.index} HM-delta kernel call accounting is incompatible"
+        )
+
+
 def _verify_updates_and_counters(
     event: DumpEvent,
     updates: Mapping[str, ExpectedUpdate],
     previous_snapshot: Optional[Tuple[Tuple[int, ...], int, int]],
     current_snapshot: Tuple[Tuple[int, ...], int, int],
+    require_isa: Optional[str],
 ) -> None:
     source_counts = {"full_refresh": 0, "stack_delta": 0, "same_frame_reuse": 0}
     current_ply = _integer(event, "incremental.ply")
@@ -804,6 +879,8 @@ def _verify_updates_and_counters(
     _expect_int(event, "incremental.current_side_to_move", current_snapshot[1])
     _expect_int(event, "incremental.counters.snapshot_mismatches", int(snapshot_mismatch))
     _expect_int(event, "incremental.counters.ep_square_mismatches", int(ep_mismatch))
+    if require_isa is not None:
+        _verify_hm_delta_accounting(event, updates, require_isa)
 
 
 def _verify_dirty(event: DumpEvent) -> None:
@@ -867,7 +944,9 @@ def _verify_dirty(event: DumpEvent) -> None:
         raise DifferentialFailure("Atomic explosion child lost collateral removals")
 
 
-def _verify_clear_diagnostic(event: DumpEvent) -> None:
+def _verify_clear_diagnostic(
+    event: DumpEvent, require_isa: Optional[str] = None
+) -> None:
     zero_scalar_ints = (
         "side_to_move",
         "network_bucket",
@@ -932,6 +1011,12 @@ def _verify_clear_diagnostic(event: DumpEvent) -> None:
         "ep_square_mismatches",
     ):
         _expect_int(event, f"incremental.counters.{name}", 0)
+    if require_isa is not None:
+        _expect_int(event, "incremental.hm_delta.enabled", 0)
+        _expect_text(event, "incremental.hm_delta.requested_isa", "scalar")
+        _expect_text(event, "incremental.hm_delta.executed_isa", "scalar")
+        for name in HM_DELTA_COUNTER_NAMES:
+            _expect_int(event, f"incremental.hm_delta.counters.{name}", 0)
 
 
 def _verify_status(event: DumpEvent, success: bool) -> None:
@@ -952,6 +1037,7 @@ def _reference_success(
     event: DumpEvent,
     position: cp.CapturePosition,
     frames: list[ReferenceFrame],
+    require_isa: Optional[str],
 ) -> None:
     frame = frames[-1]
     previous_snapshot = frame.snapshot
@@ -985,7 +1071,7 @@ def _reference_success(
     current_snapshot = _snapshot(position)
     _verify_scalar(event, position, emissions, result)
     _verify_updates_and_counters(
-        event, updates, previous_snapshot, current_snapshot
+        event, updates, previous_snapshot, current_snapshot, require_isa
     )
     frame.states = {
         perspective: updates[perspective].transition.state
@@ -998,6 +1084,7 @@ def _reference_failure(
     network: scalar.SparseNetwork,
     event: DumpEvent,
     position: cp.CapturePosition,
+    require_isa: Optional[str],
 ) -> None:
     if event.action == "feature_failure":
         try:
@@ -1010,7 +1097,7 @@ def _reference_failure(
         # Fault injection and pointer identity are incremental-only failures;
         # the immutable snapshot itself must remain a valid H9.3h input.
         scalar.evaluate(network, position)
-    _verify_clear_diagnostic(event)
+    _verify_clear_diagnostic(event, require_isa)
 
 
 def _verify_null_contract(
@@ -1042,7 +1129,11 @@ def _verify_null_contract(
             )
 
 
-def run(oracle: Path, fixture: Path) -> None:
+def run(
+    oracle: Path, fixture: Path, require_isa: Optional[str] = None
+) -> None:
+    if require_isa is not None and require_isa not in REQUIRED_ISAS:
+        raise ValueError(f"require_isa must be one of {', '.join(REQUIRED_ISAS)}")
     oracle = oracle.expanduser().resolve()
     fixture = fixture.expanduser().resolve()
     if not oracle.is_file():
@@ -1053,8 +1144,11 @@ def run(oracle: Path, fixture: Path) -> None:
     # This authenticates exact size/SHA and independently parses every V3
     # tensor before the C++ process is allowed to contribute observations.
     network = scalar.load_frozen_fixture(fixture)
+    command = [str(oracle), str(fixture), "--dump-sequence"]
+    if require_isa is not None:
+        command.extend(("--require-isa", require_isa))
     completed = subprocess.run(
-        [str(oracle), str(fixture), "--dump-sequence"],
+        command,
         text=True,
         capture_output=True,
         check=False,
@@ -1065,7 +1159,7 @@ def run(oracle: Path, fixture: Path) -> None:
             f"C++ incremental sequence failed ({completed.returncode}):\n"
             f"stdout:\n{completed.stdout}\nstderr:\n{completed.stderr}"
         )
-    events, sequence_count = _parse_dump(completed.stdout)
+    events, sequence_count = _parse_dump(completed.stdout, require_isa)
     if sequence_count != SEQUENCE_EVENTS or len(events) != SEQUENCE_EVENTS:
         raise DifferentialFailure(
             f"sequence_events differs: published={sequence_count} parsed={len(events)}"
@@ -1092,12 +1186,12 @@ def run(oracle: Path, fixture: Path) -> None:
         _verify_dirty(event)
         if success:
             _expect_int(event, "incremental.ply", expected_ply)
-            _reference_success(network, event, position, frames)
+            _reference_success(network, event, position, frames, require_isa)
             successful += 1
         else:
             before_states = tuple(frame.states.copy() for frame in frames)
             before_snapshots = tuple(frame.snapshot for frame in frames)
-            _reference_failure(network, event, position)
+            _reference_failure(network, event, position, require_isa)
             current_states = tuple(frame.states for frame in frames)
             current_snapshots = tuple(frame.snapshot for frame in frames)
             if before_states != current_states or before_snapshots != current_snapshots:
@@ -1109,10 +1203,11 @@ def run(oracle: Path, fixture: Path) -> None:
         raise DifferentialFailure(
             f"sequence outcome inventory differs: success={successful} failures={failures}"
         )
+    isa_summary = "" if require_isa is None else f" requested_isa={require_isa}"
     print(
         "Atomic V3 incremental differential passed: "
         f"sequence_events={sequence_count} successful={successful} failures={failures} "
-        f"fixture_sha256={network.sha256}"
+        f"fixture_sha256={network.sha256}{isa_summary}"
     )
 
 
@@ -1120,8 +1215,9 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--oracle", type=Path, required=True)
     parser.add_argument("--fixture", type=Path, required=True)
+    parser.add_argument("--require-isa", choices=REQUIRED_ISAS)
     args = parser.parse_args()
-    run(args.oracle, args.fixture)
+    run(args.oracle, args.fixture, args.require_isa)
     return 0
 
 

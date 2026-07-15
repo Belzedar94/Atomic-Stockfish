@@ -308,12 +308,15 @@ def run(engine: Path, timeout: float, eval_file: Path | None = None) -> None:
             xb.send("new")
             xb.send("sd 1")
             xb.send("go")
-            _, v2_output = xb.expect_move()
+            _, nnue_output = xb.expect_move()
             if not any(
-                "NNUE evaluation using AtomicNNUEV2" in line for line in v2_output
+                "NNUE evaluation using Legacy Atomic V1" in line
+                or "NNUE evaluation using AtomicNNUEV2" in line
+                for line in nnue_output
             ):
                 raise AssertionError(
-                    f"XBoard did not search with the requested AtomicNNUEV2: {v2_output}"
+                    "XBoard did not search with the requested supported Atomic NNUE: "
+                    f"{nnue_output}"
                 )
             xb.send("force")
             xb.send("option Use NNUE=false")
@@ -481,7 +484,7 @@ def main() -> int:
     parser.add_argument(
         "--eval-file",
         type=Path,
-        help="optional authenticated AtomicNNUEV2 fixture used for a CECP search",
+        help="optional authenticated Legacy Atomic V1 or AtomicNNUEV2 fixture used for a CECP search",
     )
     args = parser.parse_args()
     if args.timeout <= 0:

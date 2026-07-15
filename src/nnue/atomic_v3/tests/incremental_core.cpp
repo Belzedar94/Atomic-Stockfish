@@ -30,8 +30,10 @@ namespace {
 
 constexpr std::string_view StartFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
-bool     dumpSequence = false;
-unsigned eventIndex   = 0;
+bool     dumpSequence   = false;
+bool     requireIsaMode = false;
+unsigned eventIndex     = 0;
+SimdIsa  requiredIsa    = SimdIsa::Scalar;
 
 [[noreturn]] void die(std::string_view label, std::string_view fen, const std::string& detail) {
     std::cerr << "AtomicNNUEV3 incremental gate FAILED\nlabel=" << label << "\nFEN=" << fen << "\n"
@@ -208,6 +210,30 @@ bool counters_equal(const IncrementalCounters& lhs, const IncrementalCounters& r
         && lhs.epSquareMismatches == rhs.epSquareMismatches;
 }
 
+bool hm_delta_counters_equal(const HmDeltaCounters& lhs, const HmDeltaCounters& rhs) {
+    return lhs.removedRows == rhs.removedRows && lhs.addedRows == rhs.addedRows
+        && lhs.i16Lanes == rhs.i16Lanes && lhs.sourcePermutationLanes == rhs.sourcePermutationLanes
+        && lhs.publishPermutationLanes == rhs.publishPermutationLanes
+        && lhs.scalarKernelCalls == rhs.scalarKernelCalls
+        && lhs.sse41KernelCalls == rhs.sse41KernelCalls
+        && lhs.avx2KernelCalls == rhs.avx2KernelCalls;
+}
+
+bool hm_delta_counters_advanced_by(const HmDeltaCounters& before,
+                                   const HmDeltaCounters& event,
+                                   const HmDeltaCounters& after) {
+    HmDeltaCounters expected = before;
+    expected.removedRows += event.removedRows;
+    expected.addedRows += event.addedRows;
+    expected.i16Lanes += event.i16Lanes;
+    expected.sourcePermutationLanes += event.sourcePermutationLanes;
+    expected.publishPermutationLanes += event.publishPermutationLanes;
+    expected.scalarKernelCalls += event.scalarKernelCalls;
+    expected.sse41KernelCalls += event.sse41KernelCalls;
+    expected.avx2KernelCalls += event.avx2KernelCalls;
+    return hm_delta_counters_equal(expected, after);
+}
+
 bool diagnostic_is_clear(const IncrementalDiagnostic& value) {
     const ScalarDiagnostic zeroScalar{};
     if (!scalar_difference(value.scalar, zeroScalar).empty())
@@ -228,7 +254,11 @@ bool diagnostic_is_clear(const IncrementalDiagnostic& value) {
     }
 
     const IncrementalCounters zeroCounters{};
-    return counters_equal(value.eventCounters, zeroCounters) && value.ply == 0
+    const HmDeltaCounters     zeroHmDeltaCounters{};
+    return counters_equal(value.eventCounters, zeroCounters) && !value.hmDelta.enabled
+        && value.hmDelta.requestedIsa == SimdIsa::Scalar
+        && value.hmDelta.executedIsa == SimdIsa::Scalar
+        && hm_delta_counters_equal(value.hmDelta.counters, zeroHmDeltaCounters) && value.ply == 0
         && !value.sameFrameSnapshotMismatch && !value.epSquareMismatch
         && value.previousEpSquare == SQ_NONE && value.currentEpSquare == SQ_NONE
         && value.previousSideToMove == WHITE && value.currentSideToMove == WHITE;
@@ -247,6 +277,18 @@ const char* source_name(HmSourceKind source) {
         return "full_refresh";
     }
     return "unknown";
+}
+
+bool parse_isa(std::string_view value, SimdIsa& result) {
+    if (value == "scalar")
+        result = SimdIsa::Scalar;
+    else if (value == "sse41")
+        result = SimdIsa::Sse41;
+    else if (value == "avx2")
+        result = SimdIsa::Avx2;
+    else
+        return false;
+    return true;
 }
 
 std::string square_name(Square square) { return square == SQ_NONE ? "-" : UCI::square(square); }
@@ -316,6 +358,32 @@ void print_scalar(std::string_view prefix, const ScalarDiagnostic& value) {
               << prefix << ".raw_output=" << value.rawOutput << '\n'
               << prefix << ".scaled_output=" << value.scaledOutput << '\n'
               << prefix << ".positional_value=" << value.positionalValue << '\n';
+}
+
+void print_hm_delta(const HmDeltaDiagnostic& value) {
+    if (!requireIsaMode)
+        return;
+
+    const auto& counters = value.counters;
+    std::cout << "incremental.hm_delta.enabled=" << int(value.enabled) << '\n'
+              << "incremental.hm_delta.requested_isa=" << simd_isa_name(value.requestedIsa) << '\n'
+              << "incremental.hm_delta.executed_isa=" << simd_isa_name(value.executedIsa) << '\n'
+              << "incremental.hm_delta.counters.removed_rows=" << counters.removedRows << '\n'
+              << "incremental.hm_delta.counters.added_rows=" << counters.addedRows << '\n'
+              << "incremental.hm_delta.counters.i16_lanes=" << counters.i16Lanes << '\n'
+              << "incremental.hm_delta.counters.source_permutation_lanes="
+              << counters.sourcePermutationLanes << '\n'
+              << "incremental.hm_delta.counters.publish_permutation_lanes="
+              << counters.publishPermutationLanes << '\n'
+              << "incremental.hm_delta.counters.scalar_kernel_calls=" << counters.scalarKernelCalls
+              << '\n'
+              << "incremental.hm_delta.counters.sse41_kernel_calls=" << counters.sse41KernelCalls
+              << '\n'
+              << "incremental.hm_delta.counters.avx2_kernel_calls=" << counters.avx2KernelCalls
+              << '\n'
+              << "incremental.hm_delta.counters.kernel_calls=" << counters.kernel_calls() << '\n'
+              << "incremental.hm_delta.counters.fallback_calls="
+              << counters.fallback_calls(value.requestedIsa) << '\n';
 }
 
 struct DirtyRecord {
@@ -455,6 +523,7 @@ void dump_event(const EventDescription&      event,
         std::cout << int(event.dirty.blast[index].square);
     }
     std::cout << '\n';
+    print_hm_delta(diagnostic.hmDelta);
     print_scalar("incremental.scalar", diagnostic.scalar);
     std::cout << "end_event=" << current << '\n';
 }
@@ -482,7 +551,8 @@ void validate_success_event(const IncrementalStack&      stack,
                             const ScalarStatus&          freshStatus,
                             const ScalarDiagnostic&      fresh,
                             const IncrementalStatus&     status,
-                            const IncrementalDiagnostic& incremental) {
+                            const IncrementalDiagnostic& incremental,
+                            const HmDeltaCounters&       hmDeltaBefore) {
     require(bool(freshStatus), event.label, event.fen,
             "fresh scalar oracle failed: " + std::string(scalar_error_message(freshStatus.code)));
     require(bool(status), event.label, event.fen,
@@ -517,22 +587,89 @@ void validate_success_event(const IncrementalStack&      stack,
             event.fen, "HM source counters do not cover both perspectives");
     require(stack.ep_square_when_computed() == snapshot.epSquare, event.label, event.fen,
             "committed frame retained the wrong EP square");
+
+    require(stack.hm_delta_execution_enabled() == requireIsaMode, event.label, event.fen,
+            "incremental stack has the wrong HM-delta execution mode");
+    require(stack.requested_isa() == (requireIsaMode ? requiredIsa : SimdIsa::Scalar), event.label,
+            event.fen, "incremental stack retained the wrong requested ISA");
+
+    HmDeltaCounters expected{};
+    u64             removedRows       = 0;
+    u64             addedRows         = 0;
+    usize           deltaPerspectives = 0;
+    for (const Color perspective : {WHITE, BLACK})
+    {
+        const auto& update = incremental.hmUpdates[static_cast<std::size_t>(perspective)];
+        if (update.source != HmSourceKind::StackDelta)
+            continue;
+        removedRows += update.removedRows;
+        addedRows += update.addedRows;
+        ++deltaPerspectives;
+    }
+    const u64 rowOperations = removedRows + addedRows;
+    if (requireIsaMode)
+    {
+        expected.removedRows             = removedRows;
+        expected.addedRows               = addedRows;
+        expected.i16Lanes                = rowOperations * AccumulatorDimensions;
+        expected.sourcePermutationLanes  = deltaPerspectives * AccumulatorDimensions;
+        expected.publishPermutationLanes = deltaPerspectives * AccumulatorDimensions;
+        switch (requiredIsa)
+        {
+        case SimdIsa::Scalar :
+            expected.scalarKernelCalls = rowOperations;
+            break;
+        case SimdIsa::Sse41 :
+            expected.sse41KernelCalls = rowOperations;
+            break;
+        case SimdIsa::Avx2 :
+            expected.avx2KernelCalls = rowOperations;
+            break;
+        }
+    }
+
+    require(incremental.hmDelta.enabled == requireIsaMode, event.label, event.fen,
+            "HM-delta diagnostic has the wrong enabled state");
+    require(incremental.hmDelta.requestedIsa == (requireIsaMode ? requiredIsa : SimdIsa::Scalar),
+            event.label, event.fen, "HM-delta diagnostic has the wrong requested ISA");
+    require(incremental.hmDelta.executedIsa == (requireIsaMode ? requiredIsa : SimdIsa::Scalar),
+            event.label, event.fen, "HM-delta diagnostic has the wrong executed ISA");
+    require(hm_delta_counters_equal(incremental.hmDelta.counters, expected), event.label, event.fen,
+            "per-event HM-delta accounting differs from the semantic updates");
+    const u64 expectedKernelCalls = requireIsaMode ? rowOperations : 0;
+    require(incremental.hmDelta.counters.kernel_calls() == expectedKernelCalls, event.label,
+            event.fen,
+            requireIsaMode ? "HM-delta kernel call total differs from row operations"
+                           : "legacy scalar path unexpectedly published HM-delta kernel calls");
+    require(incremental.hmDelta.counters.fallback_calls(incremental.hmDelta.requestedIsa) == 0,
+            event.label, event.fen, "HM-delta execution used a scalar fallback");
+    require(hm_delta_counters_advanced_by(hmDeltaBefore, incremental.hmDelta.counters,
+                                          stack.hm_delta_counters()),
+            event.label, event.fen,
+            "cumulative HM-delta accounting did not advance transactionally");
 }
 
 std::unique_ptr<IncrementalDiagnostic> evaluate_success(IncrementalStack& stack,
                                                         const Network&    network,
                                                         const Position&   position,
                                                         EventDescription  event) {
-    event.fen                             = position.fen();
-    const CapturePairSnapshot snapshot    = make_capture_pair_snapshot(position);
-    auto                      fresh       = std::make_unique<ScalarDiagnostic>();
-    auto                      incremental = std::make_unique<IncrementalDiagnostic>();
-    const ScalarStatus        freshStatus = evaluate_scalar(network, snapshot, *fresh);
-    const IncrementalStatus   status      = stack.evaluate(network, snapshot, *incremental);
+    event.fen                               = position.fen();
+    const CapturePairSnapshot snapshot      = make_capture_pair_snapshot(position);
+    auto                      fresh         = std::make_unique<ScalarDiagnostic>();
+    auto                      incremental   = std::make_unique<IncrementalDiagnostic>();
+    const HmDeltaCounters     hmDeltaBefore = stack.hm_delta_counters();
+    const ScalarStatus        freshStatus   = evaluate_scalar(network, snapshot, *fresh);
+    const IncrementalStatus   status        = stack.evaluate(network, snapshot, *incremental);
     validate_success_event(stack, network, event, snapshot, freshStatus, *fresh, status,
-                           *incremental);
+                           *incremental, hmDeltaBefore);
     dump_event(event, snapshot, freshStatus, status, *incremental, true);
     return incremental;
+}
+
+std::unique_ptr<IncrementalStack> make_incremental_stack(const Network& network) {
+    if (requireIsaMode)
+        return std::make_unique<IncrementalStack>(network, requiredIsa);
+    return std::make_unique<IncrementalStack>(network);
 }
 
 void require_source(const IncrementalDiagnostic& diagnostic,
@@ -550,7 +687,7 @@ void run_quiet_roundtrip(const Network& network) {
     Position                 position;
     std::array<StateInfo, 2> states{};
     set_position(position, states[0], StartFEN, false, "quiet-root");
-    auto stack = std::make_unique<IncrementalStack>(network);
+    auto stack = make_incremental_stack(network);
 
     auto root =
       evaluate_success(*stack, network, position, {"quiet-root", "reset_root", "-", "", false, {}});
@@ -583,7 +720,7 @@ void run_lazy_branch(const Network& network) {
     Position                 position;
     std::array<StateInfo, 6> states{};
     set_position(position, states[0], StartFEN, false, "lazy-root");
-    auto stack = std::make_unique<IncrementalStack>(network);
+    auto stack = make_incremental_stack(network);
 
     auto root =
       evaluate_success(*stack, network, position, {"lazy-root", "reset_root", "-", "", false, {}});
@@ -664,7 +801,7 @@ void run_relation_blocker(const Network& network) {
     Position                   position;
     std::array<StateInfo, 2>   states{};
     set_position(position, states[0], Fen, false, "relation-blocker-root");
-    auto stack = std::make_unique<IncrementalStack>(network);
+    auto stack = make_incremental_stack(network);
     auto root  = evaluate_success(*stack, network, position,
                                   {"relation-blocker-root", "reset_root", "-", "", false, {}});
 
@@ -704,7 +841,7 @@ void run_king_orientation(const Network& network) {
     Position                   position;
     std::array<StateInfo, 2>   states{};
     set_position(position, states[0], Fen, false, "king-mirror-root");
-    auto stack = std::make_unique<IncrementalStack>(network);
+    auto stack = make_incremental_stack(network);
     auto root  = evaluate_success(*stack, network, position,
                                   {"king-mirror-root", "reset_root", "-", "", false, {}});
     require(root->scalar.perspectives[WHITE].emission.hm.orientation.horizontalXor == 7,
@@ -735,7 +872,7 @@ void run_material_bucket(const Network& network) {
     Position                   position;
     std::array<StateInfo, 2>   states{};
     set_position(position, states[0], Fen, false, "bucket-root");
-    auto stack = std::make_unique<IncrementalStack>(network);
+    auto stack = make_incremental_stack(network);
     auto root  = evaluate_success(*stack, network, position,
                                   {"bucket-root", "reset_root", "-", "", false, {}});
     require(root->scalar.networkBucket == 1, "bucket-root", position.fen(),
@@ -770,7 +907,7 @@ void run_special_roundtrip(const Network&   network,
     Position                 position;
     std::array<StateInfo, 2> states{};
     set_position(position, states[0], fen, false, label);
-    auto stack = std::make_unique<IncrementalStack>(network);
+    auto stack = make_incremental_stack(network);
     auto root  = evaluate_success(*stack, network, position,
                                   {std::string(label) + "-root", "reset_root", "-", "", false, {}});
 
@@ -830,7 +967,7 @@ void run_null_ep(const Network& network) {
     Position                   position;
     std::array<StateInfo, 2>   states{};
     set_position(position, states[0], Fen, false, "null-ep-parent");
-    auto stack  = std::make_unique<IncrementalStack>(network);
+    auto stack  = make_incremental_stack(network);
     auto parent = evaluate_success(*stack, network, position,
                                    {"null-ep-parent", "reset_root", "-", "", false, {}});
     require(position.ep_square() == SQ_D6, "null-ep-parent", position.fen(),
@@ -878,15 +1015,16 @@ void evaluate_expected_failure(IncrementalStack&          stack,
                                IncrementalError           expectedError,
                                bool                       freshShouldSucceed,
                                FullRefreshError expectedFeatureError = FullRefreshError::None) {
-    auto fresh                             = std::make_unique<ScalarDiagnostic>();
-    auto incremental                       = std::make_unique<IncrementalDiagnostic>();
-    incremental->scalar.rawOutput          = 0x12345678;
-    incremental->scalar.positionalValue    = -321;
-    incremental->ply                       = 99;
-    incremental->sameFrameSnapshotMismatch = true;
-    const IncrementalCounters before       = stack.counters();
-    const ScalarStatus        freshStatus  = evaluate_scalar(network, snapshot, *fresh);
-    const IncrementalStatus   status       = stack.evaluate(network, snapshot, *incremental);
+    auto fresh                              = std::make_unique<ScalarDiagnostic>();
+    auto incremental                        = std::make_unique<IncrementalDiagnostic>();
+    incremental->scalar.rawOutput           = 0x12345678;
+    incremental->scalar.positionalValue     = -321;
+    incremental->ply                        = 99;
+    incremental->sameFrameSnapshotMismatch  = true;
+    const IncrementalCounters before        = stack.counters();
+    const HmDeltaCounters     hmDeltaBefore = stack.hm_delta_counters();
+    const ScalarStatus        freshStatus   = evaluate_scalar(network, snapshot, *fresh);
+    const IncrementalStatus   status        = stack.evaluate(network, snapshot, *incremental);
 
     require(bool(freshStatus) == freshShouldSucceed, event.label, event.fen,
             "fresh oracle success/failure did not match the fixture contract");
@@ -905,6 +1043,8 @@ void evaluate_expected_failure(IncrementalStack&          stack,
             "failed evaluation published a partial diagnostic");
     require(counters_equal(stack.counters(), before), event.label, event.fen,
             "failed evaluation mutated cumulative counters");
+    require(hm_delta_counters_equal(stack.hm_delta_counters(), hmDeltaBefore), event.label,
+            event.fen, "failed evaluation mutated cumulative HM-delta counters");
     dump_event(event, snapshot, freshStatus, status, *incremental, true);
 }
 
@@ -912,7 +1052,7 @@ void run_failure_transactionality(const Network& network, const std::filesystem:
     Position  position;
     StateInfo state{};
     set_position(position, state, StartFEN, false, "failure-root");
-    auto                      stack    = std::make_unique<IncrementalStack>(network);
+    auto                      stack    = make_incremental_stack(network);
     auto                      baseline = evaluate_success(*stack, network, position,
                                                           {"failure-root", "reset_root", "-", "", false, {}});
     const CapturePairSnapshot valid    = make_capture_pair_snapshot(position);
@@ -966,6 +1106,83 @@ void run_failure_transactionality(const Network& network, const std::filesystem:
     pass("AtomicNNUEV3 failure transactionality");
 }
 
+void run_unsupported_isa_transactionality(const Network& network) {
+    Position  position;
+    StateInfo state{};
+    set_position(position, state, StartFEN, false, "unsupported-isa");
+
+    std::array<SimdIsa, 3> unsupported{};
+    usize                  unsupportedCount = 0;
+    for (const SimdIsa isa : {SimdIsa::Sse41, SimdIsa::Avx2})
+        if (!simd_isa_available(isa))
+            unsupported[unsupportedCount++] = isa;
+    unsupported[unsupportedCount++] = static_cast<SimdIsa>(255);
+
+    for (usize isaIndex = 0; isaIndex < unsupportedCount; ++isaIndex)
+    {
+        auto         stack = std::make_unique<IncrementalStack>(network, unsupported[isaIndex]);
+        const usize  sizeBefore                  = stack->size();
+        const Square epBefore                    = stack->ep_square_when_computed();
+        const IncrementalCounters countersBefore = stack->counters();
+        const HmDeltaCounters     hmDeltaBefore  = stack->hm_delta_counters();
+        const CapturePairSnapshot snapshot       = make_capture_pair_snapshot(position);
+
+        for (unsigned probe = 0; probe < 2; ++probe)
+        {
+            auto diagnostic                    = std::make_unique<IncrementalDiagnostic>();
+            diagnostic->scalar.rawOutput       = 0x12345678;
+            diagnostic->scalar.positionalValue = -321;
+            diagnostic->hmDelta.enabled        = true;
+            diagnostic->hmDelta.requestedIsa   = SimdIsa::Avx2;
+            diagnostic->hmDelta.executedIsa    = SimdIsa::Avx2;
+            diagnostic->hmDelta.counters.avx2KernelCalls = 99;
+            diagnostic->ply                              = 99;
+            diagnostic->sameFrameSnapshotMismatch        = true;
+
+            const IncrementalStatus status = stack->evaluate(network, snapshot, *diagnostic);
+            require(status.error == IncrementalError::UnsupportedIsa, "unsupported-isa",
+                    position.fen(),
+                    "unavailable exact ISA request did not fail with UnsupportedIsa");
+            require(diagnostic_is_clear(*diagnostic), "unsupported-isa", position.fen(),
+                    "unavailable exact ISA request published a partial diagnostic");
+            require(stack->size() == sizeBefore && stack->ep_square_when_computed() == epBefore,
+                    "unsupported-isa", position.fen(),
+                    "unavailable exact ISA request mutated incremental frame state");
+            require(counters_equal(stack->counters(), countersBefore), "unsupported-isa",
+                    position.fen(), "unavailable exact ISA request mutated cumulative counters");
+            require(hm_delta_counters_equal(stack->hm_delta_counters(), hmDeltaBefore),
+                    "unsupported-isa", position.fen(),
+                    "unavailable exact ISA request mutated cumulative HM-delta counters");
+        }
+    }
+    pass("AtomicNNUEV3 named and invalid unsupported ISA transactionality");
+}
+
+void run_reset_mode_contract(const Network& network) {
+    auto stack = std::make_unique<IncrementalStack>(network, SimdIsa::Avx2);
+    require(stack->hm_delta_execution_enabled() && stack->requested_isa() == SimdIsa::Avx2,
+            "reset-mode-simd", StartFEN, "exact-ISA constructor did not retain its execution mode");
+
+    stack->push();
+    stack->reset(network);
+    require(!stack->hm_delta_execution_enabled() && stack->requested_isa() == SimdIsa::Scalar,
+            "reset-mode-legacy", StartFEN, "legacy reset inherited an earlier SIMD execution mode");
+    require(stack->size() == 1 && counters_equal(stack->counters(), {})
+              && hm_delta_counters_equal(stack->hm_delta_counters(), {}),
+            "reset-mode-legacy", StartFEN, "legacy reset did not clear stack state and counters");
+
+    stack->reset(network, SimdIsa::Sse41);
+    require(stack->hm_delta_execution_enabled() && stack->requested_isa() == SimdIsa::Sse41,
+            "reset-mode-simd-restored", StartFEN,
+            "exact-ISA reset was overwritten by the common reset path");
+    require(stack->size() == 1 && counters_equal(stack->counters(), {})
+              && hm_delta_counters_equal(stack->hm_delta_counters(), {}),
+            "reset-mode-simd-restored", StartFEN,
+            "exact-ISA reset did not clear stack state and counters");
+
+    pass("AtomicNNUEV3 reset execution-mode contract");
+}
+
 }  // namespace
 }  // namespace Stockfish::Eval::NNUE::AtomicV3
 
@@ -973,19 +1190,47 @@ int main(int argc, char* argv[]) {
     using namespace Stockfish;
     using namespace Stockfish::Eval::NNUE::AtomicV3;
 
-    if (argc != 2 && argc != 3)
+    constexpr std::string_view Usage = "usage: atomic-v3-incremental-tests NET [--dump-sequence] "
+                                       "[--require-isa scalar|sse41|avx2]";
+    if (argc < 2)
     {
-        std::cerr << "usage: atomic-v3-incremental-tests NET [--dump-sequence]\n";
+        std::cerr << Usage << '\n';
         return EXIT_FAILURE;
     }
-    if (argc == 3)
+
+    bool haveDump = false;
+    bool haveIsa  = false;
+    for (int index = 2; index < argc; ++index)
     {
-        if (std::string_view(argv[2]) != "--dump-sequence")
+        const std::string_view argument = argv[index];
+        if (argument == "--dump-sequence" && !haveDump)
         {
-            std::cerr << "usage: atomic-v3-incremental-tests NET [--dump-sequence]\n";
+            dumpSequence = true;
+            haveDump     = true;
+        }
+        else if (argument == "--require-isa" && index + 1 < argc && !haveIsa)
+        {
+            if (!parse_isa(argv[++index], requiredIsa))
+            {
+                std::cerr << Usage << '\n';
+                return EXIT_FAILURE;
+            }
+            requireIsaMode = true;
+            haveIsa        = true;
+        }
+        else
+        {
+            std::cerr << Usage << '\n';
             return EXIT_FAILURE;
         }
-        dumpSequence = true;
+    }
+
+    // An exact ISA request is a gate, never a dispatch hint. Reject it before
+    // initializing engine state or constructing/mutating any incremental stack.
+    if (requireIsaMode && !simd_isa_available(requiredIsa))
+    {
+        std::cerr << "required_isa=" << simd_isa_name(requiredIsa) << " available=0\n";
+        return EXIT_FAILURE;
     }
 
     Bitboards::init();
@@ -1008,6 +1253,8 @@ int main(int argc, char* argv[]) {
     run_special_moves(*loaded.network);
     run_null_ep(*loaded.network);
     run_failure_transactionality(*loaded.network, netPath);
+    run_reset_mode_contract(*loaded.network);
+    run_unsupported_isa_transactionality(*loaded.network);
 
     if (dumpSequence)
         std::cout << "sequence_events=" << eventIndex << '\n';

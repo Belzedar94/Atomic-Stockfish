@@ -16,6 +16,7 @@
 #include <utility>
 
 #include "../../position.h"
+#include "incremental_simd_kernels.h"
 #include "wire_io.h"
 
 namespace Stockfish::Eval::NNUE::AtomicV3 {
@@ -43,6 +44,17 @@ void add_counters(IncrementalCounters& destination, const IncrementalCounters& s
     destination.epSquareMismatches += source.epSquareMismatches;
 }
 
+void add_hm_delta_counters(HmDeltaCounters& destination, const HmDeltaCounters& source) noexcept {
+    destination.removedRows += source.removedRows;
+    destination.addedRows += source.addedRows;
+    destination.i16Lanes += source.i16Lanes;
+    destination.sourcePermutationLanes += source.sourcePermutationLanes;
+    destination.publishPermutationLanes += source.publishPermutationLanes;
+    destination.scalarKernelCalls += source.scalarKernelCalls;
+    destination.sse41KernelCalls += source.sse41KernelCalls;
+    destination.avx2KernelCalls += source.avx2KernelCalls;
+}
+
 IncrementalStatus fail(IncrementalDiagnostic& result,
                        IncrementalError       error,
                        FullRefreshError       featureError = FullRefreshError::None,
@@ -54,11 +66,20 @@ IncrementalStatus fail(IncrementalDiagnostic& result,
 }  // namespace
 
 void IncrementalStack::reset(const Network& network) noexcept {
-    network_   = &network;
-    frames_[0] = {};
-    size_      = 1;
-    counters_  = {};
-    testFault_ = IncrementalFaultPoint::None;
+    network_                 = &network;
+    frames_[0]               = {};
+    size_                    = 1;
+    counters_                = {};
+    hmDeltaCounters_         = {};
+    testFault_               = IncrementalFaultPoint::None;
+    requestedIsa_            = SimdIsa::Scalar;
+    hmDeltaExecutionEnabled_ = false;
+}
+
+void IncrementalStack::reset(const Network& network, SimdIsa requestedIsa) noexcept {
+    reset(network);
+    requestedIsa_            = requestedIsa;
+    hmDeltaExecutionEnabled_ = true;
 }
 
 DirtyPiece& IncrementalStack::push() noexcept {
@@ -96,12 +117,12 @@ bool IncrementalStack::extract_hm_rows(const HmEmission& emission, HmRows& resul
         == result.values.begin() + result.size;
 }
 
-IncrementalStatus
-IncrementalStack::build_hm_perspective(const Network&      network,
-                                       Color               perspective,
-                                       const HmEmission&   emission,
-                                       PerspectiveFrame&   target,
-                                       HmUpdateDiagnostic& diagnostic) const noexcept {
+IncrementalStatus IncrementalStack::build_hm_perspective(const Network&      network,
+                                                         Color               perspective,
+                                                         const HmEmission&   emission,
+                                                         PerspectiveFrame&   target,
+                                                         HmUpdateDiagnostic& diagnostic,
+                                                         HmDeltaCounters& deltaCounters) noexcept {
     target     = {};
     diagnostic = {};
 
@@ -193,40 +214,106 @@ IncrementalStack::build_hm_perspective(const Network&      network,
     if (!network.hm_weights() || !network.hm_psqt_weights())
         return {IncrementalError::InvalidHmRows};
 
-    std::array<i64, AccumulatorDimensions> accumulator{};
-    std::array<i64, PsqtBuckets>           psqt = source->hm.psqt;
-    for (std::size_t output = 0; output < AccumulatorDimensions; ++output)
-        accumulator[output] = source->hm.accumulator[output];
+    std::array<i64, PsqtBuckets> psqt = source->hm.psqt;
+    ScalarHmPerspective          candidateHm{};
+    if (!hmDeltaExecutionEnabled_)
+    {
+        std::array<i64, AccumulatorDimensions> accumulator{};
+        for (std::size_t output = 0; output < AccumulatorDimensions; ++output)
+            accumulator[output] = source->hm.accumulator[output];
 
-    auto apply = [&](IndexType row, i64 sign) {
-        if (row >= HmPhysicalDimensions)
-            return false;
-        const i16* weights = network.hm_weights() + std::size_t(row) * AccumulatorDimensions;
+        auto apply = [&](IndexType row, i64 sign) {
+            if (row >= HmPhysicalDimensions)
+                return false;
+            const i16* weights = network.hm_weights() + std::size_t(row) * AccumulatorDimensions;
+            for (std::size_t canonical = 0; canonical < AccumulatorDimensions; ++canonical)
+            {
+                const std::size_t internal =
+                  WireIO::internal_index_from_canonical<i16, 16>(canonical);
+                accumulator[canonical] += sign * i64(weights[internal]);
+            }
+            for (IndexType bucket = 0; bucket < PsqtBuckets; ++bucket)
+                psqt[bucket] +=
+                  sign * i64(network.hm_psqt_weights()[std::size_t(row) * PsqtBuckets + bucket]);
+            return true;
+        };
+
+        // Removal first is part of the frozen incremental arithmetic contract.
+        for (IndexType index = 0; index < removedSize; ++index)
+            if (!apply(removed[index], -1))
+                return {IncrementalError::InvalidHmRows};
+        for (IndexType index = 0; index < addedSize; ++index)
+            if (!apply(added[index], 1))
+                return {IncrementalError::InvalidHmRows};
+
+        for (std::size_t output = 0; output < AccumulatorDimensions; ++output)
+        {
+            if (!feature_transformer_accumulator_in_range(accumulator[output]))
+                return {IncrementalError::HmAccumulatorOutOfRange};
+            candidateHm.accumulator[output] = static_cast<i32>(accumulator[output]);
+        }
+    }
+    else
+    {
+        auto& internalAccumulator = scratch_.internalHmAccumulator;
         for (std::size_t canonical = 0; canonical < AccumulatorDimensions; ++canonical)
         {
             const std::size_t internal = WireIO::internal_index_from_canonical<i16, 16>(canonical);
-            accumulator[canonical] += sign * i64(weights[internal]);
+            internalAccumulator[internal] = source->hm.accumulator[canonical];
         }
-        for (IndexType bucket = 0; bucket < PsqtBuckets; ++bucket)
-            psqt[bucket] +=
-              sign * i64(network.hm_psqt_weights()[std::size_t(row) * PsqtBuckets + bucket]);
-        return true;
-    };
+        deltaCounters.sourcePermutationLanes += AccumulatorDimensions;
 
-    // Removal first is part of the frozen incremental arithmetic contract.
-    for (IndexType index = 0; index < removedSize; ++index)
-        if (!apply(removed[index], -1))
-            return {IncrementalError::InvalidHmRows};
-    for (IndexType index = 0; index < addedSize; ++index)
-        if (!apply(added[index], 1))
-            return {IncrementalError::InvalidHmRows};
+        auto apply = [&](IndexType row, HmDeltaOperation operation) {
+            if (row >= HmPhysicalDimensions)
+                return false;
+            const i16* weights = network.hm_weights() + std::size_t(row) * AccumulatorDimensions;
+            const HmDeltaKernelResult kernelResult =
+              apply_hm_delta_kernel(requestedIsa_, operation, internalAccumulator.data(), weights,
+                                    internalAccumulator.size());
+            if (!kernelResult || kernelResult.executedIsa != requestedIsa_)
+                return false;
 
-    ScalarHmPerspective candidateHm{};
-    for (std::size_t output = 0; output < AccumulatorDimensions; ++output)
-    {
-        if (!feature_transformer_accumulator_in_range(accumulator[output]))
-            return {IncrementalError::HmAccumulatorOutOfRange};
-        candidateHm.accumulator[output] = static_cast<i32>(accumulator[output]);
+            if (operation == HmDeltaOperation::Remove)
+                ++deltaCounters.removedRows;
+            else
+                ++deltaCounters.addedRows;
+            deltaCounters.i16Lanes += AccumulatorDimensions;
+            switch (kernelResult.executedIsa)
+            {
+            case SimdIsa::Scalar :
+                ++deltaCounters.scalarKernelCalls;
+                break;
+            case SimdIsa::Sse41 :
+                ++deltaCounters.sse41KernelCalls;
+                break;
+            case SimdIsa::Avx2 :
+                ++deltaCounters.avx2KernelCalls;
+                break;
+            }
+
+            const i64 sign = operation == HmDeltaOperation::Remove ? -1 : 1;
+            for (IndexType bucket = 0; bucket < PsqtBuckets; ++bucket)
+                psqt[bucket] +=
+                  sign * i64(network.hm_psqt_weights()[std::size_t(row) * PsqtBuckets + bucket]);
+            return true;
+        };
+
+        for (IndexType index = 0; index < removedSize; ++index)
+            if (!apply(removed[index], HmDeltaOperation::Remove))
+                return {IncrementalError::UnsupportedIsa};
+        for (IndexType index = 0; index < addedSize; ++index)
+            if (!apply(added[index], HmDeltaOperation::Add))
+                return {IncrementalError::UnsupportedIsa};
+
+        for (std::size_t canonical = 0; canonical < AccumulatorDimensions; ++canonical)
+        {
+            const std::size_t internal = WireIO::internal_index_from_canonical<i16, 16>(canonical);
+            const i64         value    = internalAccumulator[internal];
+            if (!feature_transformer_accumulator_in_range(value))
+                return {IncrementalError::HmAccumulatorOutOfRange};
+            candidateHm.accumulator[canonical] = static_cast<i32>(value);
+        }
+        deltaCounters.publishPermutationLanes += AccumulatorDimensions;
     }
     for (IndexType bucket = 0; bucket < PsqtBuckets; ++bucket)
     {
@@ -252,6 +339,8 @@ IncrementalStatus IncrementalStack::evaluate(const Network&             network,
     result = {};
     if (network_ != &network)
         return {IncrementalError::NetworkMismatch};
+    if (hmDeltaExecutionEnabled_ && !simd_isa_available(requestedIsa_))
+        return {IncrementalError::UnsupportedIsa};
 
     const Frame& previous = latest();
 
@@ -261,6 +350,9 @@ IncrementalStatus IncrementalStack::evaluate(const Network&             network,
     // second ScalarDiagnostic) keeps this hot function's Windows stack frame
     // comfortably below the sanitizer gate.
     IncrementalDiagnostic& candidateDiagnostic = result;
+    candidateDiagnostic.hmDelta.enabled        = hmDeltaExecutionEnabled_;
+    candidateDiagnostic.hmDelta.requestedIsa   = requestedIsa_;
+    candidateDiagnostic.hmDelta.executedIsa    = requestedIsa_;
     candidateDiagnostic.ply                    = size_ - 1;
     candidateDiagnostic.currentEpSquare        = snapshot.epSquare;
     candidateDiagnostic.currentSideToMove      = snapshot.sideToMove;
@@ -297,7 +389,7 @@ IncrementalStatus IncrementalStack::evaluate(const Network&             network,
         const std::size_t       index  = color_index(perspective);
         const IncrementalStatus status = build_hm_perspective(
           network, perspective, emissions[index].hm, candidateFrame.perspectives[index],
-          candidateDiagnostic.hmUpdates[index]);
+          candidateDiagnostic.hmUpdates[index], candidateDiagnostic.hmDelta.counters);
         if (!status)
         {
             result = {};
@@ -342,6 +434,13 @@ IncrementalStatus IncrementalStack::evaluate(const Network&             network,
 
     latest() = std::move(candidateFrame);
     add_counters(counters_, candidateDiagnostic.eventCounters);
+    add_hm_delta_counters(hmDeltaCounters_, candidateDiagnostic.hmDelta.counters);
+    if (candidateDiagnostic.hmDelta.counters.avx2KernelCalls)
+        candidateDiagnostic.hmDelta.executedIsa = SimdIsa::Avx2;
+    else if (candidateDiagnostic.hmDelta.counters.sse41KernelCalls)
+        candidateDiagnostic.hmDelta.executedIsa = SimdIsa::Sse41;
+    else if (candidateDiagnostic.hmDelta.counters.scalarKernelCalls)
+        candidateDiagnostic.hmDelta.executedIsa = SimdIsa::Scalar;
     return {};
 }
 
@@ -370,6 +469,8 @@ const char* incremental_error_message(IncrementalError error) noexcept {
         return "shared scalar relation/transform/dense composition failed";
     case IncrementalError::InjectedFailure :
         return "private incremental transactional fault was injected";
+    case IncrementalError::UnsupportedIsa :
+        return "requested incremental SIMD ISA is not compiled into this binary";
     }
     return "unknown Atomic V3 incremental error";
 }

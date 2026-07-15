@@ -16,6 +16,7 @@
 
 #include "../../types.h"
 #include "scalar_backend.h"
+#include "simd_isa.h"
 
 namespace Stockfish {
 class Position;
@@ -40,7 +41,8 @@ enum class IncrementalError : u8 {
     HmAccumulatorOutOfRange,
     PsqtAccumulatorOutOfRange,
     ScalarCompositionError,
-    InjectedFailure
+    InjectedFailure,
+    UnsupportedIsa
 };
 
 enum class IncrementalFaultPoint : u8 {
@@ -75,11 +77,37 @@ struct IncrementalCounters {
     u64 epSquareMismatches = 0;
 };
 
+struct HmDeltaCounters {
+    u64 removedRows             = 0;
+    u64 addedRows               = 0;
+    u64 i16Lanes                = 0;
+    u64 sourcePermutationLanes  = 0;
+    u64 publishPermutationLanes = 0;
+    u64 scalarKernelCalls       = 0;
+    u64 sse41KernelCalls        = 0;
+    u64 avx2KernelCalls         = 0;
+
+    [[nodiscard]] constexpr u64 kernel_calls() const noexcept {
+        return scalarKernelCalls + sse41KernelCalls + avx2KernelCalls;
+    }
+    [[nodiscard]] constexpr u64 fallback_calls(SimdIsa requestedIsa) const noexcept {
+        return requestedIsa == SimdIsa::Scalar ? 0 : scalarKernelCalls;
+    }
+};
+
+struct HmDeltaDiagnostic {
+    bool            enabled      = false;
+    SimdIsa         requestedIsa = SimdIsa::Scalar;
+    SimdIsa         executedIsa  = SimdIsa::Scalar;
+    HmDeltaCounters counters{};
+};
+
 struct IncrementalDiagnostic {
     ScalarDiagnostic                          scalar{};
     std::array<ScalarHmPerspective, COLOR_NB> hmOnly{};
     std::array<HmUpdateDiagnostic, COLOR_NB>  hmUpdates{};
     IncrementalCounters                       eventCounters{};
+    HmDeltaDiagnostic                         hmDelta{};
     usize                                     ply                       = 0;
     bool                                      sameFrameSnapshotMismatch = false;
     bool                                      epSquareMismatch          = false;
@@ -95,8 +123,12 @@ class IncrementalStack {
 
     IncrementalStack() = default;
     explicit IncrementalStack(const Network& network) noexcept { reset(network); }
+    IncrementalStack(const Network& network, SimdIsa requestedIsa) noexcept {
+        reset(network, requestedIsa);
+    }
 
     void        reset(const Network& network) noexcept;
+    void        reset(const Network& network, SimdIsa requestedIsa) noexcept;
     DirtyPiece& push() noexcept;
     void        pop() noexcept;
 
@@ -111,7 +143,14 @@ class IncrementalStack {
     [[nodiscard]] usize                      size() const noexcept { return size_; }
     [[nodiscard]] usize                      ply() const noexcept { return size_ - 1; }
     [[nodiscard]] const IncrementalCounters& counters() const noexcept { return counters_; }
-    [[nodiscard]] Square                     ep_square_when_computed() const noexcept;
+    [[nodiscard]] const HmDeltaCounters&     hm_delta_counters() const noexcept {
+        return hmDeltaCounters_;
+    }
+    [[nodiscard]] bool hm_delta_execution_enabled() const noexcept {
+        return hmDeltaExecutionEnabled_;
+    }
+    [[nodiscard]] SimdIsa requested_isa() const noexcept { return requestedIsa_; }
+    [[nodiscard]] Square  ep_square_when_computed() const noexcept;
 
     // Deterministic private fault seam used to prove that evaluation never
     // publishes a partially updated frame or diagnostic.
@@ -144,24 +183,28 @@ class IncrementalStack {
     // state observable after a failed transaction.
     struct alignas(CacheLineSize) EvaluationScratch {
         std::array<FullRefreshEmission, COLOR_NB> emissions{};
+        std::array<i64, AccumulatorDimensions>    internalHmAccumulator{};
     };
 
     [[nodiscard]] Frame&       latest() noexcept { return frames_[size_ - 1]; }
     [[nodiscard]] const Frame& latest() const noexcept { return frames_[size_ - 1]; }
 
     [[nodiscard]] static bool extract_hm_rows(const HmEmission& emission, HmRows& result) noexcept;
-    [[nodiscard]] IncrementalStatus
-    build_hm_perspective(const Network&      network,
-                         Color               perspective,
-                         const HmEmission&   emission,
-                         PerspectiveFrame&   target,
-                         HmUpdateDiagnostic& diagnostic) const noexcept;
+    [[nodiscard]] IncrementalStatus build_hm_perspective(const Network&      network,
+                                                         Color               perspective,
+                                                         const HmEmission&   emission,
+                                                         PerspectiveFrame&   target,
+                                                         HmUpdateDiagnostic& diagnostic,
+                                                         HmDeltaCounters& deltaCounters) noexcept;
 
     const Network*             network_ = nullptr;
     std::array<Frame, MaxSize> frames_{};
     usize                      size_ = 1;
     IncrementalCounters        counters_{};
-    IncrementalFaultPoint      testFault_ = IncrementalFaultPoint::None;
+    HmDeltaCounters            hmDeltaCounters_{};
+    IncrementalFaultPoint      testFault_               = IncrementalFaultPoint::None;
+    SimdIsa                    requestedIsa_            = SimdIsa::Scalar;
+    bool                       hmDeltaExecutionEnabled_ = false;
     EvaluationScratch          scratch_{};
 };
 
