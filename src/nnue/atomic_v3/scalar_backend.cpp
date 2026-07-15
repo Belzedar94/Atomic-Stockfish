@@ -294,23 +294,18 @@ ScalarStatus compose_scalar_diagnostic(const Network&                           
     if (snapshot.sideToMove != WHITE && snapshot.sideToMove != BLACK)
         return fail(result, ScalarError::FeatureOracleError, FullRefreshError::InvalidSideToMove);
 
-    ScalarDiagnostic candidate{};
-    candidate.sideToMove = snapshot.sideToMove;
+    std::array<ScalarHmPerspective, COLOR_NB> completeStates{};
 
     for (const Color perspective : {WHITE, BLACK})
     {
-        const std::size_t index       = color_index(perspective);
-        const auto&       emission    = emissions[index];
-        const auto&       hm          = hmStates[index];
-        auto&             destination = candidate.perspectives[index];
+        const std::size_t index    = color_index(perspective);
+        const auto&       emission = emissions[index];
+        const auto&       hm       = hmStates[index];
+        auto&             complete = completeStates[index];
 
         if (!valid_composition_emission(emission, perspective)
             || emission.hm.networkBucket >= LayerStacks)
             return fail(result, ScalarError::InvalidFeatureIndex);
-
-        destination.perspective = perspective;
-        destination.emission    = emission;
-        destination.psqt        = hm.psqt;
 
         InternalAccumulator combined{};
         for (std::size_t output = 0; output < AccumulatorDimensions; ++output)
@@ -324,7 +319,51 @@ ScalarStatus compose_scalar_diagnostic(const Network&                           
         {
             if (!feature_transformer_accumulator_in_range(combined[output]))
                 return fail(result, ScalarError::FeatureAccumulatorOutOfRange);
-            destination.accumulator[output] = static_cast<i32>(combined[output]);
+            complete.accumulator[output] = static_cast<i32>(combined[output]);
+        }
+
+        complete.psqt = hm.psqt;
+        for (const HmPsqtAccumulatorType value : complete.psqt)
+            if (value < std::numeric_limits<i32>::min() || value > std::numeric_limits<i32>::max())
+                return fail(result, ScalarError::PsqtAccumulatorOutOfRange);
+    }
+
+    return finalize_scalar_diagnostic(network, snapshot, emissions, completeStates, result);
+}
+
+ScalarStatus
+finalize_scalar_diagnostic(const Network&                                   network,
+                           const CapturePairSnapshot&                       snapshot,
+                           const std::array<FullRefreshEmission, COLOR_NB>& emissions,
+                           const std::array<ScalarHmPerspective, COLOR_NB>& completeStates,
+                           ScalarDiagnostic&                                result) {
+    result = {};
+    if (snapshot.sideToMove != WHITE && snapshot.sideToMove != BLACK)
+        return fail(result, ScalarError::FeatureOracleError, FullRefreshError::InvalidSideToMove);
+
+    ScalarDiagnostic candidate{};
+    candidate.sideToMove = snapshot.sideToMove;
+
+    for (const Color perspective : {WHITE, BLACK})
+    {
+        const std::size_t index       = color_index(perspective);
+        const auto&       emission    = emissions[index];
+        const auto&       complete    = completeStates[index];
+        auto&             destination = candidate.perspectives[index];
+
+        if (!valid_composition_emission(emission, perspective)
+            || emission.hm.networkBucket >= LayerStacks)
+            return fail(result, ScalarError::InvalidFeatureIndex);
+
+        destination.perspective = perspective;
+        destination.emission    = emission;
+        destination.psqt        = complete.psqt;
+
+        for (std::size_t output = 0; output < AccumulatorDimensions; ++output)
+        {
+            if (!feature_transformer_accumulator_in_range(complete.accumulator[output]))
+                return fail(result, ScalarError::FeatureAccumulatorOutOfRange);
+            destination.accumulator[output] = complete.accumulator[output];
         }
 
         for (const HmPsqtAccumulatorType value : destination.psqt)

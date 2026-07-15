@@ -68,6 +68,10 @@ jobs:
           make -j2 ARCH=x86-64 COMP=${{ matrix.comp }} COMPCXX=${{ matrix.cxx }} \
             ATOMIC_NNUE_V3_TEST_NET="$RUNNER_TEMP/atomic-v3-wire-v1.nnue" \
             atomic-v3-incremental-stress-tests
+          make -j2 ARCH=x86-64 COMP=${{ matrix.comp }} COMPCXX=${{ matrix.cxx }} \
+            ATOMIC_NNUE_V3_TEST_NET="$RUNNER_TEMP/atomic-v3-wire-v1.nnue" \
+            ATOMIC_V3_SIMD_REQUIRED_ISA=scalar \
+            atomic-v3-simd-tests
           make -j2 ARCH=x86-64 COMP=${{ matrix.comp }} COMPCXX=${{ matrix.cxx }} atomic-syzygy-driver
           make -j2 ARCH=x86-64 COMP=${{ matrix.comp }} COMPCXX=${{ matrix.cxx }} legacy-atomic-v1-tests
           make -j2 ARCH=x86-64 COMP=${{ matrix.comp }} COMPCXX=${{ matrix.cxx }} atomic-bin-v2-tests
@@ -170,6 +174,93 @@ jobs:
             ATOMIC_NNUE_V3_TEST_NET="$RUNNER_TEMP/atomic-v3-wire-v1.nnue" \
             atomic-v3-incremental-stress-tests
 
+  nnue-v3-simd:
+    name: AtomicNNUEV3 full-refresh SIMD ${{ matrix.compiler }} ${{ matrix.isa }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - isa: scalar
+            arch: general-64
+            compiler: GCC
+            comp: gcc
+            cxx: g++
+          - isa: sse41
+            arch: x86-64-sse41-popcnt
+            compiler: GCC
+            comp: gcc
+            cxx: g++
+          - isa: avx2
+            arch: x86-64-avx2
+            compiler: GCC
+            comp: gcc
+            cxx: g++
+          - isa: avx2
+            arch: x86-64-avx2
+            compiler: Clang
+            comp: clang
+            cxx: clang++
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Create authenticated AtomicNNUEV3 fixture
+        run: >-
+          python3 tests/create_synthetic_atomic_v3_nnue.py
+          --output "$RUNNER_TEMP/atomic-v3-wire-v1.nnue"
+      - name: Build private full-refresh SIMD runner
+        run: >-
+          make -C src -j2 ARCH=${{ matrix.arch }}
+          COMP=${{ matrix.comp }} COMPCXX=${{ matrix.cxx }}
+          atomic-v3-simd-tests.bin
+      - name: Prove exact Python, scalar and requested-ISA identity
+        run: >-
+          python3 tests/atomic_v3_simd_differential.py
+          --runner src/atomic-v3-simd-tests.bin
+          --net "$RUNNER_TEMP/atomic-v3-wire-v1.nnue"
+          --require-isa ${{ matrix.isa }}
+          --timeout 300
+      - name: Verify compiled SIMD kernel symbols and widening instructions
+        run: |
+          binary=src/atomic-v3-simd-tests.bin
+          if [ "${{ matrix.isa }}" = scalar ]; then
+            if objdump -t "$binary" | grep -F 'atomic_v3_add_i' >/dev/null; then
+              echo "portable scalar build unexpectedly contains an x86 SIMD kernel" >&2
+              exit 1
+            fi
+            exit 0
+          fi
+
+          kernels=(
+            atomic_v3_add_i16_sse41_kernel
+            atomic_v3_add_i8_sse41_kernel
+          )
+          if [ "${{ matrix.isa }}" = avx2 ]; then
+            kernels+=(
+              atomic_v3_add_i16_avx2_kernel
+              atomic_v3_add_i8_avx2_kernel
+            )
+          fi
+          for symbol in "${kernels[@]}"; do
+            assembly="$RUNNER_TEMP/${symbol}.asm"
+            objdump -d --disassemble="$symbol" "$binary" > "$assembly"
+            grep -F "<$symbol>:" "$assembly"
+          done
+
+          if [ "${{ matrix.isa }}" = sse41 ]; then
+            grep -E '[[:space:]]pmovsxwd[[:space:]]' \
+              "$RUNNER_TEMP/atomic_v3_add_i16_sse41_kernel.asm"
+            grep -E '[[:space:]]pmovsxbd[[:space:]]' \
+              "$RUNNER_TEMP/atomic_v3_add_i8_sse41_kernel.asm"
+          else
+            grep -E '[[:space:]]vpmovsxwd[[:space:]]' \
+              "$RUNNER_TEMP/atomic_v3_add_i16_avx2_kernel.asm"
+            grep -E '[[:space:]]vpmovsxbd[[:space:]]' \
+              "$RUNNER_TEMP/atomic_v3_add_i8_avx2_kernel.asm"
+          fi
+
   nnue-v3-wire-policies:
     name: AtomicNNUEV3 wire policy ${{ matrix.policy }}
     runs-on: ubuntu-24.04
@@ -182,24 +273,29 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
-      - name: Forced portable wire and scalar selftests and differentials
+      - name: Forced wire layouts with real AVX2 selftests and differentials
         run: |
-          make -C src -j2 ARCH=general-64 \
+          make -C src -j2 ARCH=x86-64-avx2 \
             ATOMIC_V3_WIRE_TEST_POLICY=${{ matrix.policy }} \
             ATOMIC_NNUE_V3_TEST_NET="$RUNNER_TEMP/atomic-v3-wire-v1.nnue" \
             atomic-v3-wire-tests
-          make -C src -j2 ARCH=general-64 \
+          make -C src -j2 ARCH=x86-64-avx2 \
             ATOMIC_V3_WIRE_TEST_POLICY=${{ matrix.policy }} \
             ATOMIC_NNUE_V3_TEST_NET="$RUNNER_TEMP/atomic-v3-wire-v1.nnue" \
             atomic-v3-scalar-tests
-          make -C src -j2 ARCH=general-64 \
+          make -C src -j2 ARCH=x86-64-avx2 \
             ATOMIC_V3_WIRE_TEST_POLICY=${{ matrix.policy }} \
             ATOMIC_NNUE_V3_TEST_NET="$RUNNER_TEMP/atomic-v3-wire-v1.nnue" \
             atomic-v3-incremental-tests
-          make -C src -j2 ARCH=general-64 \
+          make -C src -j2 ARCH=x86-64-avx2 \
             ATOMIC_V3_WIRE_TEST_POLICY=${{ matrix.policy }} \
             ATOMIC_NNUE_V3_TEST_NET="$RUNNER_TEMP/atomic-v3-wire-v1.nnue" \
             atomic-v3-incremental-stress-tests
+          make -C src -j2 ARCH=x86-64-avx2 \
+            ATOMIC_V3_WIRE_TEST_POLICY=${{ matrix.policy }} \
+            ATOMIC_NNUE_V3_TEST_NET="$RUNNER_TEMP/atomic-v3-wire-v1.nnue" \
+            ATOMIC_V3_SIMD_REQUIRED_ISA=avx2 \
+            atomic-v3-simd-tests
 
   nnue-v3-incremental-stress:
     name: AtomicNNUEV3 incremental stress ${{ matrix.compiler }}
@@ -328,6 +424,10 @@ jobs:
           make -C src -j2 ARCH=x86-64 debug=yes optimize=no \
             ATOMIC_NNUE_V3_TEST_NET="$RUNNER_TEMP/atomic-v3-wire-v1.nnue" \
             atomic-v3-incremental-stress-tests
+          make -C src -j2 ARCH=x86-64 debug=yes optimize=no \
+            ATOMIC_NNUE_V3_TEST_NET="$RUNNER_TEMP/atomic-v3-wire-v1.nnue" \
+            ATOMIC_V3_SIMD_REQUIRED_ISA=scalar \
+            atomic-v3-simd-tests
           make -C src -j2 ARCH=x86-64 debug=yes optimize=no atomic-syzygy-driver
           make -C src -j2 ARCH=x86-64 debug=yes optimize=no legacy-atomic-v1-tests
           make -C src -j2 ARCH=x86-64 debug=yes optimize=no atomic-bin-v2-tests
@@ -400,6 +500,10 @@ jobs:
           make -C src -j2 ARCH=x86-64 COMP=mingw \
             ATOMIC_NNUE_V3_TEST_NET="$RUNNER_TEMP/atomic-v3-wire-v1.nnue" \
             atomic-v3-incremental-stress-tests
+          make -C src -j2 ARCH=x86-64 COMP=mingw \
+            ATOMIC_NNUE_V3_TEST_NET="$RUNNER_TEMP/atomic-v3-wire-v1.nnue" \
+            ATOMIC_V3_SIMD_REQUIRED_ISA=scalar \
+            atomic-v3-simd-tests
           python tests/nnue_v3_dispatch_reject.py \
             --engine src/atomic-stockfish.exe \
             --v3-net "$RUNNER_TEMP/atomic-v3-wire-v1.nnue"
@@ -466,6 +570,7 @@ jobs:
           make -j2 ARCH=x86-64-sse41-popcnt sanitize=${{ matrix.sanitizer }} debug=yes optimize=no atomic-v3-scalar-tests.bin
           make -j2 ARCH=x86-64-sse41-popcnt sanitize=${{ matrix.sanitizer }} debug=yes optimize=no atomic-v3-incremental-tests.bin
           make -j2 ARCH=x86-64-sse41-popcnt sanitize=${{ matrix.sanitizer }} debug=yes optimize=no atomic-v3-incremental-stress-tests.bin
+          make -j2 ARCH=x86-64-sse41-popcnt sanitize=${{ matrix.sanitizer }} debug=yes optimize=no atomic-v3-simd-tests.bin
           make -j2 ARCH=x86-64-sse41-popcnt sanitize=${{ matrix.sanitizer }} debug=yes optimize=no data-generator
           make -j2 ARCH=x86-64-sse41-popcnt sanitize=${{ matrix.sanitizer }} debug=yes optimize=no data-tools
       - name: Create authenticated Legacy V1 and AtomicNNUEV2 fixtures
@@ -488,6 +593,11 @@ jobs:
           src/atomic-v3-numeric-tests.bin && \
           src/atomic-v3-wire-tests.bin inspect "$RUNNER_TEMP/atomic-v3-wire-v1.nnue" && \
           src/atomic-v3-scalar-tests.bin "$RUNNER_TEMP/atomic-v3-wire-v1.nnue" && \
+          python3 tests/atomic_v3_simd_differential.py \
+            --runner src/atomic-v3-simd-tests.bin \
+            --net "$RUNNER_TEMP/atomic-v3-wire-v1.nnue" \
+            --require-isa sse41 \
+            --timeout 300 && \
           python3 tests/atomic_v3_incremental_differential.py \
             --oracle src/atomic-v3-incremental-tests.bin \
             --fixture "$RUNNER_TEMP/atomic-v3-wire-v1.nnue" && \
@@ -625,6 +735,8 @@ jobs:
             debug=yes optimize=no atomic-v3-scalar-tests.bin
           make -j2 ARCH=x86-64 COMP=gcc COMPCXX=g++ \
             debug=yes optimize=no atomic-v3-incremental-tests.bin
+          make -j2 ARCH=x86-64 COMP=gcc COMPCXX=g++ \
+            debug=yes optimize=no atomic-v3-simd-tests.bin
       - name: Run AtomicNNUEV2 and AtomicNNUEV3 isolated tests under Valgrind
         run: |
           python3 tests/create_synthetic_atomic_v2_nnue.py \
@@ -710,6 +822,31 @@ jobs:
             src/atomic-v3-scalar-tests.bin \
             "$RUNNER_TEMP/atomic-v3-wire-v1.nnue" \
             --snapshot white d6 "7k/3b4/8/2RPp3/8/8/8/K7"
+          cat > "$RUNNER_TEMP/atomic-v3-simd-one-case.in" <<'EOF'
+          record=simd_input
+          case=0
+          chess960=0
+          fen=7k/8/2N1b3/2ppP3/8/8/8/K7 w - d6 0 2
+          end_input=0
+          batch_cases=1
+          EOF
+          valgrind \
+            --error-exitcode=99 \
+            --quiet \
+            --leak-check=full \
+            --show-leak-kinds=all \
+            --errors-for-leak-kinds=all \
+            --track-origins=yes \
+            --num-callers=30 \
+            src/atomic-v3-simd-tests.bin \
+            --net "$RUNNER_TEMP/atomic-v3-wire-v1.nnue" \
+            --require-isa scalar \
+            --batch \
+            < "$RUNNER_TEMP/atomic-v3-simd-one-case.in" \
+            > "$RUNNER_TEMP/atomic-v3-simd-one-case.out"
+          grep -E \
+            '^AtomicNNUEV3 SIMD gate passed: requested=scalar executed=scalar cases=1 comparisons=1 errors=0 .*fallback_calls=0 fingerprint=0x[0-9A-F]{16}$' \
+            "$RUNNER_TEMP/atomic-v3-simd-one-case.out"
           cat > "$RUNNER_TEMP/atomic-v3-incremental-valgrind" <<'EOF'
           #!/usr/bin/env bash
           exec valgrind \
@@ -890,6 +1027,8 @@ jobs:
           tests/python/test_atomic_v3_scalar_oracle.py
           tests/python/test_atomic_v3_incremental_oracle.py
           tests/python/test_atomic_v3_incremental_stress_wrapper.py
+          tests/python/test_atomic_v3_simd_wrapper.py
+          tests/python/test_atomic_v3_simd_benchmark.py
           tests/python/test_create_synthetic_atomic_v3_nnue.py
           tests/python/test_validate_atomic_v3_bundle.py
           tests/python/test_create_synthetic_atomic_v2_nnue.py

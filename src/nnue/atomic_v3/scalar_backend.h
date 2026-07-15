@@ -121,6 +121,17 @@ compose_scalar_diagnostic(const Network&                                   netwo
                           const std::array<ScalarHmPerspective, COLOR_NB>& hmStates,
                           ScalarDiagnostic&                                result);
 
+// Private completion seam for H9.3j. completeStates contains canonical i32
+// accumulators after every HM and relation row has been added, plus the scalar
+// HM PSQT totals. The function owns the exact H9.3h validation, transform,
+// PSQT and dense-tail semantics, and is transactional on every failure.
+[[nodiscard]] ScalarStatus
+finalize_scalar_diagnostic(const Network&                                   network,
+                           const CapturePairSnapshot&                       snapshot,
+                           const std::array<FullRefreshEmission, COLOR_NB>& emissions,
+                           const std::array<ScalarHmPerspective, COLOR_NB>& completeStates,
+                           ScalarDiagnostic&                                result);
+
 // Both entry points are transactional: on every failure result is reset to a
 // bytewise/default-zero diagnostic. The returned status retains only the error
 // domains required to diagnose the rejected input.

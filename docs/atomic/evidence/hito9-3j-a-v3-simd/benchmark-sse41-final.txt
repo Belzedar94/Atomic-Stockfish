@@ -1,0 +1,25 @@
+record=simd_identity
+network.version=0xA70C0003
+network.hash=0xCF9A484
+network.description=Atomic-Stockfish AtomicNNUEV3 controlled mixed-wire CI source
+wire.policy=identity
+wire.simd_permuted=1
+isa.requested=sse41
+isa.maximum=sse41
+end_identity=1
+record=simd_benchmark
+isa.requested=sse41
+isa.executed=sse41
+warmups=1
+trials=5
+repetitions=8192
+promotion_gate=1
+scalar_ns=4089500,4220100,4309800,4377500,4479100
+required_ns=1097300,1146400,1136000,1153900,1146400
+scalar_median_ns=4309800
+required_median_ns=1146400
+throughput_ratio=3.759421
+sink=0x661CDFB1D7556853
+end_benchmark=1
+AtomicNNUEV3 SIMD benchmark passed: requested=sse41 executed=sse41 warmups=1 trials=5 ratio=3.759421 promotion_gate=1
+AtomicNNUEV3 SIMD benchmark audit passed: requested=sse41 executed=sse41 promotion_gate=1 trials=5 ratio=3.759421 fixture_sha256=00E46223822D06D7927E884EEC10739BA19EF8DD82A6E262F627D361658080C2
