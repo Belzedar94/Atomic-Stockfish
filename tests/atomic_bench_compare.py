@@ -136,11 +136,17 @@ def require_nnue_output(label: str, net: Path, output: list[str]) -> None:
     if any("ERROR:" in line.upper() for line in output):
         raise RuntimeError(f"{label} reported an NNUE/protocol error: {output[-10:]}")
     selected_net = str(net)
-    expected_prefix = f"NNUE evaluation using {selected_net} "
+    if label in {"candidate", "control"}:
+        expected_prefixes = (
+            f"NNUE evaluation using Legacy Atomic V1 {selected_net} ",
+            f"NNUE evaluation using AtomicNNUEV2 {selected_net} ",
+        )
+    else:
+        expected_prefixes = (f"NNUE evaluation using {selected_net} ",)
     net_lines = [
         line
         for line in output
-        if expected_prefix in line
+        if any(expected_prefix in line for expected_prefix in expected_prefixes)
     ]
     marker_ok = (
         any(CANDIDATE_NNUE_ARCHITECTURE_MARKER in line for line in net_lines)

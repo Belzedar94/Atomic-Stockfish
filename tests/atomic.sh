@@ -123,10 +123,10 @@ if [[ -n "$PERFT_NET" ]]; then
         printf 'go nodes 1\n'
         printf 'quit\n'
     } | "$ENGINE")"
-    grep -Fq 'NNUE evaluation using AtomicNNUEV2' <<<"$nnue_probe_output" \
-        || fail "perft fixture was not authenticated as AtomicNNUEV2"
+    grep -Eq 'NNUE evaluation using (Legacy Atomic V1|AtomicNNUEV2)' <<<"$nnue_probe_output" \
+        || fail "perft fixture was not authenticated as a supported Atomic NNUE backend"
     grep -Eq '^bestmove [a-h][1-8][a-h][1-8][nbrq]?$' <<<"$nnue_probe_output" \
-        || fail "AtomicNNUEV2 perft preflight did not complete a search"
+        || fail "Atomic NNUE perft preflight did not complete a search"
 fi
 
 perft_failed=0

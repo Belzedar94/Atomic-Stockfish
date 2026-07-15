@@ -4,7 +4,8 @@
 The wrapper authenticates the frozen H9.3g mixed-wire fixture before starting
 the isolated C++ runner.  A zero exit status is accepted only when the final
 non-empty output line is the exact stress sentinel for the requested profile
-and every published counter is internally consistent.
+and required ISA, every published delta counter is internally consistent, and
+the child reports zero fallback calls.
 
 AtomicNNUEV3 remains private at this milestone.  This script does not load the
 network through the production dispatcher and does not run search or training.
@@ -38,6 +39,8 @@ DIRECTED_COUNTS = {
     "atomic960_castles": 11,
     "max_blast": 9,
 }
+REQUIRED_ISAS = ("scalar", "sse41", "avx2")
+ACCUMULATOR_DIMENSIONS = 1024
 
 
 @dataclass(frozen=True)
@@ -62,6 +65,8 @@ DEFAULT_PROFILES: Dict[str, Profile] = {
 FINAL_SENTINEL_RE = re.compile(
     r"^AtomicNNUEV3 incremental stress gate passed: "
     r"mode=(?P<mode>smoke|release|soak) "
+    r"isa-requested=(?P<isa_requested>scalar|sse41|avx2) "
+    r"isa-executed=(?P<isa_executed>scalar|sse41|avx2) "
     r"requested-operations=(?P<requested>\d+) "
     r"actual-operations=(?P<actual>\d+) "
     r"makes=(?P<makes>\d+) "
@@ -81,6 +86,17 @@ FINAL_SENTINEL_RE = re.compile(
     r"directed-atomic960-castles=(?P<directed_atomic960_castles>\d+) "
     r"directed-max-blast=(?P<directed_max_blast>\d+) "
     r"threads=(?P<threads>\d+) "
+    r"hm-delta-perspectives=(?P<hm_delta_perspectives>\d+) "
+    r"hm-delta-removed-rows=(?P<hm_delta_removed_rows>\d+) "
+    r"hm-delta-added-rows=(?P<hm_delta_added_rows>\d+) "
+    r"hm-delta-i16-lanes=(?P<hm_delta_i16_lanes>\d+) "
+    r"hm-delta-source-permutation-lanes=(?P<hm_delta_source_permutation_lanes>\d+) "
+    r"hm-delta-publish-permutation-lanes=(?P<hm_delta_publish_permutation_lanes>\d+) "
+    r"hm-delta-kernel-calls=(?P<hm_delta_kernel_calls>\d+) "
+    r"hm-delta-scalar-kernel-calls=(?P<hm_delta_scalar_kernel_calls>\d+) "
+    r"hm-delta-sse41-kernel-calls=(?P<hm_delta_sse41_kernel_calls>\d+) "
+    r"hm-delta-avx2-kernel-calls=(?P<hm_delta_avx2_kernel_calls>\d+) "
+    r"hm-delta-fallback-calls=(?P<hm_delta_fallback_calls>\d+) "
     r"state-signature=0x(?P<signature>[0-9A-F]{16})$"
 )
 
@@ -203,9 +219,14 @@ def validate_gate_output(
     operations: int,
     full_refresh_interval: int,
     threads: int,
+    required_isa: str,
 ) -> str:
     """Validate the final C++ sentinel and return its canonical signature."""
 
+    if required_isa not in REQUIRED_ISAS:
+        raise ValueError(
+            f"--require-isa must be one of {', '.join(REQUIRED_ISAS)}"
+        )
     configuration = resolve_configuration(
         mode=mode,
         operations=operations,
@@ -225,6 +246,8 @@ def validate_gate_output(
         )
 
     child_mode = match.group("mode")
+    isa_requested = match.group("isa_requested")
+    isa_executed = match.group("isa_executed")
     requested = int(match.group("requested"))
     actual = int(match.group("actual"))
     makes = int(match.group("makes"))
@@ -246,11 +269,34 @@ def validate_gate_output(
         "max_blast": int(match.group("directed_max_blast")),
     }
     child_threads = int(match.group("threads"))
+    hm_delta_perspectives = int(match.group("hm_delta_perspectives"))
+    hm_delta_removed_rows = int(match.group("hm_delta_removed_rows"))
+    hm_delta_added_rows = int(match.group("hm_delta_added_rows"))
+    hm_delta_i16_lanes = int(match.group("hm_delta_i16_lanes"))
+    hm_delta_source_permutation_lanes = int(
+        match.group("hm_delta_source_permutation_lanes")
+    )
+    hm_delta_publish_permutation_lanes = int(
+        match.group("hm_delta_publish_permutation_lanes")
+    )
+    hm_delta_kernel_calls = int(match.group("hm_delta_kernel_calls"))
+    hm_delta_kernel_calls_by_isa = {
+        "scalar": int(match.group("hm_delta_scalar_kernel_calls")),
+        "sse41": int(match.group("hm_delta_sse41_kernel_calls")),
+        "avx2": int(match.group("hm_delta_avx2_kernel_calls")),
+    }
+    hm_delta_fallback_calls = int(match.group("hm_delta_fallback_calls"))
     signature = match.group("signature")
 
     if child_mode != configuration.mode:
         raise GateOutputError(
             f"child reported mode={child_mode}, expected mode={configuration.mode}"
+        )
+    if isa_requested != required_isa or isa_executed != required_isa:
+        raise GateOutputError(
+            "child did not execute the exact required ISA: "
+            f"requested={isa_requested} executed={isa_executed} "
+            f"required={required_isa}"
         )
     if requested != configuration.operations or actual != configuration.operations:
         raise GateOutputError(
@@ -313,6 +359,54 @@ def validate_gate_output(
             f"expected={DIRECTED_COUNTS}"
         )
 
+    expected_kernel_calls = hm_delta_removed_rows + hm_delta_added_rows
+    if (
+        hm_delta_perspectives <= 0
+        or hm_delta_removed_rows <= 0
+        or hm_delta_added_rows <= 0
+    ):
+        raise GateOutputError(
+            "child incremental HM delta coverage was incomplete: "
+            f"perspectives={hm_delta_perspectives} "
+            f"removed={hm_delta_removed_rows} added={hm_delta_added_rows}"
+        )
+    if (
+        hm_delta_kernel_calls != expected_kernel_calls
+        or hm_delta_i16_lanes
+        != expected_kernel_calls * ACCUMULATOR_DIMENSIONS
+    ):
+        raise GateOutputError(
+            "child incremental HM delta kernel/lane accounting mismatch: "
+            f"kernels={hm_delta_kernel_calls} expected={expected_kernel_calls} "
+            f"lanes={hm_delta_i16_lanes}"
+        )
+    expected_permutation_lanes = (
+        hm_delta_perspectives * ACCUMULATOR_DIMENSIONS
+    )
+    if (
+        hm_delta_source_permutation_lanes != expected_permutation_lanes
+        or hm_delta_publish_permutation_lanes != expected_permutation_lanes
+    ):
+        raise GateOutputError(
+            "child incremental HM delta permutation accounting mismatch: "
+            f"source={hm_delta_source_permutation_lanes} "
+            f"publish={hm_delta_publish_permutation_lanes} "
+            f"expected={expected_permutation_lanes}"
+        )
+    expected_kernel_calls_by_isa = {isa: 0 for isa in REQUIRED_ISAS}
+    expected_kernel_calls_by_isa[required_isa] = expected_kernel_calls
+    if hm_delta_kernel_calls_by_isa != expected_kernel_calls_by_isa:
+        raise GateOutputError(
+            "child incremental HM delta kernel inventory was not exact-ISA only: "
+            f"actual={hm_delta_kernel_calls_by_isa} "
+            f"expected={expected_kernel_calls_by_isa}"
+        )
+    if hm_delta_fallback_calls != 0:
+        raise GateOutputError(
+            "child incremental HM delta execution used fallback calls: "
+            f"fallbacks={hm_delta_fallback_calls}"
+        )
+
     expected_signature = _default_signature(configuration)
     if expected_signature is not None and signature != expected_signature:
         raise GateOutputError(
@@ -328,6 +422,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--binary", type=Path, required=True)
     parser.add_argument("--net", type=Path, required=True)
+    parser.add_argument("--require-isa", choices=REQUIRED_ISAS, required=True)
     parser.add_argument("--mode", choices=tuple(DEFAULT_PROFILES), default="smoke")
     parser.add_argument("--operations", type=int)
     parser.add_argument("--full-refresh-interval", type=int)
@@ -362,6 +457,8 @@ def main() -> int:
         str(binary),
         "--net",
         str(net),
+        "--require-isa",
+        args.require_isa,
         "--mode",
         configuration.mode,
         "--operations",
@@ -385,7 +482,8 @@ def main() -> int:
         f"bytes={FROZEN_NET_BYTES} SHA-256={actual_sha.upper()} "
         f"mode={configuration.mode} operations={configuration.operations} "
         f"interval={configuration.full_refresh_interval} "
-        f"threads={configuration.threads} signature={signature_state}",
+        f"threads={configuration.threads} isa={args.require_isa} "
+        f"signature={signature_state}",
         flush=True,
     )
     try:
@@ -420,6 +518,7 @@ def main() -> int:
             operations=configuration.operations,
             full_refresh_interval=configuration.full_refresh_interval,
             threads=configuration.threads,
+            required_isa=args.require_isa,
         )
     except GateOutputError as error:
         print(f"AtomicNNUEV3 stress output validation failed: {error}", file=sys.stderr)

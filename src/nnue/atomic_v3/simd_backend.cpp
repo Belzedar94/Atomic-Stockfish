@@ -346,50 +346,6 @@ atomic_v3_add_i8_avx2_kernel(i32* destination, const i8* source, std::size_t cou
 
 #endif
 
-bool simd_isa_available(SimdIsa isa) noexcept {
-    switch (isa)
-    {
-    case SimdIsa::Scalar :
-        return true;
-    case SimdIsa::Sse41 :
-#if defined(USE_SSE41) || defined(USE_AVX2) || defined(USE_AVX512)
-        return true;
-#else
-        return false;
-#endif
-    case SimdIsa::Avx2 :
-#if defined(USE_AVX2) || defined(USE_AVX512)
-        return true;
-#else
-        return false;
-#endif
-    }
-    return false;
-}
-
-SimdIsa maximum_simd_isa() noexcept {
-#if defined(USE_AVX2) || defined(USE_AVX512)
-    return SimdIsa::Avx2;
-#elif defined(USE_SSE41)
-    return SimdIsa::Sse41;
-#else
-    return SimdIsa::Scalar;
-#endif
-}
-
-const char* simd_isa_name(SimdIsa isa) noexcept {
-    switch (isa)
-    {
-    case SimdIsa::Scalar :
-        return "scalar";
-    case SimdIsa::Sse41 :
-        return "sse41";
-    case SimdIsa::Avx2 :
-        return "avx2";
-    }
-    return "unknown";
-}
-
 const char* simd_error_message(SimdError error) noexcept {
     switch (error)
     {

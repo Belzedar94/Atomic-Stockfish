@@ -435,3 +435,67 @@ Because V3 remains absent from search, UCI, XBoard, Python, JavaScript, WASM,
 the generator and the trainer, H9.3j-a has no engine bench, OpenBench, Elo, LOS
 or training claim. Evidence belongs under
 `docs/atomic/evidence/hito9-3j-a-v3-simd/`.
+
+## H9.3j-b private SIMD incremental HM deltas
+
+H9.3j-b keeps the H9.3i frame stack, source selection and row-set difference
+as the sole incremental state machine. It vectorizes only application of an
+already validated i16 HM row: lanes widen to i64, removed rows precede added
+rows, HM PSQT stays scalar and canonical diagnostics cross an explicit
+canonical/internal permutation boundary. Frame publication and semantic/kernel
+counters remain transactional.
+
+Scalar, SSE4.1 and AVX2 are exact requests rather than a fallback chain. An
+unavailable ISA fails before observable mutation. Acceptance requires the
+direct tail/extrema kernel probe, the unchanged 39-event independent-Python
+differential, the deterministic Atomic/Atomic960 stress signatures, forced
+wire layouts and object-code proof of signed i16-to-i64 widening and 64-bit
+add/sub. CI gates exactness, not speed.
+
+Final-head local acceptance passed the direct kernel probe for tails
+`0,1,3,4,7,8,9,15,16,17,1023,1024,1025` under Scalar, SSE4.1 and AVX2; all
+three reproduced fingerprint `0x21E9FF9A77F881F2`. The same three exact modes
+passed the independent 39-event trace (`35` successes and `4` expected
+fail-closed events) and the smoke stress profile with signature
+`0x45D43FB02CAA9A3D`, exact requested/executed ISA counters and zero fallback.
+Debug/assert SSE4.1 passed the same focused matrix. An object-code audit found
+both stable AVX2 add/sub symbols plus signed widening and 64-bit add/sub
+instructions.
+
+Review found and fixed one reset-mode persistence defect: the legacy
+`reset(network)` overload now restores Scalar policy and disables HM-delta
+execution, while an exact-ISA reset applies only its requested mode. A focused
+constructor/reset transition contract and the complete final-head smoke matrix
+cover the correction. A second audit hardened the execution proof: stable
+kernels return their actual ISA, counters derive from that result, request/result
+mismatches fail before publication, every named unavailable ISA is exercised at
+stack level and wrap-boundary arithmetic is defined consistently across Scalar,
+SSE4.1 and AVX2. The 65,536-operation release signature
+`0xE86C39BDF8187078` and 1,048,576-operation soak signature
+`0xAF6B51180815972B` were reproduced before this small correction, so they are
+supporting evidence and are not labelled exact-head runs.
+
+The representative local benchmark measures quiet, capture, promotion,
+en-passant and maximum-blast transitions with one warm-up and five alternating
+trials. It reports raw samples and medians without a hard timing threshold.
+The latest exactness-qualified AVX2 run reported aggregate ratio `0.968590`;
+it is report-only and establishes no V3 speed improvement.
+
+The independent normative BMI2 product comparison did pass its speed gate:
+over 13 positions, 100,000 nodes per FEN and five alternating repetitions,
+Atomic-Stockfish reached median `1,262,958` NPS against Fairy's `1,106,174`
+NPS, ratio `1.1417` (**+14.17%**), with matching MinGW GCC 15.2 BMI2 builds.
+The product also passed the complete Hito 4 aggregate gate using
+`atomic_run3b_e202_l05.nnue`, SHA-256
+`99DC67EABF26A64FAEECA3A88B4C38597A840B8D4A874B9F2CF658C6F92A04A6`:
+C++ `87/87`, API `34/34`, Python `1178/1178`, historical `test.py` `22/22`,
+native UCI/XBoard/Syzygy/perft/search/reprosearch/signature, CommonJS and ES
+module Board WASM, byte-reproducible UCI/NNUE WASM and real-network loading.
+These are product regression and throughput gates; V3 remains private and
+cannot affect moves.
+
+Because V3 is still excluded from every production and binding graph, no
+engine-NPS, Elo, LOS, OpenBench or training claim applies. The exact contract is
+[ADR 0005](adr/0005-atomic-nnue-v3-incremental-simd.md); the acceptance status
+and remaining reviewed-head CI/PR artifacts are indexed under
+[`hito9-3j-b-v3-incremental-simd`](evidence/hito9-3j-b-v3-incremental-simd/README.md).

@@ -534,7 +534,7 @@ def test_bench_nnue_output_requires_exact_enabled_nnue_path(tmp_path):
         "candidate",
         net,
         [
-            "info string NNUE evaluation using "
+            "info string NNUE evaluation using Legacy Atomic V1 "
             f"{net} {bench_compare.CANDIDATE_NNUE_ARCHITECTURE_MARKER}",
             "readyok",
         ],
@@ -548,7 +548,7 @@ def test_bench_nnue_output_requires_exact_enabled_nnue_path(tmp_path):
         "control",
         net,
         [
-            "info string NNUE evaluation using "
+            "info string NNUE evaluation using AtomicNNUEV2 "
             f"{net} {bench_compare.CANDIDATE_NNUE_ARCHITECTURE_MARKER}",
             "readyok",
         ],
@@ -663,7 +663,7 @@ def test_bench_nnue_preflight_accepts_candidate_marker_emitted_on_go(tmp_path):
     engine.send = commands.append
 
     search_output = [
-        "info string NNUE evaluation using "
+        "info string NNUE evaluation using Legacy Atomic V1 "
         f"{net} {bench_compare.CANDIDATE_NNUE_ARCHITECTURE_MARKER}",
         "info depth 1 nodes 1 time 1",
         "bestmove b2b3",

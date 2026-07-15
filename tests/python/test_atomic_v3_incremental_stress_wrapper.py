@@ -45,6 +45,19 @@ def sentinel(
     directed_atomic960_castles: int = 11,
     directed_max_blast: int = 9,
     threads: int = 1,
+    required_isa: str = "scalar",
+    executed_isa: Optional[str] = None,
+    hm_delta_perspectives: int = 10,
+    hm_delta_removed_rows: int = 20,
+    hm_delta_added_rows: int = 30,
+    hm_delta_i16_lanes: Optional[int] = None,
+    hm_delta_source_permutation_lanes: Optional[int] = None,
+    hm_delta_publish_permutation_lanes: Optional[int] = None,
+    hm_delta_kernel_calls: Optional[int] = None,
+    hm_delta_scalar_kernel_calls: Optional[int] = None,
+    hm_delta_sse41_kernel_calls: Optional[int] = None,
+    hm_delta_avx2_kernel_calls: Optional[int] = None,
+    hm_delta_fallback_calls: int = 0,
     signature: str = "0123456789ABCDEF",
 ) -> str:
     actual = requested if actual is None else actual
@@ -52,9 +65,45 @@ def sentinel(
     undos = actual - makes if undos is None else undos
     evaluations = actual + 8 if evaluations is None else evaluations
     full_refresh = evaluations if full_refresh is None else full_refresh
+    executed_isa = required_isa if executed_isa is None else executed_isa
+    expected_kernel_calls = hm_delta_removed_rows + hm_delta_added_rows
+    hm_delta_kernel_calls = (
+        expected_kernel_calls
+        if hm_delta_kernel_calls is None
+        else hm_delta_kernel_calls
+    )
+    hm_delta_i16_lanes = (
+        expected_kernel_calls * WRAPPER.ACCUMULATOR_DIMENSIONS
+        if hm_delta_i16_lanes is None
+        else hm_delta_i16_lanes
+    )
+    expected_permutation_lanes = (
+        hm_delta_perspectives * WRAPPER.ACCUMULATOR_DIMENSIONS
+    )
+    hm_delta_source_permutation_lanes = (
+        expected_permutation_lanes
+        if hm_delta_source_permutation_lanes is None
+        else hm_delta_source_permutation_lanes
+    )
+    hm_delta_publish_permutation_lanes = (
+        expected_permutation_lanes
+        if hm_delta_publish_permutation_lanes is None
+        else hm_delta_publish_permutation_lanes
+    )
+    kernel_calls_by_isa = {
+        "scalar": hm_delta_scalar_kernel_calls,
+        "sse41": hm_delta_sse41_kernel_calls,
+        "avx2": hm_delta_avx2_kernel_calls,
+    }
+    for isa in WRAPPER.REQUIRED_ISAS:
+        if kernel_calls_by_isa[isa] is None:
+            kernel_calls_by_isa[isa] = (
+                expected_kernel_calls if isa == required_isa else 0
+            )
     return (
         "AtomicNNUEV3 incremental stress gate passed: "
-        f"mode={mode} requested-operations={requested} "
+        f"mode={mode} isa-requested={required_isa} "
+        f"isa-executed={executed_isa} requested-operations={requested} "
         f"actual-operations={actual} makes={makes} undos={undos} "
         f"evaluations={evaluations} "
         f"full-refresh-comparisons={full_refresh} "
@@ -70,6 +119,19 @@ def sentinel(
         f"directed-standard-castles={directed_standard_castles} "
         f"directed-atomic960-castles={directed_atomic960_castles} "
         f"directed-max-blast={directed_max_blast} threads={threads} "
+        f"hm-delta-perspectives={hm_delta_perspectives} "
+        f"hm-delta-removed-rows={hm_delta_removed_rows} "
+        f"hm-delta-added-rows={hm_delta_added_rows} "
+        f"hm-delta-i16-lanes={hm_delta_i16_lanes} "
+        "hm-delta-source-permutation-lanes="
+        f"{hm_delta_source_permutation_lanes} "
+        "hm-delta-publish-permutation-lanes="
+        f"{hm_delta_publish_permutation_lanes} "
+        f"hm-delta-kernel-calls={hm_delta_kernel_calls} "
+        f"hm-delta-scalar-kernel-calls={kernel_calls_by_isa['scalar']} "
+        f"hm-delta-sse41-kernel-calls={kernel_calls_by_isa['sse41']} "
+        f"hm-delta-avx2-kernel-calls={kernel_calls_by_isa['avx2']} "
+        f"hm-delta-fallback-calls={hm_delta_fallback_calls} "
         f"state-signature=0x{signature}"
     )
 
@@ -93,6 +155,31 @@ def test_default_profiles_accept_their_frozen_or_pending_signature(
             operations=profile.operations,
             full_refresh_interval=profile.full_refresh_interval,
             threads=profile.threads,
+            required_isa="scalar",
+        )
+        == signature
+    )
+
+
+@pytest.mark.parametrize("required_isa", WRAPPER.REQUIRED_ISAS)
+@pytest.mark.parametrize("threads", (1, 2, 4, 8))
+def test_each_thread_count_requires_exact_isa_and_preserves_the_frozen_signature(
+    required_isa: str, threads: int
+) -> None:
+    signature = WRAPPER.DEFAULT_PROFILES["smoke"].expected_signature
+    assert signature is not None
+    assert (
+        WRAPPER.validate_gate_output(
+            sentinel(
+                required_isa=required_isa,
+                threads=threads,
+                signature=signature,
+            ),
+            mode="smoke",
+            operations=4_096,
+            full_refresh_interval=1,
+            threads=threads,
+            required_isa=required_isa,
         )
         == signature
     )
@@ -121,6 +208,7 @@ def test_default_profile_signature_can_be_frozen_after_measurement(
             operations=4_096,
             full_refresh_interval=1,
             threads=1,
+            required_isa="scalar",
         )
         == "A1B2C3D4E5F60718"
     )
@@ -131,6 +219,7 @@ def test_default_profile_signature_can_be_frozen_after_measurement(
             operations=4_096,
             full_refresh_interval=1,
             threads=4,
+            required_isa="scalar",
         )
         == "A1B2C3D4E5F60718"
     )
@@ -141,6 +230,7 @@ def test_default_profile_signature_can_be_frozen_after_measurement(
             operations=4_096,
             full_refresh_interval=1,
             threads=1,
+            required_isa="scalar",
         )
 
 
@@ -152,6 +242,7 @@ def test_zero_exit_unknown_command_is_not_a_pass() -> None:
             operations=4_096,
             full_refresh_interval=1,
             threads=1,
+            required_isa="scalar",
         )
 
 
@@ -163,6 +254,7 @@ def test_success_sentinel_must_be_the_final_non_empty_line() -> None:
             operations=4_096,
             full_refresh_interval=1,
             threads=1,
+            required_isa="scalar",
         )
 
 
@@ -204,6 +296,88 @@ def test_mismatched_success_claims_are_rejected(output: str, message: str) -> No
             operations=4_096,
             full_refresh_interval=1,
             threads=1,
+            required_isa="scalar",
+        )
+
+
+@pytest.mark.parametrize(
+    ("output", "required_isa", "message"),
+    (
+        (sentinel(required_isa="sse41"), "avx2", "exact required ISA"),
+        (
+            sentinel(required_isa="avx2", executed_isa="sse41"),
+            "avx2",
+            "exact required ISA",
+        ),
+        (
+            sentinel(hm_delta_perspectives=0),
+            "scalar",
+            "coverage was incomplete",
+        ),
+        (
+            sentinel(hm_delta_removed_rows=0),
+            "scalar",
+            "coverage was incomplete",
+        ),
+        (
+            sentinel(hm_delta_kernel_calls=49),
+            "scalar",
+            "kernel/lane accounting mismatch",
+        ),
+        (
+            sentinel(hm_delta_i16_lanes=49),
+            "scalar",
+            "kernel/lane accounting mismatch",
+        ),
+        (
+            sentinel(hm_delta_source_permutation_lanes=0),
+            "scalar",
+            "permutation accounting mismatch",
+        ),
+        (
+            sentinel(hm_delta_scalar_kernel_calls=49),
+            "scalar",
+            "kernel inventory was not exact-ISA only",
+        ),
+        (
+            sentinel(
+                required_isa="sse41",
+                hm_delta_scalar_kernel_calls=1,
+                hm_delta_sse41_kernel_calls=49,
+            ),
+            "sse41",
+            "kernel inventory was not exact-ISA only",
+        ),
+        (
+            sentinel(hm_delta_fallback_calls=1),
+            "scalar",
+            "used fallback calls",
+        ),
+    ),
+)
+def test_exact_isa_and_delta_accounting_fail_closed(
+    output: str, required_isa: str, message: str
+) -> None:
+    with pytest.raises(WRAPPER.GateOutputError, match=message):
+        WRAPPER.validate_gate_output(
+            output,
+            mode="smoke",
+            operations=4_096,
+            full_refresh_interval=1,
+            threads=1,
+            required_isa=required_isa,
+        )
+
+
+def test_unknown_required_isa_is_rejected_before_output_is_trusted() -> None:
+    with pytest.raises(ValueError, match="require-isa must be one of"):
+        WRAPPER.validate_gate_output(
+            sentinel(),
+            mode="smoke",
+            operations=4_096,
+            full_refresh_interval=1,
+            threads=1,
+            required_isa="neon",
         )
 
 
@@ -224,6 +398,7 @@ def test_override_profile_still_requires_coherent_accounting() -> None:
             operations=80,
             full_refresh_interval=7,
             threads=4,
+            required_isa="scalar",
         )
         == "0123456789ABCDEF"
     )
@@ -257,6 +432,39 @@ def test_configuration_rejects_invalid_overrides(
     values.update(overrides)
     with pytest.raises(ValueError, match=message):
         WRAPPER.resolve_configuration(**values)
+
+
+@pytest.mark.parametrize("required_isa", WRAPPER.REQUIRED_ISAS)
+def test_parser_requires_one_supported_exact_isa(
+    monkeypatch: pytest.MonkeyPatch, required_isa: str
+) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            str(MODULE_PATH),
+            "--binary",
+            "runner",
+            "--net",
+            "fixture",
+            "--require-isa",
+            required_isa,
+        ],
+    )
+    assert WRAPPER.parse_args().require_isa == required_isa
+
+
+@pytest.mark.parametrize("extra", ([], ["--require-isa", "neon"]))
+def test_parser_fails_closed_without_a_supported_exact_isa(
+    monkeypatch: pytest.MonkeyPatch, extra: Any
+) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [str(MODULE_PATH), "--binary", "runner", "--net", "fixture"] + extra,
+    )
+    with pytest.raises(SystemExit):
+        WRAPPER.parse_args()
 
 
 def test_fixture_authentication_checks_size_and_sha256_from_one_handle(
@@ -293,6 +501,7 @@ def test_main_passes_one_explicit_reproducible_command(
         operations=80,
         full_refresh_interval=7,
         threads=4,
+        require_isa="avx2",
         timeout=12.5,
     )
     observed: Dict[str, Any] = {}
@@ -316,6 +525,7 @@ def test_main_passes_one_explicit_reproducible_command(
                 atomic960_castles=0,
                 full_refresh=24,
                 threads=4,
+                required_isa="avx2",
             ),
         )
 
@@ -325,6 +535,8 @@ def test_main_passes_one_explicit_reproducible_command(
         str(binary.resolve()),
         "--net",
         str(net.resolve()),
+        "--require-isa",
+        "avx2",
         "--mode",
         "smoke",
         "--operations",
@@ -337,6 +549,39 @@ def test_main_passes_one_explicit_reproducible_command(
     assert observed["kwargs"]["timeout"] == 12.5
     assert observed["kwargs"]["check"] is False
     assert "signature=measurement-pending" in capsys.readouterr().out
+
+
+def test_main_propagates_child_unsupported_isa_failure(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    binary = tmp_path / "stress-runner"
+    net = tmp_path / "atomic-v3.nnue"
+    binary.write_bytes(b"binary")
+    net.write_bytes(b"fixture")
+    args = SimpleNamespace(
+        binary=binary,
+        net=net,
+        mode="smoke",
+        operations=None,
+        full_refresh_interval=None,
+        threads=None,
+        require_isa="avx2",
+        timeout=1.0,
+    )
+    monkeypatch.setattr(WRAPPER, "parse_args", lambda: args)
+    monkeypatch.setattr(
+        WRAPPER, "authenticate_fixture", lambda _path: WRAPPER.FROZEN_NET_SHA256
+    )
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *_args, **_kwargs: subprocess.CompletedProcess(
+            args=[],
+            returncode=17,
+            stdout="required ISA is not compiled into this binary; refusing fallback\n",
+        ),
+    )
+    assert WRAPPER.main() == 17
 
 
 def test_main_rejects_wrong_zero_exit_executable(
@@ -353,6 +598,7 @@ def test_main_rejects_wrong_zero_exit_executable(
         operations=None,
         full_refresh_interval=None,
         threads=None,
+        require_isa="scalar",
         timeout=1.0,
     )
     monkeypatch.setattr(WRAPPER, "parse_args", lambda: args)
@@ -392,6 +638,8 @@ def test_wrapper_is_python39_and_signatures_are_explicit() -> None:
         "atomic960_castles": 11,
         "max_blast": 9,
     }
+    assert WRAPPER.REQUIRED_ISAS == ("scalar", "sse41", "avx2")
+    assert WRAPPER.ACCUMULATOR_DIMENSIONS == 1024
     assert WRAPPER.DEFAULT_PROFILES["smoke"].expected_signature == "45D43FB02CAA9A3D"
     assert WRAPPER.DEFAULT_PROFILES["release"].expected_signature == "E86C39BDF8187078"
     assert WRAPPER.DEFAULT_PROFILES["soak"].expected_signature == "AF6B51180815972B"

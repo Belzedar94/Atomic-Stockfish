@@ -15,21 +15,13 @@
 #include <cstddef>
 
 #include "scalar_backend.h"
+#include "simd_isa.h"
 
 namespace Stockfish {
 class Position;
 }
 
 namespace Stockfish::Eval::NNUE::AtomicV3 {
-
-// H9.3j-a vectorizes only signed feature-row widening into canonical i32
-// accumulators. PSQT, the feature transform and the dense stack deliberately
-// remain on the frozen H9.3h scalar path.
-enum class SimdIsa : u8 {
-    Scalar,
-    Sse41,
-    Avx2
-};
 
 enum class SimdError : u8 {
     None,
@@ -91,10 +83,7 @@ struct SimdDiagnostic {
     SimdCounters     counters{};
 };
 
-[[nodiscard]] bool    simd_isa_available(SimdIsa isa) noexcept;
-[[nodiscard]] SimdIsa maximum_simd_isa() noexcept;
-const char*           simd_isa_name(SimdIsa isa) noexcept;
-const char*           simd_error_message(SimdError error) noexcept;
+const char* simd_error_message(SimdError error) noexcept;
 
 // Both entry points execute exactly requestedIsa or fail closed. Result is
 // reset on every failure; no partial accumulator or counter state is exposed.
