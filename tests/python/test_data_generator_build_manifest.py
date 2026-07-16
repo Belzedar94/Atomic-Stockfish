@@ -23,6 +23,16 @@ IDENTITY_ARGUMENTS = (
 )
 
 
+def test_ci_pins_generator_identity_without_weakening_clean_tree_fallback() -> None:
+    makefile = (TESTS_DIR.parent / "src" / "Makefile").read_text(encoding="utf-8")
+    workflow = (TESTS_DIR.parent / ".github" / "workflows" / "atomic.yml").read_text(
+        encoding="utf-8"
+    )
+    assert "GIT_SHA_FULL    ?=" in makefile
+    assert "git status --porcelain --untracked-files=normal" in makefile
+    assert "GIT_SHA_FULL: ${{ github.sha }}" in workflow
+
+
 @pytest.mark.parametrize(
     ("atomic_recipe", "generator_recipe", "platform", "target"),
     (

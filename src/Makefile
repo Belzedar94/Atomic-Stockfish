@@ -1170,7 +1170,7 @@ BUILD_SHA_FILE  := .build_sha.txt
 BUILD_FULL_SHA_FILE := .build_full_sha.txt
 BUILD_DATE_FILE := .build_date.txt
 GIT_SHA         := $(shell git rev-parse HEAD 2>/dev/null | cut -c 1-8 || true)
-GIT_SHA_FULL    := $(shell if git rev-parse --is-inside-work-tree >/dev/null 2>&1 \
+GIT_SHA_FULL    ?= $(shell if git rev-parse --is-inside-work-tree >/dev/null 2>&1 \
 	&& [ -z "$$(git status --porcelain --untracked-files=normal 2>/dev/null)" ]; then \
 	git rev-parse HEAD 2>/dev/null; fi)
 GIT_DATE        := $(shell git show -s --date=format:%Y%m%d --format=%cd HEAD 2>/dev/null || true)

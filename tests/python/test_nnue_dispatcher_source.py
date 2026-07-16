@@ -121,7 +121,18 @@ def test_engine_and_workers_only_store_backend_agnostic_facades():
 def test_reload_is_quiescent_candidate_first_transactional_and_rebinds_workers():
     engine = (ROOT / "src" / "engine.cpp").read_text(encoding="utf-8")
     load = compact(
-        function_body(engine, "void Engine::load_network", "void Engine::save_network")
+        function_body(
+            engine,
+            "void Engine::load_network",
+            "bool Engine::load_authenticated_network",
+        )
+    )
+    authenticated = compact(
+        function_body(
+            engine,
+            "bool Engine::load_authenticated_network",
+            "void Engine::save_network",
+        )
     )
     save = compact(
         function_body(engine, "void Engine::save_network", "// utility functions")
@@ -143,6 +154,25 @@ def test_reload_is_quiescent_candidate_first_transactional_and_rebinds_workers()
     )
     assert "modify_and_replicate" not in load
 
+    assert authenticated.index("wait_for_search_finished();") < authenticated.index(
+        "auto candidate = make_unique_large_page<NN::AnyNetwork>();"
+    )
+    assert "NN::EvalFile candidateFile{std::nullopt, \"\"};" in authenticated
+    assert (
+        "if (!candidate->load_authenticated(stream, logicalPath, candidateFile)) "
+        "return false;"
+    ) in authenticated
+    assert authenticated.index("network = std::move(candidate);") < authenticated.index(
+        "networkFile = std::move(candidateFile);"
+    )
+    assert authenticated.index("networkFile = std::move(candidateFile);") < (
+        authenticated.index("threads.clear();")
+    )
+    assert authenticated.index("threads.clear();") < authenticated.index(
+        "threads.ensure_network_replicated();"
+    )
+    assert "modify_and_replicate" not in authenticated
+
     assert "wait_for_search_finished();" in save
     assert "network->save(networkFile, file);" in save
     assert "modify_and_replicate" not in save
@@ -153,7 +183,7 @@ def test_wasm_fallback_adopts_the_validated_network_allocation():
     numa = (ROOT / "src" / "numa.h").read_text(encoding="utf-8")
     shm = (ROOT / "src" / "shm.h").read_text(encoding="utf-8")
 
-    assert engine.count("make_unique_large_page<NN::AnyNetwork>()") == 2
+    assert engine.count("make_unique_large_page<NN::AnyNetwork>()") == 3
     assert "prepare_replicate_from(LargePagePtr<T>&& source)" in numa
     assert "SystemWideSharedConstant<T>(std::move(source), get_discriminator(0))" in numa
     assert "SharedMemoryBackendFallback(const std::string&, LargePagePtr<T>&& value)" in shm

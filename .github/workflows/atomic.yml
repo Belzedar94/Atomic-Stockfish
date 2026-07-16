@@ -15,6 +15,10 @@ permissions:
 env:
   ATOMIC_SYNTHETIC_NNUE_SHA256: 9CF054CA00B82AB53A34473DE52D1104AEDDAA19B2E7B24091B5E613AF485985
   ATOMIC_SYNTHETIC_V2_NNUE_SHA256: 4DEB05CFF79B5D5EBA51C560F64ED24224671C188B6C5DB27521033E587C87C6
+  # The checkout becomes dirty with untracked test/build products before some
+  # generator targets run. Bind every CI producer to the exact checked-out
+  # commit instead of weakening the Makefile's clean-tree fallback.
+  GIT_SHA_FULL: ${{ github.sha }}
 
 jobs:
   native:
