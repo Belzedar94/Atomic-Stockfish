@@ -64,6 +64,9 @@ def test_release_version_is_consistent_across_packaging_surfaces() -> None:
     assert policy["releaseCiRequirementsSha256"] == (
         "33f274924a8f41ca9cf4ddc891c0d488dc30491c29d2b034de9088d9d032dd28"
     )
+    assert policy["releaseBuildRequirementsSha256"] == (
+        "1e4f6c667fd5fab07e2016986bfd330bca57a9562875869323c8c1fd09245f34"
+    )
     assert policy["releaseWheelTestRequirementsSha256"] == (
         "b877081ac9f4a6aa56eff9c5ed6c7b832a9fc02ca2dca39f786401e1a03f842b"
     )
@@ -89,11 +92,18 @@ def test_release_version_is_consistent_across_packaging_surfaces() -> None:
         "if: github.event_name == 'push' && github.ref_type == 'tag' "
         "&& github.ref_name == 'v1.0.0'"
     ) in publish
-    assert "overwrite_files: false" in publish
+    assert "softprops/action-gh-release" not in publish
+    assert 'test "$UPLOAD_URL" = "$expected_upload_url"' in publish
+    assert "--data-binary \"@$asset\"" in publish
     source = workflow.split("  source:\n", 1)[1].split("  board-wasm:\n", 1)[0]
-    assert source.count('git archive --format=tar --prefix=') == 3
-    assert 'normalized_a="build/release/atomic_pyffish-${RELEASE_VERSION}.tar.gz"' in source
-    assert 'cmp "$normalized_a" "$normalized_b"' in source
+    assert '"$EMSCRIPTEN_IMAGE"' in source
+    assert source.count("scripts/build_atomic_source_release.sh") >= 1
+    assert '"${source_recipe_a[@]}"' in source
+    assert '"${source_recipe_b[@]}"' in source
+    assert '"${sdist_recipe_a[@]}"' in source
+    assert '"${sdist_recipe_b[@]}"' in source
+    assert 'cmp "build/source-a/$source_asset" "build/source-b/$source_asset"' in source
+    assert 'cmp "build/source-a/$sdist_asset" "build/source-b/$sdist_asset"' in source
 
     quality_workflow = (ROOT / ".github" / "workflows" / "atomic.yml").read_text(
         encoding="utf-8"

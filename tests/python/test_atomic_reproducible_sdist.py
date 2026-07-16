@@ -66,7 +66,17 @@ def test_normalized_sdist_is_byte_exact_across_order_and_wall_clock(tmp_path: Pa
         assert modes[ROOT + "/src/tool.py"] == 0o755
 
 
-@pytest.mark.parametrize("name", ["../escape", "/absolute", "other/file"])
+@pytest.mark.parametrize(
+    "name",
+    [
+        "../escape",
+        "/absolute",
+        "other/file",
+        ROOT + "\\windows-path",
+        ROOT + "//noncanonical",
+        ROOT + "/./noncanonical",
+    ],
+)
 def test_normalizer_rejects_unsafe_or_foreign_members(
     tmp_path: Path, name: str
 ) -> None:
@@ -76,6 +86,17 @@ def test_normalizer_rejects_unsafe_or_foreign_members(
         member.size = 0
         archive.addfile(member)
     with pytest.raises(SdistContractError, match="unsafe or foreign"):
+        normalize_sdist(source, tmp_path / "output.tar.gz", ROOT, EPOCH)
+
+
+def test_normalizer_rejects_casefold_collisions(tmp_path: Path) -> None:
+    source = tmp_path / "casefold.tar.gz"
+    with tarfile.open(source, "w:gz") as archive:
+        for name in (ROOT + "/README.md", ROOT + "/readme.md"):
+            member = tarfile.TarInfo(name)
+            member.size = 0
+            archive.addfile(member)
+    with pytest.raises(SdistContractError, match="case-insensitive duplicate"):
         normalize_sdist(source, tmp_path / "output.tar.gz", ROOT, EPOCH)
 
 

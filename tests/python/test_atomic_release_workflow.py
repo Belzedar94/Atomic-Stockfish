@@ -1,5 +1,9 @@
 from pathlib import Path
 
+from scripts.run_atomic_release_contract_tests import (
+    discover_release_contract_tests,
+)
+
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = ROOT / ".github" / "workflows" / "atomic-release.yml"
@@ -8,6 +12,34 @@ CHECKLIST = ROOT / "docs" / "atomic" / "release-1.0-checklist.md"
 
 def workflow() -> str:
     return WORKFLOW.read_text(encoding="utf-8")
+
+
+def recipe(name: str) -> str:
+    return (ROOT / "scripts" / name).read_text(encoding="utf-8")
+
+
+def test_one_authoritative_runner_discovers_every_release_contract_module() -> None:
+    expected = {
+        "test_atomic_release_manifest.py",
+        "test_atomic_release_verification.py",
+        "test_atomic_release_workflow.py",
+        "test_atomic_reproducible_sdist.py",
+        "test_atomic_uci_wasm_release.py",
+        "test_atomic_windows_wheel_fingerprint.py",
+        "test_release_dependency_locks.py",
+        "test_release_version.py",
+        "test_wasm_source_date_epoch.py",
+    }
+    discovered = {path.name for path in discover_release_contract_tests()}
+    assert discovered == expected
+
+    release_workflow = workflow()
+    atomic_workflow = (ROOT / ".github" / "workflows" / "atomic.yml").read_text(
+        encoding="utf-8"
+    )
+    invocation = "python scripts/run_atomic_release_contract_tests.py"
+    assert release_workflow.count(invocation) == 1
+    assert atomic_workflow.count(invocation) == 1
 
 
 def job(text: str, name: str, next_name: str) -> str:
@@ -24,6 +56,9 @@ def test_python_wheels_consume_only_the_authenticated_source_job_sdist() -> None
     assert "setup.py sdist" not in wheels
     assert wheels.count('python -m cibuildwheel "$RELEASE_SDIST"') == 3
     assert "SOURCE_DATE_EPOCH=${{ needs.validate.outputs.epoch }}" in wheels
+    assert 'CIBW_BUILD_FRONTEND: "pip; args: --no-build-isolation"' in wheels
+    assert "CIBW_BEFORE_BUILD: >-" in wheels
+    assert "-r {project}/tests/release-build-requirements.txt" in wheels
     assert "CIBW_TEST_REQUIRES" not in wheels
     assert "CIBW_BEFORE_TEST: >-" in wheels
     assert "-r {project}/tests/release-wheel-test-requirements.txt" in wheels
@@ -36,9 +71,10 @@ def test_python_wheels_consume_only_the_authenticated_source_job_sdist() -> None
 def test_release_python_installs_are_closed_or_pre_authenticated() -> None:
     text = workflow()
     commands = text.count("python -m pip install")
-    assert commands == 5
-    assert text.count("--only-binary=:all: --require-hashes") == 4
-    assert text.count("-r tests/release-ci-requirements.txt") == 3
+    assert commands == 6
+    assert text.count("--only-binary=:all: --require-hashes") == 5
+    assert text.count("-r tests/release-ci-requirements.txt") == 2
+    assert text.count("-r {project}/tests/release-build-requirements.txt") == 2
     assert (
         text.count("-r {project}/tests/release-wheel-test-requirements.txt")
         == 1
@@ -78,13 +114,19 @@ def test_native_toolchains_are_digest_pinned_and_reproduced_in_isolated_roots() 
     assert 'for build_id in a b; do' in linux
     assert "build/native-linux-a/src/atomic-stockfish" in linux
     assert "build/native-linux-b/src/atomic-stockfish" in linux
-    assert "COMP=gcc build" in linux
+    assert "scripts/build_atomic_native_release.sh" in linux
+    assert "linux '${{ matrix.arch }}'" in linux
     assert "docker run --rm --platform linux/amd64" in linux
     assert 'for build_id in a b; do' in windows
     assert "build/native-windows-a/src/atomic-stockfish.exe" in windows
     assert "build/native-windows-b/src/atomic-stockfish.exe" in windows
-    assert windows.count("COMP=mingw") >= 3
-    assert 'COMPCXX="$CXX" build' in windows
+    assert windows.count("scripts/build_atomic_native_release.sh") >= 2
+    assert "windows '${{ matrix.arch }}'" in windows
+    native_recipe = recipe("build_atomic_native_release.sh")
+    assert 'COMP=gcc' in native_recipe
+    assert 'COMP=mingw COMPCXX="$CXX"' in native_recipe
+    assert 'xz --threads=1 -9e --check=crc64' in native_recipe
+    assert 'cmake -E tar' in native_recipe
     assert "runs-on: windows-2022" in smoke
     assert "name: release-windows-${{ matrix.arch }}" in smoke
     assert "tests/release_protocol_smoke.py" in smoke
@@ -155,8 +197,18 @@ def test_publication_requires_annotated_tag_immutable_policy_and_same_tag_ci() -
     assert "id: reserve_draft" in publish
     assert "id: upload_draft" in publish
     assert "id: verify_draft" in publish
-    assert "steps.upload_draft.outputs.id" in publish
+    assert "steps.upload_draft.outputs.release_id" in publish
     assert 'test "$UPLOAD_RELEASE_ID" = "$RELEASE_ID"' in publish
+    assert "softprops/action-gh-release" not in publish
+    assert "steps.reserve_draft.outputs.upload_url" in publish
+    assert 'test "$UPLOAD_URL" = "$expected_upload_url"' in publish
+    assert "curl --fail-with-body --silent --show-error" in publish
+    assert '"$UPLOAD_URL?name=$encoded"' in publish
+    assert "--data-binary \"@$asset\"" in publish
+    assert publish.count('"repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID"') >= 4
+    assert '([.assets[].name] | index($name) == null)' in publish
+    assert 'actual_assets=$(jq -c \'[.assets[].name] | sort\'' in publish
+    assert 'test "$actual_assets" = "$expected_assets"' in publish
     assert "if: always() && steps.reserve_draft.outputs.release_id != ''" in publish
     assert '"repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID"' in publish
     assert "Delete only this workflow's invalid draft" in publish
@@ -175,18 +227,27 @@ def test_wasm_provenance_records_real_digest_pinned_docker_commands() -> None:
     )
     assert digest in text
     assert 'toolchain="image=$EMSCRIPTEN_IMAGE;' in board
-    assert "docker run --rm --env" in board
-    assert "--workdir /src/src" in board
-    assert "make -f Makefile_js repro" in board
+    assert "scripts/build_atomic_board_wasm_release.sh" in board
+    assert '--volume "$GITHUB_WORKSPACE/build/board-wasm-a:/work"' in board
     assert 'toolchain="image=$EMSCRIPTEN_IMAGE;' in uci
-    assert "docker run --rm --env" in uci
-    assert "tests/wasm-engine/build.py" in uci
+    assert "scripts/build_atomic_uci_wasm_release.sh" in uci
+    assert '--volume "$GITHUB_WORKSPACE/build/uci-wasm-a:/work"' in uci
+
+    board_recipe = recipe("build_atomic_board_wasm_release.sh")
+    assert "make -C src -f Makefile_js clean" in board_recipe
+    assert "npm test" in board_recipe
+    assert "npm pack --pack-destination" in board_recipe
+    uci_recipe = recipe("build_atomic_uci_wasm_release.sh")
+    assert "python3 tests/wasm-engine/build.py" in uci_recipe
+    assert "tar --sort=name --format=gnu" in uci_recipe
+    assert "atomic_verify_uci_wasm_archive.py" in uci_recipe
 
 
 def test_board_wasm_executes_both_exports_from_the_exact_installed_tgz() -> None:
     board = job(workflow(), "board-wasm", "uci-wasm")
 
-    assert 'cmp "${first[0]}" "${second[0]}"' in board
+    assert '"build/board-wasm-a/build/release/$asset"' in board
+    assert '"build/board-wasm-b/build/release/$asset"' in board
     assert 'PACKAGE_TGZ=/src/build/release/$package_file' in board
     assert "mktemp -d /tmp/atomic-installed-npm.XXXXXX" in board
     assert "npm install --package-lock=false --ignore-scripts" in board
@@ -202,8 +263,9 @@ def test_board_wasm_executes_both_exports_from_the_exact_installed_tgz() -> None
 def test_uci_wasm_archive_uses_and_authenticates_release_documentation() -> None:
     uci = job(workflow(), "uci-wasm", "assemble")
 
-    assert 'cp docs/atomic/node-uci-wasm-release.md "$root/README.md"' in uci
-    assert "cp tests/wasm-engine/README.md" not in uci
+    uci_recipe = recipe("build_atomic_uci_wasm_release.sh")
+    assert 'docs/atomic/node-uci-wasm-release.md "$stage_root/README.md"' in uci_recipe
+    assert "tests/wasm-engine/README.md" not in uci_recipe
     assert "atomic_verify_uci_wasm_archive.py" in uci
     assert '--source-date-epoch "$SOURCE_DATE_EPOCH"' in uci
     assert "build/wasm-archive-smoke" in uci
@@ -243,29 +305,24 @@ def test_manual_publish_requires_immediate_pre_and_post_trust_rechecks() -> None
         assert marker in after
 
 
-def test_uci_wasm_precreates_every_later_host_write_root() -> None:
+def test_uci_wasm_uses_clean_roots_and_never_packages_on_the_mutable_host() -> None:
     uci = job(workflow(), "uci-wasm", "assemble")
     build = uci.split(
-        "      - name: Build twice and require identical complete engine\n", 1
-    )[1].split("      - name: Package complete UCI WASM and provenance\n", 1)[0]
-    package = uci.split(
-        "      - name: Package complete UCI WASM and provenance\n", 1
+        "      - name: Build and package twice with the versioned UCI WASM recipe\n",
+        1,
+    )[1].split(
+        "      - name: Authenticate and exercise the exact packaged dual-NNUE engine\n",
+        1,
+    )[0]
+    authenticate = uci.split(
+        "      - name: Authenticate and exercise the exact packaged dual-NNUE engine\n",
+        1,
     )[1]
-    first_container = build.index("docker run --rm")
-    precreate = build[build.index("mkdir -p ") : first_container]
-
-    for directory in (
-        "build/wasm-release-a",
-        "build/wasm-release-b",
-        "build/wasm-fixtures",
-        "build/wasm-stage",
-        "build/release",
-    ):
-        assert directory in precreate
-
-    assert build.index("python3 tests/create_synthetic_zero_nnue.py") > first_container
-    assert "cp -a build/wasm-release-a/." not in package
-    assert (
-        'cp -R --no-preserve=ownership build/wasm-release-a/. "$root/"'
-        in package
-    )
+    assert 'for build_id in a b; do' in build
+    assert 'git archive "$COMMIT" | tar -x -C "$root"' in build
+    assert '--user "$(id -u):$(id -g)"' in build
+    assert "scripts/build_atomic_uci_wasm_release.sh" in build
+    assert "-cJf" not in build
+    assert "-cJf" not in authenticate
+    assert "python3 tests/create_synthetic_zero_nnue.py" in authenticate
+    assert 'build/wasm-archive-smoke' in authenticate

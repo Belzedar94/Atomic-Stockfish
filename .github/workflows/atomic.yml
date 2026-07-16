@@ -1171,17 +1171,19 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - run: python -m pip install --disable-pip-version-check -r tests/python-ci-requirements.txt
+      - name: Capture the candidate Windows wheel toolchain fingerprint
+        if: matrix.os == 'windows-2022' && matrix.python-version == '3.9'
+        run: |
+          python -c "from pathlib import Path; Path('build').mkdir(exist_ok=True)"
+          python scripts/atomic_windows_wheel_fingerprint.py --output build/windows-wheel-fingerprint.json
+          python -c "from pathlib import Path; print(Path('build/windows-wheel-fingerprint.json').read_text(encoding='ascii'), end='')"
       - run: python setup.py build_ext --inplace
       - run: python test.py
       - run: python -m pytest -q tests/python/test_pyffish.py
+      - run: python scripts/run_atomic_release_contract_tests.py
       - run: >-
           python -m pytest -q
           tests/python/test_atomic_los_gate.py
-          tests/python/test_atomic_release_manifest.py
-          tests/python/test_atomic_release_verification.py
-          tests/python/test_atomic_release_workflow.py
-          tests/python/test_atomic_reproducible_sdist.py
-          tests/python/test_release_version.py
           tests/python/test_atomic_syzygy_uci.py
           tests/python/test_atomic_compiler_preflight.py
           tests/python/test_atomic_training_data_schema.py

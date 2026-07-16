@@ -53,6 +53,19 @@ WINDOWS_NATIVE_IMAGE = (
     "dockcross/windows-static-x64@sha256:"
     "e5fde458b54dda21d0265516f0310bc017532dd6f4fdad0b7239dc6ccd0f8ca9"
 )
+PYTHON_MANYLINUX_X86_64_IMAGE = (
+    "quay.io/pypa/manylinux_2_28_x86_64:2026.03.20-1@sha256:"
+    "853663dc8253b62be437bb52a5caecffd020792af4442f55d927d22e0ea795ae"
+)
+RELEASE_CI_REQUIREMENTS_SHA256 = (
+    "33f274924a8f41ca9cf4ddc891c0d488dc30491c29d2b034de9088d9d032dd28"
+)
+RELEASE_BUILD_REQUIREMENTS_SHA256 = (
+    "1e4f6c667fd5fab07e2016986bfd330bca57a9562875869323c8c1fd09245f34"
+)
+RELEASE_WHEEL_TEST_REQUIREMENTS_SHA256 = (
+    "b877081ac9f4a6aa56eff9c5ed6c7b832a9fc02ca2dca39f786401e1a03f842b"
+)
 
 
 class ReleaseContractError(RuntimeError):
@@ -70,6 +83,12 @@ def expected_inventory_policy(version: str) -> Dict[str, Any]:
         "linuxNativeAmd64Manifest": LINUX_NATIVE_AMD64_MANIFEST,
         "linuxNativeImage": LINUX_NATIVE_IMAGE,
         "nativeBuildRepetitions": 2,
+        "pythonManylinuxX86_64Image": PYTHON_MANYLINUX_X86_64_IMAGE,
+        "releaseBuildRequirementsSha256": RELEASE_BUILD_REQUIREMENTS_SHA256,
+        "releaseCiRequirementsSha256": RELEASE_CI_REQUIREMENTS_SHA256,
+        "releaseWheelTestRequirementsSha256": (
+            RELEASE_WHEEL_TEST_REQUIREMENTS_SHA256
+        ),
         "pythonWheelBuildRepetitions": 2,
         "pythonWheelRuntimeSmoke": {
             "operatingSystems": ["ubuntu-24.04", "windows-2022"],

@@ -1,10 +1,14 @@
 docs/atomic/evidence/**/*.log text eol=lf
 docs/atomic/evidence/**/*.json text eol=lf
 docs/atomic/evidence/**/*.sh text eol=lf
+scripts/build_atomic_*_release.sh text eol=lf
 tests/legacy_pipeline-ci-requirements.in text eol=lf
 tests/legacy_pipeline-ci-requirements.txt text eol=lf
 tests/pip-bootstrap-requirements.txt text eol=lf
 tests/python-ci-requirements.txt text eol=lf
+tests/release-build-requirements.txt text eol=lf
+tests/release-ci-requirements.txt text eol=lf
+tests/release-wheel-test-requirements.txt text eol=lf
 schemas/atomic-schema.json text eol=lf
 schemas/atomic-bin-v2.json text eol=lf
 schemas/atomic-bin-v2-manifest.json text eol=lf

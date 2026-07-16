@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 import re
 
+from scripts.atomic_release_manifest import expected_inventory_policy
+
 try:
     import tomllib
 except ModuleNotFoundError:  # pragma: no cover - exercised by the Python 3.9 lane
@@ -127,6 +129,25 @@ def test_cibuildwheel_test_lock_is_complete_and_hash_closed() -> None:
     assert all(requirement.marker is None for requirement in locked.values())
 
 
+def test_pep517_build_lock_is_complete_and_hash_closed() -> None:
+    locked = load_lock("release-build-requirements.txt")
+    assert set(locked) == {"setuptools", "wheel"}
+    assert locked["setuptools"].version == "80.9.0"
+    assert locked["wheel"].version == "0.45.1"
+    assert all(requirement.marker is None for requirement in locked.values())
+
+
+def test_source_recipe_installs_build_dependencies_only_from_the_hash_lock() -> None:
+    recipe = (ROOT / "scripts" / "build_atomic_source_release.sh").read_text(
+        encoding="utf-8"
+    )
+    assert recipe.count("python3 -m pip install") == 1
+    assert "--only-binary=:all: --require-hashes" in recipe
+    assert "tests/release-build-requirements.txt" in recipe
+    assert "setup.py sdist" in recipe
+    assert "scripts/atomic_reproducible_sdist.py" in recipe
+
+
 def test_pep517_build_requirements_are_exactly_pinned() -> None:
     document = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     assert document["build-system"] == {
@@ -134,6 +155,7 @@ def test_pep517_build_requirements_are_exactly_pinned() -> None:
         "build-backend": "setuptools.build_meta",
     }
     manifest = (ROOT / "MANIFEST.in").read_text(encoding="utf-8").splitlines()
+    assert "include tests/release-build-requirements.txt" in manifest
     assert "include tests/release-wheel-test-requirements.txt" in manifest
 
 
@@ -144,6 +166,7 @@ def test_release_inventory_authenticates_both_dependency_locks() -> None:
         )
     )["releasePolicy"]
     expected = {
+        "releaseBuildRequirementsSha256": "release-build-requirements.txt",
         "releaseCiRequirementsSha256": "release-ci-requirements.txt",
         "releaseWheelTestRequirementsSha256": (
             "release-wheel-test-requirements.txt"
@@ -152,3 +175,12 @@ def test_release_inventory_authenticates_both_dependency_locks() -> None:
     for field, name in expected.items():
         actual = hashlib.sha256((ROOT / "tests" / name).read_bytes()).hexdigest()
         assert inventory[field] == actual
+
+
+def test_checked_in_inventory_matches_the_assembler_policy() -> None:
+    inventory = json.loads(
+        (ROOT / "docs" / "atomic" / "release-1.0-inventory.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert inventory["releasePolicy"] == expected_inventory_policy("1.0.0")

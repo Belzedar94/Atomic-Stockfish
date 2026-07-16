@@ -28,6 +28,8 @@ def _safe_member_name(name: str, expected_root: str) -> bool:
     path = PurePosixPath(name)
     return (
         bool(name)
+        and "\\" not in name
+        and path.as_posix() == name
         and not path.is_absolute()
         and ".." not in path.parts
         and bool(path.parts)
@@ -70,6 +72,10 @@ def normalize_sdist(
             names = [member.name for member in members]
             if len(names) != len(set(names)):
                 raise SdistContractError("sdist contains duplicate member names")
+            if len(names) != len({name.casefold() for name in names}):
+                raise SdistContractError(
+                    "sdist contains case-insensitive duplicate member names"
+                )
             if not members or any(
                 not _safe_member_name(member.name, expected_root)
                 for member in members

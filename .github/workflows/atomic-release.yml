@@ -59,11 +59,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$(python setup.py --version)" = "$RELEASE_VERSION"
-          python -m pytest -q \
-            tests/python/test_atomic_release_manifest.py \
-            tests/python/test_atomic_release_verification.py \
-            tests/python/test_atomic_release_workflow.py \
-            tests/python/test_atomic_reproducible_sdist.py
+          python scripts/run_atomic_release_contract_tests.py
 
           commit=$(git rev-parse HEAD)
           tag_object=not-a-tag
@@ -149,7 +145,7 @@ jobs:
             echo "$description"
             echo EOF
           } >> "$GITHUB_OUTPUT"
-      - name: Build twice in isolated roots and require identical binaries
+      - name: Build and package twice with the versioned release recipe
         shell: bash
         env:
           COMMIT: ${{ needs.validate.outputs.commit }}
@@ -163,41 +159,15 @@ jobs:
             docker run --rm --platform linux/amd64 \
               --env "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" \
               --volume "$GITHUB_WORKSPACE/$root:/work" \
-              --workdir /work/src \
+              --workdir /work \
               "$LINUX_NATIVE_IMAGE" \
-              make -j2 'ARCH=${{ matrix.arch }}' COMP=gcc build
+              bash scripts/build_atomic_native_release.sh \
+                linux '${{ matrix.arch }}' "$RELEASE_VERSION" "$SOURCE_DATE_EPOCH"
           done
           cmp \
             build/native-linux-a/src/atomic-stockfish \
             build/native-linux-b/src/atomic-stockfish
-      - name: Package twice with the pinned toolchain and compare archives
-        shell: bash
-        env:
-          SOURCE_DATE_EPOCH: ${{ needs.validate.outputs.epoch }}
-        run: |
-          set -euo pipefail
           asset="Atomic-Stockfish-${RELEASE_VERSION}-linux-${{ matrix.arch }}.tar.xz"
-          for build_id in a b; do
-            root="build/native-linux-$build_id"
-            docker run --rm --platform linux/amd64 \
-              --env "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" \
-              --env "RELEASE_VERSION=$RELEASE_VERSION" \
-              --env "ASSET=$asset" \
-              --volume "$GITHUB_WORKSPACE/$root:/work" \
-              --workdir /work \
-              "$LINUX_NATIVE_IMAGE" sh -ceu '
-                stage="build/release-stage/Atomic-Stockfish-$RELEASE_VERSION"
-                rm -rf build/release-stage build/release
-                mkdir -p "$stage" build/release
-                install -m 0755 src/atomic-stockfish "$stage/atomic-stockfish"
-                cp AUTHORS CITATION.cff Copying.txt README.md "$stage/"
-                cp docs/atomic/release-1.0-notes.md "$stage/RELEASE_NOTES.md"
-                tar --sort=name --mtime="@$SOURCE_DATE_EPOCH" \
-                  --owner=0 --group=0 --numeric-owner \
-                  -C build/release-stage -cJf "build/release/$ASSET" \
-                  "Atomic-Stockfish-$RELEASE_VERSION"
-              '
-          done
           cmp \
             "build/native-linux-a/build/release/$asset" \
             "build/native-linux-b/build/release/$asset"
@@ -224,8 +194,9 @@ jobs:
             docker run --rm --platform linux/amd64 \
               --env "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" \
               --volume "$GITHUB_WORKSPACE/build/native-linux-a:/work" \
-              --workdir /work/src "$LINUX_NATIVE_IMAGE" \
-              make -j2 'ARCH=${{ matrix.arch }}' COMP=gcc build
+              --workdir /work "$LINUX_NATIVE_IMAGE" \
+              bash scripts/build_atomic_native_release.sh \
+                linux '${{ matrix.arch }}' "$RELEASE_VERSION" "$SOURCE_DATE_EPOCH"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: release-linux-${{ matrix.arch }}
@@ -276,7 +247,7 @@ jobs:
             echo "$description"
             echo EOF
           } >> "$GITHUB_OUTPUT"
-      - name: Build twice in isolated roots with Makefile COMP=mingw
+      - name: Build and package twice with the versioned MinGW recipe
         shell: bash
         env:
           COMMIT: ${{ needs.validate.outputs.commit }}
@@ -290,46 +261,20 @@ jobs:
             git archive "$COMMIT" | tar -x -C "$root"
             docker run --rm --platform linux/amd64 \
               --env "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" \
+              --env "RELEASE_VERSION=$RELEASE_VERSION" \
               --env 'ARCHITECTURE=${{ matrix.arch }}' \
               --volume "$GITHUB_WORKSPACE/$root:/work" \
-              --workdir /work/src \
+              --workdir /work \
               "$WINDOWS_NATIVE_IMAGE" sh -ceu '
                 test -x "$CXX"
-                make -j2 ARCH="$ARCHITECTURE" COMP=mingw \
-                  COMPCXX="$CXX" build
+                bash scripts/build_atomic_native_release.sh \
+                  windows "$ARCHITECTURE" "$RELEASE_VERSION" "$SOURCE_DATE_EPOCH"
               '
           done
           cmp \
             build/native-windows-a/src/atomic-stockfish.exe \
             build/native-windows-b/src/atomic-stockfish.exe
-      - name: Package twice with the pinned toolchain and compare archives
-        shell: bash
-        env:
-          SOURCE_DATE_EPOCH: ${{ needs.validate.outputs.epoch }}
-        run: |
-          set -euo pipefail
           asset="Atomic-Stockfish-${RELEASE_VERSION}-windows-${{ matrix.arch }}.zip"
-          for build_id in a b; do
-            root="build/native-windows-$build_id"
-            docker run --rm --platform linux/amd64 \
-              --env "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" \
-              --env "RELEASE_VERSION=$RELEASE_VERSION" \
-              --env "ASSET=$asset" \
-              --volume "$GITHUB_WORKSPACE/$root:/work" \
-              --workdir /work \
-              "$WINDOWS_NATIVE_IMAGE" sh -ceu '
-                stage="build/release-stage/Atomic-Stockfish-$RELEASE_VERSION"
-                rm -rf build/release-stage build/release
-                mkdir -p "$stage" build/release
-                cp src/atomic-stockfish.exe "$stage/atomic-stockfish.exe"
-                cp AUTHORS CITATION.cff Copying.txt README.md "$stage/"
-                cp docs/atomic/release-1.0-notes.md "$stage/RELEASE_NOTES.md"
-                find build/release-stage -exec touch -d "@$SOURCE_DATE_EPOCH" {} +
-                cd build/release-stage
-                cmake -E tar cf "../release/$ASSET" --format=zip \
-                  "Atomic-Stockfish-$RELEASE_VERSION"
-              '
-          done
           cmp \
             "build/native-windows-a/build/release/$asset" \
             "build/native-windows-b/build/release/$asset"
@@ -352,10 +297,12 @@ jobs:
             --toolchain "$TOOLCHAIN" -- \
             docker run --rm --platform linux/amd64 \
               --env "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" \
+              --env "RELEASE_VERSION=$RELEASE_VERSION" \
               --env 'ARCHITECTURE=${{ matrix.arch }}' \
               --volume "$GITHUB_WORKSPACE/build/native-windows-a:/work" \
-              --workdir /work/src "$WINDOWS_NATIVE_IMAGE" \
-              sh -ceu 'make -j2 ARCH="$ARCHITECTURE" COMP=mingw COMPCXX="$CXX" build'
+              --workdir /work "$WINDOWS_NATIVE_IMAGE" \
+              bash scripts/build_atomic_native_release.sh \
+                windows '${{ matrix.arch }}' "$RELEASE_VERSION" "$SOURCE_DATE_EPOCH"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: release-windows-${{ matrix.arch }}
@@ -464,6 +411,11 @@ jobs:
           CIBW_ENVIRONMENT: >-
             SOURCE_DATE_EPOCH=${{ needs.validate.outputs.epoch }}
             PYTHONHASHSEED=0
+          CIBW_BUILD_FRONTEND: "pip; args: --no-build-isolation"
+          CIBW_BEFORE_BUILD: >-
+            python -m pip install --disable-pip-version-check
+            --only-binary=:all: --require-hashes
+            -r {project}/tests/release-build-requirements.txt
           CIBW_BEFORE_TEST: >-
             python -m pip install --disable-pip-version-check
             --only-binary=:all: --require-hashes
@@ -519,8 +471,11 @@ jobs:
             --source-date-epoch "$SOURCE_DATE_EPOCH" \
             --kind python --platform '${{ matrix.platform }}' \
             --architecture '${{ matrix.architecture }}' \
-            --toolchain "cibuildwheel 3.4.1 / CPython 3.9 stable ABI / abi3audit 0.0.26 / builder=$builder / sourceSha256=$RELEASE_SDIST_SHA256" -- \
-            python -m cibuildwheel "$RELEASE_SDIST" --output-dir build/wheelhouse-a
+            --toolchain "cibuildwheel 3.4.1 / CPython 3.9 stable ABI / abi3audit 0.0.26 / builder=$builder / sourceSha256=$RELEASE_SDIST_SHA256 / buildLockSha256=1e4f6c667fd5fab07e2016986bfd330bca57a9562875869323c8c1fd09245f34 / frontend=pip-no-build-isolation" -- \
+            env "CIBW_BUILD_FRONTEND=pip; args: --no-build-isolation" \
+              "CIBW_BEFORE_BUILD=python -m pip install --disable-pip-version-check --only-binary=:all: --require-hashes -r {project}/tests/release-build-requirements.txt" \
+              python -m cibuildwheel "$RELEASE_SDIST" \
+                --output-dir build/wheelhouse-a
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: release-python-${{ matrix.platform }}
@@ -544,7 +499,7 @@ jobs:
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '3.12.11'
-      - name: Build authoritative source archive and normalized Python sdist
+      - name: Build each source artifact twice in the pinned release image
         id: source
         shell: bash
         env:
@@ -552,56 +507,72 @@ jobs:
           SOURCE_DATE_EPOCH: ${{ needs.validate.outputs.epoch }}
         run: |
           set -euo pipefail
-          mkdir -p build/release build/sdist-a build/sdist-b \
-            build/repro-source build/repro-sdist-b
-          python -m pip install --disable-pip-version-check \
-            --only-binary=:all: --require-hashes \
-            -r tests/release-ci-requirements.txt
+          mkdir -p build/release build/source-a build/source-b
+          docker pull "$EMSCRIPTEN_IMAGE"
+          docker image inspect \
+            --format '{{range .RepoDigests}}{{println .}}{{end}}' \
+            "$EMSCRIPTEN_IMAGE" |
+            grep -Fqx 'emscripten/emsdk@sha256:90b757eb11fa9a0e3ce4d2d9f76d932a56018e4accc37b5a28b2783751e60eb7'
+          toolchain="image=$EMSCRIPTEN_IMAGE; $(docker run --rm \
+            "$EMSCRIPTEN_IMAGE" sh -ceu '
+              git --version
+              xz --version | head -n 1
+              tar --version | head -n 1
+              python3 --version
+              python3 -m pip --version
+            ')"
+
+          common=(
+            docker run --rm
+            --user "$(id -u):$(id -g)"
+            --env HOME=/tmp
+            --env "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH"
+            --volume "$GITHUB_WORKSPACE:/src"
+            --workdir /src
+            "$EMSCRIPTEN_IMAGE"
+            sh scripts/build_atomic_source_release.sh
+          )
           source_asset="Atomic-Stockfish-${RELEASE_VERSION}-source.tar.xz"
-          git archive --format=tar --prefix="Atomic-Stockfish-${RELEASE_VERSION}/" "$COMMIT" | \
-            xz -9e > "build/release/$source_asset"
-          git archive --format=tar --prefix="Atomic-Stockfish-${RELEASE_VERSION}/" "$COMMIT" | \
-            xz -9e > "build/repro-source/$source_asset"
-          cmp "build/release/$source_asset" "build/repro-source/$source_asset"
-          python setup.py sdist --dist-dir build/sdist-a
-          rm -rf atomic_pyffish.egg-info
-          python setup.py sdist --dist-dir build/sdist-b
-          mapfile -t first_sdists < <(find build/sdist-a -maxdepth 1 -type f -name '*.tar.gz')
-          mapfile -t second_sdists < <(find build/sdist-b -maxdepth 1 -type f -name '*.tar.gz')
-          test "${#first_sdists[@]}" -eq 1
-          test "${#second_sdists[@]}" -eq 1
-          normalized_a="build/release/atomic_pyffish-${RELEASE_VERSION}.tar.gz"
-          normalized_b="build/repro-sdist-b/atomic_pyffish-${RELEASE_VERSION}.tar.gz"
-          python scripts/atomic_reproducible_sdist.py \
-            --source "${first_sdists[0]}" --destination "$normalized_a" \
-            --root "atomic_pyffish-${RELEASE_VERSION}" \
-            --source-date-epoch "$SOURCE_DATE_EPOCH"
-          python scripts/atomic_reproducible_sdist.py \
-            --source "${second_sdists[0]}" --destination "$normalized_b" \
-            --root "atomic_pyffish-${RELEASE_VERSION}" \
-            --source-date-epoch "$SOURCE_DATE_EPOCH"
-          cmp "$normalized_a" "$normalized_b"
+          sdist_asset="atomic_pyffish-${RELEASE_VERSION}.tar.gz"
+          source_recipe_a=(
+            "${common[@]}" source "$RELEASE_VERSION" "$SOURCE_DATE_EPOCH"
+            "$COMMIT" build/source-a
+          )
+          source_recipe_b=(
+            "${common[@]}" source "$RELEASE_VERSION" "$SOURCE_DATE_EPOCH"
+            "$COMMIT" build/source-b
+          )
+          sdist_recipe_a=(
+            "${common[@]}" sdist "$RELEASE_VERSION" "$SOURCE_DATE_EPOCH"
+            "$COMMIT" build/source-a
+          )
+          sdist_recipe_b=(
+            "${common[@]}" sdist "$RELEASE_VERSION" "$SOURCE_DATE_EPOCH"
+            "$COMMIT" build/source-b
+          )
+          "${source_recipe_a[@]}"
+          "${source_recipe_b[@]}"
+          "${sdist_recipe_a[@]}"
+          "${sdist_recipe_b[@]}"
+          cmp "build/source-a/$source_asset" "build/source-b/$source_asset"
+          cmp "build/source-a/$sdist_asset" "build/source-b/$sdist_asset"
+
           python scripts/atomic_release_provenance.py \
-            --asset "build/release/$source_asset" \
+            --asset "build/source-a/$source_asset" \
             --version "$RELEASE_VERSION" --commit "$COMMIT" \
             --source-date-epoch "$SOURCE_DATE_EPOCH" \
             --kind source --platform source --architecture source \
-            --toolchain "$(git --version) / xz $(xz --version | head -n 1)" -- \
-            bash -lc \
-              "git archive --format=tar --prefix=Atomic-Stockfish-${RELEASE_VERSION}/ $COMMIT | xz -9e > build/release/$source_asset"
-          sdist="$normalized_a"
+            --toolchain "$toolchain" -- "${source_recipe_a[@]}"
           python scripts/atomic_release_provenance.py \
-            --asset "$sdist" --version "$RELEASE_VERSION" --commit "$COMMIT" \
+            --asset "build/source-a/$sdist_asset" \
+            --version "$RELEASE_VERSION" --commit "$COMMIT" \
             --source-date-epoch "$SOURCE_DATE_EPOCH" \
             --kind python --platform source --architecture source \
-            --toolchain "$(python --version) / setuptools 80.9.0" -- \
-            python scripts/atomic_reproducible_sdist.py \
-              --source "${first_sdists[0]}" \
-               --destination "$sdist" \
-               --root "atomic_pyffish-${RELEASE_VERSION}" \
-               --source-date-epoch "$SOURCE_DATE_EPOCH"
-          sdist_name=$(basename "$sdist")
-          sdist_sha256=$(sha256sum "$sdist" | cut -d ' ' -f 1)
+            --toolchain "$toolchain / buildLockSha256=1e4f6c667fd5fab07e2016986bfd330bca57a9562875869323c8c1fd09245f34" -- \
+            "${sdist_recipe_a[@]}"
+          cp build/source-a/* build/release/
+          sdist_name=$sdist_asset
+          sdist_sha256=$(sha256sum "build/release/$sdist_asset" | cut -d ' ' -f 1)
           [[ "$sdist_sha256" =~ ^[0-9a-f]{64}$ ]]
           echo "sdist_name=$sdist_name" >> "$GITHUB_OUTPUT"
           echo "sdist_sha256=$sdist_sha256" >> "$GITHUB_OUTPUT"
@@ -699,9 +670,10 @@ jobs:
         with:
           ref: ${{ needs.validate.outputs.commit }}
           persist-credentials: false
-      - name: Reproducible build and Node tests
+      - name: Build, test and pack twice with the versioned Board recipe
         shell: bash
         env:
+          COMMIT: ${{ needs.validate.outputs.commit }}
           SOURCE_DATE_EPOCH: ${{ needs.validate.outputs.epoch }}
         run: |
           set -euo pipefail
@@ -710,35 +682,34 @@ jobs:
             --format '{{range .RepoDigests}}{{println .}}{{end}}' \
             "$EMSCRIPTEN_IMAGE" |
             grep -Fqx 'emscripten/emsdk@sha256:90b757eb11fa9a0e3ce4d2d9f76d932a56018e4accc37b5a28b2783751e60eb7'
-          docker run --rm --env "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" \
-            --volume "$GITHUB_WORKSPACE:/src" --workdir /src/src \
-            "$EMSCRIPTEN_IMAGE" make -f Makefile_js repro
-          docker run --rm --env "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" \
-            --volume "$GITHUB_WORKSPACE:/src" --workdir /src/tests/js \
-            "$EMSCRIPTEN_IMAGE" npm test
-      - name: Pack npm artifact and provenance
+          for build_id in a b; do
+            root="build/board-wasm-$build_id"
+            mkdir -p "$root"
+            git archive "$COMMIT" | tar -x -C "$root"
+            docker run --rm \
+              --user "$(id -u):$(id -g)" --env HOME=/tmp \
+              --env "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" \
+              --volume "$GITHUB_WORKSPACE/$root:/work" --workdir /work \
+              "$EMSCRIPTEN_IMAGE" \
+              bash scripts/build_atomic_board_wasm_release.sh \
+                "$RELEASE_VERSION" "$SOURCE_DATE_EPOCH"
+          done
+          diff -r \
+            build/board-wasm-a/tests/js/dist \
+            build/board-wasm-b/tests/js/dist
+          asset="atomic-stockfish-ffish-${RELEASE_VERSION}.tgz"
+          cmp \
+            "build/board-wasm-a/build/release/$asset" \
+            "build/board-wasm-b/build/release/$asset"
+          mkdir -p build/release
+          cp "build/board-wasm-a/build/release/$asset" build/release/
+      - name: Authenticate installed npm artifact and write exact provenance
         shell: bash
         env:
           COMMIT: ${{ needs.validate.outputs.commit }}
           SOURCE_DATE_EPOCH: ${{ needs.validate.outputs.epoch }}
         run: |
           set -euo pipefail
-          cp AUTHORS tests/js/AUTHORS
-          cp CITATION.cff tests/js/CITATION.cff
-          cp Copying.txt tests/js/LICENSE
-          mkdir -p build/npm-pack-a build/npm-pack-b build/release
-          docker run --rm --env "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" \
-            --volume "$GITHUB_WORKSPACE:/src" --workdir /src/tests/js \
-            "$EMSCRIPTEN_IMAGE" npm pack --pack-destination /src/build/npm-pack-a
-          docker run --rm --env "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" \
-            --volume "$GITHUB_WORKSPACE:/src" --workdir /src/tests/js \
-            "$EMSCRIPTEN_IMAGE" npm pack --pack-destination /src/build/npm-pack-b
-          mapfile -t first < <(find build/npm-pack-a -maxdepth 1 -type f -name '*.tgz')
-          mapfile -t second < <(find build/npm-pack-b -maxdepth 1 -type f -name '*.tgz')
-          test "${#first[@]}" -eq 1
-          test "${#second[@]}" -eq 1
-          cmp "${first[0]}" "${second[0]}"
-          cp "${first[0]}" build/release/
           mapfile -t assets < <(find build/release -maxdepth 1 -type f -name '*.tgz')
           test "${#assets[@]}" -eq 1
           tar -tzf "${assets[0]}" | grep -Fx 'package/AUTHORS'
@@ -769,9 +740,13 @@ jobs:
             --source-date-epoch "$SOURCE_DATE_EPOCH" \
             --kind board-wasm --platform web-node --architecture wasm32 \
             --toolchain "$toolchain" -- \
-            docker run --rm --env "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" \
-              --volume "$GITHUB_WORKSPACE:/src" --workdir /src/src \
-              "$EMSCRIPTEN_IMAGE" make -f Makefile_js repro
+            docker run --rm \
+              --user "$(id -u):$(id -g)" --env HOME=/tmp \
+              --env "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" \
+              --volume "$GITHUB_WORKSPACE/build/board-wasm-a:/work" \
+              --workdir /work "$EMSCRIPTEN_IMAGE" \
+              bash scripts/build_atomic_board_wasm_release.sh \
+                "$RELEASE_VERSION" "$SOURCE_DATE_EPOCH"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: release-board-wasm
@@ -788,9 +763,10 @@ jobs:
         with:
           ref: ${{ needs.validate.outputs.commit }}
           persist-credentials: false
-      - name: Build twice and require identical complete engine
+      - name: Build and package twice with the versioned UCI WASM recipe
         shell: bash
         env:
+          COMMIT: ${{ needs.validate.outputs.commit }}
           SOURCE_DATE_EPOCH: ${{ needs.validate.outputs.epoch }}
         run: |
           set -euo pipefail
@@ -799,40 +775,28 @@ jobs:
             --format '{{range .RepoDigests}}{{println .}}{{end}}' \
             "$EMSCRIPTEN_IMAGE" |
             grep -Fqx 'emscripten/emsdk@sha256:90b757eb11fa9a0e3ce4d2d9f76d932a56018e4accc37b5a28b2783751e60eb7'
-          # Containers run as root, so create every directory that a later
-          # host-side command must write before the first bind-mounted build.
-          # The container may create files inside these directories, but it
-          # cannot make the shared parent hierarchy root-owned.
-          mkdir -p \
-            build/wasm-release-a \
-            build/wasm-release-b \
-            build/wasm-fixtures \
-            build/wasm-stage \
-            build/release
-          for output in build/wasm-release-a build/wasm-release-b; do
-            docker run --rm --env "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" \
-              --volume "$GITHUB_WORKSPACE:/src" --workdir /src \
-              "$EMSCRIPTEN_IMAGE" python3 tests/wasm-engine/build.py --out-dir "$output"
+          for build_id in a b; do
+            root="build/uci-wasm-$build_id"
+            mkdir -p "$root"
+            git archive "$COMMIT" | tar -x -C "$root"
+            docker run --rm \
+              --user "$(id -u):$(id -g)" --env HOME=/tmp \
+              --env "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" \
+              --volume "$GITHUB_WORKSPACE/$root:/work" --workdir /work \
+              "$EMSCRIPTEN_IMAGE" \
+              bash scripts/build_atomic_uci_wasm_release.sh \
+                "$RELEASE_VERSION" "$SOURCE_DATE_EPOCH"
           done
-          diff -r build/wasm-release-a build/wasm-release-b
-          mkdir -p build/wasm-fixtures
-          python3 tests/create_synthetic_zero_nnue.py --output build/wasm-fixtures/atomic-zero.nnue
-          python3 tests/create_synthetic_atomic_v2_nnue.py --output build/wasm-fixtures/atomic-v2.nnue
-          docker run --rm --env "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" \
-            --volume "$GITHUB_WORKSPACE:/src" --workdir /src \
-            "$EMSCRIPTEN_IMAGE" node tests/wasm-engine/run-engine-tests.mjs \
-            --engine build/wasm-release-a/atomic-stockfish-nnue-node.mjs \
-            --net build/wasm-fixtures/atomic-zero.nnue \
-            --expected-net-sha256 9CF054CA00B82AB53A34473DE52D1104AEDDAA19B2E7B24091B5E613AF485985
-          docker run --rm --env "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" \
-            --volume "$GITHUB_WORKSPACE:/src" --workdir /src \
-            "$EMSCRIPTEN_IMAGE" node tests/wasm-engine/run-dual-backend-tests.mjs \
-            --engine build/wasm-release-a/atomic-stockfish-nnue-node.mjs \
-            --legacy-net build/wasm-fixtures/atomic-zero.nnue \
-            --legacy-sha256 9CF054CA00B82AB53A34473DE52D1104AEDDAA19B2E7B24091B5E613AF485985 \
-            --v2-net build/wasm-fixtures/atomic-v2.nnue \
-            --v2-sha256 4DEB05CFF79B5D5EBA51C560F64ED24224671C188B6C5DB27521033E587C87C6
-      - name: Package complete UCI WASM and provenance
+          diff -r \
+            build/uci-wasm-a/build/uci-wasm-runtime \
+            build/uci-wasm-b/build/uci-wasm-runtime
+          asset="Atomic-Stockfish-${RELEASE_VERSION}-node-uci-nnue-wasm.tar.xz"
+          cmp \
+            "build/uci-wasm-a/build/release/$asset" \
+            "build/uci-wasm-b/build/release/$asset"
+          mkdir -p build/release
+          cp "build/uci-wasm-a/build/release/$asset" build/release/
+      - name: Authenticate and exercise the exact packaged dual-NNUE engine
         shell: bash
         env:
           COMMIT: ${{ needs.validate.outputs.commit }}
@@ -840,24 +804,33 @@ jobs:
         run: |
           set -euo pipefail
           asset="Atomic-Stockfish-${RELEASE_VERSION}-node-uci-nnue-wasm.tar.xz"
-          root="build/wasm-stage/Atomic-Stockfish-${RELEASE_VERSION}-node-uci-nnue-wasm"
-          mkdir -p "$root" build/release
-          cp -R --no-preserve=ownership build/wasm-release-a/. "$root/"
-          cp docs/atomic/node-uci-wasm-release.md "$root/README.md"
-          cp AUTHORS CITATION.cff Copying.txt "$root/"
-          tar --sort=name --mtime="@$SOURCE_DATE_EPOCH" \
-            --owner=0 --group=0 --numeric-owner \
-            -C build/wasm-stage -cJf "build/release/$asset" \
-            "Atomic-Stockfish-${RELEASE_VERSION}-node-uci-nnue-wasm"
           python3 scripts/atomic_verify_uci_wasm_archive.py \
             --archive "build/release/$asset" \
             --version "$RELEASE_VERSION" \
             --source-date-epoch "$SOURCE_DATE_EPOCH" \
             --readme docs/atomic/node-uci-wasm-release.md
           rm -rf build/wasm-archive-smoke
-          mkdir -p build/wasm-archive-smoke
+          mkdir -p build/wasm-archive-smoke build/wasm-fixtures
           tar -xJf "build/release/$asset" -C build/wasm-archive-smoke
           extracted="build/wasm-archive-smoke/Atomic-Stockfish-${RELEASE_VERSION}-node-uci-nnue-wasm"
+          python3 tests/create_synthetic_zero_nnue.py \
+            --output build/wasm-fixtures/atomic-zero.nnue
+          python3 tests/create_synthetic_atomic_v2_nnue.py \
+            --output build/wasm-fixtures/atomic-v2.nnue
+          docker run --rm --env "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" \
+            --volume "$GITHUB_WORKSPACE:/src:ro" --workdir /src \
+            "$EMSCRIPTEN_IMAGE" node tests/wasm-engine/run-engine-tests.mjs \
+            --engine "$extracted/atomic-stockfish-nnue-node.mjs" \
+            --net build/wasm-fixtures/atomic-zero.nnue \
+            --expected-net-sha256 9CF054CA00B82AB53A34473DE52D1104AEDDAA19B2E7B24091B5E613AF485985
+          docker run --rm --env "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" \
+            --volume "$GITHUB_WORKSPACE:/src:ro" --workdir /src \
+            "$EMSCRIPTEN_IMAGE" node tests/wasm-engine/run-dual-backend-tests.mjs \
+            --engine "$extracted/atomic-stockfish-nnue-node.mjs" \
+            --legacy-net build/wasm-fixtures/atomic-zero.nnue \
+            --legacy-sha256 9CF054CA00B82AB53A34473DE52D1104AEDDAA19B2E7B24091B5E613AF485985 \
+            --v2-net build/wasm-fixtures/atomic-v2.nnue \
+            --v2-sha256 4DEB05CFF79B5D5EBA51C560F64ED24224671C188B6C5DB27521033E587C87C6
           smoke_output=$(
             printf 'uci\nisready\nsetoption name Use NNUE value false\nposition startpos\ngo perft 1\nquit\n' |
               docker run --rm -i \
@@ -877,10 +850,13 @@ jobs:
             --source-date-epoch "$SOURCE_DATE_EPOCH" \
             --kind uci-wasm --platform node --architecture wasm32-pthreads \
             --toolchain "$toolchain" -- \
-            docker run --rm --env "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" \
-              --volume "$GITHUB_WORKSPACE:/src" --workdir /src \
-              "$EMSCRIPTEN_IMAGE" python3 tests/wasm-engine/build.py \
-              --out-dir build/wasm-release-a
+            docker run --rm \
+              --user "$(id -u):$(id -g)" --env HOME=/tmp \
+              --env "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" \
+              --volume "$GITHUB_WORKSPACE/build/uci-wasm-a:/work" \
+              --workdir /work "$EMSCRIPTEN_IMAGE" \
+              bash scripts/build_atomic_uci_wasm_release.sh \
+                "$RELEASE_VERSION" "$SOURCE_DATE_EPOCH"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: release-uci-wasm
@@ -1118,11 +1094,18 @@ jobs:
             "repos/$GITHUB_REPOSITORY/releases" --input - <<<"$payload")
           release_id=$(jq -r '.id' <<<"$release")
           [[ "$release_id" =~ ^[0-9]+$ ]]
-          jq -e --arg tag "$tag" '
+          upload_url=$(jq -r '.upload_url' <<<"$release")
+          expected_upload_url="https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$release_id/assets{?name,label}"
+          test "$upload_url" = "$expected_upload_url"
+          upload_base=${upload_url%\{*}
+          test "$upload_base" = "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$release_id/assets"
+          jq -e --argjson id "$release_id" --arg tag "$tag" '
+            .id == $id and
             .tag_name == $tag and
             .draft == true and
             .prerelease == false and
-            .published_at == null
+            .published_at == null and
+            (.assets | type == "array" and length == 0)
           ' <<<"$release"
 
           pages=$(gh api --paginate --slurp \
@@ -1134,20 +1117,68 @@ jobs:
           test "$(jq -r '.[0].id' <<<"$matches")" = "$release_id"
 
           echo "release_id=$release_id" >> "$GITHUB_OUTPUT"
+          echo "upload_url=$upload_base" >> "$GITHUB_OUTPUT"
           reservation_complete=1
           trap - EXIT
       - name: Upload candidate as a draft, never as a published release
         id: upload_draft
-        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
-        with:
-          tag_name: v1.0.0
-          name: Atomic-Stockfish 1.0.0
-          body_path: docs/atomic/release-1.0-notes.md
-          draft: true
-          prerelease: false
-          overwrite_files: false
-          fail_on_unmatched_files: true
-          files: build/release-final/*
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ steps.reserve_draft.outputs.release_id }}
+          UPLOAD_URL: ${{ steps.reserve_draft.outputs.upload_url }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_ID" =~ ^[0-9]+$ ]]
+          expected_upload_url="https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets"
+          test "$UPLOAD_URL" = "$expected_upload_url"
+          tag="v$RELEASE_VERSION"
+          mapfile -d '' assets < <(
+            find build/release-final -maxdepth 1 -type f -print0 | LC_ALL=C sort -z
+          )
+          test "${#assets[@]}" -gt 0
+          for asset in "${assets[@]}"; do
+            test -f "$asset"
+            test ! -L "$asset"
+            name=$(basename "$asset")
+            size=$(stat -c '%s' "$asset")
+            current=$(gh api -X GET \
+              -H "X-GitHub-Api-Version: $GITHUB_API_VERSION" \
+              "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID")
+            jq -e --argjson id "$RELEASE_ID" --arg tag "$tag" --arg name "$name" '
+              .id == $id and
+              .tag_name == $tag and
+              .draft == true and
+              .prerelease == false and
+              .published_at == null and
+              ([.assets[].name] | index($name) == null)
+            ' <<<"$current"
+            encoded=$(python -c \
+              'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' \
+              "$name")
+            response=$(curl --fail-with-body --silent --show-error \
+              --request POST \
+              --header "Accept: application/vnd.github+json" \
+              --header "Authorization: Bearer $GH_TOKEN" \
+              --header "X-GitHub-Api-Version: $GITHUB_API_VERSION" \
+              --header "Content-Type: application/octet-stream" \
+              --data-binary "@$asset" \
+              "$UPLOAD_URL?name=$encoded")
+            jq -e --arg name "$name" --argjson size "$size" '
+              .name == $name and
+              .size == $size and
+              .state == "uploaded" and
+              (.id | type == "number")
+            ' <<<"$response"
+          done
+          current=$(gh api -X GET \
+            -H "X-GitHub-Api-Version: $GITHUB_API_VERSION" \
+            "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID")
+          expected_assets=$(printf '%s\0' "${assets[@]}" | \
+            xargs -0 -n1 basename | LC_ALL=C sort | jq -Rsc 'split("\n")[:-1]')
+          actual_assets=$(jq -c '[.assets[].name] | sort' <<<"$current")
+          test "$actual_assets" = "$expected_assets"
+          echo "release_id=$RELEASE_ID" >> "$GITHUB_OUTPUT"
       - name: Download from GitHub and authenticate the complete draft
         id: verify_draft
         shell: bash
@@ -1156,7 +1187,7 @@ jobs:
           COMMIT: ${{ needs.validate.outputs.commit }}
           TAG_OBJECT: ${{ needs.validate.outputs.tag_object }}
           RELEASE_ID: ${{ steps.reserve_draft.outputs.release_id }}
-          UPLOAD_RELEASE_ID: ${{ steps.upload_draft.outputs.id }}
+          UPLOAD_RELEASE_ID: ${{ steps.upload_draft.outputs.release_id }}
         run: |
           set -euo pipefail
           tag="v$RELEASE_VERSION"
