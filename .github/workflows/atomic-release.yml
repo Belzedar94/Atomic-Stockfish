@@ -507,7 +507,7 @@ jobs:
           SOURCE_DATE_EPOCH: ${{ needs.validate.outputs.epoch }}
         run: |
           set -euo pipefail
-          mkdir -p build/release build/source-a build/source-b
+          mkdir -p build/release
           docker pull "$EMSCRIPTEN_IMAGE"
           docker image inspect \
             --format '{{range .RepoDigests}}{{println .}}{{end}}' \
@@ -515,62 +515,75 @@ jobs:
             grep -Fqx 'emscripten/emsdk@sha256:90b757eb11fa9a0e3ce4d2d9f76d932a56018e4accc37b5a28b2783751e60eb7'
           toolchain="image=$EMSCRIPTEN_IMAGE; $(docker run --rm \
             "$EMSCRIPTEN_IMAGE" sh -ceu '
-              git --version
               xz --version | head -n 1
               tar --version | head -n 1
               python3 --version
               python3 -m pip --version
             ')"
 
-          common=(
+          for root in \
+            build/source-a build/source-b build/sdist-a build/sdist-b; do
+            mkdir -p "$root"
+            git archive "$COMMIT" | tar -x -C "$root"
+          done
+          docker_prefix=(
             docker run --rm
             --user "$(id -u):$(id -g)"
             --env HOME=/tmp
             --env "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH"
-            --volume "$GITHUB_WORKSPACE:/src"
-            --workdir /src
-            "$EMSCRIPTEN_IMAGE"
-            sh scripts/build_atomic_source_release.sh
           )
           source_asset="Atomic-Stockfish-${RELEASE_VERSION}-source.tar.xz"
           sdist_asset="atomic_pyffish-${RELEASE_VERSION}.tar.gz"
           source_recipe_a=(
-            "${common[@]}" source "$RELEASE_VERSION" "$SOURCE_DATE_EPOCH"
-            "$COMMIT" build/source-a
+            "${docker_prefix[@]}"
+            --volume "$GITHUB_WORKSPACE/build/source-a:/work" --workdir /work
+            "$EMSCRIPTEN_IMAGE" sh scripts/build_atomic_source_release.sh
+            source "$RELEASE_VERSION" "$SOURCE_DATE_EPOCH"
           )
           source_recipe_b=(
-            "${common[@]}" source "$RELEASE_VERSION" "$SOURCE_DATE_EPOCH"
-            "$COMMIT" build/source-b
+            "${docker_prefix[@]}"
+            --volume "$GITHUB_WORKSPACE/build/source-b:/work" --workdir /work
+            "$EMSCRIPTEN_IMAGE" sh scripts/build_atomic_source_release.sh
+            source "$RELEASE_VERSION" "$SOURCE_DATE_EPOCH"
           )
           sdist_recipe_a=(
-            "${common[@]}" sdist "$RELEASE_VERSION" "$SOURCE_DATE_EPOCH"
-            "$COMMIT" build/source-a
+            "${docker_prefix[@]}"
+            --volume "$GITHUB_WORKSPACE/build/sdist-a:/work" --workdir /work
+            "$EMSCRIPTEN_IMAGE" sh scripts/build_atomic_source_release.sh
+            sdist "$RELEASE_VERSION" "$SOURCE_DATE_EPOCH"
           )
           sdist_recipe_b=(
-            "${common[@]}" sdist "$RELEASE_VERSION" "$SOURCE_DATE_EPOCH"
-            "$COMMIT" build/source-b
+            "${docker_prefix[@]}"
+            --volume "$GITHUB_WORKSPACE/build/sdist-b:/work" --workdir /work
+            "$EMSCRIPTEN_IMAGE" sh scripts/build_atomic_source_release.sh
+            sdist "$RELEASE_VERSION" "$SOURCE_DATE_EPOCH"
           )
           "${source_recipe_a[@]}"
           "${source_recipe_b[@]}"
           "${sdist_recipe_a[@]}"
           "${sdist_recipe_b[@]}"
-          cmp "build/source-a/$source_asset" "build/source-b/$source_asset"
-          cmp "build/source-a/$sdist_asset" "build/source-b/$sdist_asset"
+          cmp \
+            "build/source-a/build/release/$source_asset" \
+            "build/source-b/build/release/$source_asset"
+          cmp \
+            "build/sdist-a/build/release/$sdist_asset" \
+            "build/sdist-b/build/release/$sdist_asset"
 
           python scripts/atomic_release_provenance.py \
-            --asset "build/source-a/$source_asset" \
+            --asset "build/source-a/build/release/$source_asset" \
             --version "$RELEASE_VERSION" --commit "$COMMIT" \
             --source-date-epoch "$SOURCE_DATE_EPOCH" \
             --kind source --platform source --architecture source \
             --toolchain "$toolchain" -- "${source_recipe_a[@]}"
           python scripts/atomic_release_provenance.py \
-            --asset "build/source-a/$sdist_asset" \
+            --asset "build/sdist-a/build/release/$sdist_asset" \
             --version "$RELEASE_VERSION" --commit "$COMMIT" \
             --source-date-epoch "$SOURCE_DATE_EPOCH" \
             --kind python --platform source --architecture source \
             --toolchain "$toolchain / buildLockSha256=1e4f6c667fd5fab07e2016986bfd330bca57a9562875869323c8c1fd09245f34" -- \
             "${sdist_recipe_a[@]}"
-          cp build/source-a/* build/release/
+          cp build/source-a/build/release/* build/release/
+          cp build/sdist-a/build/release/* build/release/
           sdist_name=$sdist_asset
           sdist_sha256=$(sha256sum "build/release/$sdist_asset" | cut -d ' ' -f 1)
           [[ "$sdist_sha256" =~ ^[0-9a-f]{64}$ ]]

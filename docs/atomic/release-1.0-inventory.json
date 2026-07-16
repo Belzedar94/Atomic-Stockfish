@@ -5,6 +5,7 @@
   "releasePolicy": {
     "abi3AuditVersion": "0.0.26",
     "draftOnly": true,
+    "emscriptenImage": "emscripten/emsdk:4.0.10@sha256:90b757eb11fa9a0e3ce4d2d9f76d932a56018e4accc37b5a28b2783751e60eb7",
     "immutableReleasesReadSecret": "ATOMIC_RELEASE_POLICY_TOKEN",
     "immutableReleasesRequired": true,
     "linuxNativeAmd64Manifest": "sha256:82549aa8f90ada3236a8be70c74543132a76662ef33f0c3271ed802b81584a82",
@@ -26,10 +27,12 @@
       "ref": "refs/tags/v1.0.0"
     },
     "sdistAuthority": "source-job-normalized-artifact",
+    "sourceBuildRepetitions": 2,
     "tagObjectType": "annotated",
     "windowsMakeComp": "mingw",
     "windowsNativeImage": "dockcross/windows-static-x64@sha256:e5fde458b54dda21d0265516f0310bc017532dd6f4fdad0b7239dc6ccd0f8ca9",
-    "windowsRuntimeSmoke": "windows-2022"
+    "windowsRuntimeSmoke": "windows-2022",
+    "wasmBuildRepetitions": 2
   },
   "assets": [
     {"namePattern": "Atomic-Stockfish-1.0.0-linux-x86-64.tar.xz", "kind": "native", "platform": "linux", "architecture": "x86-64"},

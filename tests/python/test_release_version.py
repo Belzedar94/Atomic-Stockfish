@@ -57,6 +57,12 @@ def test_release_version_is_consistent_across_packaging_surfaces() -> None:
     }
     assert policy["windowsMakeComp"] == "mingw"
     assert policy["abi3AuditVersion"] == "0.0.26"
+    assert policy["emscriptenImage"] == (
+        "emscripten/emsdk:4.0.10@sha256:"
+        "90b757eb11fa9a0e3ce4d2d9f76d932a56018e4accc37b5a28b2783751e60eb7"
+    )
+    assert policy["sourceBuildRepetitions"] == 2
+    assert policy["wasmBuildRepetitions"] == 2
     assert policy["pythonManylinuxX86_64Image"] == (
         "quay.io/pypa/manylinux_2_28_x86_64:2026.03.20-1@sha256:"
         "853663dc8253b62be437bb52a5caecffd020792af4442f55d927d22e0ea795ae"
@@ -102,8 +108,10 @@ def test_release_version_is_consistent_across_packaging_surfaces() -> None:
     assert '"${source_recipe_b[@]}"' in source
     assert '"${sdist_recipe_a[@]}"' in source
     assert '"${sdist_recipe_b[@]}"' in source
-    assert 'cmp "build/source-a/$source_asset" "build/source-b/$source_asset"' in source
-    assert 'cmp "build/source-a/$sdist_asset" "build/source-b/$sdist_asset"' in source
+    assert '"build/source-a/build/release/$source_asset"' in source
+    assert '"build/source-b/build/release/$source_asset"' in source
+    assert '"build/sdist-a/build/release/$sdist_asset"' in source
+    assert '"build/sdist-b/build/release/$sdist_asset"' in source
 
     quality_workflow = (ROOT / ".github" / "workflows" / "atomic.yml").read_text(
         encoding="utf-8"

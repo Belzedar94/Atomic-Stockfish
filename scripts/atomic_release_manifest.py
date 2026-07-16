@@ -53,6 +53,10 @@ WINDOWS_NATIVE_IMAGE = (
     "dockcross/windows-static-x64@sha256:"
     "e5fde458b54dda21d0265516f0310bc017532dd6f4fdad0b7239dc6ccd0f8ca9"
 )
+EMSCRIPTEN_IMAGE = (
+    "emscripten/emsdk:4.0.10@sha256:"
+    "90b757eb11fa9a0e3ce4d2d9f76d932a56018e4accc37b5a28b2783751e60eb7"
+)
 PYTHON_MANYLINUX_X86_64_IMAGE = (
     "quay.io/pypa/manylinux_2_28_x86_64:2026.03.20-1@sha256:"
     "853663dc8253b62be437bb52a5caecffd020792af4442f55d927d22e0ea795ae"
@@ -78,6 +82,7 @@ def expected_inventory_policy(version: str) -> Dict[str, Any]:
     return {
         "abi3AuditVersion": "0.0.26",
         "draftOnly": True,
+        "emscriptenImage": EMSCRIPTEN_IMAGE,
         "immutableReleasesReadSecret": "ATOMIC_RELEASE_POLICY_TOKEN",
         "immutableReleasesRequired": True,
         "linuxNativeAmd64Manifest": LINUX_NATIVE_AMD64_MANIFEST,
@@ -101,10 +106,12 @@ def expected_inventory_policy(version: str) -> Dict[str, Any]:
             "ref": "refs/tags/v" + version,
         },
         "sdistAuthority": "source-job-normalized-artifact",
+        "sourceBuildRepetitions": 2,
         "tagObjectType": "annotated",
         "windowsMakeComp": "mingw",
         "windowsNativeImage": WINDOWS_NATIVE_IMAGE,
         "windowsRuntimeSmoke": "windows-2022",
+        "wasmBuildRepetitions": 2,
     }
 
 
