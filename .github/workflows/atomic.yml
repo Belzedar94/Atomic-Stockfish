@@ -1421,3 +1421,68 @@ jobs:
           --atomic-data-generator-build-manifest "$RUNNER_TEMP/atomic-data-generator-build.json"
           --atomic-root .
           --atomic-commit "$(git rev-parse HEAD)"
+
+  release-wheel-fingerprint-capture:
+    name: Release Windows wheel fingerprint capture
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'agent/release-1-0-prep'
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.12.11'
+      - name: Capture two independent canonical fingerprints
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -m pip install --disable-pip-version-check `
+            --only-binary=:all: --require-hashes `
+            -r tests/release-ci-requirements.txt
+          if ($LASTEXITCODE -ne 0) { throw 'release tooling installation failed' }
+
+          Get-ChildItem Env: | Where-Object Name -Like 'CIBW_*' |
+            ForEach-Object { Remove-Item -LiteralPath "Env:$($_.Name)" }
+          $commit = (git rev-parse HEAD).Trim()
+          $epoch = (git show -s --format=%ct $commit).Trim()
+          if ($LASTEXITCODE -ne 0 -or $epoch -notmatch '^(0|[1-9][0-9]*)$') {
+            throw 'could not resolve the checked-out source epoch'
+          }
+          $env:SOURCE_DATE_EPOCH = $epoch
+          $env:PYTHONHASHSEED = '0'
+          $env:CIBW_BUILD = 'cp39-*'
+          $env:CIBW_ARCHS = 'AMD64'
+          $env:CIBW_ENVIRONMENT = "SOURCE_DATE_EPOCH=$epoch PYTHONHASHSEED=0"
+          $env:CIBW_BUILD_FRONTEND = 'pip; args: --no-build-isolation'
+          $install = 'python -m pip install --disable-pip-version-check --force-reinstall --no-deps --only-binary=:all: --require-hashes -r "{project}/tests/release-build-requirements.txt"'
+
+          foreach ($buildId in @('a', 'b')) {
+            $fingerprint = Join-Path $env:GITHUB_WORKSPACE "build/windows-wheel-fingerprint-$buildId.json"
+            $wheelhouse = Join-Path $env:GITHUB_WORKSPACE "build/fingerprint-wheelhouse-$buildId"
+            $env:CIBW_CACHE_PATH = Join-Path $env:GITHUB_WORKSPACE "build/fingerprint-cache-$buildId"
+            $env:CIBW_BEFORE_BUILD = "$install && python \"{project}/scripts/atomic_windows_wheel_fingerprint.py\" --output \"$fingerprint\""
+            python -m cibuildwheel --platform windows --output-dir $wheelhouse .
+            if ($LASTEXITCODE -ne 0) {
+              throw "cibuildwheel fingerprint capture $buildId failed"
+            }
+          }
+
+          $first = Join-Path $env:GITHUB_WORKSPACE 'build/windows-wheel-fingerprint-a.json'
+          $second = Join-Path $env:GITHUB_WORKSPACE 'build/windows-wheel-fingerprint-b.json'
+          $firstBytes = [IO.File]::ReadAllBytes($first)
+          $secondBytes = [IO.File]::ReadAllBytes($second)
+          if (-not [System.Linq.Enumerable]::SequenceEqual($firstBytes, $secondBytes)) {
+            throw 'independent cibuildwheel fingerprints are not byte-identical'
+          }
+          $digest = (Get-FileHash -LiteralPath $first -Algorithm SHA256).Hash.ToLowerInvariant()
+          New-Item -ItemType Directory -Path build/fingerprint-capture | Out-Null
+          Copy-Item -LiteralPath $first -Destination build/fingerprint-capture/windows-wheel-fingerprint-v2.json
+          "fingerprint_sha256=$digest" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+          Get-Content -LiteralPath $first
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: windows-wheel-fingerprint-capture
+          path: build/fingerprint-capture/windows-wheel-fingerprint-v2.json
+          if-no-files-found: error
+          retention-days: 14

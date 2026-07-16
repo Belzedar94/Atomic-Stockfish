@@ -115,7 +115,8 @@ def test_python_wheel_builder_is_digest_pinned_and_in_provenance() -> None:
     atomic_ci = (ROOT / ".github" / "workflows" / "atomic.yml").read_text(
         encoding="utf-8"
     )
-    assert "atomic_windows_wheel_fingerprint.py" not in atomic_ci
+    assert "Capture the candidate Windows wheel toolchain fingerprint" not in atomic_ci
+    assert "--expected-sha256 $env:ATOMIC_WINDOWS_WHEEL_FINGERPRINT_SHA256" not in atomic_ci
     for line in text.splitlines():
         if "manylinux_2_28_x86_64" in line:
             assert "@sha256:" in line
