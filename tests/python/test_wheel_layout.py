@@ -12,6 +12,24 @@ def fail(message: str) -> None:
     raise AssertionError(message)
 
 
+def typecheck_installed_wheel(python: Path) -> None:
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "mypy",
+            "--python-executable",
+            str(python),
+            "-m",
+            "pyffish",
+            "--no-incremental",
+            "--no-error-summary",
+        ],
+        cwd=python.parent.parent,
+        check=True,
+    )
+
+
 def main() -> int:
     if len(sys.argv) != 2:
         raise SystemExit("usage: test_wheel_layout.py WHEEL_OR_DIRECTORY")
@@ -95,7 +113,7 @@ assert pyffish.validate_fen(
         )
 
         typecheck_environment = target / "typecheck-environment"
-        venv.EnvBuilder(with_pip=True, system_site_packages=True).create(typecheck_environment)
+        venv.EnvBuilder(with_pip=True).create(typecheck_environment)
         if sys.platform == "win32":
             typecheck_python = typecheck_environment / "Scripts" / "python.exe"
         else:
@@ -113,19 +131,7 @@ assert pyffish.validate_fen(
             ],
             check=True,
         )
-        subprocess.run(
-            [
-                str(typecheck_python),
-                "-m",
-                "mypy",
-                "-m",
-                "pyffish",
-                "--no-incremental",
-                "--no-error-summary",
-            ],
-            cwd=typecheck_environment,
-            check=True,
-        )
+        typecheck_installed_wheel(typecheck_python)
 
     print("Atomic pyffish wheel layout, import and PEP 561 discovery passed")
     return 0

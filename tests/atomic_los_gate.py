@@ -788,7 +788,11 @@ def playing_engine_smoke(
                 f"engine{index} playing smoke reported an NNUE/protocol error"
             )
         selected_net = str(eval_file)
-        expected_prefix = f"NNUE evaluation using {selected_net} "
+        expected_prefix = (
+            f"NNUE evaluation using Legacy Atomic V1 {selected_net} "
+            if index == 1
+            else f"NNUE evaluation using {selected_net} "
+        )
         net_lines = [
             line
             for line in lines

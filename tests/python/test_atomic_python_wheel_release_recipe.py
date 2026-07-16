@@ -15,6 +15,7 @@ RECIPE = ROOT / "scripts" / "build_atomic_python_wheel_release.sh"
 WINDOWS_FINGERPRINT_DOCUMENT = (
     ROOT / "docs" / "atomic" / "windows-wheel-fingerprint-v2.json"
 )
+WHEEL_LAYOUT_TEST = ROOT / "tests" / "python" / "test_wheel_layout.py"
 WINDOWS_FINGERPRINT_SHA256 = (
     "9af3078f7f7d2635e5fe20c913c6948e53dbdc5f1ec81ba22f081d21e6a3f23d"
 )
@@ -99,6 +100,33 @@ def test_windows_extension_normalizes_absolute_source_paths() -> None:
     extension = setup.call_args.kwargs["ext_modules"][0]
     assert extension.extra_compile_args[-1] == f"/d1trimfile:{ROOT.resolve()}\\"
     assert extension.extra_link_args == ["/Brepro"]
+
+
+def test_wheel_layout_typechecks_the_isolated_wheel_environment() -> None:
+    namespace = runpy.run_path(str(WHEEL_LAYOUT_TEST), run_name="wheel_layout_contract")
+    typecheck_python = Path("isolated-typecheck-python")
+
+    with mock.patch.object(namespace["subprocess"], "run") as run:
+        namespace["typecheck_installed_wheel"](typecheck_python)
+
+    run.assert_called_once_with(
+        [
+            namespace["sys"].executable,
+            "-m",
+            "mypy",
+            "--python-executable",
+            str(typecheck_python),
+            "-m",
+            "pyffish",
+            "--no-incremental",
+            "--no-error-summary",
+        ],
+        cwd=typecheck_python.parent.parent,
+        check=True,
+    )
+    assert "system_site_packages=True" not in WHEEL_LAYOUT_TEST.read_text(
+        encoding="utf-8"
+    )
 
 
 def test_recipe_usage_and_scalar_validation_fail_before_any_build() -> None:

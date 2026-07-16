@@ -844,9 +844,7 @@ def test_engine_evaluation_requires_exact_loaded_candidate_and_true_mode(
     tmp_path: Path, score: str
 ) -> None:
     candidate = (tmp_path / "candidate.nnue").resolve()
-    marker = (
-        f"info string NNUE evaluation using {candidate}" + gate.LEGACY_NNUE_LOAD_SUFFIX
-    )
+    marker = gate.LEGACY_NNUE_LOAD_PREFIX + str(candidate) + gate.LEGACY_NNUE_LOAD_SUFFIX
     assert gate.validate_engine_evaluation(
         (marker, f"Final evaluation {score} (white side) [Use NNUE=true]"), candidate
     ) == float(score)
@@ -865,9 +863,7 @@ def test_engine_evaluation_rejects_nonfinite_or_wrong_nnue_mode(
     tmp_path: Path, final: str
 ) -> None:
     candidate = (tmp_path / "candidate.nnue").resolve()
-    marker = (
-        f"info string NNUE evaluation using {candidate}" + gate.LEGACY_NNUE_LOAD_SUFFIX
-    )
+    marker = gate.LEGACY_NNUE_LOAD_PREFIX + str(candidate) + gate.LEGACY_NNUE_LOAD_SUFFIX
     with pytest.raises(gate.GateError, match="finite Use NNUE=true"):
         gate.validate_engine_evaluation((marker, final), candidate)
 
@@ -875,8 +871,22 @@ def test_engine_evaluation_rejects_nonfinite_or_wrong_nnue_mode(
 def test_engine_evaluation_rejects_candidate_path_suffix(tmp_path: Path) -> None:
     candidate = (tmp_path / "candidate.nnue").resolve()
     marker = (
-        f"info string NNUE evaluation using {candidate}.backup"
+        gate.LEGACY_NNUE_LOAD_PREFIX
+        + f"{candidate}.backup"
         + gate.LEGACY_NNUE_LOAD_SUFFIX
+    )
+    with pytest.raises(gate.GateError, match="load marker"):
+        gate.validate_engine_evaluation(
+            (marker, "Final evaluation 0 (white side) [Use NNUE=true]"), candidate
+        )
+
+
+def test_engine_evaluation_rejects_marker_without_backend_identity(
+    tmp_path: Path,
+) -> None:
+    candidate = (tmp_path / "candidate.nnue").resolve()
+    marker = (
+        f"info string NNUE evaluation using {candidate}" + gate.LEGACY_NNUE_LOAD_SUFFIX
     )
     with pytest.raises(gate.GateError, match="load marker"):
         gate.validate_engine_evaluation(
@@ -912,7 +922,8 @@ def test_engine_load_rechecks_candidate_after_uci(
             responses = (
                 ["uciok"],
                 [
-                    f"info string NNUE evaluation using {candidate.resolve()}"
+                    gate.LEGACY_NNUE_LOAD_PREFIX
+                    + str(candidate.resolve())
                     + gate.LEGACY_NNUE_LOAD_SUFFIX,
                     "readyok",
                 ],

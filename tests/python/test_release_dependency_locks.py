@@ -80,9 +80,13 @@ def test_release_runner_lock_is_complete_and_hash_closed() -> None:
         "idna",
         "iniconfig",
         "kaitaistruct",
+        "librt",
         "markdown-it-py",
         "mdurl",
+        "mypy",
+        "mypy-extensions",
         "packaging",
+        "pathspec",
         "patchelf",
         "pefile",
         "platformdirs",
@@ -105,6 +109,9 @@ def test_release_runner_lock_is_complete_and_hash_closed() -> None:
     assert locked["wheel"].version == "0.45.1"
     assert locked["cibuildwheel"].version == "3.4.1"
     assert locked["abi3audit"].version == "0.0.26"
+    assert locked["mypy"].version == "1.19.1"
+    assert len(locked["mypy"].hashes) == 2
+    assert len(locked["librt"].hashes) == 2
     assert locked["colorama"].marker == 'sys_platform == "win32"'
     assert locked["patchelf"].marker == (
         'sys_platform == "linux" and platform_machine == "x86_64"'

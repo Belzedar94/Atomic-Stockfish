@@ -246,10 +246,10 @@ make the dataset reproducible from authenticated inputs; they do not claim
 that a network is reproducible until controlled training execution is
 implemented and verified.
 
-The separately scheduled 500-million-position Atomic BIN V2 bootstrap is a
-distributed-generation transport and throughput pilot only. Whether it is
-still running or complete does not alter its provenance: it began without
-complete V3 trajectory ledgers or this evidence chain and can never be
+The completed, owner-capped 375-million-position Atomic BIN V2 bootstrap is a
+distributed-generation transport and throughput pilot only. Its completion
+does not alter its provenance: it began without complete V3 trajectory ledgers
+or this evidence chain and can never be
 relabelled as a V3 release-candidate dataset. OpenBench v39 contains a reviewed
 multi-artifact transport, but that transport must preserve these exact hashes
 and cannot replace any publication gate.

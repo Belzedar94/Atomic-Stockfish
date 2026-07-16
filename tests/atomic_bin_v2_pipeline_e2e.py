@@ -38,6 +38,7 @@ DECODE_SCHEMA_SHA256 = "5e3f8d7c6db6ee955b71747ee063859e15609adb557a3754228a606f
 LEGACY_SCHEMA_SHA256 = "acca0f551f1c012c31a6c727dedccaebb7b5ebbc46810edb87e31bb208d5abe1"
 LEGACY_NNUE_VERSION = 0x7AF32F20
 LEGACY_NNUE_ARCHITECTURE = 0x3C103E72
+LEGACY_NNUE_LOAD_PREFIX = "info string NNUE evaluation using Legacy Atomic V1 "
 LEGACY_NNUE_LOAD_SUFFIX = " (45MiB, (45056, 1024, 16, 32, 1))"
 
 NORMATIVE_TOOLS_COMMIT = "450049ee7a0ece32694b11f6c55deb7df1d42a84"
@@ -2119,9 +2120,7 @@ def serialize_and_reimport(
 
 
 def validate_engine_evaluation(lines: Sequence[str], candidate: Path) -> float:
-    expected_marker = (
-        f"info string NNUE evaluation using {candidate.resolve()}" + LEGACY_NNUE_LOAD_SUFFIX
-    )
+    expected_marker = LEGACY_NNUE_LOAD_PREFIX + str(candidate.resolve()) + LEGACY_NNUE_LOAD_SUFFIX
     markers = [line for line in lines if line.startswith("info string NNUE evaluation using ")]
     require(markers == [expected_marker], "engine NNUE load marker is not exact")
     finals = [line for line in lines if line.startswith("Final evaluation")]

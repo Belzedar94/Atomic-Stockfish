@@ -6,16 +6,23 @@ on:
       - .gitattributes
       - .github/workflows/atomic-release.yml
       - .github/workflows/atomic-release-pr.yml
+      - AUTHORS
+      - CITATION.cff
+      - Copying.txt
       - MANIFEST.in
+      - README.md
       - pyproject.toml
+      - pyffish.pyi
       - setup.py
       - docs/atomic/release-1.0-*
       - docs/atomic/windows-wheel-fingerprint-v2.json
+      - scripts/atomic_reproducible_sdist.py
       - scripts/atomic_release_*.py
       - scripts/atomic_verify_release_asset.py
       - scripts/atomic_windows_wheel_fingerprint.py
       - scripts/build_atomic_python_wheel_release.sh
       - scripts/build_atomic_source_release.sh
+      - src/**
       - tests/release-*.txt
       - tests/python/test_atomic_python_wheel_release_recipe.py
       - tests/python/test_atomic_release_*.py

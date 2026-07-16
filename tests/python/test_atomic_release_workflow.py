@@ -169,6 +169,23 @@ def test_release_pr_reproduces_real_windows_wheel_and_frozen_fingerprint() -> No
     text = release_pr_workflow()
     assert "pull_request:" in text
     assert "paths:" in text
+    trigger = text.split("\nconcurrency:", 1)[0]
+    for dependency in (
+        "AUTHORS",
+        "CITATION.cff",
+        "Copying.txt",
+        "MANIFEST.in",
+        "README.md",
+        "pyffish.pyi",
+        "scripts/atomic_reproducible_sdist.py",
+        "scripts/build_atomic_python_wheel_release.sh",
+        "scripts/build_atomic_source_release.sh",
+        "setup.py",
+        "src/**",
+        "tests/release-*.txt",
+        "tests/python/test_wheel_layout.py",
+    ):
+        assert f"      - {dependency}\n" in trigger
     source = job(text, "source_sdist", "windows_wheel")
     gate = text.split("  windows_wheel:\n", 1)[1]
     assert "ref: ${{ github.event.pull_request.head.sha }}" in source

@@ -10,17 +10,17 @@ counts.
 
 ## Current executable coverage
 
-The following evidence was reproduced locally on 2026-07-14 by
+The following evidence was reproduced locally on 2026-07-16 by
 `tests/run_hito5.py` in release mode, including the cross-repository training
 pipeline and full Node UCI/NNUE WASM launcher. The development-only
 `--allow-missing-wasm` switch cannot produce a release pass.
 
 | Surface | Migrated coverage | Current evidence |
 | --- | --- | --- |
-| C++ Atomic rules/state | Atomic SEE, explosion deltas, terminal captures, en passant, promotions, castling/Atomic960, repetition, rule 50, UCI moves, Atomic move-count thresholds, null-move reductions, capture-futility eligibility and capture-prefilter invariants | `87/87` PASS lines and terminal success marker |
+| C++ Atomic rules/state | Atomic SEE, explosion deltas, terminal captures, en passant, promotions, castling/Atomic960, repetition, rule 50, UCI moves, Atomic move-count thresholds, null-move reductions, capture-futility eligibility and capture-prefilter invariants | `88/88` PASS lines and terminal success marker |
 | Shared C++ board API | SAN, outcomes, checked pieces, material, FEN validation and Atomic960 | `34/34` PASS lines and terminal success marker |
 | Historical Python API | Frozen Fairy `test.py` contracts | `22/22`; two removed-variant APIs are classified, not skipped |
-| Extended Python API | Fixtures, perft, errors, transactional calls, wheel layout, concurrent independent calls and pipeline/source contracts | Hito 4 lifecycle subset: `60 passed`; complete `tests/python`: `588 passed`; sdist-to-wheel import and PEP 561 discovery passed |
+| Extended Python API | Fixtures, perft, errors, transactional calls, wheel layout, concurrent independent calls and pipeline/source contracts | Hito 4 lifecycle subset: `60 passed`; exact-head complete `tests/python`: `1420 passed`; sdist-to-wheel import and PEP 561 discovery passed |
 | Fixture accounting | Frozen Python, JavaScript and perft source inventory | `58` fixtures, `22` Python source tests, `58` JavaScript source tests, eight perft vectors |
 | CommonJS Board WASM | Full Atomic binding/lifecycle suite | `58` fixtures passed |
 | ES-module Board WASM | Full Atomic binding/lifecycle suite | `58` fixtures passed |
