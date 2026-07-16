@@ -88,6 +88,19 @@ DataResult sort_unique_atomic_v3_keys(const std::filesystem::path& input,
                                       bool                         rejectDuplicates,
                                       u64&                         uniqueRecords);
 
+#ifdef ATOMIC_V3_EXTERNAL_SORT_TEST_HOOKS
+// Focused-test entrypoint for exercising release-scale merge topology without
+// allocating multi-gigabyte fixtures. Production binaries expose only the
+// fixed-memory, fixed-fan-in wrapper above.
+DataResult sort_unique_atomic_v3_keys_with_limits_for_testing(const std::filesystem::path& input,
+                                                              const std::filesystem::path& output,
+                                                              u64   expectedRecords,
+                                                              bool  rejectDuplicates,
+                                                              u64&  uniqueRecords,
+                                                              usize chunkRecords,
+                                                              usize mergeFanIn);
+#endif
+
 struct AtomicV3LedgerMetadata {
     std::filesystem::path path;
     u64                   records      = 0;

@@ -48,6 +48,10 @@ constexpr char  SplitGroupDomain[]      = "atomic-split-group-v1\0";
 constexpr char  PartitionDomain[]       = "atomic-split-v1\0";
 constexpr char  FeatureInputDomain[]    = "atomic-v3-feature-input-v1\0";
 constexpr usize ExternalSortMemoryBytes = usize(64) * 1024 * 1024;
+constexpr usize ExternalSortMergeFanIn  = 64;
+constexpr usize ExternalSortKeySize     = 32;
+
+static_assert(ExternalSortMergeFanIn > 1);
 
 DataResult invalid(std::string message) {
     return DataResult::failure(DataError::INVALID_RECORD, std::move(message));
@@ -342,119 +346,77 @@ DataResult atomic_v3_feature_input_key(const TrainingDataSample& sample,
     return DataResult::success();
 }
 
-DataResult sort_unique_atomic_v3_keys(const std::filesystem::path& input,
-                                      const std::filesystem::path& output,
-                                      u64                          expectedRecords,
-                                      bool                         rejectDuplicates,
-                                      u64&                         uniqueRecords) {
-    uniqueRecords = 0;
-    if (expectedRecords == 0 || multiply_overflows(expectedRecords, usize(32)))
-        return DataResult::failure(DataError::RECORD_COUNT_OUT_OF_RANGE,
-                                   "Atomic V3 external-sort record count is invalid");
-    std::error_code ec;
-    const u64       inputBytes = std::filesystem::file_size(input, ec);
-    if (ec || inputBytes != expectedRecords * 32)
-        return DataResult::failure(DataError::FILE_SIZE_MISMATCH,
-                                   "Atomic V3 external-sort input size is inconsistent");
-    if (std::filesystem::exists(output, ec) || ec)
-        return DataResult::failure(
-          ec ? DataError::OPEN_FAILED : DataError::OUTPUT_EXISTS,
-          "Atomic V3 external-sort output already exists or is inaccessible");
+namespace {
 
-    std::ifstream source(input, std::ios::binary);
-    if (!source)
-        return DataResult::failure(DataError::OPEN_FAILED,
-                                   "Cannot open Atomic V3 external-sort input");
+std::filesystem::path
+external_sort_run_path(const std::filesystem::path& output, usize pass, usize index) {
+    return output.parent_path()
+         / (output.filename().string() + ".atomic-v3-sort-p" + std::to_string(pass) + "-"
+            + std::to_string(index) + ".partial");
+}
 
-    constexpr usize KeySize       = 32;
-    const usize     chunkCapacity = std::max<usize>(1, ExternalSortMemoryBytes / KeySize);
-    std::vector<std::filesystem::path> chunks;
-    u64                                remaining = expectedRecords;
-    while (remaining != 0)
-    {
-        const usize count = usize(std::min<u64>(remaining, u64(chunkCapacity)));
-        std::vector<AtomicV3FeatureInputKey> keys(count);
-        source.read(reinterpret_cast<char*>(keys.data()), std::streamsize(count * KeySize));
-        if (source.gcount() != std::streamsize(count * KeySize))
-        {
-            (void) remove_paths(chunks);
-            return DataResult::failure(DataError::READ_FAILED,
-                                       "Cannot read complete Atomic V3 external-sort chunk");
-        }
-        std::sort(keys.begin(), keys.end());
-        const auto duplicate = std::adjacent_find(keys.begin(), keys.end());
-        if (rejectDuplicates && duplicate != keys.end())
-        {
-            (void) remove_paths(chunks);
-            return invalid("Atomic V3 identity must be unique within its dataset role");
-        }
-        keys.erase(std::unique(keys.begin(), keys.end()), keys.end());
+DataResult cleanup_external_sort_failure(DataResult                                primary,
+                                         const std::vector<std::filesystem::path>& current,
+                                         const std::vector<std::filesystem::path>& next = {}) {
+    const DataResult currentCleanup = remove_paths(current);
+    const DataResult nextCleanup    = remove_paths(next);
+    if (!currentCleanup)
+        return currentCleanup;
+    if (!nextCleanup)
+        return nextCleanup;
+    return primary;
+}
 
-        const auto chunk = output.parent_path()
-                         / (output.filename().string() + ".chunk-" + std::to_string(chunks.size()));
-        std::FILE* file = open_exclusive(chunk);
-        if (!file)
-        {
-            (void) remove_paths(chunks);
-            return DataResult::failure(errno == EEXIST ? DataError::OUTPUT_EXISTS
-                                                       : DataError::OPEN_FAILED,
-                                       "Cannot create Atomic V3 external-sort chunk");
-        }
-        DataResult result =
-          write_exact(file, keys.data(), keys.size() * KeySize, "external-sort chunk");
-        if (result)
-            result = sync_file(file, "external-sort chunk");
-        if (DataResult closed = close_file(file, "external-sort chunk"); !closed && result)
-            result = closed;
-        if (!result)
-        {
-            std::error_code ignored;
-            std::filesystem::remove(chunk, ignored);
-            (void) remove_paths(chunks);
-            return result;
-        }
-        chunks.push_back(chunk);
-        remaining -= count;
-    }
-    char trailing = 0;
-    if (source.read(&trailing, 1) || !source.eof())
-    {
-        (void) remove_paths(chunks);
-        return DataResult::failure(DataError::FILE_SIZE_MISMATCH,
-                                   "Atomic V3 external-sort input has trailing bytes");
-    }
+DataResult merge_atomic_v3_key_runs(const std::vector<std::filesystem::path>& inputs,
+                                    const std::filesystem::path&              output,
+                                    bool                                      rejectDuplicates,
+                                    u64&                                      emittedRecords) {
+    emittedRecords = 0;
+    if (inputs.empty())
+        return invalid("Atomic V3 external-sort merge requires at least one input run");
+
+    // Create the output first so this helper owns at most inputs.size() + 1
+    // descriptors. The production caller bounds inputs to ExternalSortMergeFanIn.
+    std::FILE* destination = open_exclusive(output);
+    if (!destination)
+        return DataResult::failure(errno == EEXIST ? DataError::OUTPUT_EXISTS
+                                                   : DataError::OPEN_FAILED,
+                                   "Cannot create Atomic V3 external-sort merge output");
 
     struct Cursor {
         AtomicV3FeatureInputKey key{};
-        usize                   chunk = 0;
+        usize                   run = 0;
     };
-    const auto greater = [](const Cursor& lhs, const Cursor& rhs) { return lhs.key > rhs.key; };
+    const auto greater = [](const Cursor& lhs, const Cursor& rhs) {
+        if (lhs.key != rhs.key)
+            return lhs.key > rhs.key;
+        return lhs.run > rhs.run;
+    };
     std::priority_queue<Cursor, std::vector<Cursor>, decltype(greater)> queue(greater);
     std::vector<std::ifstream>                                          streams;
-    streams.reserve(chunks.size());
-    for (usize i = 0; i < chunks.size(); ++i)
+    streams.reserve(inputs.size());
+
+    DataResult result = DataResult::success();
+    for (usize i = 0; i < inputs.size() && result; ++i)
     {
-        streams.emplace_back(chunks[i], std::ios::binary);
-        Cursor cursor{{}, i};
-        streams.back().read(reinterpret_cast<char*>(cursor.key.data()), KeySize);
-        if (streams.back().gcount() != std::streamsize(KeySize))
+        streams.emplace_back(inputs[i], std::ios::binary);
+        if (!streams.back().is_open())
         {
-            (void) remove_paths(chunks);
-            return DataResult::failure(DataError::READ_FAILED,
-                                       "Cannot prime Atomic V3 external-sort merge");
+            result = DataResult::failure(DataError::OPEN_FAILED,
+                                         "Cannot open Atomic V3 external-sort merge input");
+            break;
+        }
+        Cursor cursor{{}, i};
+        streams.back().read(reinterpret_cast<char*>(cursor.key.data()), ExternalSortKeySize);
+        if (streams.back().gcount() != std::streamsize(ExternalSortKeySize))
+        {
+            result = DataResult::failure(DataError::READ_FAILED,
+                                         "Cannot prime Atomic V3 external-sort merge");
+            break;
         }
         queue.push(cursor);
     }
 
-    std::FILE* destination = open_exclusive(output);
-    if (!destination)
-    {
-        (void) remove_paths(chunks);
-        return DataResult::failure(errno == EEXIST ? DataError::OUTPUT_EXISTS
-                                                   : DataError::OPEN_FAILED,
-                                   "Cannot create Atomic V3 external-sort output");
-    }
-    DataResult              result = DataResult::success();
     AtomicV3FeatureInputKey previous{};
     bool                    havePrevious = false;
     while (!queue.empty() && result)
@@ -469,44 +431,205 @@ DataResult sort_unique_atomic_v3_keys(const std::filesystem::path& input,
         }
         if (!duplicate)
         {
-            result       = write_exact(destination, cursor.key.data(), cursor.key.size(),
-                                       "external-sort output");
+            result = write_exact(destination, cursor.key.data(), cursor.key.size(),
+                                 "external-sort merge output");
+            if (!result)
+                break;
             previous     = cursor.key;
             havePrevious = true;
-            ++uniqueRecords;
+            ++emittedRecords;
         }
 
-        Cursor next{{}, cursor.chunk};
-        auto&  stream = streams[cursor.chunk];
-        stream.read(reinterpret_cast<char*>(next.key.data()), KeySize);
-        if (stream.gcount() == std::streamsize(KeySize))
+        Cursor next{{}, cursor.run};
+        auto&  stream = streams[cursor.run];
+        stream.read(reinterpret_cast<char*>(next.key.data()), ExternalSortKeySize);
+        if (stream.gcount() == std::streamsize(ExternalSortKeySize))
             queue.push(next);
         else if (stream.gcount() != 0 || !stream.eof())
             result = DataResult::failure(DataError::READ_FAILED,
-                                         "Cannot merge Atomic V3 external-sort chunk");
+                                         "Cannot merge Atomic V3 external-sort input");
+    }
+
+    // All readers and the synchronized writer are closed before the caller is
+    // allowed to delete any input run, which also makes Windows cleanup exact.
+    for (auto& stream : streams)
+    {
+        stream.clear();
+        stream.close();
+        if (stream.fail() && result)
+            result = DataResult::failure(DataError::CLOSE_FAILED,
+                                         "Cannot close Atomic V3 external-sort merge input");
     }
     if (result)
-        result = sync_file(destination, "external-sort output");
-    if (DataResult closed = close_file(destination, "external-sort output"); !closed && result)
+        result = sync_file(destination, "external-sort merge output");
+    if (DataResult closed = close_file(destination, "external-sort merge output");
+        !closed && result)
         result = closed;
 
-    for (auto& stream : streams)
-        stream.close();
-    DataResult cleanup = remove_paths(chunks);
     if (!result)
     {
-        std::error_code ignored;
-        std::filesystem::remove(output, ignored);
-        return result;
-    }
-    if (!cleanup)
-    {
-        std::error_code ignored;
-        std::filesystem::remove(output, ignored);
-        return cleanup;
+        const DataResult cleanup = remove_paths({output});
+        return cleanup ? result : cleanup;
     }
     return DataResult::success();
 }
+
+DataResult sort_unique_atomic_v3_keys_impl(const std::filesystem::path& input,
+                                           const std::filesystem::path& output,
+                                           u64                          expectedRecords,
+                                           bool                         rejectDuplicates,
+                                           u64&                         uniqueRecords,
+                                           usize                        chunkRecords,
+                                           usize                        mergeFanIn) {
+    uniqueRecords = 0;
+    if (expectedRecords == 0 || multiply_overflows(expectedRecords, ExternalSortKeySize))
+        return DataResult::failure(DataError::RECORD_COUNT_OUT_OF_RANGE,
+                                   "Atomic V3 external-sort record count is invalid");
+    if (chunkRecords == 0 || chunkRecords > ExternalSortMemoryBytes / ExternalSortKeySize
+        || mergeFanIn <= 1 || mergeFanIn > ExternalSortMergeFanIn)
+        return invalid("Atomic V3 external-sort limits are invalid");
+    std::error_code ec;
+    const u64       inputBytes = std::filesystem::file_size(input, ec);
+    if (ec || inputBytes != expectedRecords * ExternalSortKeySize)
+        return DataResult::failure(DataError::FILE_SIZE_MISMATCH,
+                                   "Atomic V3 external-sort input size is inconsistent");
+    if (std::filesystem::exists(output, ec) || ec)
+        return DataResult::failure(
+          ec ? DataError::OPEN_FAILED : DataError::OUTPUT_EXISTS,
+          "Atomic V3 external-sort output already exists or is inaccessible");
+
+    std::ifstream source(input, std::ios::binary);
+    if (!source)
+        return DataResult::failure(DataError::OPEN_FAILED,
+                                   "Cannot open Atomic V3 external-sort input");
+
+    std::vector<std::filesystem::path> chunks;
+    u64                                remaining = expectedRecords;
+    while (remaining != 0)
+    {
+        const usize count = usize(std::min<u64>(remaining, u64(chunkRecords)));
+        std::vector<AtomicV3FeatureInputKey> keys(count);
+        source.read(reinterpret_cast<char*>(keys.data()),
+                    std::streamsize(count * ExternalSortKeySize));
+        if (source.gcount() != std::streamsize(count * ExternalSortKeySize))
+        {
+            return cleanup_external_sort_failure(
+              DataResult::failure(DataError::READ_FAILED,
+                                  "Cannot read complete Atomic V3 external-sort chunk"),
+              chunks);
+        }
+        std::sort(keys.begin(), keys.end());
+        const auto duplicate = std::adjacent_find(keys.begin(), keys.end());
+        if (rejectDuplicates && duplicate != keys.end())
+            return cleanup_external_sort_failure(
+              invalid("Atomic V3 identity must be unique within its dataset role"), chunks);
+        keys.erase(std::unique(keys.begin(), keys.end()), keys.end());
+
+        const auto chunk = external_sort_run_path(output, 0, chunks.size());
+        std::FILE* file  = open_exclusive(chunk);
+        if (!file)
+            return cleanup_external_sort_failure(
+              DataResult::failure(errno == EEXIST ? DataError::OUTPUT_EXISTS
+                                                  : DataError::OPEN_FAILED,
+                                  "Cannot create Atomic V3 external-sort chunk"),
+              chunks);
+        DataResult result =
+          write_exact(file, keys.data(), keys.size() * ExternalSortKeySize, "external-sort chunk");
+        if (result)
+            result = sync_file(file, "external-sort chunk");
+        if (DataResult closed = close_file(file, "external-sort chunk"); !closed && result)
+            result = closed;
+        if (!result)
+        {
+            const DataResult chunkCleanup = remove_paths({chunk});
+            if (!chunkCleanup)
+                result = chunkCleanup;
+            return cleanup_external_sort_failure(result, chunks);
+        }
+        chunks.push_back(chunk);
+        remaining -= count;
+    }
+    char trailing = 0;
+    if (source.read(&trailing, 1) || !source.eof())
+        return cleanup_external_sort_failure(
+          DataResult::failure(DataError::FILE_SIZE_MISMATCH,
+                              "Atomic V3 external-sort input has trailing bytes"),
+          chunks);
+    source.clear();
+    source.close();
+    if (source.fail())
+        return cleanup_external_sort_failure(
+          DataResult::failure(DataError::CLOSE_FAILED,
+                              "Cannot close Atomic V3 external-sort input"),
+          chunks);
+
+    usize pass = 1;
+    while (chunks.size() > mergeFanIn)
+    {
+        std::vector<std::filesystem::path> merged;
+        merged.reserve(chunks.size() / mergeFanIn + usize(chunks.size() % mergeFanIn != 0));
+        for (usize first = 0, index = 0; first < chunks.size(); ++index)
+        {
+            const usize last = first + std::min(mergeFanIn, chunks.size() - first);
+            const std::vector<std::filesystem::path> inputs(chunks.begin() + first,
+                                                            chunks.begin() + last);
+            const auto destination    = external_sort_run_path(output, pass, index);
+            u64        ignoredRecords = 0;
+            if (DataResult result =
+                  merge_atomic_v3_key_runs(inputs, destination, rejectDuplicates, ignoredRecords);
+                !result)
+                return cleanup_external_sort_failure(result, chunks, merged);
+            merged.push_back(destination);
+            first = last;
+        }
+
+        // Every next-pass run is already synchronized and closed. Retire the
+        // previous pass only after the complete next pass exists.
+        if (DataResult cleanup = remove_paths(chunks); !cleanup)
+            return cleanup_external_sort_failure(cleanup, chunks, merged);
+        chunks = std::move(merged);
+        ++pass;
+    }
+
+    u64 finalRecords = 0;
+    if (DataResult result =
+          merge_atomic_v3_key_runs(chunks, output, rejectDuplicates, finalRecords);
+        !result)
+        return cleanup_external_sort_failure(result, chunks);
+
+    if (DataResult cleanup = remove_paths(chunks); !cleanup)
+    {
+        const DataResult outputCleanup = remove_paths({output});
+        return outputCleanup ? cleanup : outputCleanup;
+    }
+    uniqueRecords = finalRecords;
+    return DataResult::success();
+}
+
+}  // namespace
+
+DataResult sort_unique_atomic_v3_keys(const std::filesystem::path& input,
+                                      const std::filesystem::path& output,
+                                      u64                          expectedRecords,
+                                      bool                         rejectDuplicates,
+                                      u64&                         uniqueRecords) {
+    return sort_unique_atomic_v3_keys_impl(
+      input, output, expectedRecords, rejectDuplicates, uniqueRecords,
+      ExternalSortMemoryBytes / ExternalSortKeySize, ExternalSortMergeFanIn);
+}
+
+#ifdef ATOMIC_V3_EXTERNAL_SORT_TEST_HOOKS
+DataResult sort_unique_atomic_v3_keys_with_limits_for_testing(const std::filesystem::path& input,
+                                                              const std::filesystem::path& output,
+                                                              u64   expectedRecords,
+                                                              bool  rejectDuplicates,
+                                                              u64&  uniqueRecords,
+                                                              usize chunkRecords,
+                                                              usize mergeFanIn) {
+    return sort_unique_atomic_v3_keys_impl(input, output, expectedRecords, rejectDuplicates,
+                                           uniqueRecords, chunkRecords, mergeFanIn);
+}
+#endif
 
 DataResult validate_atomic_v3_trajectory(const AtomicV3Trajectory& trajectory,
                                          std::optional<u32>        expectedMaximumPly) {

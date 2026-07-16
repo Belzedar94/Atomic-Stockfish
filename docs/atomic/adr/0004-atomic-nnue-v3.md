@@ -432,7 +432,11 @@ an independent full-board enumerator.
     counted; generation continues until both requested role counts are exact.
     Before publication, the retained validation keys are independently
     external-sorted and merge-compared with the train set. Split-group IDs are
-    likewise externally sorted per role and any duplicate is fatal.
+    likewise externally sorted per role and any duplicate is fatal. Every
+    external sort uses at most 64 MiB initial runs and deterministic multipass
+    merges with fan-in 64, so release-scale audits open at most 64 run readers
+    plus one synchronized output while preserving the same canonical bytes and
+    hashes.
 
     `game_id` is deterministic producer scheduling state, not a new ledger
     field or sidecar. For a fixed complete configuration, including `Threads`,

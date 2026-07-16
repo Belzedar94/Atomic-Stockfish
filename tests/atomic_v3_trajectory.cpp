@@ -2,6 +2,7 @@
   Focused AtomicNNUEV3 trajectory and partition tests.
 */
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <chrono>
@@ -9,6 +10,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <iterator>
 #include <limits>
 #include <mutex>
 #include <string>
@@ -43,6 +45,51 @@ void expect(bool condition, std::string_view id, std::string_view detail) {
         ++Failures;
         std::cerr << "FAIL " << id << ": " << detail << '\n';
     }
+}
+
+AtomicV3FeatureInputKey synthetic_feature_key(u32 value) {
+    AtomicV3FeatureInputKey key{};
+    key[0] = u8(value >> 24);
+    key[1] = u8(value >> 16);
+    key[2] = u8(value >> 8);
+    key[3] = u8(value);
+    return key;
+}
+
+bool write_feature_keys(const std::filesystem::path&                path,
+                        const std::vector<AtomicV3FeatureInputKey>& keys) {
+    std::ofstream output(path, std::ios::binary);
+    for (const auto& key : keys)
+        output.write(reinterpret_cast<const char*>(key.data()), key.size());
+    return bool(output);
+}
+
+std::vector<AtomicV3FeatureInputKey> read_feature_keys(const std::filesystem::path& path) {
+    std::ifstream input(path, std::ios::binary | std::ios::ate);
+    const auto    end = input.tellg();
+    if (!input || end < 0)
+        return {};
+    const u64 bytes = u64(std::streamoff(end));
+    if (bytes % sizeof(AtomicV3FeatureInputKey) != 0)
+        return {};
+    const usize count = usize(bytes / sizeof(AtomicV3FeatureInputKey));
+    input.seekg(0, std::ios::beg);
+    std::vector<AtomicV3FeatureInputKey> keys(count);
+    input.read(reinterpret_cast<char*>(keys.data()),
+               std::streamsize(keys.size() * sizeof(AtomicV3FeatureInputKey)));
+    if (input.gcount() != std::streamsize(keys.size() * sizeof(AtomicV3FeatureInputKey)))
+        return {};
+    return keys;
+}
+
+bool no_external_sort_temporaries(const std::filesystem::path& directory,
+                                  std::string_view             outputFilename,
+                                  const std::filesystem::path& allowed = {}) {
+    const std::string prefix = std::string(outputFilename) + ".atomic-v3-sort-";
+    for (const auto& entry : std::filesystem::directory_iterator(directory))
+        if (entry.path() != allowed && entry.path().filename().string().rfind(prefix, 0) == 0)
+            return false;
+    return true;
 }
 
 AtomicV3StopReason reason_for(const Atomic::Outcome& outcome) {
@@ -248,6 +295,109 @@ void test_feature_identity_and_external_sort() {
     auto duplicate = sort_unique_atomic_v3_keys(raw, rejected, 3, true, uniqueRecords);
     expect(!duplicate && !std::filesystem::exists(rejected), "feature.duplicate-reject",
            "duplicate-rejecting external sort published an output");
+
+#ifdef ATOMIC_V3_EXTERNAL_SORT_TEST_HOOKS
+    // Forty-seven records at two records/run create 24 initial runs. Fan-in
+    // three therefore forces two intermediate passes before the final merge.
+    std::vector<AtomicV3FeatureInputKey> manyKeys;
+    for (u32 i = 0; i < 47; ++i)
+        manyKeys.push_back(synthetic_feature_key((i * 17) % 29));
+    auto expectedKeys = manyKeys;
+    std::sort(expectedKeys.begin(), expectedKeys.end());
+    expectedKeys.erase(std::unique(expectedKeys.begin(), expectedKeys.end()), expectedKeys.end());
+
+    const auto manyRaw = directory / "many.raw";
+    const auto multiA  = directory / "many-a.unique";
+    const auto multiB  = directory / "many-b.unique";
+    expect(write_feature_keys(manyRaw, manyKeys), "feature.multipass-fixture",
+           "could not write multipass fixture");
+    uniqueRecords         = 0;
+    const auto multipassA = sort_unique_atomic_v3_keys_with_limits_for_testing(
+      manyRaw, multiA, manyKeys.size(), false, uniqueRecords, 2, 3);
+    expect(bool(multipassA) && uniqueRecords == expectedKeys.size()
+             && read_feature_keys(multiA) == expectedKeys,
+           "feature.multipass-bounded",
+           multipassA ? "bounded multipass merge changed sorted unique records"
+                      : multipassA.message);
+    expect(no_external_sort_temporaries(directory, multiA.filename().string()),
+           "feature.multipass-cleanup", "successful multipass merge leaked a partial run");
+
+    uniqueRecords         = 0;
+    const auto multipassB = sort_unique_atomic_v3_keys_with_limits_for_testing(
+      manyRaw, multiB, manyKeys.size(), false, uniqueRecords, 3, 2);
+    expect(bool(multipassB) && uniqueRecords == expectedKeys.size()
+             && read_feature_keys(multiB) == expectedKeys
+             && read_feature_keys(multiA) == read_feature_keys(multiB),
+           "feature.multipass-deterministic",
+           multipassB ? "merge topology changed canonical output bytes" : multipassB.message);
+    expect(no_external_sort_temporaries(directory, multiB.filename().string()),
+           "feature.multipass-second-cleanup", "alternate multipass merge leaked a partial run");
+
+    // With one record/run and fan-in two, equal keys in runs 0 and 9 first
+    // meet in the final merge after three intermediate passes.
+    std::vector<AtomicV3FeatureInputKey> lateDuplicate;
+    lateDuplicate.push_back(synthetic_feature_key(500));
+    for (u32 value = 1; value <= 8; ++value)
+        lateDuplicate.push_back(synthetic_feature_key(value));
+    lateDuplicate.push_back(synthetic_feature_key(500));
+    const auto lateRaw      = directory / "late.raw";
+    const auto lateRejected = directory / "late.rejected";
+    expect(write_feature_keys(lateRaw, lateDuplicate), "feature.late-duplicate-fixture",
+           "could not write late-duplicate fixture");
+    uniqueRecords         = 999;
+    const auto lateResult = sort_unique_atomic_v3_keys_with_limits_for_testing(
+      lateRaw, lateRejected, lateDuplicate.size(), true, uniqueRecords, 1, 2);
+    expect(!lateResult && uniqueRecords == 0 && !std::filesystem::exists(lateRejected),
+           "feature.late-duplicate-reject",
+           "duplicate meeting only in the final pass was published");
+    expect(no_external_sort_temporaries(directory, lateRejected.filename().string()),
+           "feature.late-duplicate-cleanup", "late duplicate failure leaked a partial run");
+
+    // Pre-own the second pass-1 destination. The sorter must preserve that
+    // foreign path, roll back its first merged run and every initial run, and
+    // leave no apparently successful final output.
+    std::vector<AtomicV3FeatureInputKey> collisionKeys;
+    for (u32 value = 10; value != 0; --value)
+        collisionKeys.push_back(synthetic_feature_key(value));
+    const auto collisionRaw = directory / "collision.raw";
+    const auto collisionOut = directory / "collision.unique";
+    const auto foreign =
+      directory / (collisionOut.filename().string() + ".atomic-v3-sort-p1-1.partial");
+    expect(write_feature_keys(collisionRaw, collisionKeys), "feature.collision-fixture",
+           "could not write merge-collision fixture");
+    {
+        std::ofstream sentinel(foreign, std::ios::binary);
+        sentinel << "foreign-owner";
+    }
+    uniqueRecords              = 999;
+    const auto collisionResult = sort_unique_atomic_v3_keys_with_limits_for_testing(
+      collisionRaw, collisionOut, collisionKeys.size(), false, uniqueRecords, 1, 2);
+    std::ifstream     sentinel(foreign, std::ios::binary);
+    const std::string sentinelBytes((std::istreambuf_iterator<char>(sentinel)),
+                                    std::istreambuf_iterator<char>());
+    expect(!collisionResult && collisionResult.error == DataError::OUTPUT_EXISTS
+             && uniqueRecords == 0 && !std::filesystem::exists(collisionOut)
+             && sentinelBytes == "foreign-owner",
+           "feature.merge-collision-rollback",
+           "merge collision overwrote foreign state or exposed a partial output");
+    expect(no_external_sort_temporaries(directory, collisionOut.filename().string(), foreign),
+           "feature.merge-collision-cleanup", "merge collision leaked an owned partial run");
+    sentinel.close();
+    std::filesystem::remove(foreign);
+
+    const auto invalidOut = directory / "invalid.unique";
+    uniqueRecords         = 999;
+    const auto zeroChunk  = sort_unique_atomic_v3_keys_with_limits_for_testing(
+      manyRaw, invalidOut, manyKeys.size(), false, uniqueRecords, 0, 2);
+    expect(!zeroChunk && uniqueRecords == 0 && !std::filesystem::exists(invalidOut),
+           "feature.zero-chunk-limit", "zero chunk limit was accepted");
+    uniqueRecords       = 999;
+    const auto oneFanIn = sort_unique_atomic_v3_keys_with_limits_for_testing(
+      manyRaw, invalidOut, manyKeys.size(), false, uniqueRecords, 1, 1);
+    expect(!oneFanIn && uniqueRecords == 0 && !std::filesystem::exists(invalidOut),
+           "feature.one-fanin-limit", "one-way merge limit was accepted");
+#endif
+
     std::error_code ec;
     std::filesystem::remove_all(directory, ec);
 }

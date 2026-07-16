@@ -56,6 +56,7 @@
 #include "atomic_bin_v2_manifest.h"
 #include "atomic_bin_v2_sink.h"
 #include "atomic_v3_trajectory.h"
+#include "atomic_v3_private_staging.h"
 #include "engine.h"
 #include "legacy_atomic_v1.h"
 #include "misc.h"
@@ -2111,7 +2112,6 @@ class AtomicV3Generator {
             privateTts.push_back(std::make_unique<TranspositionTable>());
             privateTts.back()->resize(perWorkerMb, threads);
             privateHistories.push_back(std::make_unique<SharedHistories>(1));
-            privateHistories.back()->clear_for_search(0, 1);
         }
 
         for (usize i = 0; i < workerCount; ++i)
@@ -2510,6 +2510,8 @@ class AtomicV3Generator {
         completed.gameId              = gameId;
         const auto&            source = params.generation;
         std::vector<StateInfo> states(usize(source.writeMaxPly));
+        privateTt.clear_for_single_owner();
+        worker.clear_training_game(privateHistory);
         privateTt.new_search();
         ReplayablePRNG rng(game_seed(gameId));
 
@@ -3396,8 +3398,13 @@ bool generate_atomic_v3_chunk(Engine& engine, std::istream& input) {
         return false;
     }
     const auto cleanupPrivate = [&]() {
-        std::error_code cleanupError;
-        std::filesystem::remove_all(*privateDirectory, cleanupError);
+        return cleanup_atomic_v3_private_staging(*privateDirectory);
+    };
+    const auto failWithPrivateCleanup = [&](std::string message) {
+        if (DataResult cleanup = cleanupPrivate(); !cleanup)
+            message += "; private staging cleanup failed: " + cleanup.message;
+        print_error(message);
+        return false;
     };
 
     AtomicV3RolePaths trainPaths{*privateDirectory / trainDataset.filename(),
@@ -3417,17 +3424,13 @@ bool generate_atomic_v3_chunk(Engine& engine, std::istream& input) {
           preflight_atomic_bin_v2_manifest_publication(trainPaths.stagedManifest);
         !preflight)
     {
-        cleanupPrivate();
-        print_error(preflight.message);
-        return false;
+        return failWithPrivateCleanup(preflight.message);
     }
     if (DataResult preflight =
           preflight_atomic_bin_v2_manifest_publication(validationPaths.stagedManifest);
         !preflight)
     {
-        cleanupPrivate();
-        print_error(preflight.message);
-        return false;
+        return failWithPrivateCleanup(preflight.message);
     }
 
     AtomicV3RoleOutput trainOutput(trainPaths, AtomicV3DatasetRole::TRAIN, params.splitSeed,
@@ -3462,18 +3465,14 @@ bool generate_atomic_v3_chunk(Engine& engine, std::istream& input) {
             error += "; train cleanup failed: " + trainCleanup.message;
         if (!validationCleanup)
             error += "; validation cleanup failed: " + validationCleanup.message;
-        cleanupPrivate();
-        print_error(error);
-        return false;
+        return failWithPrivateCleanup(error);
     }
     if (DataResult auditCleanup = generator.abort_audits(); !auditCleanup)
     {
         error = auditCleanup.message;
         (void) trainOutput.abort();
         (void) validationOutput.abort();
-        cleanupPrivate();
-        print_error(error);
-        return false;
+        return failWithPrivateCleanup(error);
     }
 
     const u32         threads = u32(engine.threads.size());
@@ -3485,9 +3484,7 @@ bool generate_atomic_v3_chunk(Engine& engine, std::istream& input) {
         error = result.message;
         (void) trainOutput.abort();
         (void) validationOutput.abort();
-        cleanupPrivate();
-        print_error(error);
-        return false;
+        return failWithPrivateCleanup(error);
     }
     if (DataResult result =
           validationOutput.finalize(params, networkMetadata, bookIsFile, bookMetadata, threads,
@@ -3497,9 +3494,7 @@ bool generate_atomic_v3_chunk(Engine& engine, std::istream& input) {
         error = result.message;
         (void) trainOutput.abort();
         (void) validationOutput.abort();
-        cleanupPrivate();
-        print_error(error);
-        return false;
+        return failWithPrivateCleanup(error);
     }
 
     // Repeat the public-name preflight immediately before exclusive hard-link
@@ -3508,9 +3503,7 @@ bool generate_atomic_v3_chunk(Engine& engine, std::istream& input) {
     {
         (void) trainOutput.abort();
         (void) validationOutput.abort();
-        cleanupPrivate();
-        print_error(error);
-        return false;
+        return failWithPrivateCleanup(error);
     }
 
     const std::vector<AtomicV3PublishArtifact> artifacts = {
@@ -3533,12 +3526,15 @@ bool generate_atomic_v3_chunk(Engine& engine, std::istream& input) {
         error = published.message;
         (void) trainOutput.abort();
         (void) validationOutput.abort();
-        cleanupPrivate();
-        print_error(error);
-        return false;
+        return failWithPrivateCleanup(error);
     }
 
-    cleanupPrivate();
+    if (DataResult cleanup = cleanupPrivate(); !cleanup)
+    {
+        print_error("Atomic V3 publication completed but private staging cleanup failed: "
+                    + cleanup.message);
+        return false;
+    }
     std::cout << "INFO: generate_atomic_v3_chunk finished.\n"
               << "INFO: train_records=" << generator.train_records()
               << " validation_records=" << generator.validation_records() << " trajectories="

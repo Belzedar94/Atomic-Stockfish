@@ -83,6 +83,9 @@ class TranspositionTable {
 
     void resize(usize mbSize, ThreadPool& threads);  // Set TT size in MiB
     void clear(ThreadPool& threads);                 // Re-initialize memory, multithreaded
+    // Re-initialize a private generator TT without dispatching on ThreadPool.
+    // The caller must be the sole owner and no search may access it concurrently.
+    void clear_for_single_owner();
 
     void
     new_search();  // This must be called at the beginning of each root search to track entry aging

@@ -31,6 +31,7 @@ src/atomic-v3-incremental-simd-kernel-tests*
 src/atomic-v3-incremental-simd-benchmark*
 src/atomic-v3-simd-tests*
 src/atomic-v3-trajectory-tests*
+src/atomic-v3-private-staging-tests*
 src/legacy-atomic-v1-tests*
 src/atomic-bin-v2-tests*
 src/atomic-bin-v2-sink-tests*

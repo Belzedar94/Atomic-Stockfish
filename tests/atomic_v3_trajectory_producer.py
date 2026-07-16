@@ -391,9 +391,9 @@ def main() -> int:
             ):
                 raise ProducerError(f"{role} authenticated opening-book binding differs")
 
-        # The deterministic contract is per complete configuration, including
-        # Threads. game_id is internal scheduling state; retained bytes, pins,
-        # split groups and artifact hashes are the public evidence.
+        # Reproducibility is scoped to a complete configuration, including
+        # Threads. Each supported worker count must still reproduce byte for
+        # byte across repeated executions.
         for threads in (2, 4):
             threaded_first_prefix = root / f"threads-{threads}-first"
             run_generator(

@@ -919,13 +919,13 @@ void Search::Worker::undo_move(Position& pos, const Move move) {
 void Search::Worker::undo_null_move(Position& pos) { pos.undo_null_move(); }
 
 
-// Reset histories, usually before a new game
-void Search::Worker::clear() {
+void Search::Worker::clear_for_new_game(SharedHistories& histories,
+                                        usize            historyThreadIdx,
+                                        usize            historyThreadCount) {
     mainHistory.fill(-5);
     captureHistory.fill(-699);
 
-    // Each thread is responsible for clearing its part of shared history.
-    sharedHistory.clear_for_search(numaThreadIdx, numaTotal);
+    histories.clear_for_search(historyThreadIdx, historyThreadCount);
 
     ttMoveHistory = 0;
 
@@ -938,6 +938,21 @@ void Search::Worker::clear() {
 
     accumulator.rebind(network[numaAccessToken]);
 }
+
+
+// Reset histories, usually before a new game
+void Search::Worker::clear() {
+    // Each thread is responsible for clearing its part of shared history.
+    clear_for_new_game(sharedHistory, numaThreadIdx, numaTotal);
+}
+
+
+#ifdef ATOMIC_DATA_GENERATOR
+void Search::Worker::clear_training_game(SharedHistories& privateHistories) {
+    clear_for_new_game(privateHistories, 0, 1);
+    lowPlyHistory.fill(100);
+}
+#endif
 
 
 // Main search function for both PV and non-PV nodes
