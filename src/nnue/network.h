@@ -64,7 +64,7 @@ class Network {
               EvalFile&                    evalFile);
     // Load an already-authenticated byte snapshot. The caller owns the stream
     // and supplies only the logical EvalFile identity; no pathname is reopened.
-    bool load_authenticated(std::istream&                 stream,
+    bool load_authenticated(std::istream&                stream,
                             const std::filesystem::path& logicalPath,
                             EvalFile&                    evalFile);
     bool save(const EvalFile& evalFile, const std::optional<std::filesystem::path>& filename) const;

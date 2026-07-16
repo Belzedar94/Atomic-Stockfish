@@ -32,15 +32,15 @@ enum class AtomicV3DatasetRole : u32 {
 };
 
 enum class AtomicV3StopReason : u8 {
-    ATOMIC_EXPLOSION          = 0,
-    CHECKMATE                 = 1,
-    STALEMATE                 = 2,
-    INSUFFICIENT_MATERIAL     = 3,
-    FIFTY_MOVE_RULE           = 4,
-    THREEFOLD_REPETITION      = 5,
-    MAXIMUM_PLY_DRAW          = 6,
-    SCORE_DRAW_ADJUDICATION   = 7,
-    EVALUATION_RESIGNATION    = 8
+    ATOMIC_EXPLOSION        = 0,
+    CHECKMATE               = 1,
+    STALEMATE               = 2,
+    INSUFFICIENT_MATERIAL   = 3,
+    FIFTY_MOVE_RULE         = 4,
+    THREEFOLD_REPETITION    = 5,
+    MAXIMUM_PLY_DRAW        = 6,
+    SCORE_DRAW_ADJUDICATION = 7,
+    EVALUATION_RESIGNATION  = 8
 };
 
 struct AtomicV3Trajectory {
@@ -48,27 +48,27 @@ struct AtomicV3Trajectory {
     AtomicBinV2Position             rootPosition{};
     std::vector<u32>                playedMoves;
     std::vector<TrainingDataSample> samples;
-    i8                              terminalResult = 0;  // White perspective.
-    bool                            atomic960      = false;
+    i8                              terminalResult         = 0;  // White perspective.
+    bool                            atomic960              = false;
     bool                            adjudicateInsufficient = true;
-    AtomicV3StopReason              stopReason     = AtomicV3StopReason::MAXIMUM_PLY_DRAW;
+    AtomicV3StopReason              stopReason             = AtomicV3StopReason::MAXIMUM_PLY_DRAW;
 };
 
-using AtomicV3SplitGroupId = std::array<u8, 32>;
+using AtomicV3SplitGroupId    = std::array<u8, 32>;
 using AtomicV3FeatureInputKey = std::array<u8, 32>;
 
 inline constexpr std::string_view AtomicV3FeatureSchemaSha256Hex =
   "9d3c77a58e5e55ac1bc798dab41977451eb523fce1d6fd3ec3f7c1e574a78750";
 
 AtomicV3SplitGroupId atomic_v3_split_group_id(const AtomicBinV2Position& root,
-                                               bool                       atomic960,
-                                               const std::vector<u32>&     playedMoves) noexcept;
+                                              bool                       atomic960,
+                                              const std::vector<u32>&    playedMoves) noexcept;
 
 u64 atomic_v3_partition_hash(u64 splitSeed, const AtomicV3SplitGroupId& group) noexcept;
 
-AtomicV3DatasetRole atomic_v3_partition_role(u64 splitSeed,
-                                              u64 validationThreshold,
-                                              const AtomicV3SplitGroupId& group) noexcept;
+AtomicV3DatasetRole atomic_v3_partition_role(u64                         splitSeed,
+                                             u64                         validationThreshold,
+                                             const AtomicV3SplitGroupId& group) noexcept;
 
 // Replays the complete move stream, checks every retained pre-move sample and
 // proves the result/stop reason before a byte reaches a role artifact.
@@ -90,10 +90,10 @@ DataResult sort_unique_atomic_v3_keys(const std::filesystem::path& input,
 
 struct AtomicV3LedgerMetadata {
     std::filesystem::path path;
-    u64                   records     = 0;
+    u64                   records      = 0;
     u64                   trajectories = 0;
-    u64                   moves       = 0;
-    u64                   bytes       = 0;
+    u64                   moves        = 0;
+    u64                   bytes        = 0;
     std::string           sha256;
 };
 
@@ -115,8 +115,8 @@ class AtomicV3TrajectoryLedgerStager {
 
     DataResult append(const AtomicV3Trajectory& trajectory, u64 expectedFirstRecord);
     DataResult finalize(const std::filesystem::path& finalPath,
-                        std::string_view              manifestSha256,
-                        AtomicV3LedgerMetadata&       metadata);
+                        std::string_view             manifestSha256,
+                        AtomicV3LedgerMetadata&      metadata);
     DataResult abort();
 
     u64 records() const noexcept { return recordCount; }
@@ -137,14 +137,14 @@ class AtomicV3TrajectoryLedgerStager {
     u64                   splitSeed;
     u64                   validationThreshold;
     u32                   expectedMaximumPly;
-    std::FILE*            entriesFile = nullptr;
-    std::FILE*            movesFile   = nullptr;
-    std::FILE*            groupsFile  = nullptr;
-    u64                   recordCount = 0;
+    std::FILE*            entriesFile     = nullptr;
+    std::FILE*            movesFile       = nullptr;
+    std::FILE*            groupsFile      = nullptr;
+    u64                   recordCount     = 0;
     u64                   trajectoryCount = 0;
-    u64                   moveCount = 0;
-    bool                  finalized = false;
-    bool                  aborted   = false;
+    u64                   moveCount       = 0;
+    bool                  finalized       = false;
+    bool                  aborted         = false;
 };
 
 }  // namespace Stockfish::Data

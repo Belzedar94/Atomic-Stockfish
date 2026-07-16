@@ -491,8 +491,8 @@ std::optional<std::filesystem::path> absolute_file_candidate(const std::filesyst
 
 std::FILE* open_private_exclusive(const std::filesystem::path& path) {
 #ifdef _WIN32
-    const int descriptor = ::_wopen(path.c_str(), _O_CREAT | _O_EXCL | _O_WRONLY | _O_BINARY,
-                                    _S_IREAD | _S_IWRITE);
+    const int descriptor =
+      ::_wopen(path.c_str(), _O_CREAT | _O_EXCL | _O_WRONLY | _O_BINARY, _S_IREAD | _S_IWRITE);
 #else
     const int descriptor = ::open(path.c_str(), O_CREAT | O_EXCL | O_WRONLY | O_CLOEXEC, 0600);
 #endif
@@ -522,11 +522,10 @@ DataResult sync_private_file(std::FILE* file, std::string_view label) {
 #else
     const int result = ::fsync(::fileno(file));
 #endif
-    return result == 0
-           ? DataResult::success()
-           : DataResult::failure(DataError::WRITE_FAILED,
-                                 "Cannot synchronize " + std::string(label) + ": "
-                                   + std::generic_category().message(errno));
+    return result == 0 ? DataResult::success()
+                       : DataResult::failure(DataError::WRITE_FAILED,
+                                             "Cannot synchronize " + std::string(label) + ": "
+                                               + std::generic_category().message(errno));
 }
 
 u64 read_u64_le_bytes(const u8* input) noexcept {
@@ -543,11 +542,9 @@ bool read_authenticated_regular_file(const std::filesystem::path& path,
     Sha256 hash;
 
 #ifdef _WIN32
-    HANDLE handle = ::CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr,
-                                  OPEN_EXISTING,
-                                  FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT
-                                    | FILE_FLAG_SEQUENTIAL_SCAN,
-                                  nullptr);
+    HANDLE handle = ::CreateFileW(
+      path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+      FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
     if (handle == INVALID_HANDLE_VALUE)
     {
         error = "Cannot open authenticated input " + path_to_utf8(path) + ": "
@@ -556,21 +553,21 @@ bool read_authenticated_regular_file(const std::filesystem::path& path,
     }
     const auto close = [&]() { ::CloseHandle(handle); };
 
-    FILE_ATTRIBUTE_TAG_INFO attributes{};
+    FILE_ATTRIBUTE_TAG_INFO    attributes{};
     BY_HANDLE_FILE_INFORMATION before{};
-    LARGE_INTEGER size{};
+    LARGE_INTEGER              size{};
     if (!::GetFileInformationByHandleEx(handle, FileAttributeTagInfo, &attributes,
                                         sizeof(attributes))
         || (attributes.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)
-        || !::GetFileInformationByHandle(handle, &before) || before.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY
-        || !::GetFileSizeEx(handle, &size) || size.QuadPart < 0
-        || u64(size.QuadPart) > u64(std::numeric_limits<std::size_t>::max())
+        || !::GetFileInformationByHandle(handle, &before)
+        || before.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY || !::GetFileSizeEx(handle, &size)
+        || size.QuadPart < 0 || u64(size.QuadPart) > u64(std::numeric_limits<std::size_t>::max())
         || u64(size.QuadPart) > Sha256MaxByteCount)
     {
         const DWORD code = ::GetLastError();
         close();
-        error = "Authenticated input is not a stable regular non-reparse file: "
-              + path_to_utf8(path);
+        error =
+          "Authenticated input is not a stable regular non-reparse file: " + path_to_utf8(path);
         if (code != ERROR_SUCCESS)
             error += ": " + std::system_category().message(int(code));
         return false;
@@ -580,8 +577,8 @@ bool read_authenticated_regular_file(const std::filesystem::path& path,
     std::size_t offset = 0;
     while (offset < authenticated.contents.size())
     {
-        const DWORD requested = DWORD(std::min<std::size_t>(authenticated.contents.size() - offset,
-                                                           1U << 20));
+        const DWORD requested =
+          DWORD(std::min<std::size_t>(authenticated.contents.size() - offset, 1U << 20));
         DWORD read = 0;
         if (!::ReadFile(handle, authenticated.contents.data() + offset, requested, &read, nullptr)
             || read == 0)
@@ -595,23 +592,23 @@ bool read_authenticated_regular_file(const std::filesystem::path& path,
         hash.update(authenticated.contents.data() + offset, read);
         offset += read;
     }
-    char  trailing = 0;
-    DWORD trailingRead = 0;
+    char                       trailing     = 0;
+    DWORD                      trailingRead = 0;
     BY_HANDLE_FILE_INFORMATION after{};
-    const bool stable = ::ReadFile(handle, &trailing, 1, &trailingRead, nullptr)
-                     && trailingRead == 0 && ::GetFileInformationByHandle(handle, &after)
-                     && before.dwVolumeSerialNumber == after.dwVolumeSerialNumber
-                     && before.nFileIndexHigh == after.nFileIndexHigh
-                     && before.nFileIndexLow == after.nFileIndexLow
-                     && before.nFileSizeHigh == after.nFileSizeHigh
-                     && before.nFileSizeLow == after.nFileSizeLow
-                     && before.ftLastWriteTime.dwHighDateTime == after.ftLastWriteTime.dwHighDateTime
-                     && before.ftLastWriteTime.dwLowDateTime == after.ftLastWriteTime.dwLowDateTime;
+    const bool                 stable =
+      ::ReadFile(handle, &trailing, 1, &trailingRead, nullptr) && trailingRead == 0
+      && ::GetFileInformationByHandle(handle, &after)
+      && before.dwVolumeSerialNumber == after.dwVolumeSerialNumber
+      && before.nFileIndexHigh == after.nFileIndexHigh
+      && before.nFileIndexLow == after.nFileIndexLow && before.nFileSizeHigh == after.nFileSizeHigh
+      && before.nFileSizeLow == after.nFileSizeLow
+      && before.ftLastWriteTime.dwHighDateTime == after.ftLastWriteTime.dwHighDateTime
+      && before.ftLastWriteTime.dwLowDateTime == after.ftLastWriteTime.dwLowDateTime;
     close();
     if (!stable)
     {
-        error = "Authenticated input changed while its byte snapshot was captured: "
-              + path_to_utf8(path);
+        error =
+          "Authenticated input changed while its byte snapshot was captured: " + path_to_utf8(path);
         return false;
     }
 #else
@@ -622,7 +619,7 @@ bool read_authenticated_regular_file(const std::filesystem::path& path,
               + std::generic_category().message(errno);
         return false;
     }
-    const auto close = [&]() { ::close(descriptor); };
+    const auto  close = [&]() { ::close(descriptor); };
     struct stat before{};
     if (::fstat(descriptor, &before) != 0 || !S_ISREG(before.st_mode) || before.st_size < 0
         || u64(before.st_size) > u64(std::numeric_limits<std::size_t>::max())
@@ -651,24 +648,24 @@ bool read_authenticated_regular_file(const std::filesystem::path& path,
         hash.update(authenticated.contents.data() + offset, std::size_t(count));
         offset += std::size_t(count);
     }
-    char trailing = 0;
+    char    trailing = 0;
     ssize_t trailingRead;
     do
         trailingRead = ::read(descriptor, &trailing, 1);
     while (trailingRead < 0 && errno == EINTR);
     struct stat after{};
-    const auto timestampsMatch = [&]() {
-#if defined(__APPLE__)
+    const auto  timestampsMatch = [&]() {
+    #if defined(__APPLE__)
         return before.st_mtimespec.tv_sec == after.st_mtimespec.tv_sec
             && before.st_mtimespec.tv_nsec == after.st_mtimespec.tv_nsec
             && before.st_ctimespec.tv_sec == after.st_ctimespec.tv_sec
             && before.st_ctimespec.tv_nsec == after.st_ctimespec.tv_nsec;
-#else
+    #else
         return before.st_mtim.tv_sec == after.st_mtim.tv_sec
             && before.st_mtim.tv_nsec == after.st_mtim.tv_nsec
             && before.st_ctim.tv_sec == after.st_ctim.tv_sec
             && before.st_ctim.tv_nsec == after.st_ctim.tv_nsec;
-#endif
+    #endif
     };
     const bool stable = trailingRead == 0 && ::fstat(descriptor, &after) == 0
                      && before.st_dev == after.st_dev && before.st_ino == after.st_ino
@@ -676,8 +673,8 @@ bool read_authenticated_regular_file(const std::filesystem::path& path,
     close();
     if (!stable)
     {
-        error = "Authenticated input changed while its byte snapshot was captured: "
-              + path.string();
+        error =
+          "Authenticated input changed while its byte snapshot was captured: " + path.string();
         return false;
     }
 #endif
@@ -1418,13 +1415,13 @@ struct AtomicV3GeneratorParams {
     bool            adjudicateResignations = false;
 
     AtomicV3GeneratorParams() {
-        generation.dataFormat              = DatasetFormat::ATOMIC_BIN_V2;
-        generation.adjudicateDrawsByScore  = false;
-        generation.filterPromotions        = true;
-        generation.keepDraws               = 1.0;
-        generation.keepDrawsManifest       = "1";
-        generation.randomFileName          = false;
-        generation.saveEvery               = std::numeric_limits<u64>::max();
+        generation.dataFormat             = DatasetFormat::ATOMIC_BIN_V2;
+        generation.adjudicateDrawsByScore = false;
+        generation.filterPromotions       = true;
+        generation.keepDraws              = 1.0;
+        generation.keepDrawsManifest      = "1";
+        generation.randomFileName         = false;
+        generation.saveEvery              = std::numeric_limits<u64>::max();
     }
 };
 
@@ -1456,7 +1453,7 @@ bool parse_atomic_v3_params(std::istream&            input,
                             std::string&             error) {
     auto&       common = params.generation;
     std::string token;
-    bool        depthMaxSeen = false;
+    bool        depthMaxSeen       = false;
     bool        generationSeedSeen = false;
     bool        splitSeedSeen      = false;
     bool        thresholdSeen      = false;
@@ -1606,7 +1603,7 @@ bool parse_atomic_v3_params(std::istream&            input,
                     error = "Atomic V3 generation seed must be a nonzero decimal uint64";
                 return false;
             }
-            common.seedText     = std::to_string(seed);
+            common.seedText    = std::to_string(seed);
             generationSeedSeen = true;
         }
         else if (token == "split_seed")
@@ -1672,13 +1669,12 @@ bool parse_atomic_v3_params(std::istream&            input,
       || common.writeMaxPly <= common.writeMinPly || common.writeMaxPly > MaximumGeneratedPly
       || common.randomMoveMinPly < -1 || common.randomMoveMaxPly < 0
       || common.randomMoveMaxPly > MaximumGeneratedPly
-      || (common.randomMoveMinPly != -1
-          && common.randomMoveMaxPly < common.randomMoveMinPly)
+      || (common.randomMoveMinPly != -1 && common.randomMoveMaxPly < common.randomMoveMinPly)
       || common.randomMoveCount < 0 || common.randomMoveCount > MaximumGeneratedPly
       || common.randomMoveLikeApery < 0 || common.randomMultiPv < 0
       || common.randomMultiPv > int(MAX_MOVES) || common.randomMultiPvDiff < 0
-      || common.keepDraws != 1.0 || common.keepDrawsManifest != "1"
-      || common.adjudicateDrawsByScore || params.adjudicateResignations;
+      || common.keepDraws != 1.0 || common.keepDrawsManifest != "1" || common.adjudicateDrawsByScore
+      || params.adjudicateResignations;
     if (invalid)
     {
         error = "Invalid generate_atomic_v3_chunk parameter or release-policy value";
@@ -1729,15 +1725,13 @@ class AtomicV3FeatureAuditIndex {
         {
             rawFile = open_private_exclusive(rawPath);
             if (!rawFile)
-                return DataResult::failure(errno == EEXIST ? DataError::OUTPUT_EXISTS
-                                                           : DataError::OPEN_FAILED,
-                                           "Cannot create private Atomic V3 " + label
-                                             + " feature index");
+                return DataResult::failure(
+                  errno == EEXIST ? DataError::OUTPUT_EXISTS : DataError::OPEN_FAILED,
+                  "Cannot create private Atomic V3 " + label + " feature index");
         }
         if (std::fwrite(key.data(), 1, key.size(), rawFile) != key.size())
-            return DataResult::failure(DataError::WRITE_FAILED,
-                                       "Cannot write private Atomic V3 " + label
-                                         + " feature index");
+            return DataResult::failure(DataError::WRITE_FAILED, "Cannot write private Atomic V3 "
+                                                                  + label + " feature index");
         ++observations;
         return DataResult::success();
     }
@@ -1748,21 +1742,19 @@ class AtomicV3FeatureAuditIndex {
         if (!rawFile || observations == 0)
             return DataResult::failure(DataError::EMPTY_DATASET,
                                        "Atomic V3 " + label + " feature index cannot be empty");
-        if (DataResult synced =
-              sync_private_file(rawFile, "Atomic V3 " + label + " feature index");
+        if (DataResult synced = sync_private_file(rawFile, "Atomic V3 " + label + " feature index");
             !synced)
             return synced;
         if (std::fclose(rawFile) != 0)
         {
             rawFile = nullptr;
-            return DataResult::failure(DataError::CLOSE_FAILED,
-                                       "Cannot close private Atomic V3 " + label
-                                         + " feature index");
+            return DataResult::failure(DataError::CLOSE_FAILED, "Cannot close private Atomic V3 "
+                                                                  + label + " feature index");
         }
         rawFile = nullptr;
 
-        if (DataResult sorted = sort_unique_atomic_v3_keys(
-              rawPath, sortedPath, observations, false, uniqueRecords);
+        if (DataResult sorted =
+              sort_unique_atomic_v3_keys(rawPath, sortedPath, observations, false, uniqueRecords);
             !sorted)
             return sorted;
 
@@ -1773,9 +1765,9 @@ class AtomicV3FeatureAuditIndex {
         }
 
         constexpr u64 MaximumBloomBytes = u64(512) * 1024 * 1024;
-        const u64 desiredBits = uniqueRecords > std::numeric_limits<u64>::max() / 10
-                                ? std::numeric_limits<u64>::max()
-                                : uniqueRecords * 10;
+        const u64     desiredBits       = uniqueRecords > std::numeric_limits<u64>::max() / 10
+                                          ? std::numeric_limits<u64>::max()
+                                          : uniqueRecords * 10;
         bloomBits = std::max<u64>(8, std::min<u64>(MaximumBloomBytes * 8, desiredBits));
         bloom.assign(std::size_t((bloomBits + 7) / 8), 0);
         sparse.reserve(std::size_t(uniqueRecords / SparseStride + 1));
@@ -1783,16 +1775,14 @@ class AtomicV3FeatureAuditIndex {
         std::ifstream input(sortedPath, std::ios::binary);
         if (!input)
             return DataResult::failure(DataError::OPEN_FAILED,
-                                       "Cannot open sorted Atomic V3 " + label
-                                         + " feature index");
+                                       "Cannot open sorted Atomic V3 " + label + " feature index");
         for (u64 ordinal = 0; ordinal < uniqueRecords; ++ordinal)
         {
             AtomicV3FeatureInputKey key{};
             input.read(reinterpret_cast<char*>(key.data()), std::streamsize(key.size()));
             if (input.gcount() != std::streamsize(key.size()))
-                return DataResult::failure(DataError::READ_FAILED,
-                                           "Cannot scan sorted Atomic V3 " + label
-                                             + " feature index");
+                return DataResult::failure(DataError::READ_FAILED, "Cannot scan sorted Atomic V3 "
+                                                                     + label + " feature index");
             if (ordinal % SparseStride == 0)
                 sparse.push_back({key, ordinal});
             bloom_add(key);
@@ -1805,9 +1795,8 @@ class AtomicV3FeatureAuditIndex {
 
         sortedStream.open(sortedPath, std::ios::binary);
         if (!sortedStream)
-            return DataResult::failure(DataError::OPEN_FAILED,
-                                       "Cannot retain sorted Atomic V3 " + label
-                                         + " feature index");
+            return DataResult::failure(DataError::OPEN_FAILED, "Cannot retain sorted Atomic V3 "
+                                                                 + label + " feature index");
         finalized = true;
         return DataResult::success();
     }
@@ -1816,18 +1805,16 @@ class AtomicV3FeatureAuditIndex {
         present = false;
         if (!finalized)
             return DataResult::failure(DataError::SINK_CLOSED,
-                                        "Atomic V3 feature index was queried before finalization");
+                                       "Atomic V3 feature index was queried before finalization");
         if (!membershipEnabled)
             return DataResult::failure(DataError::SINK_CLOSED,
                                        "Atomic V3 audit-only feature index cannot be queried");
         if (!bloom_maybe_contains(key) || sparse.empty())
             return DataResult::success();
 
-        auto it = std::upper_bound(
-          sparse.begin(), sparse.end(), key,
-          [](const AtomicV3FeatureInputKey& value, const SparseEntry& entry) {
-              return value < entry.first;
-          });
+        auto it = std::upper_bound(sparse.begin(), sparse.end(), key,
+                                   [](const AtomicV3FeatureInputKey& value,
+                                      const SparseEntry& entry) { return value < entry.first; });
         if (it == sparse.begin())
             return DataResult::success();
         --it;
@@ -1838,8 +1825,7 @@ class AtomicV3FeatureAuditIndex {
         sortedStream.read(reinterpret_cast<char*>(block.data()), std::streamsize(count * 32));
         if (sortedStream.gcount() != std::streamsize(count * 32))
             return DataResult::failure(DataError::READ_FAILED,
-                                       "Cannot query sorted Atomic V3 " + label
-                                         + " feature index");
+                                       "Cannot query sorted Atomic V3 " + label + " feature index");
         present = std::binary_search(block.begin(), block.end(), key);
         return DataResult::success();
     }
@@ -1850,9 +1836,9 @@ class AtomicV3FeatureAuditIndex {
         if (rawFile)
         {
             if (std::fclose(rawFile) != 0)
-                first = DataResult::failure(DataError::CLOSE_FAILED,
-                                            "Cannot close Atomic V3 " + label
-                                              + " feature staging file");
+                first =
+                  DataResult::failure(DataError::CLOSE_FAILED,
+                                      "Cannot close Atomic V3 " + label + " feature staging file");
             rawFile = nullptr;
         }
         for (const auto& path : {rawPath, sortedPath})
@@ -1862,15 +1848,14 @@ class AtomicV3FeatureAuditIndex {
             if (ec && first)
                 first = DataResult::failure(DataError::ABORT_FAILED,
                                             "Cannot remove Atomic V3 " + label
-                                              + " feature staging file: "
-                                              + ec.message());
+                                              + " feature staging file: " + ec.message());
         }
         finalized = false;
         return first;
     }
 
     const std::filesystem::path& sorted_path() const noexcept { return sortedPath; }
-    u64 unique_records() const noexcept { return uniqueRecords; }
+    u64                          unique_records() const noexcept { return uniqueRecords; }
 
    private:
     static constexpr u64 SparseStride = 4096;
@@ -1905,18 +1890,18 @@ class AtomicV3FeatureAuditIndex {
         return true;
     }
 
-    std::filesystem::path       rawPath;
-    std::filesystem::path       sortedPath;
-    std::string                 label;
-    std::FILE*                  rawFile = nullptr;
-    std::ifstream               sortedStream;
-    std::vector<u8>             bloom;
-    std::vector<SparseEntry>    sparse;
-    u64                         bloomBits    = 0;
-    u64                         observations = 0;
-    u64                         uniqueRecords = 0;
-    bool                        finalized = false;
-    bool                        membershipEnabled = false;
+    std::filesystem::path    rawPath;
+    std::filesystem::path    sortedPath;
+    std::string              label;
+    std::FILE*               rawFile = nullptr;
+    std::ifstream            sortedStream;
+    std::vector<u8>          bloom;
+    std::vector<SparseEntry> sparse;
+    u64                      bloomBits         = 0;
+    u64                      observations      = 0;
+    u64                      uniqueRecords     = 0;
+    bool                     finalized         = false;
+    bool                     membershipEnabled = false;
 };
 
 struct AtomicV3RolePaths {
@@ -1930,15 +1915,19 @@ struct AtomicV3RolePaths {
 
 class AtomicV3RoleOutput {
    public:
-    AtomicV3RoleOutput(AtomicV3RolePaths paths_,
+    AtomicV3RoleOutput(AtomicV3RolePaths   paths_,
                        AtomicV3DatasetRole role_,
-                       u64 splitSeed,
-        u64 validationThreshold,
-        u32 expectedMaximumPly) :
+                       u64                 splitSeed,
+                       u64                 validationThreshold,
+                       u32                 expectedMaximumPly) :
         paths(std::move(paths_)),
         dataset(paths.stagedDataset),
-        ledger(paths.stagedLedger.parent_path(), paths.stagedLedger.filename().string(), role_,
-               splitSeed, validationThreshold, expectedMaximumPly),
+        ledger(paths.stagedLedger.parent_path(),
+               paths.stagedLedger.filename().string(),
+               role_,
+               splitSeed,
+               validationThreshold,
+               expectedMaximumPly),
         maximumPly(expectedMaximumPly) {}
 
     ~AtomicV3RoleOutput() { (void) abort(); }
@@ -1993,47 +1982,45 @@ class AtomicV3RoleOutput {
         manifest.threads      = threads;
         manifest.hashMb       = hashMb;
 
-        const auto& source = params.generation;
-        auto&       options = manifest.options;
-        options.searchDepthMin                 = source.searchDepthMin;
-        options.searchDepthMax                 = source.searchDepthMax;
-        options.nodes                          = source.nodes;
-        options.requestedRecords               = requestedRecords;
-        options.recordsPerShard                = requestedRecords;
-        options.evalLimit                      = source.evalLimit;
-        options.evalDiffLimit                  = source.evalDiffLimit;
-        options.randomMoveMinPly               = source.randomMoveMinPly;
-        options.randomMoveMaxPly               = source.randomMoveMaxPly;
-        options.randomMoveCount                = source.randomMoveCount;
-        options.randomMoveLikeApery            = source.randomMoveLikeApery;
-        options.randomMultiPv                   = source.randomMultiPv;
-        options.randomMultiPvDiff               = source.randomMultiPvDiff;
-        options.randomMultiPvDepth              = source.randomMultiPvDepth;
-        options.writeMinPly                     = source.writeMinPly;
-        options.writeMaxPly                     = source.writeMaxPly;
-        options.keepDraws                       = source.keepDrawsManifest;
-        options.adjudicateDrawsByScore          = false;
-        options.adjudicateInsufficient          = source.adjudicateInsufficient;
-        options.filterCaptures                  = source.filterCaptures;
-        options.filterChecks                    = source.filterChecks;
-        options.filterPromotions                = source.filterPromotions;
-        options.randomFileName                  = false;
-        options.setRecommendedUciOptionsSeen    = source.setRecommendedUciOptionsSeen;
-        manifest.records                        = dataset.records_written();
-        manifest.draws                          = drawRecords;
+        const auto& source                   = params.generation;
+        auto&       options                  = manifest.options;
+        options.searchDepthMin               = source.searchDepthMin;
+        options.searchDepthMax               = source.searchDepthMax;
+        options.nodes                        = source.nodes;
+        options.requestedRecords             = requestedRecords;
+        options.recordsPerShard              = requestedRecords;
+        options.evalLimit                    = source.evalLimit;
+        options.evalDiffLimit                = source.evalDiffLimit;
+        options.randomMoveMinPly             = source.randomMoveMinPly;
+        options.randomMoveMaxPly             = source.randomMoveMaxPly;
+        options.randomMoveCount              = source.randomMoveCount;
+        options.randomMoveLikeApery          = source.randomMoveLikeApery;
+        options.randomMultiPv                = source.randomMultiPv;
+        options.randomMultiPvDiff            = source.randomMultiPvDiff;
+        options.randomMultiPvDepth           = source.randomMultiPvDepth;
+        options.writeMinPly                  = source.writeMinPly;
+        options.writeMaxPly                  = source.writeMaxPly;
+        options.keepDraws                    = source.keepDrawsManifest;
+        options.adjudicateDrawsByScore       = false;
+        options.adjudicateInsufficient       = source.adjudicateInsufficient;
+        options.filterCaptures               = source.filterCaptures;
+        options.filterChecks                 = source.filterChecks;
+        options.filterPromotions             = source.filterPromotions;
+        options.randomFileName               = false;
+        options.setRecommendedUciOptionsSeen = source.setRecommendedUciOptionsSeen;
+        manifest.records                     = dataset.records_written();
+        manifest.draws                       = drawRecords;
         manifest.shards.push_back({dataset.output_path(), 0, dataset.records_written(),
                                    dataset.finalized_size(), dataset.sha256_hex()});
 
         if (DataResult result = write_atomic_bin_v2_manifest(manifest); !result)
             return result;
         manifestWritten = true;
-        if (DataResult result =
-              sha256_file(paths.stagedManifest, manifestSha256, manifestBytes);
+        if (DataResult result = sha256_file(paths.stagedManifest, manifestSha256, manifestBytes);
             !result)
             return result;
 
-        if (DataResult result =
-              ledger.finalize(paths.stagedLedger, manifestSha256, ledgerMetadata);
+        if (DataResult result = ledger.finalize(paths.stagedLedger, manifestSha256, ledgerMetadata);
             !result)
             return result;
         return DataResult::success();
@@ -2048,48 +2035,48 @@ class AtomicV3RoleOutput {
             std::error_code ec;
             std::filesystem::remove(paths.stagedManifest, ec);
             if (ec && first)
-                first = DataResult::failure(DataError::ABORT_FAILED,
-                                            "Cannot remove staged Atomic V3 manifest: "
-                                              + ec.message());
+                first =
+                  DataResult::failure(DataError::ABORT_FAILED,
+                                      "Cannot remove staged Atomic V3 manifest: " + ec.message());
         }
-        DataResult datasetResult = datasetFinalized ? dataset.remove_finalized_owned()
-                                                    : dataset.abort();
+        DataResult datasetResult =
+          datasetFinalized ? dataset.remove_finalized_owned() : dataset.abort();
         if (!datasetResult && first)
             first = datasetResult;
         aborted = true;
         return first;
     }
 
-    const AtomicV3RolePaths& output_paths() const noexcept { return paths; }
-    const std::string& manifest_sha256() const noexcept { return manifestSha256; }
+    const AtomicV3RolePaths&      output_paths() const noexcept { return paths; }
+    const std::string&            manifest_sha256() const noexcept { return manifestSha256; }
     const AtomicV3LedgerMetadata& ledger_metadata() const noexcept { return ledgerMetadata; }
-    const AtomicBinV2Sink& dataset_sink() const noexcept { return dataset; }
-    u64 manifest_size() const noexcept { return manifestBytes; }
+    const AtomicBinV2Sink&        dataset_sink() const noexcept { return dataset; }
+    u64                           manifest_size() const noexcept { return manifestBytes; }
 
    private:
-    AtomicV3RolePaths               paths;
-    AtomicBinV2Sink                 dataset;
-    AtomicV3TrajectoryLedgerStager  ledger;
-    AtomicV3LedgerMetadata          ledgerMetadata;
-    u64                             drawRecords = 0;
-    u64                             manifestBytes = 0;
-    std::string                     manifestSha256;
-    bool                            datasetFinalized = false;
-    bool                            manifestWritten  = false;
-    bool                            aborted          = false;
-    u32                             maximumPly       = 0;
+    AtomicV3RolePaths              paths;
+    AtomicBinV2Sink                dataset;
+    AtomicV3TrajectoryLedgerStager ledger;
+    AtomicV3LedgerMetadata         ledgerMetadata;
+    u64                            drawRecords   = 0;
+    u64                            manifestBytes = 0;
+    std::string                    manifestSha256;
+    bool                           datasetFinalized = false;
+    bool                           manifestWritten  = false;
+    bool                           aborted          = false;
+    u32                            maximumPly       = 0;
 };
 
 class AtomicV3Generator {
    public:
     AtomicV3Generator(const AtomicV3GeneratorParams& params_,
-                       ThreadPool&                    threads_,
-                       AtomicV3RoleOutput&             train_,
-                       AtomicV3RoleOutput&             validation_,
-                       std::vector<std::string>        openings,
-                       u64                             resolvedSeed,
-                       const std::filesystem::path&    privateDirectory,
-                       u64                             hashMb_) :
+                      ThreadPool&                    threads_,
+                      AtomicV3RoleOutput&            train_,
+                      AtomicV3RoleOutput&            validation_,
+                      std::vector<std::string>       openings,
+                      u64                            resolvedSeed,
+                      const std::filesystem::path&   privateDirectory,
+                      u64                            hashMb_) :
         params(params_),
         threads(threads_),
         train(train_),
@@ -2142,9 +2129,8 @@ class AtomicV3Generator {
                 std::unique_lock<std::mutex> lock(pendingMutex);
                 pendingCv.wait(lock, [&]() {
                     return pendingGames.find(nextGameId) != pendingGames.end()
-                        || std::all_of(workerDone.begin(), workerDone.end(), [](bool done) {
-                               return done;
-                           });
+                        || std::all_of(workerDone.begin(), workerDone.end(),
+                                       [](bool done) { return done; });
                 });
                 auto found = pendingGames.find(nextGameId);
                 if (found == pendingGames.end())
@@ -2164,8 +2150,9 @@ class AtomicV3Generator {
             }
             if (!game.trajectory.samples.empty())
                 commit_trajectory(game.trajectory);
-            if (!failure.empty() || (trainWritten == params.trainCount
-                                     && validationWritten == params.validationCount))
+            if (!failure.empty()
+                || (trainWritten == params.trainCount
+                    && validationWritten == params.validationCount))
                 break;
             if (++nextGameId >= params.maximumGames)
             {
@@ -2211,7 +2198,7 @@ class AtomicV3Generator {
     u64 games_generated() const noexcept { return gamesGenerated; }
 
     DataResult abort_audits() {
-        DataResult first = trainFeatureIndex.abort();
+        DataResult first  = trainFeatureIndex.abort();
         DataResult second = validationFeatureIndex.abort();
         return !first ? first : second;
     }
@@ -2219,24 +2206,24 @@ class AtomicV3Generator {
    private:
     const AtomicV3GeneratorParams& params;
     ThreadPool&                    threads;
-    AtomicV3RoleOutput&             train;
-    AtomicV3RoleOutput&             validation;
-    std::vector<std::string>        openingPositions;
-    u64                             generationSeed;
-    AtomicV3FeatureAuditIndex       trainFeatureIndex;
-    AtomicV3FeatureAuditIndex       validationFeatureIndex;
-    u64                             hashMb;
-    u64                             trainWritten      = 0;
-    u64                             validationWritten = 0;
-    u64                             gamesGenerated    = 0;
-    std::string                     failure;
+    AtomicV3RoleOutput&            train;
+    AtomicV3RoleOutput&            validation;
+    std::vector<std::string>       openingPositions;
+    u64                            generationSeed;
+    AtomicV3FeatureAuditIndex      trainFeatureIndex;
+    AtomicV3FeatureAuditIndex      validationFeatureIndex;
+    u64                            hashMb;
+    u64                            trainWritten      = 0;
+    u64                            validationWritten = 0;
+    u64                            gamesGenerated    = 0;
+    std::string                    failure;
     struct CompletedGame {
         u64                gameId = 0;
         AtomicV3Trajectory trajectory;
         std::string        error;
     };
     std::vector<std::unique_ptr<TranspositionTable>> privateTts;
-    std::vector<std::unique_ptr<SharedHistories>>     privateHistories;
+    std::vector<std::unique_ptr<SharedHistories>>    privateHistories;
     std::map<u64, CompletedGame>                     pendingGames;
     std::vector<bool>                                workerDone;
     std::mutex                                       pendingMutex;
@@ -2244,7 +2231,7 @@ class AtomicV3Generator {
     std::atomic_bool                                 cancelled{false};
     std::atomic<u64>                                 nextCommitGameId{0};
     usize                                            pendingLimit = 0;
-    const std::chrono::steady_clock::time_point started = std::chrono::steady_clock::now();
+    const std::chrono::steady_clock::time_point      started = std::chrono::steady_clock::now();
 
     void fail(std::string message) {
         if (failure.empty())
@@ -2261,11 +2248,9 @@ class AtomicV3Generator {
 
         AtomicV3FeatureInputKey trainKey{};
         AtomicV3FeatureInputKey validationKey{};
-        u64 trainRead = 0;
-        u64 validationRead = 0;
-        const auto readKey = [](std::ifstream& input,
-                                AtomicV3FeatureInputKey& key,
-                                u64&                     count) {
+        u64                     trainRead      = 0;
+        u64                     validationRead = 0;
+        const auto readKey = [](std::ifstream& input, AtomicV3FeatureInputKey& key, u64& count) {
             input.read(reinterpret_cast<char*>(key.data()), std::streamsize(key.size()));
             if (input.gcount() == 0 && input.eof())
                 return 0;
@@ -2275,7 +2260,7 @@ class AtomicV3Generator {
             return 1;
         };
 
-        int trainStatus = readKey(trainInput, trainKey, trainRead);
+        int trainStatus      = readKey(trainInput, trainKey, trainRead);
         int validationStatus = readKey(validationInput, validationKey, validationRead);
         while (trainStatus > 0 && validationStatus > 0)
         {
@@ -2302,7 +2287,7 @@ class AtomicV3Generator {
 
     u64 game_seed(u64 gameId) const noexcept {
         constexpr char Domain[] = "atomic-v3-game-seed-v1\0";
-        Sha256 hash;
+        Sha256         hash;
         hash.update(Domain, sizeof(Domain) - 1);
         std::array<u8, 16> wire{};
         for (unsigned i = 0; i < 8; ++i)
@@ -2319,11 +2304,11 @@ class AtomicV3Generator {
     }
 
     std::vector<u8> random_move_flags(ReplayablePRNG& rng) const {
-        const auto& source = params.generation;
-        std::vector<u8> flags(usize(source.randomMoveMaxPly + source.randomMoveCount), 0);
+        const auto&      source = params.generation;
+        std::vector<u8>  flags(usize(source.randomMoveMaxPly + source.randomMoveCount), 0);
         std::vector<int> candidates;
-        for (int ply = std::max(source.randomMoveMinPly - 1, 0);
-             ply < source.randomMoveMaxPly; ++ply)
+        for (int ply = std::max(source.randomMoveMinPly - 1, 0); ply < source.randomMoveMaxPly;
+             ++ply)
             candidates.push_back(ply);
         const int count = std::min(source.randomMoveCount, int(candidates.size()));
         for (int i = 0; i < count; ++i)
@@ -2335,16 +2320,16 @@ class AtomicV3Generator {
         return flags;
     }
 
-    std::optional<Move> choose_random_move(Search::Worker& worker,
-                                           Position&       position,
-                                           std::vector<u8>& flags,
-                                           int             ply,
-                                           int&            randomMovesMade,
-                                           ReplayablePRNG&  rng,
+    std::optional<Move> choose_random_move(Search::Worker&     worker,
+                                           Position&           position,
+                                           std::vector<u8>&    flags,
+                                           int                 ply,
+                                           int&                randomMovesMade,
+                                           ReplayablePRNG&     rng,
                                            TranspositionTable& privateTt,
                                            SharedHistories&    privateHistory) {
         const auto& source = params.generation;
-        const bool selected =
+        const bool  selected =
           (source.randomMoveMinPly != -1 && usize(ply) < flags.size() && flags[usize(ply)])
           || (source.randomMoveMinPly == -1 && randomMovesMade < source.randomMoveCount);
         if (!selected)
@@ -2356,8 +2341,7 @@ class AtomicV3Generator {
             const MoveList<LEGAL> moves(position);
             if (moves.size() == 0)
                 return std::nullopt;
-            if (source.randomMoveLikeApery == 0
-                || rng.rand(u64(source.randomMoveLikeApery)) != 0)
+            if (source.randomMoveLikeApery == 0 || rng.rand(u64(source.randomMoveLikeApery)) != 0)
                 return *(moves.begin() + rng.rand(moves.size()));
 
             std::vector<Move> kingMoves;
@@ -2373,19 +2357,18 @@ class AtomicV3Generator {
         }
 
         Search::TrainingSearchRequest request;
-        request.mode    = Search::TrainingSearchMode::FixedDepth;
-        request.depth   = source.randomMultiPvDepth;
-        request.multiPV = usize(source.randomMultiPv);
+        request.mode               = Search::TrainingSearchMode::FixedDepth;
+        request.depth              = source.randomMultiPvDepth;
+        request.multiPV            = usize(source.randomMultiPv);
         request.transpositionTable = &privateTt;
-        request.sharedHistories     = &privateHistory;
-        const auto result = worker.training_search(position, request);
+        request.sharedHistories    = &privateHistory;
+        const auto result          = worker.training_search(position, request);
         if (result.lines.empty())
             return std::nullopt;
         usize candidates = result.lines.size();
         for (usize i = 1; i < candidates; ++i)
             if (std::int64_t(result.lines.front().value)
-                > std::int64_t(result.lines[i].value)
-                    + std::int64_t(source.randomMultiPvDiff))
+                > std::int64_t(result.lines[i].value) + std::int64_t(source.randomMultiPvDiff))
             {
                 candidates = i;
                 break;
@@ -2394,28 +2377,27 @@ class AtomicV3Generator {
         return line.pv.empty() ? std::optional<Move>{} : std::optional<Move>{line.pv[0]};
     }
 
-    void seal_trajectory(AtomicV3Trajectory& trajectory,
+    void seal_trajectory(AtomicV3Trajectory&    trajectory,
                          const Atomic::Outcome& outcome,
-                         AtomicV3StopReason reason) const {
-        trajectory.stopReason = reason;
+                         AtomicV3StopReason     reason) const {
+        trajectory.stopReason     = reason;
         trajectory.terminalResult = !outcome.winner ? 0 : (*outcome.winner == WHITE ? 1 : -1);
         for (auto& sample : trajectory.samples)
-            sample.result = trajectory.terminalResult == 0
-                            ? 0
-                            : (side_to_move_from_fen(sample.fen) == WHITE
-                                 ? trajectory.terminalResult
-                                 : -trajectory.terminalResult);
+            sample.result =
+              trajectory.terminalResult == 0
+                ? 0
+                : (side_to_move_from_fen(sample.fen) == WHITE ? trajectory.terminalResult
+                                                              : -trajectory.terminalResult);
     }
 
     bool commit_trajectory(AtomicV3Trajectory& trajectory) {
         if (trajectory.samples.empty() || trajectory.playedMoves.empty())
             return false;
 
-        const auto group = atomic_v3_split_group_id(trajectory.rootPosition,
-                                                     trajectory.atomic960,
-                                                     trajectory.playedMoves);
-        const auto role = atomic_v3_partition_role(params.splitSeed,
-                                                    params.validationThreshold, group);
+        const auto group = atomic_v3_split_group_id(trajectory.rootPosition, trajectory.atomic960,
+                                                    trajectory.playedMoves);
+        const auto role =
+          atomic_v3_partition_role(params.splitSeed, params.validationThreshold, group);
         // Freeze train first. Validation is not retained until the exact train
         // feature-input set has been externally sorted; this makes train win
         // every collision without unbounded candidate buffering.
@@ -2424,12 +2406,12 @@ class AtomicV3Generator {
         if (trainWritten == params.trainCount && role != AtomicV3DatasetRole::VALIDATION)
             return false;
 
-        u64* written = role == AtomicV3DatasetRole::TRAIN ? &trainWritten : &validationWritten;
-        const u64 target = role == AtomicV3DatasetRole::TRAIN ? params.trainCount
-                                                               : params.validationCount;
+        u64*      written = role == AtomicV3DatasetRole::TRAIN ? &trainWritten : &validationWritten;
+        const u64 target =
+          role == AtomicV3DatasetRole::TRAIN ? params.trainCount : params.validationCount;
         if (*written >= target)
             return false;
-        const u64 remaining = target - *written;
+        const u64                            remaining = target - *written;
         std::vector<AtomicV3FeatureInputKey> retainedValidationKeys;
         if (role == AtomicV3DatasetRole::VALIDATION)
         {
@@ -2507,15 +2489,14 @@ class AtomicV3Generator {
         }
 
         const u64 done = trainWritten + validationWritten;
-        if (done % ReportEvery == 0 || (trainWritten == params.trainCount
-                                        && validationWritten == params.validationCount))
+        if (done % ReportEvery == 0
+            || (trainWritten == params.trainCount && validationWritten == params.validationCount))
         {
             const auto elapsed = std::max(
-              1.0, std::chrono::duration<double>(std::chrono::steady_clock::now() - started)
-                     .count());
-            std::cout << "info string Atomic V3 data " << done << "/"
-                      << params.generation.count << " records, "
-                      << u64(double(done) / elapsed) << " records/s" << std::endl;
+              1.0,
+              std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count());
+            std::cout << "info string Atomic V3 data " << done << "/" << params.generation.count
+                      << " records, " << u64(double(done) / elapsed) << " records/s" << std::endl;
         }
         return true;
     }
@@ -2525,8 +2506,8 @@ class AtomicV3Generator {
                                 TranspositionTable& privateTt,
                                 SharedHistories&    privateHistory) {
         CompletedGame completed;
-        completed.gameId = gameId;
-        const auto& source = params.generation;
+        completed.gameId              = gameId;
+        const auto&            source = params.generation;
         std::vector<StateInfo> states(usize(source.writeMaxPly));
         privateTt.new_search();
         ReplayablePRNG rng(game_seed(gameId));
@@ -2539,7 +2520,7 @@ class AtomicV3Generator {
             return completed;
         }
 
-        auto& trajectory = completed.trajectory;
+        auto& trajectory                  = completed.trajectory;
         trajectory.rootFen                = position.fen();
         trajectory.atomic960              = source.atomic960;
         trajectory.adjudicateInsufficient = source.adjudicateInsufficient;
@@ -2550,8 +2531,8 @@ class AtomicV3Generator {
             return completed;
         }
 
-        std::vector<u8> flags = random_move_flags(rng);
-        int randomMovesMade   = 0;
+        std::vector<u8> flags           = random_move_flags(rng);
+        int             randomMovesMade = 0;
         for (int ply = 0; !cancelled.load(std::memory_order_relaxed); ++ply)
         {
             const auto outcome = Atomic::outcome(position, true, 0);
@@ -2579,25 +2560,25 @@ class AtomicV3Generator {
             const int depth = source.searchDepthMin
                             + int(rng.rand(u64(source.searchDepthMax - source.searchDepthMin + 1)));
             Search::TrainingSearchRequest evalRequest;
-            evalRequest.mode = position.atomic_in_check(position.side_to_move())
-                                 ? Search::TrainingSearchMode::Quiescence
-                                 : Search::TrainingSearchMode::Evaluate;
+            evalRequest.mode               = position.atomic_in_check(position.side_to_move())
+                                             ? Search::TrainingSearchMode::Quiescence
+                                             : Search::TrainingSearchMode::Evaluate;
             evalRequest.transpositionTable = &privateTt;
-            evalRequest.sharedHistories     = &privateHistory;
-            const auto evalResult = worker.training_search(position, evalRequest);
+            evalRequest.sharedHistories    = &privateHistory;
+            const auto evalResult          = worker.training_search(position, evalRequest);
             Search::TrainingSearchRequest qRequest;
-            qRequest.mode               = Search::TrainingSearchMode::Quiescence;
-            qRequest.transpositionTable = &privateTt;
-            qRequest.sharedHistories     = &privateHistory;
-            const auto qResult = worker.training_search(position, qRequest);
+            qRequest.mode                         = Search::TrainingSearchMode::Quiescence;
+            qRequest.transpositionTable           = &privateTt;
+            qRequest.sharedHistories              = &privateHistory;
+            const auto                    qResult = worker.training_search(position, qRequest);
             Search::TrainingSearchRequest searchRequest;
             searchRequest.mode               = Search::TrainingSearchMode::FixedDepth;
             searchRequest.depth              = depth;
             searchRequest.nodes              = source.nodes;
             searchRequest.multiPV            = 1;
             searchRequest.transpositionTable = &privateTt;
-            searchRequest.sharedHistories     = &privateHistory;
-            const auto searchResult = worker.training_search(position, searchRequest);
+            searchRequest.sharedHistories    = &privateHistory;
+            const auto searchResult          = worker.training_search(position, searchRequest);
             if (cancelled.load(std::memory_order_relaxed))
                 return completed;
             if (searchResult.value == VALUE_NONE || qResult.value == VALUE_NONE
@@ -2607,14 +2588,14 @@ class AtomicV3Generator {
                 return completed;
             }
 
-            const int  score      = searchResult.value;
-            const Move bestMove   = searchResult.pv[0];
+            const int  score    = searchResult.value;
+            const Move bestMove = searchResult.pv[0];
             const bool stableTarget =
               std::abs(int(qResult.value) - int(evalResult.value)) <= source.evalDiffLimit;
-            if (ply >= source.writeMinPly && dataset_position_clocks_fit(source.dataFormat, position)
-                && std::abs(score) < source.evalLimit && stableTarget
-                && position.has_king(WHITE) && position.has_king(BLACK)
-                && !position.atomic_in_check(position.side_to_move())
+            if (ply >= source.writeMinPly
+                && dataset_position_clocks_fit(source.dataFormat, position)
+                && std::abs(score) < source.evalLimit && stableTarget && position.has_king(WHITE)
+                && position.has_king(BLACK) && !position.atomic_in_check(position.side_to_move())
                 && !(source.filterCaptures && position.capture(bestMove))
                 && !(source.filterChecks && position.gives_check(bestMove))
                 && !(source.filterPromotions && bestMove.type_of() == PROMOTION))
@@ -2622,9 +2603,8 @@ class AtomicV3Generator {
                   {position.fen(), score, bestMove, ply, 0,
                    source.atomic960 ? TRAINING_DATA_CHESS960 : NO_TRAINING_DATA_FLAGS});
 
-            const auto randomMove = choose_random_move(worker, position, flags, ply,
-                                                       randomMovesMade, rng, privateTt,
-                                                       privateHistory);
+            const auto randomMove = choose_random_move(
+              worker, position, flags, ply, randomMovesMade, rng, privateTt, privateHistory);
             const Move playedMove = randomMove.value_or(bestMove);
             if (!MoveList<LEGAL>(position).contains(playedMove))
             {
@@ -2643,16 +2623,16 @@ class AtomicV3Generator {
         return completed;
     }
 
-    void produce_games(usize workerId,
-                       usize workerCount,
-                       Search::Worker& worker,
+    void produce_games(usize               workerId,
+                       usize               workerCount,
+                       Search::Worker&     worker,
                        TranspositionTable& privateTt,
                        SharedHistories&    privateHistory) {
         for (u64 gameId = workerId; gameId < params.maximumGames && !cancelled.load();
              gameId += workerCount)
         {
             CompletedGame completed = generate_game(gameId, worker, privateTt, privateHistory);
-            const bool    fatal      = !completed.error.empty();
+            const bool    fatal     = !completed.error.empty();
             {
                 std::unique_lock<std::mutex> lock(pendingMutex);
                 pendingCv.wait(lock, [&]() {
@@ -2680,22 +2660,19 @@ bool portable_atomic_v3_basename(std::string_view name) {
     if (name.empty() || name == "." || name == "..")
         return false;
     return std::none_of(name.begin(), name.end(), [](unsigned char c) {
-        return c < 0x20 || c == 0x7F || c == '/' || c == '\\' || c == ':' || c == '*'
-            || c == '?' || c == '"' || c == '<' || c == '>' || c == '|';
+        return c < 0x20 || c == 0x7F || c == '/' || c == '\\' || c == ':' || c == '*' || c == '?'
+            || c == '"' || c == '<' || c == '>' || c == '|';
     });
 }
 
 std::optional<std::filesystem::path> create_atomic_v3_private_directory(
-  const std::filesystem::path& parent,
-  std::string_view             basename,
-  u64                          seed,
-  std::string&                 error) {
+  const std::filesystem::path& parent, std::string_view basename, u64 seed, std::string& error) {
     ReplayablePRNG suffix(seed ^ 0xA70C0003A77A31ULL);
     for (unsigned attempt = 0; attempt < 100; ++attempt)
     {
         std::ostringstream name;
         name << '.' << basename << ".atomic-v3-private-" << std::hex << suffix.rand<u64>();
-        const auto path = parent / name.str();
+        const auto      path = parent / name.str();
         std::error_code ec;
         if (std::filesystem::create_directory(path, ec))
             return path;
@@ -2716,9 +2693,8 @@ struct AtomicV3PublishArtifact {
     u64                   bytes = 0;
 };
 
-DataResult hash_stable_regular_file(const std::filesystem::path& path,
-                                    std::string&                 checksum,
-                                    u64&                         bytes) {
+DataResult
+hash_stable_regular_file(const std::filesystem::path& path, std::string& checksum, u64& bytes) {
     checksum.clear();
     bytes = 0;
 #ifdef _WIN32
@@ -2729,9 +2705,9 @@ DataResult hash_stable_regular_file(const std::filesystem::path& path,
         return DataResult::failure(DataError::OPEN_FAILED,
                                    "Cannot open Atomic V3 artifact for authenticated audit: "
                                      + std::system_category().message(int(::GetLastError())));
-    FILE_ATTRIBUTE_TAG_INFO attributes{};
+    FILE_ATTRIBUTE_TAG_INFO    attributes{};
     BY_HANDLE_FILE_INFORMATION before{};
-    LARGE_INTEGER size{};
+    LARGE_INTEGER              size{};
     if (!::GetFileInformationByHandleEx(handle, FileAttributeTagInfo, &attributes,
                                         sizeof(attributes))
         || (attributes.FileAttributes & (FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_DIRECTORY))
@@ -2762,18 +2738,18 @@ DataResult hash_stable_regular_file(const std::filesystem::path& path,
         hash.update(buffer.data(), count);
         remaining -= count;
     }
-    char trailing = 0;
-    DWORD trailingRead = 0;
+    char                       trailing     = 0;
+    DWORD                      trailingRead = 0;
     BY_HANDLE_FILE_INFORMATION after{};
-    const bool stable = ::ReadFile(handle, &trailing, 1, &trailingRead, nullptr)
-                     && trailingRead == 0 && ::GetFileInformationByHandle(handle, &after)
-                     && before.dwVolumeSerialNumber == after.dwVolumeSerialNumber
-                     && before.nFileIndexHigh == after.nFileIndexHigh
-                     && before.nFileIndexLow == after.nFileIndexLow
-                     && before.nFileSizeHigh == after.nFileSizeHigh
-                     && before.nFileSizeLow == after.nFileSizeLow
-                     && before.ftLastWriteTime.dwHighDateTime == after.ftLastWriteTime.dwHighDateTime
-                     && before.ftLastWriteTime.dwLowDateTime == after.ftLastWriteTime.dwLowDateTime;
+    const bool                 stable =
+      ::ReadFile(handle, &trailing, 1, &trailingRead, nullptr) && trailingRead == 0
+      && ::GetFileInformationByHandle(handle, &after)
+      && before.dwVolumeSerialNumber == after.dwVolumeSerialNumber
+      && before.nFileIndexHigh == after.nFileIndexHigh
+      && before.nFileIndexLow == after.nFileIndexLow && before.nFileSizeHigh == after.nFileSizeHigh
+      && before.nFileSizeLow == after.nFileSizeLow
+      && before.ftLastWriteTime.dwHighDateTime == after.ftLastWriteTime.dwHighDateTime
+      && before.ftLastWriteTime.dwLowDateTime == after.ftLastWriteTime.dwLowDateTime;
     ::CloseHandle(handle);
     if (!stable)
         return DataResult::failure(DataError::FILE_IDENTITY_MISMATCH,
@@ -2800,20 +2776,20 @@ DataResult hash_stable_regular_file(const std::filesystem::path& path,
                                    "Atomic V3 artifact is not a stable regular non-symlink file: "
                                      + std::generic_category().message(code ? code : EINVAL));
     }
-    DataResult result = sha256_file_descriptor(descriptor, u64(before.st_size), checksum);
+    DataResult  result = sha256_file_descriptor(descriptor, u64(before.st_size), checksum);
     struct stat after{};
-    const auto timestampsMatch = [&]() {
-#if defined(__APPLE__)
+    const auto  timestampsMatch = [&]() {
+    #if defined(__APPLE__)
         return before.st_mtimespec.tv_sec == after.st_mtimespec.tv_sec
             && before.st_mtimespec.tv_nsec == after.st_mtimespec.tv_nsec
             && before.st_ctimespec.tv_sec == after.st_ctimespec.tv_sec
             && before.st_ctimespec.tv_nsec == after.st_ctimespec.tv_nsec;
-#else
+    #else
         return before.st_mtim.tv_sec == after.st_mtim.tv_sec
             && before.st_mtim.tv_nsec == after.st_mtim.tv_nsec
             && before.st_ctim.tv_sec == after.st_ctim.tv_sec
             && before.st_ctim.tv_nsec == after.st_ctim.tv_nsec;
-#endif
+    #endif
     };
     if (result
         && (::fstat(descriptor, &after) != 0 || before.st_dev != after.st_dev
@@ -2823,9 +2799,9 @@ DataResult hash_stable_regular_file(const std::filesystem::path& path,
                                      "Atomic V3 artifact changed during authenticated audit");
     const int closeResult = ::close(descriptor);
     if (closeResult != 0 && result)
-        result = DataResult::failure(DataError::CLOSE_FAILED,
-                                     "Cannot close Atomic V3 artifact audit: "
-                                       + std::generic_category().message(errno));
+        result =
+          DataResult::failure(DataError::CLOSE_FAILED, "Cannot close Atomic V3 artifact audit: "
+                                                         + std::generic_category().message(errno));
     if (!result)
     {
         checksum.clear();
@@ -2842,9 +2818,9 @@ DataResult synchronize_publication_directory(const std::filesystem::path& direct
     // is committed with FlushFileBuffers and every final artifact was already
     // committed before its private audit; this handle flush is the strongest
     // available metadata barrier and is allowed to report "unsupported".
-    const HANDLE handle = ::CreateFileW(directory.c_str(), GENERIC_READ,
-                                        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-                                        nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+    const HANDLE handle = ::CreateFileW(
+      directory.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+      nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
     if (handle == INVALID_HANDLE_VALUE)
         return DataResult::failure(DataError::OPEN_FAILED,
                                    "Cannot open Atomic V3 publication directory: "
@@ -2870,7 +2846,7 @@ DataResult synchronize_publication_directory(const std::filesystem::path& direct
     do
         result = ::fsync(descriptor);
     while (result != 0 && errno == EINTR);
-    const int code = errno;
+    const int code        = errno;
     const int closeResult = ::close(descriptor);
     if (result != 0 || closeResult != 0)
         return DataResult::failure(DataError::WRITE_FAILED,
@@ -2902,9 +2878,9 @@ DataResult same_regular_file_identity(const std::filesystem::path& first,
         return DataResult::failure(DataError::OPEN_FAILED,
                                    "Cannot identify Atomic V3 publication during rollback");
     }
-    FILE_ATTRIBUTE_TAG_INFO firstTag{}, secondTag{};
+    FILE_ATTRIBUTE_TAG_INFO    firstTag{}, secondTag{};
     BY_HANDLE_FILE_INFORMATION firstInfo{}, secondInfo{};
-    const bool inspected =
+    const bool                 inspected =
       ::GetFileInformationByHandleEx(firstHandle, FileAttributeTagInfo, &firstTag, sizeof(firstTag))
       && ::GetFileInformationByHandleEx(secondHandle, FileAttributeTagInfo, &secondTag,
                                         sizeof(secondTag))
@@ -2968,9 +2944,9 @@ DataResult publish_atomic_v3_artifacts(const std::vector<AtomicV3PublishArtifact
                                        "Staged Atomic V3 artifact differs before publication");
     }
 
-    const auto journal = directory
-                       / ("." + artifacts.front().destination.filename().string()
-                          + ".atomic-v3-publish.journal");
+    const auto journal =
+      directory
+      / ("." + artifacts.front().destination.filename().string() + ".atomic-v3-publish.journal");
     std::FILE* journalFile = open_private_exclusive(journal);
     if (!journalFile)
         return DataResult::failure(errno == EEXIST ? DataError::OUTPUT_EXISTS
@@ -2982,11 +2958,11 @@ DataResult publish_atomic_v3_artifacts(const std::vector<AtomicV3PublishArtifact
         journalContents << artifact.destination.filename().string() << '\t' << artifact.bytes
                         << '\t' << artifact.sha256 << '\n';
     const std::string journalBytes = journalContents.str();
-    DataResult journalResult =
+    DataResult        journalResult =
       std::fwrite(journalBytes.data(), 1, journalBytes.size(), journalFile) == journalBytes.size()
-        ? sync_private_file(journalFile, "Atomic V3 publication journal")
-        : DataResult::failure(DataError::WRITE_FAILED,
-                              "Cannot write Atomic V3 publication journal");
+               ? sync_private_file(journalFile, "Atomic V3 publication journal")
+               : DataResult::failure(DataError::WRITE_FAILED,
+                                     "Cannot write Atomic V3 publication journal");
     if (std::fclose(journalFile) != 0 && journalResult)
         journalResult = DataResult::failure(DataError::CLOSE_FAILED,
                                             "Cannot close Atomic V3 publication journal");
@@ -3004,18 +2980,18 @@ DataResult publish_atomic_v3_artifacts(const std::vector<AtomicV3PublishArtifact
     }
 
     std::vector<std::size_t> published;
-    DataResult failure = DataResult::success();
+    DataResult               failure = DataResult::success();
     for (std::size_t index = 0; index < artifacts.size(); ++index)
     {
-        const auto& artifact = artifacts[index];
+        const auto&     artifact = artifacts[index];
         std::error_code ec;
         std::filesystem::create_hard_link(artifact.staged, artifact.destination, ec);
         if (ec)
         {
-            failure = DataResult::failure(
-              ec == std::errc::file_exists ? DataError::OUTPUT_EXISTS : DataError::WRITE_FAILED,
-              "Cannot transactionally publish Atomic V3 artifact "
-                + artifact.destination.string() + ": " + ec.message());
+            failure = DataResult::failure(ec == std::errc::file_exists ? DataError::OUTPUT_EXISTS
+                                                                       : DataError::WRITE_FAILED,
+                                          "Cannot transactionally publish Atomic V3 artifact "
+                                            + artifact.destination.string() + ": " + ec.message());
             break;
         }
         published.push_back(index);
@@ -3052,9 +3028,9 @@ DataResult publish_atomic_v3_artifacts(const std::vector<AtomicV3PublishArtifact
         {
             std::error_code journalError;
             if (!std::filesystem::remove(journal, journalError) || journalError)
-                failure.message += "; rollback succeeded but journal cleanup failed: "
-                                 + (journalError ? journalError.message()
-                                                 : std::string("path was not removed"));
+                failure.message +=
+                  "; rollback succeeded but journal cleanup failed: "
+                  + (journalError ? journalError.message() : std::string("path was not removed"));
             (void) synchronize_publication_directory(directory);
         }
         return failure;
@@ -3146,8 +3122,7 @@ bool generate_training_data(Engine& engine, std::istream& input) {
     AuthenticatedFile networkMetadata;
     if (params.dataFormat == DatasetFormat::ATOMIC_BIN_V2)
     {
-        if (!authenticate_network(engine, engine.binaryDirectory, {},
-                                  networkMetadata, error))
+        if (!authenticate_network(engine, engine.binaryDirectory, {}, networkMetadata, error))
         {
             print_error(error);
             return false;
@@ -3166,10 +3141,10 @@ bool generate_training_data(Engine& engine, std::istream& input) {
     std::vector<std::string> openings;
     AuthenticatedFile        bookMetadata;
     const bool               bookIsFile = !params.book.empty();
-    const bool bookLoaded = bookIsFile
-                            ? authenticate_book_and_load(params.book, params.atomic960, {}, openings,
-                                                         bookMetadata, error)
-                            : load_book(nullptr, {}, params.atomic960, openings, error);
+    const bool               bookLoaded = bookIsFile
+                                          ? authenticate_book_and_load(params.book, params.atomic960, {},
+                                                                       openings, bookMetadata, error)
+                                          : load_book(nullptr, {}, params.atomic960, openings, error);
     if (!bookLoaded)
     {
         print_error(error);
@@ -3304,8 +3279,7 @@ bool generate_training_data(Engine& engine, std::istream& input) {
 
 bool generate_atomic_v3_chunk(Engine& engine, std::istream& input) {
 #ifndef ATOMIC_DATA_GENERATOR_GIT_SHA
-    print_error(
-      "generate_atomic_v3_chunk requires a clean Git build with a pinned 40-hex commit");
+    print_error("generate_atomic_v3_chunk requires a clean Git build with a pinned 40-hex commit");
     return false;
 #endif
 #ifdef ATOMIC_DATA_GENERATOR_GIT_SHA
@@ -3339,8 +3313,7 @@ bool generate_atomic_v3_chunk(Engine& engine, std::istream& input) {
         print_error("generate_atomic_v3_chunk requires an empty SyzygyPath");
         return false;
     }
-    if (engine.threads.size() == 0
-        || engine.threads.size() > std::numeric_limits<u32>::max())
+    if (engine.threads.size() == 0 || engine.threads.size() > std::numeric_limits<u32>::max())
     {
         print_error("generate_atomic_v3_chunk thread count is outside uint32");
         return false;
@@ -3348,8 +3321,8 @@ bool generate_atomic_v3_chunk(Engine& engine, std::istream& input) {
     params.generation.atomic960 = int(engine.options["UCI_Chess960"]) != 0;
 
     AuthenticatedFile networkMetadata;
-    if (!authenticate_network(engine, engine.binaryDirectory, params.networkSha256,
-                              networkMetadata, error))
+    if (!authenticate_network(engine, engine.binaryDirectory, params.networkSha256, networkMetadata,
+                              error))
     {
         print_error(error);
         return false;
@@ -3363,11 +3336,10 @@ bool generate_atomic_v3_chunk(Engine& engine, std::istream& input) {
     std::vector<std::string> openings;
     AuthenticatedFile        bookMetadata;
     const bool               bookIsFile = !params.generation.book.empty();
-    const bool bookLoaded = bookIsFile
-                            ? authenticate_book_and_load(
-                                params.generation.book, params.generation.atomic960,
-                                params.bookSha256, openings, bookMetadata, error)
-                            : load_book(nullptr, {}, params.generation.atomic960, openings, error);
+    const bool               bookLoaded =
+      bookIsFile ? authenticate_book_and_load(params.generation.book, params.generation.atomic960,
+                                                            params.bookSha256, openings, bookMetadata, error)
+                               : load_book(nullptr, {}, params.generation.atomic960, openings, error);
     if (!bookLoaded)
     {
         print_error(error);
@@ -3384,18 +3356,19 @@ bool generate_atomic_v3_chunk(Engine& engine, std::istream& input) {
     std::string{}.swap(bookMetadata.contents);
 
     std::error_code ec;
-    auto prefix = std::filesystem::absolute(path_from_utf8(params.outputPrefix), ec);
+    auto            prefix = std::filesystem::absolute(path_from_utf8(params.outputPrefix), ec);
     if (ec)
     {
         print_error("Cannot resolve Atomic V3 output prefix: " + ec.message());
         return false;
     }
-    prefix = prefix.lexically_normal();
+    prefix            = prefix.lexically_normal();
     const auto parent = prefix.parent_path();
     const auto base   = prefix.filename().string();
     if (!portable_atomic_v3_basename(base) || !std::filesystem::is_directory(parent, ec) || ec)
     {
-        print_error("Atomic V3 output prefix must have a portable basename in an existing directory");
+        print_error(
+          "Atomic V3 output prefix must have a portable basename in an existing directory");
         return false;
     }
 
@@ -3405,9 +3378,9 @@ bool generate_atomic_v3_chunk(Engine& engine, std::istream& input) {
     const auto validationManifest = atomic_bin_v2_manifest_path(validationDataset);
     const auto trainLedger        = parent / (base + ".train.attraj");
     const auto validationLedger   = parent / (base + ".validation.attraj");
-    const std::vector<std::filesystem::path> finalPaths = {
-      trainDataset, validationDataset, trainManifest,
-      validationManifest, trainLedger, validationLedger};
+    const std::vector<std::filesystem::path> finalPaths = {trainDataset,  validationDataset,
+                                                           trainManifest, validationManifest,
+                                                           trainLedger,   validationLedger};
     if (!preflight_output_paths(finalPaths, error))
     {
         print_error(error);
@@ -3415,8 +3388,7 @@ bool generate_atomic_v3_chunk(Engine& engine, std::istream& input) {
     }
 
     const u64 resolvedSeed = ReplayablePRNG::resolve(params.generation.seedText);
-    auto privateDirectory =
-      create_atomic_v3_private_directory(parent, base, resolvedSeed, error);
+    auto privateDirectory  = create_atomic_v3_private_directory(parent, base, resolvedSeed, error);
     if (!privateDirectory)
     {
         print_error(error);
@@ -3427,20 +3399,18 @@ bool generate_atomic_v3_chunk(Engine& engine, std::istream& input) {
         std::filesystem::remove_all(*privateDirectory, cleanupError);
     };
 
-    AtomicV3RolePaths trainPaths{
-      *privateDirectory / trainDataset.filename(),
-      *privateDirectory / trainManifest.filename(),
-      *privateDirectory / trainLedger.filename(),
-      trainDataset,
-      trainManifest,
-      trainLedger};
-    AtomicV3RolePaths validationPaths{
-      *privateDirectory / validationDataset.filename(),
-      *privateDirectory / validationManifest.filename(),
-      *privateDirectory / validationLedger.filename(),
-      validationDataset,
-      validationManifest,
-      validationLedger};
+    AtomicV3RolePaths trainPaths{*privateDirectory / trainDataset.filename(),
+                                 *privateDirectory / trainManifest.filename(),
+                                 *privateDirectory / trainLedger.filename(),
+                                 trainDataset,
+                                 trainManifest,
+                                 trainLedger};
+    AtomicV3RolePaths validationPaths{*privateDirectory / validationDataset.filename(),
+                                      *privateDirectory / validationManifest.filename(),
+                                      *privateDirectory / validationLedger.filename(),
+                                      validationDataset,
+                                      validationManifest,
+                                      validationLedger};
 
     if (DataResult preflight =
           preflight_atomic_bin_v2_manifest_publication(trainPaths.stagedManifest);
@@ -3459,18 +3429,16 @@ bool generate_atomic_v3_chunk(Engine& engine, std::istream& input) {
         return false;
     }
 
-    AtomicV3RoleOutput trainOutput(trainPaths, AtomicV3DatasetRole::TRAIN,
-                                    params.splitSeed, params.validationThreshold,
-                                    u32(params.generation.writeMaxPly));
+    AtomicV3RoleOutput trainOutput(trainPaths, AtomicV3DatasetRole::TRAIN, params.splitSeed,
+                                   params.validationThreshold, u32(params.generation.writeMaxPly));
     AtomicV3RoleOutput validationOutput(validationPaths, AtomicV3DatasetRole::VALIDATION,
-                                         params.splitSeed, params.validationThreshold,
-                                         u32(params.generation.writeMaxPly));
+                                        params.splitSeed, params.validationThreshold,
+                                        u32(params.generation.writeMaxPly));
 
     const u64 hashMb = u64(int(engine.options["Hash"]));
     std::cout << "INFO: Executing generate_atomic_v3_chunk command\n"
               << "INFO: data_schema_sha256 = " << AtomicBinV2SchemaSha256Hex << '\n'
-              << "INFO: trajectory_schema_sha256 = "
-              << AtomicV3TrajectorySchemaSha256Hex << '\n'
+              << "INFO: trajectory_schema_sha256 = " << AtomicV3TrajectorySchemaSha256Hex << '\n'
               << "INFO: generation_seed = " << resolvedSeed << '\n'
               << "INFO: split_seed = " << params.splitSeed << '\n'
               << "INFO: validation_threshold_u64 = " << params.validationThreshold << '\n'
@@ -3481,7 +3449,7 @@ bool generate_atomic_v3_chunk(Engine& engine, std::istream& input) {
               << "INFO: validation_count = " << params.validationCount << std::endl;
 
     AtomicV3Generator generator(params, engine.threads, trainOutput, validationOutput,
-                                 std::move(openings), resolvedSeed, *privateDirectory, hashMb);
+                                std::move(openings), resolvedSeed, *privateDirectory, hashMb);
     if (!generator.run(error))
     {
         DataResult auditCleanup      = generator.abort_audits();
@@ -3507,11 +3475,10 @@ bool generate_atomic_v3_chunk(Engine& engine, std::istream& input) {
         return false;
     }
 
-    const u32 threads = u32(engine.threads.size());
+    const u32         threads = u32(engine.threads.size());
     const std::string version = engine_version_info();
-    if (DataResult result = trainOutput.finalize(
-          params, networkMetadata, bookIsFile, bookMetadata, threads, hashMb, version,
-          params.trainCount);
+    if (DataResult result = trainOutput.finalize(params, networkMetadata, bookIsFile, bookMetadata,
+                                                 threads, hashMb, version, params.trainCount);
         !result)
     {
         error = result.message;
@@ -3521,9 +3488,9 @@ bool generate_atomic_v3_chunk(Engine& engine, std::istream& input) {
         print_error(error);
         return false;
     }
-    if (DataResult result = validationOutput.finalize(
-          params, networkMetadata, bookIsFile, bookMetadata, threads, hashMb, version,
-          params.validationCount);
+    if (DataResult result =
+          validationOutput.finalize(params, networkMetadata, bookIsFile, bookMetadata, threads,
+                                    hashMb, version, params.validationCount);
         !result)
     {
         error = result.message;
@@ -3546,17 +3513,17 @@ bool generate_atomic_v3_chunk(Engine& engine, std::istream& input) {
     }
 
     const std::vector<AtomicV3PublishArtifact> artifacts = {
-      {trainPaths.stagedDataset, trainPaths.finalDataset,
-       trainOutput.dataset_sink().sha256_hex(), trainOutput.dataset_sink().finalized_size()},
+      {trainPaths.stagedDataset, trainPaths.finalDataset, trainOutput.dataset_sink().sha256_hex(),
+       trainOutput.dataset_sink().finalized_size()},
       {validationPaths.stagedDataset, validationPaths.finalDataset,
        validationOutput.dataset_sink().sha256_hex(),
        validationOutput.dataset_sink().finalized_size()},
-      {trainPaths.stagedManifest, trainPaths.finalManifest,
-       trainOutput.manifest_sha256(), trainOutput.manifest_size()},
+      {trainPaths.stagedManifest, trainPaths.finalManifest, trainOutput.manifest_sha256(),
+       trainOutput.manifest_size()},
       {validationPaths.stagedManifest, validationPaths.finalManifest,
        validationOutput.manifest_sha256(), validationOutput.manifest_size()},
-      {trainPaths.stagedLedger, trainPaths.finalLedger,
-       trainOutput.ledger_metadata().sha256, trainOutput.ledger_metadata().bytes},
+      {trainPaths.stagedLedger, trainPaths.finalLedger, trainOutput.ledger_metadata().sha256,
+       trainOutput.ledger_metadata().bytes},
       {validationPaths.stagedLedger, validationPaths.finalLedger,
        validationOutput.ledger_metadata().sha256, validationOutput.ledger_metadata().bytes},
     };
@@ -3573,18 +3540,16 @@ bool generate_atomic_v3_chunk(Engine& engine, std::istream& input) {
     cleanupPrivate();
     std::cout << "INFO: generate_atomic_v3_chunk finished.\n"
               << "INFO: train_records=" << generator.train_records()
-              << " validation_records=" << generator.validation_records()
-              << " trajectories="
+              << " validation_records=" << generator.validation_records() << " trajectories="
               << trainOutput.ledger_metadata().trajectories
                    + validationOutput.ledger_metadata().trajectories
               << " games=" << generator.games_generated() << '\n'
-              << "INFO: committed_game_id_range = 0.."
-              << (generator.games_generated() - 1) << " (diagnostic-only)\n"
+              << "INFO: committed_game_id_range = 0.." << (generator.games_generated() - 1)
+              << " (diagnostic-only)\n"
               << "INFO: train_manifest = " << trainManifest.string() << '\n'
               << "INFO: validation_manifest = " << validationManifest.string() << '\n'
               << "INFO: train_trajectory_ledger = " << trainLedger.string() << '\n'
-              << "INFO: validation_trajectory_ledger = " << validationLedger.string()
-              << std::endl;
+              << "INFO: validation_trajectory_ledger = " << validationLedger.string() << std::endl;
     return true;
 }
 

@@ -345,8 +345,7 @@ Search::TrainingSearchResult Search::Worker::training_search(Position&          
 
     for (int i = 7; i > 0; --i)
     {
-        (ss - i)->continuationHistory =
-          &active_continuation_history()[0][0][NO_PIECE][0];
+        (ss - i)->continuationHistory           = &active_continuation_history()[0][0][NO_PIECE][0];
         (ss - i)->continuationCorrectionHistory = &continuationCorrectionHistory[NO_PIECE][0];
         (ss - i)->staticEval                    = VALUE_NONE;
     }
@@ -908,7 +907,7 @@ void Search::Worker::do_move(
 void Search::Worker::do_null_move(Position& pos, StateInfo& st, Stack* const ss) {
     pos.do_null_move(st);
     ss->currentMove                   = Move::null();
-    ss->continuationHistory = &active_continuation_history()[0][0][NO_PIECE][0];
+    ss->continuationHistory           = &active_continuation_history()[0][0][NO_PIECE][0];
     ss->continuationCorrectionHistory = &continuationCorrectionHistory[NO_PIECE][0];
 }
 
@@ -1334,7 +1333,8 @@ Value Search::Worker::search(
             {
                 // Save ProbCut data into transposition table
                 ttWriter.write(posKey, value_to_tt(value, ss->ply), ss->ttPv, BOUND_LOWER,
-                               probCutDepth + 1, move, unadjustedStaticEval, active_tt().generation());
+                               probCutDepth + 1, move, unadjustedStaticEval,
+                               active_tt().generation());
 
                 if (!is_decisive(value))
                     return value - (probCutBeta - beta);
@@ -1356,7 +1356,7 @@ moves_loop:  // When in check, search starts here
 
 
     MovePicker mp(pos, ttData.move, depth, &mainHistory, &lowPlyHistory, &captureHistory, contHist,
-                   &active_shared_history(), ss->ply);
+                  &active_shared_history(), ss->ply);
 
     value = bestValue;
 

@@ -101,8 +101,7 @@ class Engine {
     bool                                 verify_network() const;
     LargePagePtr<Eval::NNUE::AnyNetwork> get_default_network();
     void                                 load_network(const std::filesystem::path& file);
-    bool load_authenticated_network(std::istream&                 stream,
-                                    const std::filesystem::path& logicalPath);
+    bool load_authenticated_network(std::istream& stream, const std::filesystem::path& logicalPath);
     void save_network(const std::optional<std::filesystem::path>& file);
 
     // utility functions

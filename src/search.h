@@ -185,7 +185,7 @@ struct TrainingSearchRequest {
     // Data generation may provide a worker-private table so independent games
     // never race through the playing engine's shared TT.
     TranspositionTable* transpositionTable = nullptr;
-    SharedHistories*    sharedHistories     = nullptr;
+    SharedHistories*    sharedHistories    = nullptr;
 };
 
 struct TrainingSearchLine {
@@ -399,9 +399,7 @@ class Worker {
     ContinuationHistory (&continuationHistory)[2][2];
 
    private:
-    TranspositionTable& active_tt() const noexcept {
-        return trainingTt ? *trainingTt : tt;
-    }
+    TranspositionTable& active_tt() const noexcept { return trainingTt ? *trainingTt : tt; }
     ContinuationHistory (&active_continuation_history() noexcept)[2][2] {
         return active_shared_history().continuationHistory;
     }
@@ -464,8 +462,8 @@ class Worker {
     const OptionsMap&                                        options;
     ThreadPool&                                              threads;
     TranspositionTable&                                      tt;
-    TranspositionTable*                                      trainingTt = nullptr;
-    SharedHistories*                                         trainingSharedHistory = nullptr;
+    TranspositionTable*                                         trainingTt            = nullptr;
+    SharedHistories*                                            trainingSharedHistory = nullptr;
     const LazyNumaReplicatedSystemWide<Eval::NNUE::AnyNetwork>& network;
 
     // Used by NNUE

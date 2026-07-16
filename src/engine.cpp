@@ -337,7 +337,7 @@ void Engine::load_network(const std::filesystem::path& file) {
     threads.ensure_network_replicated();
 }
 
-bool Engine::load_authenticated_network(std::istream& stream,
+bool Engine::load_authenticated_network(std::istream&                stream,
                                         const std::filesystem::path& logicalPath) {
     wait_for_search_finished();
 

@@ -304,15 +304,14 @@ bool atomic_bin_v2_fullmove_fits_game_ply(int gamePly) noexcept {
 
 DataResult encode_atomic_bin_v2_position(const Position& position, AtomicBinV2Position& wire) {
     wire.fill(0);
-    if (!atomic_bin_v2_fullmove_fits_game_ply(position.game_ply())
-        || position.rule50_count() < 0 || u64(position.rule50_count()) > AtomicBinV2MaxRule50)
+    if (!atomic_bin_v2_fullmove_fits_game_ply(position.game_ply()) || position.rule50_count() < 0
+        || u64(position.rule50_count()) > AtomicBinV2MaxRule50)
         return DataResult::failure(DataError::POSITION_CLOCK_OUT_OF_RANGE,
                                    "Atomic BIN V2 position clocks exceed engine-origin limits");
 
     AtomicBinV2PositionFields fields{};
-    if (DataResult converted =
-          position_to_fields(position, u64(position.rule50_count()),
-                             u64(position.game_ply()) / 2 + 1, fields);
+    if (DataResult converted = position_to_fields(position, u64(position.rule50_count()),
+                                                  u64(position.game_ply()) / 2 + 1, fields);
         !converted)
         return converted;
     return encode_atomic_bin_v2_position(fields, position.is_chess960(), wire);
