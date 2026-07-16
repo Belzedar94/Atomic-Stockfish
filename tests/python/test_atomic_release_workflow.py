@@ -198,6 +198,9 @@ def test_release_pr_reproduces_real_windows_wheel_and_frozen_fingerprint() -> No
     assert 'cmp "${first[0]}" "${second[0]}"' in gate
     assert "python -m abi3audit --strict" in gate
     assert "test_wheel_layout.py" in gate
+    assert "Preserve the actual hosted-runner fingerprint on failure" in gate
+    assert "if: always()" in gate
+    assert "release-pr-windows-fingerprint-${{ github.run_attempt }}" in gate
     assert "name: release-pr-windows-wheel" in gate
     for forbidden in ("contents: write", "gh release", "releases/", "draft=false"):
         assert forbidden not in text

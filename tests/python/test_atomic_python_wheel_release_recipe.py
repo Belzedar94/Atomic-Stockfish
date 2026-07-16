@@ -216,15 +216,25 @@ def test_windows_fingerprint_runs_in_actual_build_interpreter() -> None:
     assert 'fingerprint_for_cibuildwheel=$(cygpath -w -- "$fingerprint_output")' in text
     fingerprint_invocation = (
         'python \\"{project}/scripts/atomic_windows_wheel_fingerprint.py\\" '
-        '--output \\"$fingerprint_for_cibuildwheel\\" '
-        '--expected-sha256 $normalized_expected'
+        '--output \\"$fingerprint_for_cibuildwheel\\"'
     )
     assert fingerprint_invocation in text
+    assert "--expected-sha256 $normalized_expected" not in text
     assert 'export CIBW_BEFORE_BUILD="$CIBW_BEFORE_BUILD && $fingerprint_command"' in text
     assert text.index("release-build-requirements.txt") < text.index(
         "atomic_windows_wheel_fingerprint.py\\\" --output"
     )
     assert "Windows build did not create its toolchain fingerprint" in text
+    assert "actual_fingerprint_sha256=$(python -I -c" in text
+    assert '[ "$actual_fingerprint_sha256" = "$normalized_expected" ]' in text
+    assert (
+        'cmp -s -- "$fingerprint_for_host" '
+        '"$WINDOWS_WHEEL_FINGERPRINT_DOCUMENT"' in text
+    )
+    assert "actual Windows wheel fingerprint does not match" in text
+    assert text.index("actual_fingerprint_sha256=$(python -I -c") > text.index(
+        "python -m cibuildwheel"
+    )
 
 
 def test_recipe_is_bound_to_the_exact_frozen_windows_fingerprint() -> None:

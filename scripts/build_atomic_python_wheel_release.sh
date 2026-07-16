@@ -183,7 +183,7 @@ case "$platform" in
         ;;
     windows)
         export CIBW_ARCHS=AMD64
-        fingerprint_command="python \"{project}/scripts/atomic_windows_wheel_fingerprint.py\" --output \"$fingerprint_for_cibuildwheel\" --expected-sha256 $normalized_expected"
+        fingerprint_command="python \"{project}/scripts/atomic_windows_wheel_fingerprint.py\" --output \"$fingerprint_for_cibuildwheel\""
         export CIBW_BEFORE_BUILD="$CIBW_BEFORE_BUILD && $fingerprint_command"
         ;;
 esac
@@ -200,6 +200,14 @@ if [ "$platform" = windows ]; then
     [ -f "$fingerprint_for_host" ] && [ ! -L "$fingerprint_for_host" ] && \
         [ -s "$fingerprint_for_host" ] || \
         die "Windows build did not create its toolchain fingerprint"
+    actual_fingerprint_sha256=$(python -I -c \
+        'import hashlib, pathlib, sys; print(hashlib.sha256(pathlib.Path(sys.argv[1]).read_bytes()).hexdigest())' \
+        "$fingerprint_for_host") || \
+        die "cannot hash actual Windows wheel fingerprint"
+    [ "$actual_fingerprint_sha256" = "$normalized_expected" ] || \
+        die "actual Windows wheel fingerprint does not match the frozen document: $actual_fingerprint_sha256"
+    cmp -s -- "$fingerprint_for_host" "$WINDOWS_WHEEL_FINGERPRINT_DOCUMENT" || \
+        die "actual Windows wheel fingerprint bytes do not match the frozen document"
 fi
 
 printf '%s\n' "${wheels[0]}"
