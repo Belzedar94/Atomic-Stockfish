@@ -291,6 +291,21 @@ def test_ci_checks_out_both_locked_sibling_repositories_recursively() -> None:
     assert "submodules: recursive" in tools
     assert "submodules: recursive" in trainer
 
+    for name, directory in (
+        (
+            "Fetch the tools engine authentication ref",
+            ".pipeline/tools/engine/Atomic-Stockfish",
+        ),
+        (
+            "Fetch the trainer engine authentication ref",
+            ".pipeline/trainer/external/Atomic-Stockfish",
+        ),
+    ):
+        step = checkout_step(name)
+        assert f"working-directory: {directory}" in step
+        assert "git fetch --no-tags --unshallow origin" in step
+        assert "git fetch --no-tags origin +main:refs/remotes/origin/main" in step
+
 
 def test_github_outputs_can_bootstrap_only_unresolved_synthetic_hashes(
     tmp_path: Path,

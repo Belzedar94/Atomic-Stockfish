@@ -1317,6 +1317,13 @@ jobs:
           path: .pipeline/trainer
           persist-credentials: false
           submodules: recursive
+      - name: Fetch the trainer engine authentication ref
+        working-directory: .pipeline/trainer/external/Atomic-Stockfish
+        run: |
+          if [ "$(git rev-parse --is-shallow-repository)" = true ]; then
+            git fetch --no-tags --unshallow origin
+          fi
+          git fetch --no-tags origin +main:refs/remotes/origin/main
       - name: Install pinned CPU trainer dependencies
         run: |
           echo "1298F53B58B86B543F79AF4BB262838FE03B82F70D7892C7A5DDADBC0B008224  tests/pip-bootstrap-requirements.txt" | sha256sum --check --strict
