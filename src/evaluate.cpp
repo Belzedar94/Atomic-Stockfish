@@ -84,6 +84,17 @@ Value damp_for_atomic_rule50(Value value, const Position& pos) {
     return Value(int(value) * remaining / 100);
 }
 
+Value direct_atomic_nnue_value(i32 rawPsqt, i32 rawPositional) {
+    // V3's authenticated numeric domain permits the complete i32 range for
+    // each raw component. Sum in i64, then enter the ordinary evaluation
+    // domain before Chess960/rule-50 corrections so neither the addition nor
+    // damp_for_atomic_rule50() can overflow.
+    constexpr i64 Minimum = i64(VALUE_TB_LOSS_IN_MAX_PLY) + 1;
+    constexpr i64 Maximum = i64(VALUE_TB_WIN_IN_MAX_PLY) - 1;
+    const i64     scaled  = (i64(rawPsqt) + i64(rawPositional)) / 16;
+    return Value(std::clamp(scaled, Minimum, Maximum));
+}
+
 }  // namespace
 
 // Evaluate is the evaluator for the outer world. It returns a static evaluation
@@ -117,13 +128,14 @@ Value Eval::evaluate(const Eval::NNUE::AnyNetwork& network,
             // Pure is the raw selected network result: no compatibility
             // scaling, Chess960 correction, or fifty-move damping. It remains
             // a data-generation-only mode.
-            v = Value((rawPsqt + rawPositional) / 16);
-        else if (network.backend() == NNUE::NetworkBackend::AtomicNNUEV2)
+            v = direct_atomic_nnue_value(rawPsqt, rawPositional);
+        else if (network.backend() == NNUE::NetworkBackend::AtomicNNUEV2
+                 || network.backend() == NNUE::NetworkBackend::AtomicNNUEV3)
         {
-            // AtomicNNUEV2 is trained directly in Atomic engine units. The
-            // Legacy COMMONER material proxy, entertainment blend, and V1
-            // calibration scale must never leak into this backend.
-            v = Value((rawPsqt + rawPositional) / 16);
+            // Modern Atomic networks are trained directly in Atomic engine
+            // units. The Legacy COMMONER material proxy, entertainment blend,
+            // and V1 calibration scale must never leak into these backends.
+            v = direct_atomic_nnue_value(rawPsqt, rawPositional);
 
             if (pos.is_chess960())
                 v += fix_frc(pos);

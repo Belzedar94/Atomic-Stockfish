@@ -13,6 +13,7 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <vector>
 
 #include "../misc.h"
 
@@ -34,7 +35,8 @@ void report_incompatible(const std::function<void(std::string_view)>& onVerify,
         return;
 
     const std::string message =
-      "ERROR: Use NNUE is enabled, but a compatible Legacy Atomic V1 or AtomicNNUEV2 "
+      "ERROR: Use NNUE is enabled, but a compatible Legacy Atomic V1, AtomicNNUEV2, or "
+      "AtomicNNUEV3 "
       "network is not available.\n"
       "ERROR: The network file "
       + path.string()
@@ -45,34 +47,84 @@ void report_incompatible(const std::function<void(std::string_view)>& onVerify,
     onVerify(message);
 }
 
+AtomicV3::LoadResult load_v3_candidate(const fs::path& rootDirectory,
+                                       const fs::path& evalfilePath) {
+    AtomicV3::LoadResult last;
+    if (evalfilePath.empty())
+        return last;
+
+    std::vector<fs::path> candidates;
+    if (evalfilePath.is_absolute())
+        candidates.push_back(evalfilePath);
+    else
+    {
+        candidates.push_back(evalfilePath);
+        const fs::path rooted = rootDirectory / evalfilePath;
+        if (rooted.lexically_normal() != evalfilePath.lexically_normal())
+            candidates.push_back(rooted);
+    }
+
+    for (const fs::path& candidate : candidates)
+    {
+        auto result = AtomicV3::load_candidate(candidate);
+        if (result)
+            return result;
+        last = std::move(result);
+    }
+    return last;
+}
+
 }  // namespace
 
 void AnyNetwork::activate_legacy() noexcept {
-    if (backend_ == NetworkBackend::LegacyAtomicV1)
+    switch (backend_)
     {
+    case NetworkBackend::LegacyAtomicV1 :
         storage_.legacy.~Network();
-        ::new (static_cast<void*>(&storage_.legacy)) LegacyAtomicV1::Network{};
-    }
-    else
-    {
+        break;
+    case NetworkBackend::AtomicNNUEV2 :
         storage_.atomicV2.~Network();
-        ::new (static_cast<void*>(&storage_.legacy)) LegacyAtomicV1::Network{};
-        backend_ = NetworkBackend::LegacyAtomicV1;
+        break;
+    case NetworkBackend::AtomicNNUEV3 :
+        storage_.atomicV3.~Network();
+        break;
     }
+    ::new (static_cast<void*>(&storage_.legacy)) LegacyAtomicV1::Network{};
+    backend_ = NetworkBackend::LegacyAtomicV1;
 }
 
 void AnyNetwork::activate_v2() noexcept {
-    if (backend_ == NetworkBackend::AtomicNNUEV2)
+    switch (backend_)
     {
-        storage_.atomicV2.~Network();
-        ::new (static_cast<void*>(&storage_.atomicV2)) AtomicV2::Network{};
-    }
-    else
-    {
+    case NetworkBackend::LegacyAtomicV1 :
         storage_.legacy.~Network();
-        ::new (static_cast<void*>(&storage_.atomicV2)) AtomicV2::Network{};
-        backend_ = NetworkBackend::AtomicNNUEV2;
+        break;
+    case NetworkBackend::AtomicNNUEV2 :
+        storage_.atomicV2.~Network();
+        break;
+    case NetworkBackend::AtomicNNUEV3 :
+        storage_.atomicV3.~Network();
+        break;
     }
+    ::new (static_cast<void*>(&storage_.atomicV2)) AtomicV2::Network{};
+    backend_ = NetworkBackend::AtomicNNUEV2;
+}
+
+void AnyNetwork::activate_v3() noexcept {
+    switch (backend_)
+    {
+    case NetworkBackend::LegacyAtomicV1 :
+        storage_.legacy.~Network();
+        break;
+    case NetworkBackend::AtomicNNUEV2 :
+        storage_.atomicV2.~Network();
+        break;
+    case NetworkBackend::AtomicNNUEV3 :
+        storage_.atomicV3.~Network();
+        break;
+    }
+    ::new (static_cast<void*>(&storage_.atomicV3)) AtomicV3::Network{};
+    backend_ = NetworkBackend::AtomicNNUEV3;
 }
 
 bool AnyNetwork::load(const fs::path& rootDirectory,
@@ -80,10 +132,20 @@ bool AnyNetwork::load(const fs::path& rootDirectory,
                       EvalFile&       evalFile) {
     const fs::path requested = requested_path(evalfilePath);
 
-    // V2 is external-only. A mismatching V1 header fails immediately, after
+    // V2/V3 are external-only. Mismatching headers fail immediately, after
     // which the byte-exact legacy loader gets an independent fresh object.
     if (!evalfilePath.empty())
     {
+        activate_v3();
+        auto v3 = load_v3_candidate(rootDirectory, evalfilePath);
+        if (v3)
+        {
+            storage_.atomicV3       = *v3.network;
+            evalFile.current        = requested;
+            evalFile.netDescription = std::move(v3.description);
+            return true;
+        }
+
         activate_v2();
         auto result = AtomicV2::load_candidate(rootDirectory, evalfilePath, storage_.atomicV2);
         if (result)
@@ -114,6 +176,17 @@ bool AnyNetwork::load_authenticated(std::istream&   stream,
     if (!stream.eof() && stream.fail())
         return false;
     const std::string bytes = std::move(captured).str();
+
+    activate_v3();
+    std::istringstream v3Stream(bytes, std::ios::binary);
+    auto               v3 = AtomicV3::load_candidate(v3Stream);
+    if (v3)
+    {
+        storage_.atomicV3       = *v3.network;
+        evalFile.current        = logicalPath;
+        evalFile.netDescription = std::move(v3.description);
+        return true;
+    }
 
     activate_v2();
     std::istringstream v2Stream(bytes, std::ios::binary);
@@ -156,7 +229,14 @@ bool AnyNetwork::save(const EvalFile& evalFile, const std::optional<fs::path>& f
 
     const fs::path actualFilename = filename.value_or(evalFile.defaultName);
     std::ofstream  stream(actualFilename, std::ios::binary);
-    bool           saved = stream && storage_.atomicV2.save(stream, evalFile.netDescription);
+    bool           saved = false;
+    if (stream)
+    {
+        if (backend_ == NetworkBackend::AtomicNNUEV2)
+            saved = storage_.atomicV2.save(stream, evalFile.netDescription);
+        else
+            saved = bool(storage_.atomicV3.save(stream, evalFile.netDescription));
+    }
     stream.flush();
     saved = saved && bool(stream);
 
@@ -176,6 +256,9 @@ usize AnyNetwork::get_content_hash() const {
         break;
     case NetworkBackend::AtomicNNUEV2 :
         hash_combine(hash, storage_.atomicV2.get_content_hash());
+        break;
+    case NetworkBackend::AtomicNNUEV3 :
+        hash_combine(hash, storage_.atomicV3.get_content_hash());
         break;
     }
     return hash;
@@ -206,13 +289,13 @@ bool AnyNetwork::verify(const std::function<void(std::string_view)>& onVerify,
         return storage_.legacy.verify(reportLegacy, evalFile, evalfilePath);
     }
 
-    if (!storage_.atomicV2.initialized())
+    if (backend_ == NetworkBackend::AtomicNNUEV2 && !storage_.atomicV2.initialized())
     {
         report_incompatible(onVerify, evalfilePath);
         return false;
     }
 
-    if (onVerify)
+    if (backend_ == NetworkBackend::AtomicNNUEV2 && onVerify)
     {
         const auto shape = AtomicV2::Network::shape();
         onVerify("NNUE evaluation using AtomicNNUEV2 " + evalfilePath.string() + " ("
@@ -221,6 +304,27 @@ bool AnyNetwork::verify(const std::function<void(std::string_view)>& onVerify,
                  + std::to_string(shape.transformedDimensions) + ", "
                  + std::to_string(shape.fc0Outputs) + ", " + std::to_string(shape.fc1Outputs)
                  + ", 1))");
+    }
+    if (backend_ == NetworkBackend::AtomicNNUEV2)
+        return true;
+
+    if (!storage_.atomicV3.simd_permuted() || storage_.atomicV3.get_content_hash() == 0)
+    {
+        report_incompatible(onVerify, evalfilePath);
+        return false;
+    }
+
+    if (onVerify)
+    {
+        constexpr usize FeatureDimensions =
+          AtomicV3::HmPhysicalDimensions + AtomicV3::CapturePairPhysicalDimensions
+          + AtomicV3::KingBlastEpPhysicalDimensions + AtomicV3::BlastRingPhysicalDimensions;
+        onVerify("NNUE evaluation using AtomicNNUEV3 " + evalfilePath.string() + " ("
+                 + std::to_string(sizeof(AtomicV3::Network) / (1024 * 1024)) + "MiB, ("
+                 + std::to_string(FeatureDimensions) + ", "
+                 + std::to_string(AtomicV3::AccumulatorDimensions) + ", "
+                 + std::to_string(AtomicV3::Fc0Outputs) + ", "
+                 + std::to_string(AtomicV3::Fc1Outputs) + ", 1))");
     }
     return true;
 }
