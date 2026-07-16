@@ -322,13 +322,19 @@ def _capture_vs_environment(
     comspec_value = _environment_value(indexed, "ComSpec", required=True)
     assert comspec_value is not None
     comspec = _require_regular_file(comspec_value, "ComSpec")
-    if '"' in str(vsdevcmd):
-        raise FingerprintError("VsDevCmd path cannot contain a double quote")
+    if '"' in str(vsdevcmd) or '"' in str(comspec):
+        raise FingerprintError("VsDevCmd and ComSpec paths cannot contain a double quote")
+    # Running VsDevCmd under ``cmd /u`` also changes the encoding used by commands
+    # executed inside the batch file.  Visual Studio's setup scripts use temporary
+    # command output internally and fail on GitHub's hosted image when that output is
+    # forced to UTF-16.  Initialize the toolchain in a normal outer cmd.exe, then use
+    # a nested Unicode cmd.exe only for the final deterministic environment dump.
     batch_command = (
-        'call "{}" -no_logo -arch=amd64 -host_arch=amd64 >nul && set'.format(vsdevcmd)
+        'call "{}" -no_logo -arch=amd64 -host_arch=amd64 >nul '
+        '&& "{}" /d /u /c set'.format(vsdevcmd, comspec)
     )
     result = runner(
-        [str(comspec), "/d", "/u", "/s", "/c", batch_command], base_environment
+        [str(comspec), "/d", "/s", "/c", batch_command], base_environment
     )
     if result.returncode != 0:
         raise FingerprintError("VsDevCmd failed with exit code {}".format(result.returncode))

@@ -195,6 +195,13 @@ def test_collects_complete_canonical_windows_fingerprint(tmp_path, monkeypatch):
     assert document["tools"]["cl"]["versionCommand"]["returnCode"] == 2
     assert "Compiler Version 19.44" in document["tools"]["cl"]["versionCommand"]["stderr"]
     assert document["tools"]["link"]["sha256"] == hashlib.sha256(b"link-binary").hexdigest()
+    vsdevcmd_calls = [
+        call[0] for call in calls if Path(call[0][0]).resolve() == layout.comspec
+    ]
+    assert len(vsdevcmd_calls) == 1
+    assert vsdevcmd_calls[0][1:4] == ["/d", "/s", "/c"]
+    assert "/u" not in vsdevcmd_calls[0][1:4]
+    assert '"{}" /d /u /c set'.format(layout.comspec) in vsdevcmd_calls[0][4]
     assert any(call[0][1:] == ["/Bv"] for call in calls if Path(call[0][0]).resolve() == layout.cl)
     assert any(call[0][1:] == ["/?"] for call in calls if Path(call[0][0]).resolve() == layout.link)
 
