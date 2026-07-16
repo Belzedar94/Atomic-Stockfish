@@ -42,6 +42,10 @@ def main() -> int:
         for name in members
     ):
         fail("wheel does not contain the native pyffish extension")
+    if not any(
+        name.endswith(".dist-info/licenses/Copying.txt") for name in members
+    ):
+        fail("wheel does not contain the GPL license text")
 
     with tempfile.TemporaryDirectory(prefix="atomic-pyffish-wheel-") as directory:
         target = Path(directory)
@@ -78,6 +82,7 @@ import pyffish
 
 root = pathlib.Path(sys.argv[1]).resolve()
 assert pathlib.Path(pyffish.__file__).resolve().parent == root
+assert pyffish.version() == (1, 0, 0)
 assert pyffish.variants() == ["atomic"]
 assert pyffish.validate_fen(
     "7k/8/8/8/8/8/8/K7 w - - not-a-number 1", "atomic"

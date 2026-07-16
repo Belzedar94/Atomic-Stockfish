@@ -88,7 +88,7 @@ SRCS = atomic_init.cpp attacks.cpp benchmark.cpp bitboard.cpp evaluate.cpp main.
 
 OTHER_SRCS = universal/entry_x86.cpp universal/entry_arm64.cpp universal/entry_riscv64.cpp universal/nnue_embed.cpp
 
-HEADERS = atomic_init.h attacks.h benchmark.h bitboard.h evaluate.h misc.h movegen.h movepick.h history.h \
+HEADERS = atomic_init.h atomic_version.h attacks.h benchmark.h bitboard.h evaluate.h misc.h movegen.h movepick.h history.h \
 		api/atomic_fen.h api/atomic_notation.h api/atomic_outcome.h \
 		nnue/nnue_misc.h nnue/features/half_ka_v2_atomic.h \
 		nnue/atomic_v2/accumulator.h nnue/atomic_v2/architecture.h nnue/atomic_v2/backend.h \

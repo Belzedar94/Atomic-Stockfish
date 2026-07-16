@@ -1,7 +1,15 @@
 {
   "name": "@atomic-stockfish/ffish",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Atomic-only rules API for JavaScript and WebAssembly",
+  "homepage": "https://github.com/Belzedar94/Atomic-Stockfish",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Belzedar94/Atomic-Stockfish.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Belzedar94/Atomic-Stockfish/issues"
+  },
   "type": "commonjs",
   "main": "dist/cjs/ffish.js",
   "module": "dist/esm/ffish.mjs",
@@ -14,6 +22,10 @@
     }
   },
   "files": [
+    "AUTHORS",
+    "CITATION.cff",
+    "LICENSE",
+    "README.md",
     "dist/cjs/ffish.js",
     "dist/cjs/ffish.wasm",
     "dist/esm/ffish.mjs",

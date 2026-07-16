@@ -25,6 +25,7 @@
 #include "api/atomic_fen.h"
 #include "api/atomic_notation.h"
 #include "api/atomic_outcome.h"
+#include "atomic_version.h"
 #include "misc.h"
 #include "position.h"
 #include "tt.h"
@@ -250,7 +251,10 @@ void set_binding_option(std::string name, std::string value) {
     found->second = std::move(value);
 }
 
-PyObject* py_version(PyObject*, PyObject*) { return Py_BuildValue("(iii)", 0, 1, 0); }
+PyObject* py_version(PyObject*, PyObject*) {
+    return Py_BuildValue("(iii)", Stockfish::AtomicVersionMajor, Stockfish::AtomicVersionMinor,
+                         Stockfish::AtomicVersionPatch);
+}
 
 PyObject* py_info(PyObject*, PyObject*) {
     return translated([] { return python_string(Stockfish::engine_info()); });

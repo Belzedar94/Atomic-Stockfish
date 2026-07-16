@@ -25,6 +25,8 @@ SOURCES := \
 	api/atomic_outcome.cpp \
 	syzygy/tbprobe.cpp
 
+HEADERS := atomic_version.h
+
 OPTIMIZE ?= yes
 DEBUG ?= no
 
@@ -69,11 +71,11 @@ cjs: $(CJS_OUT)
 
 esm: $(ESM_OUT)
 
-$(CJS_OUT): $(SOURCES)
+$(CJS_OUT): $(SOURCES) $(HEADERS)
 	mkdir -p $(CJS_DIR)
 	SOURCE_DATE_EPOCH=0 $(CXX) $(COMMON_FLAGS) -sEXPORT_ES6=0 $(SOURCES) -o $@
 
-$(ESM_OUT): $(SOURCES)
+$(ESM_OUT): $(SOURCES) $(HEADERS)
 	mkdir -p $(ESM_DIR)
 	SOURCE_DATE_EPOCH=0 $(CXX) $(COMMON_FLAGS) -sEXPORT_ES6=1 -sUSE_ES6_IMPORT_META=1 $(SOURCES) -o $@
 

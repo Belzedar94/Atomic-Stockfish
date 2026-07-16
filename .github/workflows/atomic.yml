@@ -3,6 +3,7 @@ name: Atomic CI
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request: {}
 
 concurrency:
@@ -44,6 +45,8 @@ jobs:
       - name: Build portable x86-64
         working-directory: src
         run: make -j2 ARCH=x86-64 COMP=${{ matrix.comp }} COMPCXX=${{ matrix.cxx }} build
+      - name: Network-free UCI and XBoard release smoke
+        run: python3 tests/release_protocol_smoke.py --engine src/atomic-stockfish
       - name: C++ rule and shared-API units
         working-directory: src
         run: |
@@ -1159,7 +1162,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-24.04, windows-2022]
-        python-version: ['3.9', '3.12']
+        python-version: ['3.9', '3.12', '3.14']
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -1174,6 +1177,11 @@ jobs:
       - run: >-
           python -m pytest -q
           tests/python/test_atomic_los_gate.py
+          tests/python/test_atomic_release_manifest.py
+          tests/python/test_atomic_release_verification.py
+          tests/python/test_atomic_release_workflow.py
+          tests/python/test_atomic_reproducible_sdist.py
+          tests/python/test_release_version.py
           tests/python/test_atomic_syzygy_uci.py
           tests/python/test_atomic_compiler_preflight.py
           tests/python/test_atomic_training_data_schema.py
@@ -1225,7 +1233,7 @@ jobs:
           docker run --rm
           --volume "$PWD:/src"
           --workdir /src/src
-          emscripten/emsdk:3.1.46@sha256:2491bc4bf6caf8c41993660822341bc72759cb577363dfe0781f0a2d05f7d357
+          emscripten/emsdk:4.0.10@sha256:90b757eb11fa9a0e3ce4d2d9f76d932a56018e4accc37b5a28b2783751e60eb7
           make -f Makefile_js all
       - name: Test CommonJS and ES modules
         working-directory: tests/js
@@ -1244,7 +1252,7 @@ jobs:
           docker run --rm
           --volume "$PWD:/src"
           --workdir /src
-          emscripten/emsdk:3.1.46@sha256:2491bc4bf6caf8c41993660822341bc72759cb577363dfe0781f0a2d05f7d357
+          emscripten/emsdk:4.0.10@sha256:90b757eb11fa9a0e3ce4d2d9f76d932a56018e4accc37b5a28b2783751e60eb7
           python3 tests/wasm-engine/build.py
           --out-dir build/wasm-engine-ci
       - name: Create authenticated Legacy V1 and AtomicNNUEV2 fixtures

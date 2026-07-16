@@ -244,7 +244,7 @@ function testPgn(ffish) {
 }
 
 function testContractsAndLifetime(ffish) {
-  assert.match(ffish.info(), /^Atomic-Stockfish/);
+  assert.equal(ffish.info(), "Atomic-Stockfish 1.0.0 JS/WASM");
   assert.equal(ffish.variants(), 'atomic');
   assert.equal(ffish.startingFen('atomic'), fixtures.find((f) => f.id === 'contract.start-fen').expected);
   assert.equal(ffish.capturesToHand('atomic'), false);

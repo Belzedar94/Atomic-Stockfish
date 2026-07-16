@@ -5,15 +5,10 @@ engine derived from modern [Stockfish](https://github.com/official-stockfish/Sto
 with [Fairy-Stockfish](https://github.com/fairy-stockfish/Fairy-Stockfish) used as
 the frozen rules and playing-strength reference.
 
-> [!WARNING]
-> This repository is under active development and has no strength-qualified
-> release yet. The Hito 4 interface matrix and Hito 5 engine/backend matrix have
-> passed. The clean, commit-pinned cross-repository pipeline also passed both
-> `strong-local` and public `synthetic-ci`. Hito 6 search blocks 1 through 4 are
-> implemented, and the hardened `ebfe9342` BMI2 artifact passed the reproducible
-> speed gate plus all three exact LOS gates. This is still a pre-release: the
-> Hito 6 record is accepted only when PR #3 also has a clean exact-head CI
-> matrix and Codex review.
+> [!NOTE]
+> Version 1.0.0 is the first stable, strength-qualified release. Release assets
+> include a machine-readable provenance manifest and `SHA256SUMS`; NNUE networks
+> and Atomic Syzygy files remain external and are not silently downloaded.
 
 ## Scope
 
@@ -25,7 +20,7 @@ large variant matrix:
 - the `pyffish` Python API;
 - CommonJS and ES-module JavaScript APIs;
 - lightweight Board WebAssembly and a Node UCI/NNUE WebAssembly engine;
-- Legacy Atomic NNUE V1 networks;
+- Legacy Atomic NNUE V1 and AtomicNNUEV2 networks;
 - Atomic Syzygy WDL/DTZ tables (`.atbw` and `.atbz`).
 
 UCCI, USI and non-Atomic variants are outside the release contract.
@@ -33,8 +28,8 @@ UCCI, USI and non-Atomic variants are outside the release contract.
 ## Neural network
 
 NNUE files are external artifacts and are never downloaded or embedded by the
-native build. Set `EvalFile` to a compatible Legacy Atomic V1 network and select
-one of:
+native build. Set `EvalFile` to a compatible Legacy Atomic V1 or AtomicNNUEV2
+network and select one of:
 
 ```text
 setoption name Use NNUE value false
@@ -43,9 +38,9 @@ setoption name Use NNUE value pure
 ```
 
 `true` is the normal playing mode and the only NNUE mode used for Elo/LOS
-matches. `pure` exposes the unadjusted network result for data generation and
-training-pipeline compatibility; it is tested on every release surface but is
-not a playing-strength mode. `false` disables NNUE.
+matches. `pure` is reserved for isolated data-generation and
+training-pipeline compatibility; it is not a playing-strength mode. `false`
+disables NNUE.
 
 An incompatible or missing network blocks `go` when NNUE is enabled. The frozen
 development reference is `atomic_run3b_e202_l05.nnue`, identified by SHA-256

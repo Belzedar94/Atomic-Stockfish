@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 2,
+  "project": "Atomic-Stockfish",
+  "version": "1.0.0",
+  "releasePolicy": {
+    "abi3AuditVersion": "0.0.26",
+    "draftOnly": true,
+    "immutableReleasesReadSecret": "ATOMIC_RELEASE_POLICY_TOKEN",
+    "immutableReleasesRequired": true,
+    "linuxNativeAmd64Manifest": "sha256:82549aa8f90ada3236a8be70c74543132a76662ef33f0c3271ed802b81584a82",
+    "linuxNativeImage": "gcc:14.2.0-bookworm@sha256:b99b86a28812b1e6453a231a947dc43d76fe192788a12f344a9b568bf9f5d24c",
+    "nativeBuildRepetitions": 2,
+    "pythonWheelBuildRepetitions": 2,
+    "pythonWheelRuntimeSmoke": {
+      "operatingSystems": ["ubuntu-24.04", "windows-2022"],
+      "pythonVersions": ["3.9", "3.12", "3.14"]
+    },
+    "requiredWorkflow": {
+      "event": "push",
+      "name": "Atomic CI",
+      "path": ".github/workflows/atomic.yml",
+      "ref": "refs/tags/v1.0.0"
+    },
+    "sdistAuthority": "source-job-normalized-artifact",
+    "tagObjectType": "annotated",
+    "windowsMakeComp": "mingw",
+    "windowsNativeImage": "dockcross/windows-static-x64@sha256:e5fde458b54dda21d0265516f0310bc017532dd6f4fdad0b7239dc6ccd0f8ca9",
+    "windowsRuntimeSmoke": "windows-2022"
+  },
+  "assets": [
+    {"namePattern": "Atomic-Stockfish-1.0.0-linux-x86-64.tar.xz", "kind": "native", "platform": "linux", "architecture": "x86-64"},
+    {"namePattern": "Atomic-Stockfish-1.0.0-linux-x86-64-avx2.tar.xz", "kind": "native", "platform": "linux", "architecture": "x86-64-avx2"},
+    {"namePattern": "Atomic-Stockfish-1.0.0-linux-x86-64-bmi2.tar.xz", "kind": "native", "platform": "linux", "architecture": "x86-64-bmi2"},
+    {"namePattern": "Atomic-Stockfish-1.0.0-windows-x86-64.zip", "kind": "native", "platform": "windows", "architecture": "x86-64"},
+    {"namePattern": "Atomic-Stockfish-1.0.0-windows-x86-64-avx2.zip", "kind": "native", "platform": "windows", "architecture": "x86-64-avx2"},
+    {"namePattern": "Atomic-Stockfish-1.0.0-windows-x86-64-bmi2.zip", "kind": "native", "platform": "windows", "architecture": "x86-64-bmi2"},
+    {"namePattern": "atomic_pyffish-1.0.0-cp39-abi3-manylinux*x86_64.whl", "kind": "python", "platform": "linux", "architecture": "x86-64"},
+    {"namePattern": "atomic_pyffish-1.0.0-cp39-abi3-win_amd64.whl", "kind": "python", "platform": "windows", "architecture": "x86-64"},
+    {"namePattern": "atomic_pyffish-1.0.0.tar.gz", "kind": "python", "platform": "source", "architecture": "source"},
+    {"namePattern": "atomic-stockfish-ffish-1.0.0.tgz", "kind": "board-wasm", "platform": "web-node", "architecture": "wasm32"},
+    {"namePattern": "Atomic-Stockfish-1.0.0-node-uci-nnue-wasm.tar.xz", "kind": "uci-wasm", "platform": "node", "architecture": "wasm32-pthreads"},
+    {"namePattern": "Atomic-Stockfish-1.0.0-source.tar.xz", "kind": "source", "platform": "source", "architecture": "source"}
+  ]
+}

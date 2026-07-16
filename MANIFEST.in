@@ -1,2 +1,6 @@
+include AUTHORS
+include CITATION.cff
+include Copying.txt
+include README.md
 include pyffish.pyi
 recursive-include src *.h
