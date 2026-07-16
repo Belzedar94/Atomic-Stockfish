@@ -4,16 +4,48 @@
   "version": "1.0.0",
   "releasePolicy": {
     "abi3AuditVersion": "0.0.26",
+    "artifactAttestations": {
+      "actionCommit": "a1948c3f048ba23858d222213b7c278aabede763",
+      "required": true,
+      "subjects": ["release-assets", "exact-tag-evidence"]
+    },
     "draftOnly": true,
     "emscriptenImage": "emscripten/emsdk:4.0.10@sha256:90b757eb11fa9a0e3ce4d2d9f76d932a56018e4accc37b5a28b2783751e60eb7",
+    "exactTagExternalGates": {
+      "allowSkips": false,
+      "commandPlan": "scripts/atomic-release-exact-tag-plan-v1.json",
+      "environment": "atomic-release-gates",
+      "evidenceExtensions": [".json", ".log", ".txt"],
+      "jobTimeoutMinutes": 1620,
+      "outputLimitBytes": 33554432,
+      "requiredGates": ["hito4-release", "legacy-v1-strong-local", "hito5-release", "syzygy-real-3-to-6", "atomic-bin-v2-strong-local", "bmi2-vs-fairy"],
+      "runnerLabels": ["self-hosted", "Windows", "X64", "atomic-release-gates"],
+      "schema": "schemas/atomic-release-exact-tag-gates-v1.json",
+      "syzygyTableSha256": {
+        "KBBBvK.atbw": "114f101f74ab1469d749777b5b7e8b2ada5f47d31627ff60031f4832e6bf76a8",
+        "KBBBvK.atbz": "f731d407f3ad8a0368d7f29762d0a70e407ee791dc0f5dcb88fc94eba987e31f",
+        "KRvK.atbw": "a17ff195ef2738f00f180e3dd8eb8bcd1d21e57642e78ff8f7b7ebffd233cceb",
+        "KPPPPvK.atbw": "897a15846a4b027cbd0a31e425fdf0690f68c0bd4e62105cca2055678e2910f9",
+        "KPPPPvK.atbz": "e740168d8cbb0bf662863f278ef470c5d7eb395ece0c8bf80fed004a47991bc6"
+      },
+      "timeoutBudgetSeconds": 88200
+    },
     "immutableReleasesReadSecret": "ATOMIC_RELEASE_POLICY_TOKEN",
     "immutableReleasesRequired": true,
     "linuxNativeAmd64Manifest": "sha256:82549aa8f90ada3236a8be70c74543132a76662ef33f0c3271ed802b81584a82",
     "linuxNativeImage": "gcc:14.2.0-bookworm@sha256:b99b86a28812b1e6453a231a947dc43d76fe192788a12f344a9b568bf9f5d24c",
+    "mainTagTrust": {
+      "defaultBranch": "main",
+      "mergeCommitParents": 2,
+      "mergeMethod": "merge",
+      "onlineRequired": true,
+      "releasePullRequest": 44,
+      "revalidatedBy": ["main-trust", "exact-tag-external", "publication-gate", "publish"]
+    },
     "nativeBuildRepetitions": 2,
     "pythonManylinuxX86_64Image": "quay.io/pypa/manylinux_2_28_x86_64:2026.03.20-1@sha256:853663dc8253b62be437bb52a5caecffd020792af4442f55d927d22e0ea795ae",
     "releaseBuildRequirementsSha256": "a2d6f8f099bbaf88509c38910f6d2aed1d0913ddf162813906ca7a667b260289",
-    "releaseCiRequirementsSha256": "3cef3e46f7bd7a72bd3a1ddff85fc6587c94492888ff03ccd0cd0ee8b8900c99",
+    "releaseCiRequirementsSha256": "f155cfda7577ee6a652e87ca54ebf8fecd49b2c8a158294c1fa1cd368b771b5a",
     "releaseWheelTestRequirementsSha256": "b877081ac9f4a6aa56eff9c5ed6c7b832a9fc02ca2dca39f786401e1a03f842b",
     "pythonWheelBuildRepetitions": 2,
     "pythonWheelRuntimeSmoke": {

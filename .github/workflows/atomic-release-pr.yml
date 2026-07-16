@@ -13,10 +13,12 @@ on:
       - README.md
       - pyproject.toml
       - pyffish.pyi
+      - schemas/atomic-release-*
       - setup.py
       - docs/atomic/release-1.0-*
       - docs/atomic/windows-wheel-fingerprint-v2.json
       - scripts/atomic_reproducible_sdist.py
+      - scripts/atomic-release-*
       - scripts/atomic_release_*.py
       - scripts/atomic_verify_release_asset.py
       - scripts/atomic_windows_wheel_fingerprint.py
@@ -24,6 +26,7 @@ on:
       - scripts/build_atomic_source_release.sh
       - src/**
       - tests/release-*.txt
+      - tests/run_atomic_release_exact_tag_gate.py
       - tests/python/test_atomic_python_wheel_release_recipe.py
       - tests/python/test_atomic_release_*.py
       - tests/python/test_atomic_reproducible_sdist.py

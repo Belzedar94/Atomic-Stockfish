@@ -78,8 +78,10 @@ def test_release_runner_lock_is_complete_and_hash_closed() -> None:
         "filelock",
         "humanize",
         "idna",
-        "iniconfig",
-        "kaitaistruct",
+            "iniconfig",
+            "jsonschema",
+            "jsonschema-specifications",
+            "kaitaistruct",
         "librt",
         "markdown-it-py",
         "mdurl",
@@ -91,13 +93,16 @@ def test_release_runner_lock_is_complete_and_hash_closed() -> None:
         "pefile",
         "platformdirs",
         "pluggy",
+        "psutil",
         "pyelftools",
         "pygments",
         "pyproject-hooks",
         "pytest",
         "requests",
-        "requests-cache",
-        "rich",
+            "requests-cache",
+            "referencing",
+            "rich",
+            "rpds-py",
         "setuptools",
         "typing-extensions",
         "url-normalize",
@@ -110,6 +115,8 @@ def test_release_runner_lock_is_complete_and_hash_closed() -> None:
     assert locked["cibuildwheel"].version == "3.4.1"
     assert locked["abi3audit"].version == "0.0.26"
     assert locked["mypy"].version == "1.19.1"
+    assert locked["psutil"].version == "7.2.2"
+    assert len(locked["psutil"].hashes) == 2
     assert len(locked["mypy"].hashes) == 2
     assert len(locked["librt"].hashes) == 2
     assert locked["colorama"].marker == 'sys_platform == "win32"'

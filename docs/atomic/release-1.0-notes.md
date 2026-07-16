@@ -68,8 +68,24 @@ records the exact digest-pinned Docker command used for each artifact. Every
 provenance record also freezes the producer-side asset SHA-256, which is
 rechecked during assembly.
 
+The tagged release additionally requires a protected Windows exact-tag job.
+It downloads the assembled bundle by same-run artifact ID, re-authenticates the
+frozen Legacy V1 network, both Fairy oracles, the Atomic Syzygy inventory and
+six-man fixtures, and the pinned tools/trainer repositories, then executes all
+six commands in the tag-tracked plan with zero skips. Its canonical manifest
+contains the raw five-run BMI2 samples so the medians and speed ratio can be
+recomputed independently. The assembled bundle and the bounded text/JSON gate
+evidence are both covered by GitHub artifact attestations produced with a
+commit-pinned action.
+The sequential gates have 1,470 minutes of tracked execution budget inside a
+1,620-minute self-hosted job, leaving 150 minutes for setup and release-evidence
+work. Child output is streamed under one 32 MiB bound per gate, and timeout or
+overflow terminates the complete child process tree before cleanup continues.
+
 Automation may create only a draft after GitHub release immutability is already
-enabled, the annotated tag object and peeled commit are exact, and `Atomic CI`
-has succeeded for the same tag/SHA push. It downloads that draft from GitHub
-and verifies the exact asset list and every byte. Publication remains a separate
+enabled, release PR #44 is proven to be a traditional two-parent merge on
+`main`, the annotated tag object and peeled commit are exact, `Atomic CI` has
+succeeded for the same tag/SHA push, the protected exact gates have passed, and
+the same-run attestations verify. It downloads that draft from GitHub and
+verifies the exact asset list and every byte. Publication remains a separate
 manual decision; the workflow never promotes the draft automatically.

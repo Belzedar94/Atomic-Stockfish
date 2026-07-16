@@ -272,8 +272,8 @@ def main() -> int:
             "C++ Atomic rule/state units",
             [str(paths["cpp_unit"])],
             timeout=args.timeout,
-            required_markers=("Atomic C++ unit tests passed: 87/87",),
-            expected_pass_lines=87,
+            required_markers=("Atomic C++ unit tests passed: 88/88",),
+            expected_pass_lines=88,
         )
         run_step(
             "C++ shared Atomic API units",

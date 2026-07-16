@@ -3,9 +3,10 @@
 This checklist is the release controller for `v1.0.0`. A green development CI
 run is necessary but is not, by itself, permission to publish. Every item is
 executed against the exact tagged commit. The release manifest authenticates
-the published assets and their producer provenance; gate results, hashes and
-documented skips are captured by the exact-tag workflow and preserved in the
-follow-up gate-evidence PR described below.
+the published assets and their producer provenance. The protected exact-tag
+workflow captures the six mandatory gate results and hashes with zero skips,
+attests that evidence, and preserves it in the follow-up gate-evidence PR
+described below.
 
 ## Frozen inputs
 
@@ -33,7 +34,11 @@ follow-up gate-evidence PR described below.
   SHA-256 `99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f92a04a6`.
   Release packages do not redistribute it without a separate rights decision.
 - Atomic Syzygy files remain external; the release records the fixture/table
-  manifests used by the gate and does not repackage third-party tables.
+  manifests used by the gate and does not repackage third-party tables. The
+  exact-tag contract additionally freezes SHA-256 for every consumed table:
+  `KBBBvK.atbw` `114f101f...76a8`, `KBBBvK.atbz` `f731d407...e31f`,
+  `KRvK.atbw` `a17ff195...cceb`, `KPPPPvK.atbw` `897a1584...0f9` and
+  `KPPPPvK.atbz` `e740168d...bc6`.
 - The Syzygy strength disposition is the explicit owner waiver recorded in
   `docs/atomic/evidence/release-1.0-syzygy-openbench`: OpenBench IDs 37–42 have
   six positive point estimates and were manually stopped after healthcheck.
@@ -95,9 +100,17 @@ follow-up gate-evidence PR described below.
     after the last accepted OpenBench result require their normal STC/LTC gate;
     release-only metadata and packaging changes must preserve the engine bench.
 
-No skip is added for convenience. A platform-only skip must name the missing
-dependency in the exact-tag workflow evidence and be preserved in the follow-up
-gate-evidence PR.
+The six protected exact-tag external gates permit no skips, including
+platform-only skips. A missing runner, tool, network, table, repository or
+artifact fails the release and must be repaired before the tag can proceed.
+Development suites may retain their already documented platform conditions,
+but they cannot substitute for or weaken these six release receipts.
+Their tracked sequential timeout budgets total 1,470 minutes. The self-hosted
+job is therefore bounded at 1,620 minutes: the remaining 150 minutes cover
+authenticated setup, evidence packaging, attestations and fail-closed cleanup.
+Both the outer controller and each fixed wrapper cap combined child output at
+32 MiB while it is produced and terminate the complete process tree on timeout
+or overflow.
 
 ## Release assets
 
@@ -139,20 +152,34 @@ is no separate protocol binary.
 4. Re-read and hash all assets, then write the manifest and `SHA256SUMS` last.
    Every producer-side provenance descriptor freezes its asset SHA-256; the
    assembler verifies that digest again before and after its authenticated copy.
-5. Create an annotated `v1.0.0` tag only for the exact reviewed commit. Record
-   and re-check both the tag-object SHA and its direct peeled commit SHA through
-   local Git and the GitHub Git Database API; a lightweight or nested tag fails.
+5. Merge release PR #44 with a traditional two-parent merge commit, never a
+   squash or rebase. Immediately before tagging, authenticate online that
+   `main`, the merge commit, its ordered parents and the PR's reviewed head all
+   agree. Create an annotated `v1.0.0` tag only for that exact merge commit.
+   Record and re-check both the tag-object SHA and its direct peeled commit SHA
+   through local Git and the GitHub Git Database API; a lightweight or nested
+   tag fails.
 6. Require a successful `Atomic CI` run produced by a `push` of that same tag
    and SHA. A `main`, pull-request, workflow-dispatch, or same-SHA/different-ref
    run is not publication evidence.
-7. Upload assets to a draft GitHub release only. Download the complete draft
+7. On the protected `atomic-release-gates` Windows runner, download the
+   same-run release bundle by immutable artifact ID and execute the six tracked
+   commands in `scripts/atomic-release-exact-tag-plan-v1.json`. Re-authenticate
+   the external NNUE, Fairy oracles, Atomic Syzygy inventory/tables, tools and
+   trainer checkouts; require canonical pass receipts with `failed=0` and
+   `skipped=0`; independently recompute the five-sample BMI2 benchmark. Upload
+   only bounded `.json`, `.log` and `.txt` evidence and attest both the assembled
+   bundle and exact-gate evidence with the commit-pinned attestation action.
+8. Re-run the online main/tag/PR trust check and verify the same-run artifact
+   IDs, digests and attestations before any release API mutation. Upload assets
+   to a draft GitHub release only. Download the complete draft
    with `gh release download`, require its exact file list and byte hashes to
    equal the candidate, and re-run `SHA256SUMS`. An invalid draft is deleted;
    a valid draft remains unpublished for human review. The workflow first
    reserves a unique draft ID and its `always()` cleanup may delete only that
    reserved ID, including after a partial upload failure. This workflow contains
    no automatic publish transition.
-8. Immediately before the manual publish click, repeat the remote trust checks
+9. Immediately before the manual publish click, repeat the remote trust checks
    rather than relying on the earlier workflow run. Re-read the exact tag ref,
    annotated tag object and direct peeled commit through the GitHub Git Database
    API and require all three recorded SHAs to remain byte-for-byte identical.
@@ -160,9 +187,9 @@ is no separate protocol binary.
    the reserved release by its exact ID and require it to remain the unique draft
    for `v1.0.0`; download that draft again into a new empty directory, compare its
    exact names and bytes with the frozen candidate, and re-run `SHA256SUMS`.
-9. Manually publish release notes that state the external NNUE/Syzygy requirements,
+10. Manually publish release notes that state the external NNUE/Syzygy requirements,
    supported protocols/bindings and exact known limitations.
-10. Immediately after publication, re-read the immutable-releases policy and
+11. Immediately after publication, re-read the immutable-releases policy and
     require it still enabled. Fetch the release by the same exact ID and require
     `draft=false`, a non-null publication timestamp and the unchanged `v1.0.0`
     tag. Re-read the tag ref, annotated tag object and direct peeled commit and
@@ -170,9 +197,9 @@ is no separate protocol binary.
     another new empty directory, require byte equality with the frozen candidate,
     and re-run `SHA256SUMS`. Any discrepancy is a release incident; do not move
     or recreate the tag.
-11. Preserve the build logs and exact-tag gate manifest, including any
-    documented platform-only skips, under `docs/atomic/evidence` in a follow-up
-    evidence PR without rewriting the tagged source.
+12. Preserve the build logs, exact-tag gate manifest, attestation identities and
+    six zero-skip receipts under `docs/atomic/evidence` in a follow-up evidence
+    PR without rewriting the tagged source.
 
 If any downloaded asset, tag object, peeled commit, version, bench, CI ref or
 gate differs, delete the draft release and investigate. Never move an existing

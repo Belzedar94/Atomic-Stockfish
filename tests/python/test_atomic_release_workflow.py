@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from scripts.run_atomic_release_contract_tests import (
@@ -31,6 +32,9 @@ def recipe(name: str) -> str:
 def test_one_authoritative_runner_discovers_every_release_contract_module() -> None:
     expected = {
         "test_atomic_release_manifest.py",
+        "test_atomic_release_exact_tag_gates.py",
+        "test_atomic_release_exact_tag_orchestrator.py",
+        "test_atomic_release_main_trust.py",
         "test_atomic_python_wheel_release_recipe.py",
         "test_atomic_release_verification.py",
         "test_atomic_release_workflow.py",
@@ -79,11 +83,24 @@ def test_python_wheels_consume_only_the_authenticated_source_job_sdist() -> None
 
 def test_release_python_installs_are_closed_or_pre_authenticated() -> None:
     text = workflow()
+    exact = job(text, "exact-tag-external", "publication-gate")
     wheel_recipe = recipe("build_atomic_python_wheel_release.sh")
     source_recipe = recipe("build_atomic_source_release.sh")
     assert text.count("python -m pip install") == 5
-    assert text.count("--only-binary=:all: --require-hashes") == 4
-    assert text.count("-r tests/release-ci-requirements.txt") == 3
+    assert text.count("--only-binary=:all: --require-hashes") == 10
+    assert text.count("-r tests/release-ci-requirements.txt") == 5
+    assert exact.count("--only-binary=:all: --require-hashes") == 6
+    assert exact.count("--dry-run --ignore-installed --quiet") == 2
+    assert exact.count("-r tests/pip-bootstrap-requirements.txt") == 2
+    assert exact.count("-r tests/release-ci-requirements.txt") == 2
+    assert exact.count("-r tests/legacy_pipeline-ci-requirements.txt") == 2
+    assert exact.count("-m pip check") == 2
+    assert "python-version: '3.12.10'" in exact
+    assert "python-version: '3.10.18'" in exact
+    assert exact.count("-m venv --copies") == 2
+    assert 'assert psutil.__version__ == "7.2.2"' in exact
+    assert 'assert torch.__version__ == "2.1.2+cpu"' in exact
+    assert "pipeline_python = $env:PIPELINE_PYTHON" in exact
     assert wheel_recipe.count("python -m pip install") == 2
     assert wheel_recipe.count("--force-reinstall --no-deps") == 2
     assert wheel_recipe.count("--only-binary=:all: --require-hashes") == 2
@@ -92,6 +109,20 @@ def test_release_python_installs_are_closed_or_pre_authenticated() -> None:
     assert source_recipe.count("python3 -m pip install") == 1
     assert "--force-reinstall --no-deps --only-binary=:all: --require-hashes" in source_recipe
     assert text.count("--no-index --no-deps") == 1
+
+
+def test_exact_tag_job_can_honor_every_sequential_gate_timeout() -> None:
+    exact = job(workflow(), "exact-tag-external", "publication-gate")
+    plan = json.loads(
+        (ROOT / "scripts" / "atomic-release-exact-tag-plan-v1.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    gate_budget_seconds = sum(gate["timeoutSeconds"] for gate in plan["gates"])
+    job_budget_minutes = 1620
+    setup_and_cleanup_seconds = 150 * 60
+    assert f"timeout-minutes: {job_budget_minutes}" in exact
+    assert job_budget_minutes * 60 == gate_budget_seconds + setup_and_cleanup_seconds
 
 
 def test_python_wheel_builder_is_digest_pinned_and_in_provenance() -> None:
@@ -177,12 +208,15 @@ def test_release_pr_reproduces_real_windows_wheel_and_frozen_fingerprint() -> No
         "MANIFEST.in",
         "README.md",
         "pyffish.pyi",
+        "schemas/atomic-release-*",
+        "scripts/atomic-release-*",
         "scripts/atomic_reproducible_sdist.py",
         "scripts/build_atomic_python_wheel_release.sh",
         "scripts/build_atomic_source_release.sh",
         "setup.py",
         "src/**",
         "tests/release-*.txt",
+        "tests/run_atomic_release_exact_tag_gate.py",
         "tests/python/test_wheel_layout.py",
     ):
         assert f"      - {dependency}\n" in trigger

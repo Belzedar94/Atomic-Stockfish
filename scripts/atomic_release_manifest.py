@@ -62,7 +62,7 @@ PYTHON_MANYLINUX_X86_64_IMAGE = (
     "853663dc8253b62be437bb52a5caecffd020792af4442f55d927d22e0ea795ae"
 )
 RELEASE_CI_REQUIREMENTS_SHA256 = (
-    "3cef3e46f7bd7a72bd3a1ddff85fc6587c94492888ff03ccd0cd0ee8b8900c99"
+    "f155cfda7577ee6a652e87ca54ebf8fecd49b2c8a158294c1fa1cd368b771b5a"
 )
 RELEASE_BUILD_REQUIREMENTS_SHA256 = (
     "a2d6f8f099bbaf88509c38910f6d2aed1d0913ddf162813906ca7a667b260289"
@@ -79,6 +79,27 @@ WINDOWS_WHEEL_PYTHON_VERSION = "3.9.13"
 WINDOWS_WHEEL_FINGERPRINT_DOCUMENT = (
     "docs/atomic/windows-wheel-fingerprint-v2.json"
 )
+ATTEST_ACTION_COMMIT = "a1948c3f048ba23858d222213b7c278aabede763"
+EXACT_TAG_GATE_PLAN = "scripts/atomic-release-exact-tag-plan-v1.json"
+EXACT_TAG_GATE_SCHEMA = "schemas/atomic-release-exact-tag-gates-v1.json"
+EXACT_TAG_GATE_IDS = [
+    "hito4-release",
+    "legacy-v1-strong-local",
+    "hito5-release",
+    "syzygy-real-3-to-6",
+    "atomic-bin-v2-strong-local",
+    "bmi2-vs-fairy",
+]
+EXACT_TAG_GATE_JOB_TIMEOUT_MINUTES = 1620
+EXACT_TAG_GATE_OUTPUT_LIMIT_BYTES = 32 * 1024 * 1024
+EXACT_TAG_GATE_TIMEOUT_BUDGET_SECONDS = 88_200
+EXACT_TAG_SYZYGY_TABLE_SHA256 = {
+    "KBBBvK.atbw": "114f101f74ab1469d749777b5b7e8b2ada5f47d31627ff60031f4832e6bf76a8",
+    "KBBBvK.atbz": "f731d407f3ad8a0368d7f29762d0a70e407ee791dc0f5dcb88fc94eba987e31f",
+    "KRvK.atbw": "a17ff195ef2738f00f180e3dd8eb8bcd1d21e57642e78ff8f7b7ebffd233cceb",
+    "KPPPPvK.atbw": "897a15846a4b027cbd0a31e425fdf0690f68c0bd4e62105cca2055678e2910f9",
+    "KPPPPvK.atbz": "e740168d8cbb0bf662863f278ef470c5d7eb395ece0c8bf80fed004a47991bc6",
+}
 
 
 class ReleaseContractError(RuntimeError):
@@ -90,12 +111,48 @@ def expected_inventory_policy(version: str) -> Dict[str, Any]:
 
     return {
         "abi3AuditVersion": "0.0.26",
+        "artifactAttestations": {
+            "actionCommit": ATTEST_ACTION_COMMIT,
+            "required": True,
+            "subjects": ["release-assets", "exact-tag-evidence"],
+        },
         "draftOnly": True,
         "emscriptenImage": EMSCRIPTEN_IMAGE,
+        "exactTagExternalGates": {
+            "allowSkips": False,
+            "commandPlan": EXACT_TAG_GATE_PLAN,
+            "environment": "atomic-release-gates",
+            "evidenceExtensions": [".json", ".log", ".txt"],
+            "jobTimeoutMinutes": EXACT_TAG_GATE_JOB_TIMEOUT_MINUTES,
+            "outputLimitBytes": EXACT_TAG_GATE_OUTPUT_LIMIT_BYTES,
+            "requiredGates": EXACT_TAG_GATE_IDS,
+            "runnerLabels": [
+                "self-hosted",
+                "Windows",
+                "X64",
+                "atomic-release-gates",
+            ],
+            "schema": EXACT_TAG_GATE_SCHEMA,
+            "syzygyTableSha256": EXACT_TAG_SYZYGY_TABLE_SHA256,
+            "timeoutBudgetSeconds": EXACT_TAG_GATE_TIMEOUT_BUDGET_SECONDS,
+        },
         "immutableReleasesReadSecret": "ATOMIC_RELEASE_POLICY_TOKEN",
         "immutableReleasesRequired": True,
         "linuxNativeAmd64Manifest": LINUX_NATIVE_AMD64_MANIFEST,
         "linuxNativeImage": LINUX_NATIVE_IMAGE,
+        "mainTagTrust": {
+            "defaultBranch": "main",
+            "mergeCommitParents": 2,
+            "mergeMethod": "merge",
+            "onlineRequired": True,
+            "releasePullRequest": 44,
+            "revalidatedBy": [
+                "main-trust",
+                "exact-tag-external",
+                "publication-gate",
+                "publish",
+            ],
+        },
         "nativeBuildRepetitions": 2,
         "pythonManylinuxX86_64Image": PYTHON_MANYLINUX_X86_64_IMAGE,
         "releaseBuildRequirementsSha256": RELEASE_BUILD_REQUIREMENTS_SHA256,
@@ -403,7 +460,7 @@ def assemble(
     output.mkdir(parents=True, exist_ok=False)
 
     try:
-        entries = []
+        entries: list[Dict[str, Any]] = []
         for source, provenance in assets:
             size, digest = _copy_authenticated(source, output / source.name)
             if digest != provenance["sha256"]:
