@@ -29,6 +29,8 @@ HEADERS := atomic_version.h
 
 OPTIMIZE ?= yes
 DEBUG ?= no
+SOURCE_DATE_EPOCH ?= 0
+export SOURCE_DATE_EPOCH
 
 COMMON_FLAGS := \
 	--bind \
@@ -73,11 +75,11 @@ esm: $(ESM_OUT)
 
 $(CJS_OUT): $(SOURCES) $(HEADERS)
 	mkdir -p $(CJS_DIR)
-	SOURCE_DATE_EPOCH=0 $(CXX) $(COMMON_FLAGS) -sEXPORT_ES6=0 $(SOURCES) -o $@
+	$(CXX) $(COMMON_FLAGS) -sEXPORT_ES6=0 $(SOURCES) -o $@
 
 $(ESM_OUT): $(SOURCES) $(HEADERS)
 	mkdir -p $(ESM_DIR)
-	SOURCE_DATE_EPOCH=0 $(CXX) $(COMMON_FLAGS) -sEXPORT_ES6=1 -sUSE_ES6_IMPORT_META=1 $(SOURCES) -o $@
+	$(CXX) $(COMMON_FLAGS) -sEXPORT_ES6=1 -sUSE_ES6_IMPORT_META=1 $(SOURCES) -o $@
 
 test: all
 	cd ../tests/js && npm test

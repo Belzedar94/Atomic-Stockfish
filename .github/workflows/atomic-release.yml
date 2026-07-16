@@ -764,6 +764,16 @@ jobs:
             --format '{{range .RepoDigests}}{{println .}}{{end}}' \
             "$EMSCRIPTEN_IMAGE" |
             grep -Fqx 'emscripten/emsdk@sha256:90b757eb11fa9a0e3ce4d2d9f76d932a56018e4accc37b5a28b2783751e60eb7'
+          # Containers run as root, so create every directory that a later
+          # host-side command must write before the first bind-mounted build.
+          # The container may create files inside these directories, but it
+          # cannot make the shared parent hierarchy root-owned.
+          mkdir -p \
+            build/wasm-release-a \
+            build/wasm-release-b \
+            build/wasm-fixtures \
+            build/wasm-stage \
+            build/release
           for output in build/wasm-release-a build/wasm-release-b; do
             docker run --rm --env "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" \
               --volume "$GITHUB_WORKSPACE:/src" --workdir /src \
@@ -797,7 +807,7 @@ jobs:
           asset="Atomic-Stockfish-${RELEASE_VERSION}-node-uci-nnue-wasm.tar.xz"
           root="build/wasm-stage/Atomic-Stockfish-${RELEASE_VERSION}-node-uci-nnue-wasm"
           mkdir -p "$root" build/release
-          cp -a build/wasm-release-a/. "$root/"
+          cp -R --no-preserve=ownership build/wasm-release-a/. "$root/"
           cp tests/wasm-engine/README.md "$root/README.md"
           cp AUTHORS CITATION.cff Copying.txt "$root/"
           tar --sort=name --mtime="@$SOURCE_DATE_EPOCH" \

@@ -144,3 +144,31 @@ def test_wasm_provenance_records_real_digest_pinned_docker_commands() -> None:
     assert 'toolchain="image=$EMSCRIPTEN_IMAGE;' in uci
     assert "docker run --rm --env" in uci
     assert "tests/wasm-engine/build.py" in uci
+
+
+def test_uci_wasm_precreates_every_later_host_write_root() -> None:
+    uci = job(workflow(), "uci-wasm", "assemble")
+    build = uci.split(
+        "      - name: Build twice and require identical complete engine\n", 1
+    )[1].split("      - name: Package complete UCI WASM and provenance\n", 1)[0]
+    package = uci.split(
+        "      - name: Package complete UCI WASM and provenance\n", 1
+    )[1]
+    first_container = build.index("docker run --rm")
+    precreate = build[build.index("mkdir -p ") : first_container]
+
+    for directory in (
+        "build/wasm-release-a",
+        "build/wasm-release-b",
+        "build/wasm-fixtures",
+        "build/wasm-stage",
+        "build/release",
+    ):
+        assert directory in precreate
+
+    assert build.index("python3 tests/create_synthetic_zero_nnue.py") > first_container
+    assert "cp -a build/wasm-release-a/." not in package
+    assert (
+        'cp -R --no-preserve=ownership build/wasm-release-a/. "$root/"'
+        in package
+    )

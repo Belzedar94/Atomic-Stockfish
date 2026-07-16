@@ -23,7 +23,11 @@ if (-not (Test-Path -LiteralPath $envScript -PathType Leaf)) {
 }
 
 $env:EMSDK_QUIET = '1'
-$env:SOURCE_DATE_EPOCH = '0'
+if ($null -eq $env:SOURCE_DATE_EPOCH) {
+    $env:SOURCE_DATE_EPOCH = '0'
+} elseif ($env:SOURCE_DATE_EPOCH -notmatch '\A(?:0|[1-9][0-9]*)\z') {
+    throw 'SOURCE_DATE_EPOCH must be zero or a canonical positive decimal integer'
+}
 . $envScript
 
 $empp = Get-Command em++ -ErrorAction Stop
@@ -159,6 +163,7 @@ $compilerLine = (& $empp.Source --version | Select-Object -First 1)
 $manifest = [ordered]@{
     schemaVersion = 2
     target = 'node-uci-nnue'
+    sourceDateEpoch = [long]::Parse($env:SOURCE_DATE_EPOCH)
     debug = [bool]$Debug
     compiler = $compilerLine
     initialMemoryBytes = 536870912
