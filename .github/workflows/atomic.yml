@@ -1316,6 +1316,7 @@ jobs:
           ref: ${{ steps.pipeline_lock.outputs.trainer_commit }}
           path: .pipeline/trainer
           persist-credentials: false
+          submodules: recursive
       - name: Install pinned CPU trainer dependencies
         run: |
           echo "1298F53B58B86B543F79AF4BB262838FE03B82F70D7892C7A5DDADBC0B008224  tests/pip-bootstrap-requirements.txt" | sha256sum --check --strict
