@@ -92,7 +92,7 @@ using SearchedList                  = ValueList<Move, SEARCHEDLIST_CAPACITY>;
 int correction_value(const Worker& w, const Position& pos, const Stack* const ss) {
     const Color us     = pos.side_to_move();
     const auto  m      = (ss - 1)->currentMove;
-    const auto& shared = w.sharedHistory;
+    const auto& shared = w.active_shared_history();
     const int   pcv    = shared.pawn_correction_entry(pos)[us].pawn;
     const int   micv   = shared.minor_piece_correction_entry(pos)[us].minor;
     const int   wnpcv  = shared.nonpawn_correction_entry<WHITE>(pos)[us].nonPawnWhite;
@@ -121,7 +121,7 @@ void update_correction_history(const Position& pos,
     const Color us = pos.side_to_move();
 
     constexpr int nonPawnWeight = 186;
-    auto&         shared        = workerThread.sharedHistory;
+    auto&         shared        = workerThread.active_shared_history();
 
     shared.pawn_correction_entry(pos)[us].pawn << bonus;
     shared.minor_piece_correction_entry(pos)[us].minor << bonus * 152 / 128;
@@ -210,7 +210,7 @@ void Search::Worker::start_searching() {
 
     main_manager()->tm.init(limits, rootPos.side_to_move(), rootPos.game_ply(), options,
                             main_manager()->originalTimeAdjust);
-    tt.new_search();
+    active_tt().new_search();
 
     if (rootMoves.empty())
     {
@@ -259,12 +259,12 @@ void Search::Worker::start_searching() {
     main_manager()->bestPreviousAverageScore = bestThread->rootMoves[0].averageScore;
 
     if (bestThread->rootMoves[0].pv.size() == 1
-        && bestThread->rootMoves[0].extract_ponder_from_tt(tt, rootPos))
+        && bestThread->rootMoves[0].extract_ponder_from_tt(active_tt(), rootPos))
         uciPvSent = false;
 
     // Send PV info if it has changed since last output in iterative_deepening().
     if (!uciPvSent || bestThread != this)
-        main_manager()->pv(*bestThread, threads, tt, bestThread->rootDepth);
+        main_manager()->pv(*bestThread, threads, active_tt(), bestThread->rootDepth);
 
     // In rare cases, pv() may change the ponder move through syzygy_extend_pv().
     std::string ponder;
@@ -284,6 +284,19 @@ Search::TrainingSearchResult Search::Worker::training_search(Position&          
     // ThreadPool::stop once before dispatching its workers. Doing either here
     // would race independent searches running on the other workers.
     TrainingSearchResult result;
+
+    struct PrivateStateGuard {
+        TranspositionTable*& ttSlot;
+        TranspositionTable*  previousTt;
+        SharedHistories*&    historiesSlot;
+        SharedHistories*     previousHistories;
+        ~PrivateStateGuard() {
+            ttSlot        = previousTt;
+            historiesSlot = previousHistories;
+        }
+    } privateStateGuard{trainingTt, trainingTt, trainingSharedHistory, trainingSharedHistory};
+    trainingTt            = request.transpositionTable;
+    trainingSharedHistory = request.sharedHistories;
 
     accumulator.reset();
     useNnueMode = options["Use NNUE"] == "pure" ? Eval::UseNNUEMode::Pure
@@ -332,7 +345,8 @@ Search::TrainingSearchResult Search::Worker::training_search(Position&          
 
     for (int i = 7; i > 0; --i)
     {
-        (ss - i)->continuationHistory           = &continuationHistory[0][0][NO_PIECE][0];
+        (ss - i)->continuationHistory =
+          &active_continuation_history()[0][0][NO_PIECE][0];
         (ss - i)->continuationCorrectionHistory = &continuationCorrectionHistory[NO_PIECE][0];
         (ss - i)->staticEval                    = VALUE_NONE;
     }
@@ -637,7 +651,7 @@ bool Search::Worker::iterative_deepening() {
                 // at nodes > 10M (rather than depth N, which can be reached quickly)
                 if (mainThread && multiPV == 1 && (bestValue <= alpha || bestValue >= beta)
                     && nodes > NODES_LIMIT_OUTPUT)
-                    main_manager()->pv(*this, threads, tt, rootDepth);
+                    main_manager()->pv(*this, threads, active_tt(), rootDepth);
 
                 // In case of failing low/high increase aspiration window and re-search,
                 // otherwise exit the loop.
@@ -717,7 +731,7 @@ bool Search::Worker::iterative_deepening() {
 
             if (mainThread && !threads.stop && (pvIdx + 1 == multiPV || nodes > NODES_LIMIT_OUTPUT))
             {
-                main_manager()->pv(*this, threads, tt, rootDepth);
+                main_manager()->pv(*this, threads, active_tt(), rootDepth);
                 uciPvSent = (pvIdx + 1 == multiPV);
             }
 
@@ -863,13 +877,13 @@ void Search::Worker::do_move(
     // prefetch_key does not model castling, en passant or promotion keys
     // exactly; for rare moves the prefetch lands on an unused line.
     if (!pos.capture(move))
-        prefetch(tt.first_entry(pos.prefetch_key(move)));
+        prefetch(active_tt().first_entry(pos.prefetch_key(move)));
 
     bool capture = pos.capture_stage(move);
     ++nodes;
 
     DirtyPiece& dirtyPiece = accumulator.push();
-    pos.do_move(move, st, givesCheck, dirtyPiece, &tt, &sharedHistory);
+    pos.do_move(move, st, givesCheck, dirtyPiece, &active_tt(), &active_shared_history());
 
 #ifndef NDEBUG
     const bool actualAtomicCheck = pos.atomic_in_check(pos.side_to_move());
@@ -885,7 +899,7 @@ void Search::Worker::do_move(
     {
         ss->currentMove = move;
         ss->continuationHistory =
-          &continuationHistory[ss->inCheck][capture][dirtyPiece.pc][move.to_sq()];
+          &active_continuation_history()[ss->inCheck][capture][dirtyPiece.pc][move.to_sq()];
         ss->continuationCorrectionHistory =
           &continuationCorrectionHistory[dirtyPiece.pc][move.to_sq()];
     }
@@ -894,7 +908,7 @@ void Search::Worker::do_move(
 void Search::Worker::do_null_move(Position& pos, StateInfo& st, Stack* const ss) {
     pos.do_null_move(st);
     ss->currentMove                   = Move::null();
-    ss->continuationHistory           = &continuationHistory[0][0][NO_PIECE][0];
+    ss->continuationHistory = &active_continuation_history()[0][0][NO_PIECE][0];
     ss->continuationCorrectionHistory = &continuationCorrectionHistory[NO_PIECE][0];
 }
 
@@ -1041,7 +1055,7 @@ Value Search::Worker::search(
     // Step 4. Transposition table lookup
     excludedMove                   = ss->excludedMove;
     posKey                         = pos.key();
-    auto [ttHit, ttData, ttWriter] = tt.probe(posKey);
+    auto [ttHit, ttData, ttWriter] = active_tt().probe(posKey);
     // Need further processing of the saved data
     ss->ttHit    = ttHit;
     ttData.move  = rootNode ? rootMoves[pvIdx].pv[0] : ttHit ? ttData.move : Move::none();
@@ -1078,7 +1092,7 @@ Value Search::Worker::search(
 
         // Static evaluation is saved as it was before adjustment by correction history
         ttWriter.write(posKey, VALUE_NONE, ss->ttPv, BOUND_NONE, DEPTH_UNSEARCHED, Move::none(),
-                       unadjustedStaticEval, tt.generation());
+                       unadjustedStaticEval, active_tt().generation());
     }
 
     // Set up the improving flag, which is true if current static evaluation is
@@ -1123,7 +1137,7 @@ Value Search::Worker::search(
             {
                 pos.do_move(ttData.move, st);
                 Key nextPosKey                             = pos.key();
-                auto [ttHitNext, ttDataNext, ttWriterNext] = tt.probe(nextPosKey);
+                auto [ttHitNext, ttDataNext, ttWriterNext] = active_tt().probe(nextPosKey);
                 pos.undo_move(ttData.move);
 
                 // Check that the ttValue after the tt move would also trigger a cutoff
@@ -1185,7 +1199,7 @@ Value Search::Worker::search(
                 {
                     ttWriter.write(posKey, value_to_tt(value, ss->ply), ss->ttPv, b,
                                    std::min(MAX_PLY - 1, depth + 6), Move::none(), VALUE_NONE,
-                                   tt.generation());
+                                   active_tt().generation());
 
                     return value;
                 }
@@ -1211,7 +1225,7 @@ Value Search::Worker::search(
         mainHistory[~us][((ss - 1)->currentMove).raw()] << evalDiff * 10;
         if (!ttHit && type_of(pos.piece_on(prevSq)) != PAWN
             && ((ss - 1)->currentMove).type_of() != PROMOTION)
-            sharedHistory.pawn_entry(pos)[pos.piece_on(prevSq)][prevSq] << evalDiff * 13;
+            active_shared_history().pawn_entry(pos)[pos.piece_on(prevSq)][prevSq] << evalDiff * 13;
     }
 
 
@@ -1320,7 +1334,7 @@ Value Search::Worker::search(
             {
                 // Save ProbCut data into transposition table
                 ttWriter.write(posKey, value_to_tt(value, ss->ply), ss->ttPv, BOUND_LOWER,
-                               probCutDepth + 1, move, unadjustedStaticEval, tt.generation());
+                               probCutDepth + 1, move, unadjustedStaticEval, active_tt().generation());
 
                 if (!is_decisive(value))
                     return value - (probCutBeta - beta);
@@ -1342,7 +1356,7 @@ moves_loop:  // When in check, search starts here
 
 
     MovePicker mp(pos, ttData.move, depth, &mainHistory, &lowPlyHistory, &captureHistory, contHist,
-                  &sharedHistory, ss->ply);
+                   &active_shared_history(), ss->ply);
 
     value = bestValue;
 
@@ -1439,7 +1453,7 @@ moves_loop:  // When in check, search starts here
                 int dIndex  = std::min(int(depth), int(lmrDivisor.size())) - 1;
                 int history = (*contHist[0])[movedPiece][move.to_sq()]
                             + (*contHist[1])[movedPiece][move.to_sq()]
-                            + sharedHistory.pawn_entry(pos)[movedPiece][move.to_sq()];
+                            + active_shared_history().pawn_entry(pos)[movedPiece][move.to_sq()];
 
                 // Continuation history based pruning
                 if (history < -4313 * depth)
@@ -1798,7 +1812,8 @@ moves_loop:  // When in check, search starts here
         mainHistory[~us][((ss - 1)->currentMove).raw()] << scaledBonus * 234 / 32768;
 
         if (type_of(pos.piece_on(prevSq)) != PAWN && ((ss - 1)->currentMove).type_of() != PROMOTION)
-            sharedHistory.pawn_entry(pos)[pos.piece_on(prevSq)][prevSq] << scaledBonus * 322 / 8192;
+            active_shared_history().pawn_entry(pos)[pos.piece_on(prevSq)][prevSq]
+              << scaledBonus * 322 / 8192;
     }
 
     // Bonus for prior capture countermove that caused the fail low
@@ -1825,7 +1840,7 @@ moves_loop:  // When in check, search starts here
                        : PvNode && bestMove ? BOUND_EXACT
                                             : BOUND_UPPER,
                        moveCount != 0 ? depth : std::min(MAX_PLY - 1, depth + 6), bestMove,
-                       unadjustedStaticEval, tt.generation());
+                       unadjustedStaticEval, active_tt().generation());
 
     // Adjust correction history if the best move is not a capture
     // and the error direction matches whether we are above/below bounds.
@@ -1904,7 +1919,7 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
 
     // Step 3. Transposition table lookup
     posKey                         = pos.key();
-    auto [ttHit, ttData, ttWriter] = tt.probe(posKey);
+    auto [ttHit, ttData, ttWriter] = active_tt().probe(posKey);
     // Need further processing of the saved data
     ss->ttHit    = ttHit;
     ttData.move  = ttHit ? ttData.move : Move::none();
@@ -1967,7 +1982,7 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
 
             if (!ss->ttHit)
                 ttWriter.write(posKey, VALUE_NONE, false, BOUND_LOWER, DEPTH_UNSEARCHED,
-                               Move::none(), unadjustedStaticEval, tt.generation());
+                               Move::none(), unadjustedStaticEval, active_tt().generation());
             return bestValue;
         }
 
@@ -1991,7 +2006,7 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
     // whenever the separate Atomic check predicate forbids stand-pat.
     const Depth movePickerDepth = ss->inCheck ? 1 : DEPTH_QS;
     MovePicker  mp(pos, ttData.move, movePickerDepth, &mainHistory, &lowPlyHistory, &captureHistory,
-                   contHist, &sharedHistory, ss->ply);
+                   contHist, &active_shared_history(), ss->ply);
 
     // Step 5. Loop through all pseudo-legal moves until no moves remain or a beta
     // cutoff occurs.
@@ -2096,7 +2111,7 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
     // is saved as it was before adjustment by correction history.
     ttWriter.write(posKey, value_to_tt(bestValue, ss->ply), pvHit,
                    bestValue >= beta ? BOUND_LOWER : BOUND_UPPER, DEPTH_QS, bestMove,
-                   unadjustedStaticEval, tt.generation());
+                   unadjustedStaticEval, active_tt().generation());
 
     assert(bestValue > -VALUE_INFINITE && bestValue < VALUE_INFINITE);
 
@@ -2270,7 +2285,7 @@ void update_quiet_histories(
 
     update_continuation_histories(ss, pos.moved_piece(move), move.to_sq(), bonus * 820 / 1024);
 
-    workerThread.sharedHistory.pawn_entry(pos)[pos.moved_piece(move)][move.to_sq()]
+    workerThread.active_shared_history().pawn_entry(pos)[pos.moved_piece(move)][move.to_sq()]
       << bonus * (bonus > -7 ? 1038 : 525) / 1024;
 }
 }

@@ -182,6 +182,10 @@ struct TrainingSearchRequest {
     Depth              depth   = 0;
     u64                nodes   = 0;
     usize              multiPV = 1;
+    // Data generation may provide a worker-private table so independent games
+    // never race through the playing engine's shared TT.
+    TranspositionTable* transpositionTable = nullptr;
+    SharedHistories*    sharedHistories     = nullptr;
 };
 
 struct TrainingSearchLine {
@@ -376,6 +380,13 @@ class Worker {
     // generator. Values are raw engine Values; no UCI score conversion occurs.
     TrainingSearchResult training_search(Position&, const TrainingSearchRequest&);
 
+    SharedHistories& active_shared_history() noexcept {
+        return trainingSharedHistory ? *trainingSharedHistory : sharedHistory;
+    }
+    const SharedHistories& active_shared_history() const noexcept {
+        return trainingSharedHistory ? *trainingSharedHistory : sharedHistory;
+    }
+
     // Public because they need to be updatable by the stats
     ButterflyHistory mainHistory;
     LowPlyHistory    lowPlyHistory;
@@ -388,6 +399,12 @@ class Worker {
     ContinuationHistory (&continuationHistory)[2][2];
 
    private:
+    TranspositionTable& active_tt() const noexcept {
+        return trainingTt ? *trainingTt : tt;
+    }
+    ContinuationHistory (&active_continuation_history() noexcept)[2][2] {
+        return active_shared_history().continuationHistory;
+    }
     bool iterative_deepening();
 
     void do_move(Position& pos, const Move move, StateInfo& st, Stack* const ss);
@@ -447,6 +464,8 @@ class Worker {
     const OptionsMap&                                        options;
     ThreadPool&                                              threads;
     TranspositionTable&                                      tt;
+    TranspositionTable*                                      trainingTt = nullptr;
+    SharedHistories*                                         trainingSharedHistory = nullptr;
     const LazyNumaReplicatedSystemWide<Eval::NNUE::AnyNetwork>& network;
 
     // Used by NNUE

@@ -302,6 +302,38 @@ bool atomic_bin_v2_fullmove_fits_game_ply(int gamePly) noexcept {
     return gamePly >= 0 && u64(gamePly) / 2 + 1 <= AtomicBinV2MaxFullmove;
 }
 
+DataResult encode_atomic_bin_v2_position(const Position& position, AtomicBinV2Position& wire) {
+    wire.fill(0);
+    if (!atomic_bin_v2_fullmove_fits_game_ply(position.game_ply())
+        || position.rule50_count() < 0 || u64(position.rule50_count()) > AtomicBinV2MaxRule50)
+        return DataResult::failure(DataError::POSITION_CLOCK_OUT_OF_RANGE,
+                                   "Atomic BIN V2 position clocks exceed engine-origin limits");
+
+    AtomicBinV2PositionFields fields{};
+    if (DataResult converted =
+          position_to_fields(position, u64(position.rule50_count()),
+                             u64(position.game_ply()) / 2 + 1, fields);
+        !converted)
+        return converted;
+    return encode_atomic_bin_v2_position(fields, position.is_chess960(), wire);
+}
+
+DataResult encode_atomic_bin_v2_move(Move move, u32& wire) {
+    wire = 0;
+    AtomicBinV2MoveFields fields{};
+    if (DataResult converted = move_to_wire(move, fields); !converted)
+        return converted;
+    return encode_atomic_bin_v2_move(fields, wire);
+}
+
+DataResult decode_atomic_bin_v2_move(u32 wire, Move& move) {
+    move = Move::none();
+    AtomicBinV2MoveFields fields{};
+    if (DataResult decoded = decode_atomic_bin_v2_move(wire, fields); !decoded)
+        return decoded;
+    return move_from_wire(fields, move);
+}
+
 DataResult encode_atomic_bin_v2(const TrainingDataSample& sample, AtomicBinV2Record& record) {
     record.fill(0);
     if (sample.flags & ~u32(TRAINING_DATA_CHESS960))

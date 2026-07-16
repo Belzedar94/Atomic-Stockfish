@@ -337,6 +337,22 @@ void Engine::load_network(const std::filesystem::path& file) {
     threads.ensure_network_replicated();
 }
 
+bool Engine::load_authenticated_network(std::istream& stream,
+                                        const std::filesystem::path& logicalPath) {
+    wait_for_search_finished();
+
+    auto         candidate = make_unique_large_page<NN::AnyNetwork>();
+    NN::EvalFile candidateFile{std::nullopt, ""};
+    if (!candidate->load_authenticated(stream, logicalPath, candidateFile))
+        return false;
+
+    network     = std::move(candidate);
+    networkFile = std::move(candidateFile);
+    threads.clear();
+    threads.ensure_network_replicated();
+    return true;
+}
+
 void Engine::save_network(const std::optional<std::filesystem::path>& file) {
     wait_for_search_finished();
     network->save(networkFile, file);

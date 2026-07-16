@@ -78,6 +78,9 @@ class AnyNetwork {
     [[nodiscard]] bool load(const std::filesystem::path& rootDirectory,
                             const std::filesystem::path& evalfilePath,
                             EvalFile&                    evalFile);
+    [[nodiscard]] bool load_authenticated(std::istream&                 stream,
+                                          const std::filesystem::path& logicalPath,
+                                          EvalFile&                    evalFile);
 
     bool save(const EvalFile& evalFile, const std::optional<std::filesystem::path>& filename) const;
 

@@ -423,6 +423,41 @@ an independent full-board enumerator.
     guarantee retrospectively because its filtered played moves were never
     retained.
 
+    The release producer implements train-wins decontamination as two
+    sequential retention phases without changing the frozen partition hash.
+    It first fills only train, external-sorts the exact V3 model-input keys,
+    then retains validation records only after an exact disk-backed lookup
+    proves they are absent from train. Bloom state may reject an unnecessary
+    disk lookup but can never establish absence. Filtered collisions are not
+    counted; generation continues until both requested role counts are exact.
+    Before publication, the retained validation keys are independently
+    external-sorted and merge-compared with the train set. Split-group IDs are
+    likewise externally sorted per role and any duplicate is fatal.
+
+    `game_id` is deterministic producer scheduling state, not a new ledger
+    field or sidecar. For a fixed complete configuration, including `Threads`,
+    worker `i` owns IDs `i, i + Threads, ...`; each game receives a
+    domain-separated seed from `(generation_seed, game_id)`, owns its TT and
+    search histories, and the coordinator commits completed games in total ID
+    order. Games speculatively completed beyond the stopping ID, filtered
+    candidates and resulting holes are operational diagnostics only. The
+    authenticated retained contract remains the canonical root and complete
+    moves behind each `split_group_id`, the generation/split seeds, configured
+    Threads and the final artifact hashes. Re-running the same configuration
+    and Threads must produce byte-identical data and ledger payloads; log
+    first/last/count fields do not substitute for that evidence.
+
+    Network and opening-book pins are computed from locked regular,
+    non-symlink/non-reparse byte snapshots, and the parsers consume those exact
+    bytes without reopening the names. All six role artifacts remain in a
+    private directory through semantic replay, exact set audits and global
+    hash/size reread. Publication uses exclusive hard links under one fsynced
+    recovery journal, globally re-reads all public names, and removes the
+    journal only after the transaction is complete. Checked rollback removes
+    only names still identifying the owned staged inode; an identity mismatch
+    fails closed and retains the journal for recovery. This temporary journal
+    is transaction metadata, not a seventh DAG artifact.
+
     Active-count summaries preserve the proven per-perspective bounds for an
     evaluable nonterminal position with both kings and at most 32 board pieces;
     a king-absent terminal is resolved before NNUE enumeration. HM's tight bound
