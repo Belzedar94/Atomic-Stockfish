@@ -31,8 +31,8 @@ pipeline and full Node UCI/NNUE WASM launcher. The development-only
 | XBoard/CECP | Atomic-only negotiation, clocks, state edits, analyze, playother, hard/easy and live ponder cancellation/promotion | complete protocol suite passed |
 | Search repeatability | Two-position Atomic NNUE corpus over increasing node budgets | `12/12`; signature `338376` |
 | Legacy Atomic NNUE | `false`, `true`, `pure`, invalid/truncated recovery, transactional load and byte-exact export | mode contract passed; network SHA-256 pinned |
-| Pipeline reproducibility | Normative `atomic-schema.json`, Atomic-owned generation, thin tools validation/conversion, exact tools/trainer capability handshake, machine-readable sibling commits, tracked clean-build recipes, strict build manifests, exact HEAD/clean-tree/artifact pre/postflight, authenticated Git identity, pinned Python runtime/dependency provenance, locked strong-local fixture and trainer-generated synthetic CI fixture | Legacy strong-local passed with tools `521f8410`, trainer `350a28f2` and data hash `d95f5180...`; the independent `atomic-bin-v2` E2E passed with tools `40d2db22`, trainer `3e5651a9`, one training step and byte-exact serialize/re-import/load |
-| Atomic Syzygy | Atomic magics/suffixes, connected-kings domain 518, multi-directory paths, real 3-6-man WDL/DTZ, root/interior, six-man limit 5/6, five-position oracle/tbhit analysis, Atomic960 eligibility and recoverable paths | same-checkout Makefile driver, 13 fixture headers/hashes, driver `5/5` and production UCI suite with NNUE false/true are established; coordinated same-binary classical+NNUE LOS execution and authenticated aggregate `6/6` evidence remain pending, so no Syzygy strength gate is claimed passed yet |
+| Pipeline reproducibility | Normative `atomic-schema.json`, Atomic-owned generation, thin tools validation/conversion, exact tools/trainer capability handshake, machine-readable sibling commits, tracked clean-build recipes, strict build manifests, exact HEAD/clean-tree/artifact pre/postflight, authenticated Git identity, pinned Python runtime/dependency provenance, locked strong-local fixture and trainer-generated synthetic CI fixture | Legacy strong-local passed with tools `521f8410`, trainer `350a28f2` and data hash `d95f5180...`. The current real `atomic-bin-v2` CI gate authenticates tools merge `450049ee` with engine `420c9f35` and trainer merge `44663e28` with engine `76764c3c`, requires an explicit strong-local or synthetic-CI network profile, generates disjoint 128-position train/validation datasets, performs exactly one CPU update, serializes, reimports and loads the result in the playing engine. The older `40d2db22`/`3e5651a9` pass remains historical evidence only. |
+| Atomic Syzygy | Atomic magics/suffixes, connected-kings domain 518, multi-directory paths, real 3-6-man WDL/DTZ, root/interior, six-man limit 5/6, five-position oracle/tbhit analysis, Atomic960 eligibility and recoverable paths | same-checkout Makefile driver, 13 fixture headers/hashes, driver `5/5` and production UCI suite with NNUE false/true are established. OpenBench IDs 37–42 provide six positive point estimates across same-binary classical/NNUE STC/LTC plus the requested Fairy NNUE comparison; the owner stopped and accepted them after healthcheck. The canonical evidence explicitly records that none completed 2,000 games or has `passed=true`, and does not claim aggregate `6/6` LOS. Exact-tag functional conformance remains a release gate. |
 | Full engine UCI/NNUE WASM | Interactive Node launcher, external NNUE, true/pure, perft, terminal positions and pthread operation | integration passed; all four artifact hashes match the reproducible manifest |
 
 The boundary between structural FEN validation and legal-game-history
@@ -41,9 +41,11 @@ In particular, structurally valid Atomic analysis positions are not rejected
 merely because the side to move attacks the opposing king.
 
 Small evaluation differences against Fairy are diagnostic, not a bit-exact
-acceptance condition. Deterministic structural failures remain bugs. The
-normative correctness/strength gates are unit tests, perft and the three
-required Elo/LOS matches.
+acceptance condition. Deterministic structural failures remain bugs. Normative
+correctness gates are unit tests and perft; strength evidence follows the
+explicitly recorded policy for each playing change. The release 1.0 Syzygy
+strength disposition is an owner waiver over stopped positive measurements and
+must not be presented as a completed LOS or fixed-game gate.
 
 ## Source-to-test treatment
 

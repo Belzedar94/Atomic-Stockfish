@@ -511,9 +511,10 @@ fail-closed: structural V1 validation alone cannot claim V3 dataset or training
 readiness.
 
 The contract deliberately leaves Legacy Atomic V1, AtomicNNUEV2, Atomic BIN V2
-and the existing V3 schemas byte-identical. The separately scheduled 500M
-Atomic BIN V2 bootstrap remains a transport and throughput pilot and can never
-be relabelled as a V3 release dataset.
+and the existing V3 schemas byte-identical. The owner-capped, tablebase-free
+375M Atomic BIN V2 bootstrap remains a transport and throughput pilot and can
+never be relabelled as a V3 release dataset. Its first training split and
+schedule require a separate parameter decision.
 
 ## H9.3l-b audited trajectory producer
 

@@ -35,6 +35,7 @@ def test_one_authoritative_runner_discovers_every_release_contract_module() -> N
         "test_atomic_release_verification.py",
         "test_atomic_release_workflow.py",
         "test_atomic_reproducible_sdist.py",
+        "test_atomic_syzygy_openbench_evidence.py",
         "test_atomic_uci_wasm_release.py",
         "test_atomic_windows_wheel_fingerprint.py",
         "test_release_dependency_locks.py",

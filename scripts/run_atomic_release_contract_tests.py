@@ -23,6 +23,7 @@ if str(ROOT) not in sys.path:
 PATTERNS = (
     "test_*release*.py",
     "test_atomic_reproducible_*.py",
+    "test_atomic_syzygy_openbench_evidence.py",
     "test_atomic_windows_wheel_fingerprint.py",
     "test_wasm_source_date_epoch.py",
 )

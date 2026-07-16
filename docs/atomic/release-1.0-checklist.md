@@ -2,8 +2,10 @@
 
 This checklist is the release controller for `v1.0.0`. A green development CI
 run is necessary but is not, by itself, permission to publish. Every item is
-executed against the exact tagged commit and its hashes are recorded in the
-release manifest.
+executed against the exact tagged commit. The release manifest authenticates
+the published assets and their producer provenance; gate results, hashes and
+documented skips are captured by the exact-tag workflow and preserved in the
+follow-up gate-evidence PR described below.
 
 ## Frozen inputs
 
@@ -19,10 +21,11 @@ release manifest.
 - `tests/legacy_pipeline.lock.json` records tools merge
   `450049ee7a0ece32694b11f6c55deb7df1d42a84` and trainer merge
   `44663e28c3e5464ff3be2cdaa26c8518b3951c5f`, never branch-head commits.
-- The 500M bootstrap campaign remains an independent Atomic BIN V2 pilot, not a
-  V3 publication-ready release dataset. Its live progress and exact engine,
-  network, book and command are recorded, but completion does not alter the
-  versioned playing binary or its release artifacts.
+- The owner-capped 375M bootstrap campaign remains an independent, tablebase-free
+  Atomic BIN V2 pilot, not a V3 publication-ready release dataset. Its exact
+  engine, network, book, command and 30 accepted chunks are recorded, but
+  completion does not alter the versioned playing binary or its release
+  artifacts. No training begins before a separate parameter decision.
 - OpenBench v39 is deployed only after the live v38 campaign has drained and
   its database/media backup has been verified; the engine release never forces
   a controller upgrade underneath an active campaign.
@@ -31,6 +34,12 @@ release manifest.
   Release packages do not redistribute it without a separate rights decision.
 - Atomic Syzygy files remain external; the release records the fixture/table
   manifests used by the gate and does not repackage third-party tables.
+- The Syzygy strength disposition is the explicit owner waiver recorded in
+  `docs/atomic/evidence/release-1.0-syzygy-openbench`: OpenBench IDs 37–42 have
+  six positive point estimates and were manually stopped after healthcheck.
+  None completed 2,000 games, none has `passed=true`, and no aggregate `6/6`
+  LOS is claimed. This historical strength evidence does not replace the
+  exact-tag functional gate below.
 
 ## Exact-head quality gates
 
@@ -72,8 +81,10 @@ release manifest.
    and run classical plus Legacy V1/AtomicNNUEV2 load, search, switch and export
    tests with authenticated external networks. `Use NNUE=pure` is exercised by
    the data-generation surface, not advertised as a playing mode.
-8. Run Atomic Syzygy driver, UCI and real-table fixtures, including touching
-   kings and six-man positions, with tablebases enabled and disabled.
+8. Run Atomic Syzygy driver, production UCI and real-table fixtures against the
+   exact tag, including touching kings and six-man positions, with tablebases
+   enabled and disabled. Preserve this functional result independently of the
+   stopped-and-waived OpenBench strength measurements.
 9. Run Legacy V1 and Atomic BIN V2 generation, validation, lossless decode,
    training-step, serialization, reimport and engine-load gates. Run all V3
    structural, trajectory, reachability and trainer execution-block tests that
@@ -85,7 +96,8 @@ release manifest.
     release-only metadata and packaging changes must preserve the engine bench.
 
 No skip is added for convenience. A platform-only skip must name the missing
-dependency and be recorded in the manifest.
+dependency in the exact-tag workflow evidence and be preserved in the follow-up
+gate-evidence PR.
 
 ## Release assets
 
@@ -158,8 +170,9 @@ is no separate protocol binary.
     another new empty directory, require byte equality with the frozen candidate,
     and re-run `SHA256SUMS`. Any discrepancy is a release incident; do not move
     or recreate the tag.
-11. Preserve the build logs and gate manifest under `docs/atomic/evidence` in a
-   follow-up evidence PR without rewriting the tagged source.
+11. Preserve the build logs and exact-tag gate manifest, including any
+    documented platform-only skips, under `docs/atomic/evidence` in a follow-up
+    evidence PR without rewriting the tagged source.
 
 If any downloaded asset, tag object, peeled commit, version, bench, CI ref or
 gate differs, delete the draft release and investigate. Never move an existing
