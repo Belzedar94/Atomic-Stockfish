@@ -143,7 +143,7 @@ jobs:
             $fingerprint = Join-Path $env:GITHUB_WORKSPACE "build/windows-wheel-fingerprint-$buildId.json"
             $wheelhouse = Join-Path $env:GITHUB_WORKSPACE "build/fingerprint-wheelhouse-$buildId"
             $env:CIBW_CACHE_PATH = Join-Path $env:GITHUB_WORKSPACE "build/fingerprint-cache-$buildId"
-            $env:CIBW_BEFORE_BUILD = "$install && python \"{project}/scripts/atomic_windows_wheel_fingerprint.py\" --output \"$fingerprint\""
+            $env:CIBW_BEFORE_BUILD = $install + ' && python "{project}/scripts/atomic_windows_wheel_fingerprint.py" --output "' + $fingerprint + '"'
             python -m cibuildwheel --platform windows --output-dir $wheelhouse .
             if ($LASTEXITCODE -ne 0) {
               throw "cibuildwheel fingerprint capture $buildId failed"
