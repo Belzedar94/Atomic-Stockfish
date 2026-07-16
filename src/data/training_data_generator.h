@@ -12,6 +12,8 @@
 #define DATA_TRAINING_DATA_GENERATOR_H_INCLUDED
 
 #include <algorithm>
+#include <atomic>
+#include <condition_variable>
 #include <cstdint>
 #include <iosfwd>
 
@@ -54,12 +56,28 @@ inline bool legacy_atomic_v1_draw_game_fits(std::uint64_t draws,
         <= keepDraws;
 }
 
+// Advance the ordered-commit cursor and wake a producer that is allowed to
+// bypass a full pending buffer because it owns the newly expected game_id.
+// Keeping the store and notification inseparable prevents the coordinator and
+// that producer from sleeping forever while each waits for the other.
+inline void advance_atomic_v3_commit_game_id(std::atomic<std::uint64_t>& cursor,
+                                             std::condition_variable&    pendingCv,
+                                             std::uint64_t               nextGameId) noexcept {
+    cursor.store(nextGameId, std::memory_order_relaxed);
+    pendingCv.notify_all();
+}
+
 // Parse and execute the Atomic-only PV self-play generator command. This
 // implementation is linked only by the isolated `data-generator` target.
 // Returns false after emitting a diagnostic when the command cannot complete.
 // The isolated UCI target translates that result to a non-zero process status,
 // matching the historical tools command contract.
 bool generate_training_data(Engine& engine, std::istream& input);
+
+// Additive AtomicNNUEV3 producer. Unlike the historical command it buffers a
+// complete game, partitions by a label-free trajectory hash, and publishes a
+// role-specific Atomic BIN V2 dataset plus its replay ledger.
+bool generate_atomic_v3_chunk(Engine& engine, std::istream& input);
 
 }  // namespace Data
 }  // namespace Stockfish

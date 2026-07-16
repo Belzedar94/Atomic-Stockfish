@@ -109,6 +109,20 @@ void Network::load(const fs::path& rootDirectory, fs::path evalfilePath, EvalFil
     }
 }
 
+bool Network::load_authenticated(std::istream&   stream,
+                                 const fs::path& logicalPath,
+                                 EvalFile&       evalFile) {
+    auto candidate   = std::make_unique<Network>();
+    auto description = candidate->load(stream);
+    if (!description)
+        return false;
+
+    *this                   = std::move(*candidate);
+    evalFile.current        = logicalPath;
+    evalFile.netDescription = std::move(*description);
+    return true;
+}
+
 bool Network::save(const EvalFile& evalFile, const std::optional<fs::path>& filename) const {
     if (!evalFile.current.has_value())
     {

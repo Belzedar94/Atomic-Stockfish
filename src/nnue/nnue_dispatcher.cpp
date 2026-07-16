@@ -11,6 +11,7 @@
 #include "nnue_dispatcher.h"
 
 #include <fstream>
+#include <sstream>
 #include <string>
 
 #include "../misc.h"
@@ -99,6 +100,36 @@ bool AnyNetwork::load(const fs::path& rootDirectory,
     if (candidateFile.current != requested)
         return false;
 
+    evalFile = std::move(candidateFile);
+    return true;
+}
+
+bool AnyNetwork::load_authenticated(std::istream&   stream,
+                                    const fs::path& logicalPath,
+                                    EvalFile&       evalFile) {
+    // Both parsers require the complete stream and are intentionally tried on
+    // independent snapshots. This method never reopens logicalPath.
+    std::ostringstream captured(std::ios::binary);
+    captured << stream.rdbuf();
+    if (!stream.eof() && stream.fail())
+        return false;
+    const std::string bytes = std::move(captured).str();
+
+    activate_v2();
+    std::istringstream v2Stream(bytes, std::ios::binary);
+    auto               v2 = AtomicV2::load_candidate(v2Stream, storage_.atomicV2);
+    if (v2)
+    {
+        evalFile.current        = logicalPath;
+        evalFile.netDescription = std::move(v2.description);
+        return true;
+    }
+
+    activate_legacy();
+    std::istringstream legacyStream(bytes, std::ios::binary);
+    EvalFile           candidateFile{std::nullopt, ""};
+    if (!storage_.legacy.load_authenticated(legacyStream, logicalPath, candidateFile))
+        return false;
     evalFile = std::move(candidateFile);
     return true;
 }

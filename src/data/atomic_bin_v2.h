@@ -13,6 +13,12 @@
 
 #include "atomic_bin_v2_wire.h"
 
+namespace Stockfish {
+
+class Position;
+
+}
+
 namespace Stockfish::Data {
 
 // Convert between the format-neutral generator sample and the frozen V2 wire.
@@ -21,6 +27,15 @@ namespace Stockfish::Data {
 // partially encoded or decoded data.
 DataResult encode_atomic_bin_v2(const TrainingDataSample& sample, AtomicBinV2Record& record);
 DataResult decode_atomic_bin_v2(const AtomicBinV2Record& record, TrainingDataSample& sample);
+
+// Canonical V2 primitives used by the trajectory ledger. These are additive
+// views of the exact same encoders used by encode_atomic_bin_v2(); exposing
+// them avoids reparsing a FEN for every played move and, crucially, prevents a
+// second move-wire convention from drifting away from the frozen 64-byte
+// record.
+DataResult encode_atomic_bin_v2_position(const Position& position, AtomicBinV2Position& wire);
+DataResult encode_atomic_bin_v2_move(Move move, u32& wire);
+DataResult decode_atomic_bin_v2_move(u32 wire, Move& move);
 
 // Position::game_ply() is the authoritative generator clock. Keep the V2
 // sample eligibility gate in the format adapter so generation cannot buffer a

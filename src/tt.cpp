@@ -223,6 +223,15 @@ void TranspositionTable::clear(ThreadPool& threads) {
 }
 
 
+#ifdef ATOMIC_DATA_GENERATOR
+void TranspositionTable::clear_for_single_owner() {
+    assert(table != nullptr);
+    generation8 = 0;
+    std::memset(static_cast<void*>(table), 0, clusterCount * sizeof(Cluster));
+}
+#endif
+
+
 // Returns an approximation of the hashtable
 // occupation during a search. The hash is x permill full, as per UCI protocol.
 // Only counts entries which are younger than maxAge.

@@ -158,6 +158,11 @@ void UCIEngine::loop() {
             if (!Data::generate_training_data(engine, is))
                 std::exit(EXIT_FAILURE);
         }
+        else if (token == "generate_atomic_v3_chunk")
+        {
+            if (!Data::generate_atomic_v3_chunk(engine, is))
+                std::exit(EXIT_FAILURE);
+        }
         else if (token == "openbench_generate_training_data")
         {
             if (!Data::openbench_generate_training_data(engine, is))

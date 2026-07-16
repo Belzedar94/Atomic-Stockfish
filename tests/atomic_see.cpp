@@ -8,6 +8,7 @@
 #include <array>
 #include <cstddef>
 #include <iostream>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -887,6 +888,39 @@ bool expect_atomic_capture_futility_eligibility() {
     return ok;
 }
 
+bool expect_shared_search_history_baseline() {
+    auto histories = std::make_unique<SharedHistories>(1);
+    histories->clear_for_search(0, 1);
+
+    const auto correction_matches = [](const auto& bundle) {
+        return i16(bundle.pawn) == -6 && i16(bundle.minor) == -6 && i16(bundle.nonPawnWhite) == -6
+            && i16(bundle.nonPawnBlack) == -6;
+    };
+
+    bool ok =
+      correction_matches(histories->correctionHistory[0][WHITE])
+      && correction_matches(
+        histories->correctionHistory[histories->correctionHistory.get_size() - 1][BLACK])
+      && i16(histories->pawnHistory[0][NO_PIECE][SQ_A1]) == -1262
+      && i16(histories->pawnHistory[histories->pawnHistory.get_size() - 1][B_KING][SQ_H8]) == -1262;
+
+    for (bool inCheck : {false, true})
+        for (StatsType captures : {NoCaptures, Captures})
+            ok &=
+              i16(
+                histories->continuationHistory[inCheck][captures][NO_PIECE][SQ_A1][NO_PIECE][SQ_A1])
+                == -552
+              && i16(
+                   histories->continuationHistory[inCheck][captures][B_KING][SQ_H8][B_KING][SQ_H8])
+                   == -552;
+
+    if (!ok)
+        std::cerr << "FAIL shared search histories: tuned baseline differs\n";
+    else
+        std::cout << "PASS shared search histories tuned baseline\n";
+    return ok;
+}
+
 }  // namespace
 
 int main() {
@@ -913,11 +947,13 @@ int main() {
     ok &= expect_atomic_move_count_thresholds();
     ok &= expect_atomic_null_move_reductions();
     ok &= expect_atomic_capture_futility_eligibility();
+    ok &= expect_shared_search_history_baseline();
 
     if (!ok)
         return 1;
 
-    constexpr usize TestCount = SeeCases.size() + 3 + 7 + 8 + 14 + 2 + 13 + 3 + 6 + 7 + 7 + 6 + 2;
+    constexpr usize TestCount =
+      SeeCases.size() + 3 + 7 + 8 + 14 + 2 + 13 + 3 + 6 + 7 + 7 + 6 + 2 + 1;
     std::cout << "Atomic C++ unit tests passed: " << TestCount << "/" << TestCount << '\n';
     return 0;
 }

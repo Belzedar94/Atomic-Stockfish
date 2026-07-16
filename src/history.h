@@ -207,6 +207,21 @@ struct SharedHistories {
 
     usize get_size() const { return sizeMinus1 + 1; }
 
+    // Reset every shared search history to the tuned Worker::clear baseline.
+    // A thread owns only its DynStats range, while continuation histories are
+    // atomic and are reset identically by every worker on the NUMA node.
+    void clear_for_search(usize threadIdx, usize numaTotal) {
+        assert(numaTotal != 0 && threadIdx < numaTotal);
+        correctionHistory.clear_range(-6, threadIdx, numaTotal);
+        pawnHistory.clear_range(-1262, threadIdx, numaTotal);
+
+        for (bool inCheck : {false, true})
+            for (StatsType c : {NoCaptures, Captures})
+                for (auto& to : continuationHistory[inCheck][c])
+                    for (auto& h : to)
+                        h.fill(-552);
+    }
+
     auto& pawn_entry(const Position& pos) {
         return pawnHistory[pos.pawn_key() & pawnHistSizeMinus1];
     }
