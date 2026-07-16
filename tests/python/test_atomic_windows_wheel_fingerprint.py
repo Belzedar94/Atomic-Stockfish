@@ -201,7 +201,20 @@ def test_collects_complete_canonical_windows_fingerprint(tmp_path, monkeypatch):
     assert len(vsdevcmd_calls) == 1
     assert vsdevcmd_calls[0][1:4] == ["/d", "/s", "/c"]
     assert "/u" not in vsdevcmd_calls[0][1:4]
-    assert '"{}" /d /u /c set'.format(layout.comspec) in vsdevcmd_calls[0][4]
+    assert vsdevcmd_calls[0][4:] == [
+        "call",
+        str(layout.vsdevcmd),
+        "-no_logo",
+        "-arch=amd64",
+        "-host_arch=amd64",
+        ">nul",
+        "&&",
+        str(layout.comspec),
+        "/d",
+        "/u",
+        "/c",
+        "set",
+    ]
     assert any(call[0][1:] == ["/Bv"] for call in calls if Path(call[0][0]).resolve() == layout.cl)
     assert any(call[0][1:] == ["/?"] for call in calls if Path(call[0][0]).resolve() == layout.link)
 
@@ -287,6 +300,22 @@ def test_rejects_tool_output_without_a_version(tmp_path):
 
     with pytest.raises(fingerprint.FingerprintError, match="did not identify a version"):
         fingerprint._tool_record(tool, [], [0], {}, runner, "tool.exe")
+
+
+def test_accepts_msvc_link_help_exit_code(tmp_path):
+    tool = _write(tmp_path / "link.exe")
+
+    def runner(argv, environment=None):
+        return fingerprint.CommandResult(
+            1100,
+            b"Microsoft (R) Incremental Linker Version 14.44.35221.0\r\n",
+            b"",
+        )
+
+    record = fingerprint._tool_record(
+        tool, ["/?"], [0, 1100], {}, runner, "link.exe"
+    )
+    assert record["versionCommand"]["returnCode"] == 1100
 
 
 @pytest.mark.parametrize(

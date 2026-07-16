@@ -329,12 +329,26 @@ def _capture_vs_environment(
     # command output internally and fail on GitHub's hosted image when that output is
     # forced to UTF-16.  Initialize the toolchain in a normal outer cmd.exe, then use
     # a nested Unicode cmd.exe only for the final deterministic environment dump.
-    batch_command = (
-        'call "{}" -no_logo -arch=amd64 -host_arch=amd64 >nul '
-        '&& "{}" /d /u /c set'.format(vsdevcmd, comspec)
-    )
     result = runner(
-        [str(comspec), "/d", "/s", "/c", batch_command], base_environment
+        [
+            str(comspec),
+            "/d",
+            "/s",
+            "/c",
+            "call",
+            str(vsdevcmd),
+            "-no_logo",
+            "-arch=amd64",
+            "-host_arch=amd64",
+            ">nul",
+            "&&",
+            str(comspec),
+            "/d",
+            "/u",
+            "/c",
+            "set",
+        ],
+        base_environment,
     )
     if result.returncode != 0:
         raise FingerprintError("VsDevCmd failed with exit code {}".format(result.returncode))
@@ -563,7 +577,16 @@ def collect_windows_fingerprint(
                 cl_path, ["/Bv"], [0, 2], vc_environment, runner, "cl.exe"
             ),
             "link": _tool_record(
-                link_path, ["/?"], [0], vc_environment, runner, "link.exe"
+                # Current MSVC LINK prints its complete help/version banner for
+                # /? and exits with LNK1100 (1100) because no input object was
+                # supplied.  Older installations returned zero for the same
+                # command, so both documented observable behaviours are pinned.
+                link_path,
+                ["/?"],
+                [0, 1100],
+                vc_environment,
+                runner,
+                "link.exe",
             ),
         },
         "visualStudio": {
