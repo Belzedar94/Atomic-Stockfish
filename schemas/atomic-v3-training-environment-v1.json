@@ -1,0 +1,210 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Belzedar94/Atomic-Stockfish/schemas/atomic-v3-training-environment-v1.json",
+  "title": "AtomicNNUEV3 authenticated training environment",
+  "description": "Canonical descriptor for the software and accelerator environment of one deterministic AtomicNNUEV3 training run. The descriptor cross-binds the exact trainer binary and dependency lock named by the run manifest.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "trainer_binary_sha256",
+    "dependency_lock_sha256",
+    "platform",
+    "architecture",
+    "python_version",
+    "pytorch_version",
+    "cuda_version",
+    "cudnn_version",
+    "driver_version",
+    "accelerator_devices",
+    "container_image_sha256",
+    "determinism"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "trainer_binary_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "dependency_lock_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "platform": {
+      "$ref": "#/$defs/nonEmptyString",
+      "description": "Operating-system family and release identifier, for example linux-6.8.0."
+    },
+    "architecture": {
+      "$ref": "#/$defs/nonEmptyString",
+      "description": "Normalized host architecture, for example x86_64 or aarch64."
+    },
+    "python_version": {
+      "$ref": "#/$defs/nonEmptyString"
+    },
+    "pytorch_version": {
+      "$ref": "#/$defs/nonEmptyString"
+    },
+    "cuda_version": {
+      "$ref": "#/$defs/nullableVersion"
+    },
+    "cudnn_version": {
+      "$ref": "#/$defs/nullableVersion"
+    },
+    "driver_version": {
+      "$ref": "#/$defs/nullableVersion"
+    },
+    "accelerator_devices": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1024,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/nonEmptyString"
+      },
+      "description": "Stable device model identifiers in lexicographic order. CPU-only runs use one explicit CPU identifier."
+    },
+    "container_image_sha256": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/sha256"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Decoded 32-byte image digest encoded as lowercase hex, or null for a verified bare-metal environment."
+    },
+    "determinism": {
+      "$ref": "#/$defs/determinism"
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "nullableVersion": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "determinism": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "deterministic_algorithms",
+        "warn_only",
+        "cudnn_benchmark",
+        "cudnn_deterministic",
+        "allow_tf32",
+        "cublas_workspace_config"
+      ],
+      "properties": {
+        "deterministic_algorithms": {
+          "const": true
+        },
+        "warn_only": {
+          "const": false
+        },
+        "cudnn_benchmark": {
+          "const": false
+        },
+        "cudnn_deterministic": {
+          "const": true
+        },
+        "allow_tf32": {
+          "const": false
+        },
+        "cublas_workspace_config": {
+          "oneOf": [
+            {
+              "enum": [
+                ":16:8",
+                ":4096:8"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The CUBLAS_WORKSPACE_CONFIG value used by CUDA runs, or null when CUDA is absent."
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "cuda_version": {
+            "type": "null"
+          }
+        },
+        "required": [
+          "cuda_version"
+        ]
+      },
+      "then": {
+        "properties": {
+          "determinism": {
+            "properties": {
+              "cublas_workspace_config": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "determinism": {
+            "properties": {
+              "cublas_workspace_config": {
+                "enum": [
+                  ":16:8",
+                  ":4096:8"
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "x-cross-artifact-bindings": [
+    "trainer_binary_sha256 equals training-run-v2 trainer.binary.sha256 and trainer.artifact_sha256",
+    "dependency_lock_sha256 equals training-run-v2 trainer.dependency_lock.sha256",
+    "the typed environment artifact schema_sha256 equals inputs.training_environment_schema.sha256",
+    "training-run-v2 deterministic_algorithms and determinism.deterministic_algorithms are both true"
+  ],
+  "x-ordering": "accelerator_devices is strictly lexicographically sorted and unique",
+  "x-wire": {
+    "encoding": "utf-8",
+    "bom": "forbidden",
+    "canonical_json": {
+      "key_order": "schema-declaration-order",
+      "separators": [
+        ",",
+        ":"
+      ],
+      "ensure_ascii": false,
+      "allow_nan": false,
+      "insignificant_whitespace": "forbidden"
+    },
+    "trailing_lf_count": 1,
+    "maximum_bytes": 16777216,
+    "file_type": "regular",
+    "symbolic_links": "forbidden",
+    "snapshot_stability": "same-handle-fstat-before-and-after"
+  }
+}
