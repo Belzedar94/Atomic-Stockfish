@@ -54,11 +54,17 @@ The release inventory records the immutable Linux GCC and Windows MinGW image
 digests. Native executables and archives are built twice in isolated roots and
 must be byte-identical; the packaged Windows executables are then downloaded by
 a Windows runner for UCI/XBoard smoke. Python wheels consume only the normalized
-sdist emitted by the source job, build twice under the tagged commit timestamp,
-must be byte-identical, and pass strict `abi3audit 0.0.26` plus installed-stub
-`mypy 1.19.1` checks. Board and UCI WASM provenance records the exact digest-
-pinned Docker command used for each artifact. Every provenance record also
-freezes the producer-side asset SHA-256, which is rechecked during assembly.
+sdist emitted by the source job, build twice with separate caches under the
+tagged commit timestamp, must be byte-identical, and pass strict `abi3audit
+0.0.26` plus installed-stub `mypy 1.19.1` checks. The Windows producer is also
+restricted to CPython 3.9.13 and the exact hosted-runner, Visual Studio, SDK,
+packaging-tool and compiler fingerprint frozen in the inventory. Because GitHub
+hosted runner images cannot be selected by immutable digest, this guarantee
+applies only while that exact image remains schedulable; image rotation requires
+a new reviewed release commit and fingerprint. Board and UCI WASM provenance
+records the exact digest-pinned Docker command used for each artifact. Every
+provenance record also freezes the producer-side asset SHA-256, which is
+rechecked during assembly.
 
 Automation may create only a draft after GitHub release immutability is already
 enabled, the annotated tag object and peeled commit are exact, and `Atomic CI`

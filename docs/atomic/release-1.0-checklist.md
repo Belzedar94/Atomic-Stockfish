@@ -55,7 +55,13 @@ release manifest.
    and require strict `abi3audit 0.0.26` success. Then download the exact wheel
    artifact and install it without dependency resolution on Python 3.9, 3.12
    and 3.14 on both Linux and Windows; version, variant, perft and engine identity
-   must pass outside the checkout.
+   must pass outside the checkout. Both producers target the CPython 3.9 stable
+   ABI and use pip 26.0.1, setuptools 80.9.0 and wheel 0.45.1 from the
+   hash-closed build lock. The pinned manylinux image supplies the exact Linux
+   CPython micro-version; cibuildwheel supplies CPython 3.9.13 on Windows. Each
+   producer's two builds use separate caches. On Windows, both build interpreters must
+   emit the same canonical runner/Visual Studio/SDK/CPython fingerprint and its
+   SHA-256 must equal the value frozen in the release inventory.
 6. Build the CommonJS and ES-module Board package twice with the same pinned
    Emscripten image, require byte-identical JavaScript/WASM, and run lifecycle,
    exception and cross-surface parity tests.
@@ -108,6 +114,13 @@ is no separate protocol binary.
    the trusted `v1.0.0` tag-push publication jobs, never by pull-request jobs,
    and only for the two `GET /immutable-releases` calls.
 3. Create every asset in an isolated clean checkout with a fixed toolchain.
+   Linux, MinGW and Emscripten producers are selected by immutable container
+   digests. GitHub does not expose an immutable selector for its hosted Windows
+   image, so the Windows wheel instead fails closed unless `ImageOS`,
+   `ImageVersion` and the complete toolchain fingerprint match the reviewed
+   inventory. If that hosted image is no longer available, prepare and review a
+   new release commit; never update the expected fingerprint during a release
+   run.
 4. Re-read and hash all assets, then write the manifest and `SHA256SUMS` last.
    Every producer-side provenance descriptor freezes its asset SHA-256; the
    assembler verifies that digest again before and after its authenticated copy.

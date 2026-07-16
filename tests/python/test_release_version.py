@@ -80,6 +80,13 @@ def test_release_version_is_consistent_across_packaging_surfaces() -> None:
         "operatingSystems": ["ubuntu-24.04", "windows-2022"],
         "pythonVersions": ["3.9", "3.12", "3.14"],
     }
+    assert policy["windowsWheelFingerprintSchemaVersion"] == 2
+    assert policy["windowsWheelFingerprintSha256"] == (
+        "2dcc7d539fd325a27a4ccf2dbab018176b02d810faa05dc244162ae6ef8dd4e4"
+    )
+    assert policy["windowsWheelImageOS"] == "win22"
+    assert policy["windowsWheelImageVersion"] == "20260714.244.1"
+    assert policy["windowsWheelPythonVersion"] == "3.9.13"
     patterns = [item["namePattern"] for item in inventory["assets"]]
     assert len(patterns) == 12
     assert len(patterns) == len(set(patterns))

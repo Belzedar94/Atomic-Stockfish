@@ -8,6 +8,11 @@ on:
         required: true
         default: main
         type: string
+      capture_windows_fingerprint:
+        description: Capture the real cibuildwheel identity twice for reviewed runner rotation
+        required: false
+        default: false
+        type: boolean
   push:
     tags:
       - v1.0.0
@@ -27,6 +32,9 @@ env:
   LINUX_NATIVE_AMD64_MANIFEST: sha256:82549aa8f90ada3236a8be70c74543132a76662ef33f0c3271ed802b81584a82
   WINDOWS_NATIVE_IMAGE: dockcross/windows-static-x64@sha256:e5fde458b54dda21d0265516f0310bc017532dd6f4fdad0b7239dc6ccd0f8ca9
   PYTHON_MANYLINUX_X86_64_IMAGE: quay.io/pypa/manylinux_2_28_x86_64:2026.03.20-1@sha256:853663dc8253b62be437bb52a5caecffd020792af4442f55d927d22e0ea795ae
+  WINDOWS_WHEEL_FINGERPRINT_SHA256: 2dcc7d539fd325a27a4ccf2dbab018176b02d810faa05dc244162ae6ef8dd4e4
+  WINDOWS_WHEEL_IMAGE_OS: win22
+  WINDOWS_WHEEL_IMAGE_VERSION: 20260714.244.1
 
 jobs:
   validate:
@@ -97,6 +105,74 @@ jobs:
           echo "epoch=$epoch" >> "$GITHUB_OUTPUT"
           echo "tag_object=$tag_object" >> "$GITHUB_OUTPUT"
           echo "tag_commit=$tag_commit" >> "$GITHUB_OUTPUT"
+
+  windows-fingerprint-capture:
+    name: Capture Windows wheel toolchain twice
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.capture_windows_fingerprint }}
+    needs: validate
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ needs.validate.outputs.commit }}
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.12.11'
+      - name: Capture two independent canonical fingerprints
+        shell: pwsh
+        env:
+          SOURCE_DATE_EPOCH: ${{ needs.validate.outputs.epoch }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -m pip install --disable-pip-version-check `
+            --only-binary=:all: --require-hashes `
+            -r tests/release-ci-requirements.txt
+          if ($LASTEXITCODE -ne 0) { throw 'release tooling installation failed' }
+
+          Get-ChildItem Env: | Where-Object Name -Like 'CIBW_*' |
+            ForEach-Object { Remove-Item -LiteralPath "Env:$($_.Name)" }
+          $env:PYTHONHASHSEED = '0'
+          $env:CIBW_BUILD = 'cp39-*'
+          $env:CIBW_ARCHS = 'AMD64'
+          $env:CIBW_ENVIRONMENT = "SOURCE_DATE_EPOCH=$env:SOURCE_DATE_EPOCH PYTHONHASHSEED=0"
+          $env:CIBW_BUILD_FRONTEND = 'pip; args: --no-build-isolation'
+          $install = 'python -m pip install --disable-pip-version-check --force-reinstall --no-deps --only-binary=:all: --require-hashes -r "{project}/tests/release-build-requirements.txt"'
+
+          foreach ($buildId in @('a', 'b')) {
+            $fingerprint = Join-Path $env:GITHUB_WORKSPACE "build/windows-wheel-fingerprint-$buildId.json"
+            $wheelhouse = Join-Path $env:GITHUB_WORKSPACE "build/fingerprint-wheelhouse-$buildId"
+            $env:CIBW_CACHE_PATH = Join-Path $env:GITHUB_WORKSPACE "build/fingerprint-cache-$buildId"
+            $env:CIBW_BEFORE_BUILD = "$install && python \"{project}/scripts/atomic_windows_wheel_fingerprint.py\" --output \"$fingerprint\""
+            python -m cibuildwheel --platform windows --output-dir $wheelhouse .
+            if ($LASTEXITCODE -ne 0) {
+              throw "cibuildwheel fingerprint capture $buildId failed"
+            }
+            if (-not (Test-Path -LiteralPath $fingerprint -PathType Leaf)) {
+              throw "cibuildwheel fingerprint capture $buildId produced no JSON"
+            }
+          }
+
+          $first = Join-Path $env:GITHUB_WORKSPACE 'build/windows-wheel-fingerprint-a.json'
+          $second = Join-Path $env:GITHUB_WORKSPACE 'build/windows-wheel-fingerprint-b.json'
+          $firstBytes = [IO.File]::ReadAllBytes($first)
+          $secondBytes = [IO.File]::ReadAllBytes($second)
+          if (-not [System.Linq.Enumerable]::SequenceEqual($firstBytes, $secondBytes)) {
+            throw 'independent cibuildwheel fingerprints are not byte-identical'
+          }
+          $digest = (Get-FileHash -LiteralPath $first -Algorithm SHA256).Hash.ToLowerInvariant()
+          New-Item -ItemType Directory -Path build/fingerprint-capture | Out-Null
+          Copy-Item -LiteralPath $first -Destination build/fingerprint-capture/windows-wheel-fingerprint-v2.json
+          "### Windows wheel fingerprint" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+          "- Commit: ``${{ needs.validate.outputs.commit }}``" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+          "- SHA-256: ``$digest``" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+          Get-Content -LiteralPath $first
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: windows-wheel-fingerprint-capture
+          path: build/fingerprint-capture/windows-wheel-fingerprint-v2.json
+          if-no-files-found: error
+          retention-days: 14
 
   native-linux:
     name: Linux ${{ matrix.arch }}
@@ -363,11 +439,9 @@ jobs:
           - os: ubuntu-24.04
             platform: linux
             architecture: x86-64
-            cibw_archs: x86_64
           - os: windows-2022
             platform: windows
             architecture: x86-64
-            cibw_archs: AMD64
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -402,44 +476,29 @@ jobs:
             --kind python --platform source --architecture source
           echo "RELEASE_SDIST=${sdists[0]}" >> "$GITHUB_ENV"
           echo "RELEASE_SDIST_SHA256=$EXPECTED_SDIST_SHA256" >> "$GITHUB_ENV"
-      - name: Build the authoritative sdist twice with cibuildwheel
+      - name: Build wheels twice from the authoritative sdist
         shell: bash
         env:
           SOURCE_DATE_EPOCH: ${{ needs.validate.outputs.epoch }}
-          CIBW_ARCHS: ${{ matrix.cibw_archs }}
-          CIBW_BUILD: cp39-*
-          CIBW_ENVIRONMENT: >-
-            SOURCE_DATE_EPOCH=${{ needs.validate.outputs.epoch }}
-            PYTHONHASHSEED=0
-          CIBW_BUILD_FRONTEND: "pip; args: --no-build-isolation"
-          CIBW_BEFORE_BUILD: >-
-            python -m pip install --disable-pip-version-check
-            --only-binary=:all: --require-hashes
-            -r {project}/tests/release-build-requirements.txt
-          CIBW_BEFORE_TEST: >-
-            python -m pip install --disable-pip-version-check
-            --only-binary=:all: --require-hashes
-            -r {project}/tests/release-wheel-test-requirements.txt
-          CIBW_TEST_COMMAND: >-
-            python -c "import pyffish;
-            assert pyffish.version() == (1, 0, 0);
-            assert pyffish.variants() == ['atomic'];
-            assert pyffish.perft('atomic', pyffish.start_fen('atomic'), 1) == 20;
-            assert pyffish.info().startswith('Atomic-Stockfish 1.0.0 ')"
-            && python -m mypy -m pyffish --no-incremental --no-error-summary
           WHEEL_PLATFORM: ${{ matrix.platform }}
         run: |
           set -euo pipefail
           python -m pip install --disable-pip-version-check \
             --only-binary=:all: --require-hashes \
             -r tests/release-ci-requirements.txt
-          if [[ "$WHEEL_PLATFORM" == linux ]]; then
-            export CIBW_MANYLINUX_X86_64_IMAGE="$PYTHON_MANYLINUX_X86_64_IMAGE"
-            echo "CIBW_MANYLINUX_X86_64_IMAGE=$CIBW_MANYLINUX_X86_64_IMAGE" \
-              >> "$GITHUB_ENV"
-          fi
-          python -m cibuildwheel "$RELEASE_SDIST" --output-dir build/wheelhouse-a
-          python -m cibuildwheel "$RELEASE_SDIST" --output-dir build/wheelhouse-b
+          for build_id in a b; do
+            fingerprint=none
+            expected_fingerprint=none
+            if [[ "$WHEEL_PLATFORM" == windows ]]; then
+              fingerprint="$GITHUB_WORKSPACE/build/windows-wheel-fingerprint-$build_id.json"
+              expected_fingerprint="$WINDOWS_WHEEL_FINGERPRINT_SHA256"
+            fi
+            bash scripts/build_atomic_python_wheel_release.sh \
+              "$WHEEL_PLATFORM" "$RELEASE_SDIST" \
+              "build/wheelhouse-$build_id" "build/cibw-cache-$build_id" \
+              "$RELEASE_VERSION" "$SOURCE_DATE_EPOCH" \
+              "$fingerprint" "$expected_fingerprint"
+          done
 
           mapfile -t first < <(find build/wheelhouse-a -maxdepth 1 -type f -name '*.whl')
           mapfile -t second < <(find build/wheelhouse-b -maxdepth 1 -type f -name '*.whl')
@@ -447,6 +506,21 @@ jobs:
           test "${#second[@]}" -eq 1
           test "$(basename "${first[0]}")" = "$(basename "${second[0]}")"
           cmp "${first[0]}" "${second[0]}"
+          if [[ "$WHEEL_PLATFORM" == windows ]]; then
+            cmp \
+              build/windows-wheel-fingerprint-a.json \
+              build/windows-wheel-fingerprint-b.json
+            fingerprint_sha256=$(python -c \
+              'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' \
+              build/windows-wheel-fingerprint-a.json)
+            test "$fingerprint_sha256" = "$WINDOWS_WHEEL_FINGERPRINT_SHA256"
+            test "$(python -c \
+              'import json,sys; print(json.load(open(sys.argv[1], encoding="ascii"))["runner"]["imageOS"])' \
+              build/windows-wheel-fingerprint-a.json)" = "$WINDOWS_WHEEL_IMAGE_OS"
+            test "$(python -c \
+              'import json,sys; print(json.load(open(sys.argv[1], encoding="ascii"))["runner"]["imageVersion"])' \
+              build/windows-wheel-fingerprint-a.json)" = "$WINDOWS_WHEEL_IMAGE_VERSION"
+          fi
           python -m abi3audit --strict "${first[0]}"
           python tests/python/test_wheel_layout.py "${first[0]}"
       - name: Write wheel provenance
@@ -457,9 +531,27 @@ jobs:
         run: |
           set -euo pipefail
           builder=windows-2022
+          python_toolchain=
+          fingerprint=none
+          expected_fingerprint=none
           if [[ '${{ matrix.platform }}' == linux ]]; then
             builder="$PYTHON_MANYLINUX_X86_64_IMAGE"
-            test "$CIBW_MANYLINUX_X86_64_IMAGE" = "$builder"
+            python_toolchain=$(docker run --rm "$PYTHON_MANYLINUX_X86_64_IMAGE" \
+              /opt/python/cp39-cp39/bin/python -VV | tr '\n' ' ')
+            test -n "$python_toolchain"
+          else
+            fingerprint="$GITHUB_WORKSPACE/build/windows-wheel-fingerprint-a.json"
+            expected_fingerprint="$WINDOWS_WHEEL_FINGERPRINT_SHA256"
+            test -s "$fingerprint"
+            fingerprint_sha256=$(python -c \
+              'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' \
+              "$fingerprint")
+            test "$fingerprint_sha256" = "$WINDOWS_WHEEL_FINGERPRINT_SHA256"
+            python_toolchain=$(python -c \
+              'import json,sys; print(json.load(open(sys.argv[1], encoding="ascii"))["python"]["sysVersion"])' \
+              "$fingerprint")
+            test -n "$python_toolchain"
+            builder="windows-2022 / imageOS=$WINDOWS_WHEEL_IMAGE_OS / imageVersion=$WINDOWS_WHEEL_IMAGE_VERSION / fingerprintSha256=$fingerprint_sha256"
           fi
           mkdir -p build/release
           mapfile -t wheels < <(find build/wheelhouse-a -maxdepth 1 -type f -name '*.whl')
@@ -471,11 +563,12 @@ jobs:
             --source-date-epoch "$SOURCE_DATE_EPOCH" \
             --kind python --platform '${{ matrix.platform }}' \
             --architecture '${{ matrix.architecture }}' \
-            --toolchain "cibuildwheel 3.4.1 / CPython 3.9 stable ABI / abi3audit 0.0.26 / builder=$builder / sourceSha256=$RELEASE_SDIST_SHA256 / buildLockSha256=a2d6f8f099bbaf88509c38910f6d2aed1d0913ddf162813906ca7a667b260289 / frontend=pip-no-build-isolation" -- \
-            env "CIBW_BUILD_FRONTEND=pip; args: --no-build-isolation" \
-              "CIBW_BEFORE_BUILD=python -m pip install --disable-pip-version-check --only-binary=:all: --require-hashes -r {project}/tests/release-build-requirements.txt" \
-              python -m cibuildwheel "$RELEASE_SDIST" \
-                --output-dir build/wheelhouse-a
+            --toolchain "cibuildwheel 3.4.1 / CPython=$python_toolchain / CPython 3.9 stable ABI / pip 26.0.1 / setuptools 80.9.0 / wheel 0.45.1 / abi3audit 0.0.26 / builder=$builder / sourceSha256=$RELEASE_SDIST_SHA256 / buildLockSha256=a2d6f8f099bbaf88509c38910f6d2aed1d0913ddf162813906ca7a667b260289 / frontend=pip-no-build-isolation" -- \
+            bash scripts/build_atomic_python_wheel_release.sh \
+              '${{ matrix.platform }}' "$RELEASE_SDIST" \
+              build/wheelhouse-a build/cibw-cache-a \
+              "$RELEASE_VERSION" "$SOURCE_DATE_EPOCH" \
+              "$fingerprint" "$expected_fingerprint"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: release-python-${{ matrix.platform }}

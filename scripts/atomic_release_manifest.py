@@ -70,6 +70,12 @@ RELEASE_BUILD_REQUIREMENTS_SHA256 = (
 RELEASE_WHEEL_TEST_REQUIREMENTS_SHA256 = (
     "b877081ac9f4a6aa56eff9c5ed6c7b832a9fc02ca2dca39f786401e1a03f842b"
 )
+WINDOWS_WHEEL_FINGERPRINT_SHA256 = (
+    "2dcc7d539fd325a27a4ccf2dbab018176b02d810faa05dc244162ae6ef8dd4e4"
+)
+WINDOWS_WHEEL_IMAGE_OS = "win22"
+WINDOWS_WHEEL_IMAGE_VERSION = "20260714.244.1"
+WINDOWS_WHEEL_PYTHON_VERSION = "3.9.13"
 
 
 class ReleaseContractError(RuntimeError):
@@ -111,6 +117,11 @@ def expected_inventory_policy(version: str) -> Dict[str, Any]:
         "windowsMakeComp": "mingw",
         "windowsNativeImage": WINDOWS_NATIVE_IMAGE,
         "windowsRuntimeSmoke": "windows-2022",
+        "windowsWheelFingerprintSchemaVersion": 2,
+        "windowsWheelFingerprintSha256": WINDOWS_WHEEL_FINGERPRINT_SHA256,
+        "windowsWheelImageOS": WINDOWS_WHEEL_IMAGE_OS,
+        "windowsWheelImageVersion": WINDOWS_WHEEL_IMAGE_VERSION,
+        "windowsWheelPythonVersion": WINDOWS_WHEEL_PYTHON_VERSION,
         "wasmBuildRepetitions": 2,
     }
 

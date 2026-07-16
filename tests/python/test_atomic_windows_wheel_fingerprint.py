@@ -1,6 +1,8 @@
 import hashlib
 import json
 import locale
+import platform
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -138,19 +140,40 @@ def _fake_runner(
     return run, calls
 
 
-def _fake_python_record():
+def _fake_python_record(_build_environment):
     return {
+        "artifacts": {
+            "baseExecutable": {
+                "basename": "python.exe",
+                "bytes": 103192,
+                "role": "baseExecutable",
+                "sha256": "1" * 64,
+            },
+            "runtimeLibrary": {
+                "basename": "python39.dll",
+                "bytes": 4217920,
+                "role": "runtimeLibrary",
+                "sha256": "2" * 64,
+            },
+            "venvExecutable": {
+                "basename": "python.exe",
+                "bytes": 103192,
+                "role": "venvExecutable",
+                "sha256": "3" * 64,
+            },
+        },
         "cacheTag": "cpython-313",
         "compiler": "MSC v.1944 64 bit (AMD64)",
-        "executable": {
-            "bytes": 103192,
-            "path": r"C:\hostedtoolcache\windows\Python\3.13.5\x64\python.exe",
-            "sha256": "1" * 64,
-        },
         "hexVersion": 51185136,
         "implementation": "CPython",
         "pointerBits": 64,
         "sysVersion": "3.13.5 (tags/v3.13.5:6cb20a2, Jun 11 2026, 16:15:46) [MSC v.1944 64 bit (AMD64)]",
+        "sysconfig": {
+            "EXT_SUFFIX": ".cp39-win_amd64.pyd",
+            "SOABI": "cp39-win_amd64",
+            "platform": "win-amd64",
+        },
+        "version": "3.13.5",
         "versionInfo": {
             "major": 3,
             "micro": 5,
@@ -161,10 +184,51 @@ def _fake_python_record():
     }
 
 
+def _make_python_layout(tmp_path: Path, monkeypatch) -> SimpleNamespace:
+    base_prefix = (tmp_path / "base").resolve()
+    virtual_environment = (tmp_path / "venv").resolve()
+    base_prefix.mkdir(parents=True)
+    scripts = virtual_environment / "Scripts"
+    scripts.mkdir(parents=True)
+
+    venv_executable = _write(scripts / "python.exe", b"venv-python")
+    base_executable = _write(base_prefix / "python.exe", b"base-python")
+    runtime_library = _write(
+        base_prefix
+        / "python{}{}.dll".format(sys.version_info.major, sys.version_info.minor),
+        b"python-runtime",
+    )
+
+    monkeypatch.setattr(sys, "prefix", str(virtual_environment))
+    monkeypatch.setattr(sys, "base_prefix", str(base_prefix))
+    monkeypatch.setattr(sys, "executable", str(venv_executable))
+    monkeypatch.setattr(sys, "_base_executable", str(base_executable), raising=False)
+
+    return SimpleNamespace(
+        base_executable=base_executable,
+        base_prefix=base_prefix,
+        environment={
+            "CIBUILDWHEEL": "1",
+            "PYTHON_ARCH": "64",
+            "PYTHON_VERSION": platform.python_version(),
+            "VIRTUAL_ENV": str(virtual_environment),
+        },
+        runtime_library=runtime_library,
+        scripts=scripts,
+        venv_executable=venv_executable,
+        virtual_environment=virtual_environment,
+    )
+
+
 def test_collects_complete_canonical_windows_fingerprint(tmp_path, monkeypatch):
     layout = _make_layout(tmp_path)
     runner, calls = _fake_runner(layout)
     monkeypatch.setattr(fingerprint, "_is_windows", lambda: True)
+    monkeypatch.setattr(
+        fingerprint,
+        "_validate_cibuildwheel_python_environment",
+        lambda _environment: object(),
+    )
     monkeypatch.setattr(fingerprint, "_python_record", _fake_python_record)
     monkeypatch.setattr(
         fingerprint,
@@ -178,7 +242,7 @@ def test_collects_complete_canonical_windows_fingerprint(tmp_path, monkeypatch):
 
     document = fingerprint.collect_windows_fingerprint(layout.environment, runner)
 
-    assert document["schemaVersion"] == 1
+    assert document["schemaVersion"] == 2
     assert document["runner"] == {
         "imageOS": "win22",
         "imageVersion": "20260713.1.0",
@@ -193,6 +257,8 @@ def test_collects_complete_canonical_windows_fingerprint(tmp_path, monkeypatch):
     assert document["visualStudio"]["windowsSDKVersion"] == "10.0.26100.0\\"
     assert document["python"]["packages"]["pip"]["version"] == "26.0.1"
     assert document["python"]["packages"]["wheel"]["version"] == "0.46.1"
+    assert document["python"]["artifacts"]["venvExecutable"]["role"] == "venvExecutable"
+    assert "path" not in document["python"]["artifacts"]["venvExecutable"]
     assert document["tools"]["cl"]["sha256"] == hashlib.sha256(b"cl-binary").hexdigest()
     assert document["tools"]["cl"]["versionCommand"]["returnCode"] == 2
     assert "Compiler Version 19.44" in document["tools"]["cl"]["versionCommand"]["stderr"]
@@ -224,6 +290,115 @@ def test_collects_complete_canonical_windows_fingerprint(tmp_path, monkeypatch):
     assert payload.endswith(b"\n")
     assert payload == fingerprint.canonical_json_bytes(json.loads(payload))
     assert fingerprint.fingerprint_sha256(document) == hashlib.sha256(payload).hexdigest()
+
+
+def test_rejects_python_fingerprint_outside_cibuildwheel(tmp_path, monkeypatch):
+    layout = _make_python_layout(tmp_path, monkeypatch)
+    environment = dict(layout.environment)
+    del environment["CIBUILDWHEEL"]
+
+    with pytest.raises(fingerprint.FingerprintError, match="CIBUILDWHEEL"):
+        fingerprint._validate_cibuildwheel_python_environment(environment)
+
+
+def test_rejects_python_fingerprint_outside_virtual_environment(
+    tmp_path, monkeypatch
+):
+    layout = _make_python_layout(tmp_path, monkeypatch)
+    monkeypatch.setattr(sys, "base_prefix", str(layout.virtual_environment))
+
+    with pytest.raises(fingerprint.FingerprintError, match="must differ"):
+        fingerprint._validate_cibuildwheel_python_environment(layout.environment)
+
+
+@pytest.mark.parametrize(
+    "name, value, expected_message",
+    [
+        ("CIBUILDWHEEL", "true", "exactly 1"),
+        ("PYTHON_ARCH", "AMD64", "exactly 64"),
+        ("PYTHON_VERSION", "3.9.13-wrong", "full version"),
+    ],
+)
+def test_rejects_invalid_cibuildwheel_python_identity(
+    tmp_path, monkeypatch, name, value, expected_message
+):
+    layout = _make_python_layout(tmp_path, monkeypatch)
+    environment = {**layout.environment, name: value}
+
+    with pytest.raises(fingerprint.FingerprintError, match=expected_message):
+        fingerprint._validate_cibuildwheel_python_environment(environment)
+
+
+def test_rejects_virtual_environment_that_differs_from_sys_prefix(
+    tmp_path, monkeypatch
+):
+    layout = _make_python_layout(tmp_path / "selected", monkeypatch)
+    other_venv = (tmp_path / "other").resolve()
+    (other_venv / "Scripts").mkdir(parents=True)
+    environment = {**layout.environment, "VIRTUAL_ENV": str(other_venv)}
+
+    with pytest.raises(fingerprint.FingerprintError, match="equal sys.prefix"):
+        fingerprint._validate_cibuildwheel_python_environment(environment)
+
+
+def test_rejects_relative_virtual_environment(tmp_path, monkeypatch):
+    layout = _make_python_layout(tmp_path, monkeypatch)
+    environment = {**layout.environment, "VIRTUAL_ENV": "relative-venv"}
+
+    with pytest.raises(fingerprint.FingerprintError, match="not an absolute path"):
+        fingerprint._validate_cibuildwheel_python_environment(environment)
+
+
+def test_rejects_python_executable_outside_virtual_environment_scripts(
+    tmp_path, monkeypatch
+):
+    layout = _make_python_layout(tmp_path, monkeypatch)
+    outside_executable = _write(
+        layout.virtual_environment / "python.exe", b"outside-python"
+    )
+    monkeypatch.setattr(sys, "executable", str(outside_executable))
+
+    with pytest.raises(fingerprint.FingerprintError, match="VIRTUAL_ENV/Scripts"):
+        fingerprint._validate_cibuildwheel_python_environment(layout.environment)
+
+
+def test_python_record_is_canonical_across_cibuildwheel_scratch_roots(
+    tmp_path, monkeypatch
+):
+    first_layout = _make_python_layout(tmp_path / "first-cache", monkeypatch)
+    first_environment = fingerprint._validate_cibuildwheel_python_environment(
+        first_layout.environment
+    )
+    first = fingerprint._python_record(first_environment)
+
+    second_layout = _make_python_layout(tmp_path / "second-cache", monkeypatch)
+    second_environment = fingerprint._validate_cibuildwheel_python_environment(
+        second_layout.environment
+    )
+    second = fingerprint._python_record(second_environment)
+
+    assert first == second
+    serialized = json.dumps(first, sort_keys=True)
+    assert str(first_layout.virtual_environment) not in serialized
+    assert str(first_layout.base_prefix) not in serialized
+    assert str(second_layout.virtual_environment) not in serialized
+    assert str(second_layout.base_prefix) not in serialized
+
+    artifacts = first["artifacts"]
+    assert artifacts["venvExecutable"] == {
+        "basename": "python.exe",
+        "bytes": len(b"venv-python"),
+        "role": "venvExecutable",
+        "sha256": hashlib.sha256(b"venv-python").hexdigest(),
+    }
+    assert artifacts["baseExecutable"]["sha256"] == hashlib.sha256(
+        b"base-python"
+    ).hexdigest()
+    assert artifacts["runtimeLibrary"]["sha256"] == hashlib.sha256(
+        b"python-runtime"
+    ).hexdigest()
+    assert set(first["sysconfig"]) == {"EXT_SUFFIX", "SOABI", "platform"}
+    assert first["version"] == platform.python_version()
 
 
 def test_rejects_non_windows_before_reading_environment(monkeypatch):
@@ -362,6 +537,11 @@ def test_rejects_incomplete_or_non_amd64_vs_environment(
     captured = {**layout.captured, **captured_update}
     runner, _ = _fake_runner(layout, captured=captured)
     monkeypatch.setattr(fingerprint, "_is_windows", lambda: True)
+    monkeypatch.setattr(
+        fingerprint,
+        "_validate_cibuildwheel_python_environment",
+        lambda _environment: object(),
+    )
     monkeypatch.setattr(fingerprint, "_python_record", _fake_python_record)
     monkeypatch.setattr(fingerprint, "_package_versions", lambda: {})
     with pytest.raises(fingerprint.FingerprintError, match=expected_message):
@@ -444,7 +624,7 @@ def test_canonical_json_is_order_independent_and_rejects_floats():
 
 
 def test_write_is_exclusive_and_checks_expected_digest_before_creation(tmp_path):
-    document = {"schemaVersion": 1, "value": "fixture"}
+    document = {"schemaVersion": 2, "value": "fixture"}
     expected = fingerprint.fingerprint_sha256(document)
     output = tmp_path / "fingerprint.json"
     assert fingerprint.write_fingerprint(output, document, expected.upper()) == expected
@@ -464,7 +644,7 @@ def test_write_is_exclusive_and_checks_expected_digest_before_creation(tmp_path)
 
 
 def test_cli_writes_document_and_prints_only_digest(tmp_path, monkeypatch, capsys):
-    document = {"schemaVersion": 1, "runner": {"imageOS": "win22"}}
+    document = {"schemaVersion": 2, "runner": {"imageOS": "win22"}}
     expected = fingerprint.fingerprint_sha256(document)
     output = tmp_path / "fingerprint.json"
     monkeypatch.setattr(fingerprint, "collect_windows_fingerprint", lambda: document)
@@ -479,7 +659,7 @@ def test_cli_writes_document_and_prints_only_digest(tmp_path, monkeypatch, capsy
 
 
 def test_cli_mismatch_fails_without_creating_output(tmp_path, monkeypatch, capsys):
-    document = {"schemaVersion": 1}
+    document = {"schemaVersion": 2}
     output = tmp_path / "fingerprint.json"
     monkeypatch.setattr(fingerprint, "collect_windows_fingerprint", lambda: document)
 

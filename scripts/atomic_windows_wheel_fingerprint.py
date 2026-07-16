@@ -3,7 +3,8 @@
 
 The output is intended to be embedded in Atomic-Stockfish release provenance.
 It deliberately records the concrete GitHub runner image, Visual Studio/SDK,
-CPython executable, packaging tools, and MSVC binaries used for a wheel build.
+content identities of the real cibuildwheel CPython artifacts, packaging tools,
+and MSVC binaries used for a wheel build. Ephemeral cache paths are excluded.
 """
 
 from __future__ import annotations
@@ -18,13 +19,15 @@ import os
 import platform
 import re
 import stat
+import struct
 import subprocess
 import sys
+import sysconfig
 from pathlib import Path
 from typing import Any, Callable, Dict, Mapping, NamedTuple, Optional, Sequence, Tuple
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 _SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
 _PACKAGE_NAME_RE = re.compile(r"[-_.]+")
 _VC_TOOLS_COMPONENT = "Microsoft.VisualStudio.Component.VC.Tools.x86.x64"
@@ -42,6 +45,15 @@ class CommandResult(NamedTuple):
 
 
 CommandRunner = Callable[[Sequence[str], Optional[Mapping[str, str]]], CommandResult]
+
+
+class PythonBuildEnvironment(NamedTuple):
+    """Authenticated CPython paths supplied by cibuildwheel."""
+
+    base_executable: Path
+    runtime_library: Path
+    venv_executable: Path
+    python_version: str
 
 
 def run_command(
@@ -447,23 +459,164 @@ def _tool_record(
     return record
 
 
-def _python_record() -> Dict[str, Any]:
+def _validate_cibuildwheel_python_environment(
+    environment: Mapping[str, str],
+) -> PythonBuildEnvironment:
+    indexed = _index_environment(environment)
+
+    cibuildwheel = _environment_value(indexed, "CIBUILDWHEEL", required=True)
+    if cibuildwheel != "1":
+        raise FingerprintError("CIBUILDWHEEL must be exactly 1")
+
+    virtual_environment_value = _environment_value(
+        indexed, "VIRTUAL_ENV", required=True
+    )
+    assert virtual_environment_value is not None
+    virtual_environment = _require_directory(
+        virtual_environment_value, "VIRTUAL_ENV"
+    )
+    prefix = _require_directory(sys.prefix, "sys.prefix")
+    base_prefix = _require_directory(sys.base_prefix, "sys.base_prefix")
+    if _path_key(virtual_environment) != _path_key(prefix):
+        raise FingerprintError("VIRTUAL_ENV must equal sys.prefix")
+    if _path_key(prefix) == _path_key(base_prefix):
+        raise FingerprintError(
+            "sys.prefix must differ from sys.base_prefix inside cibuildwheel"
+        )
+
+    python_version = _environment_value(indexed, "PYTHON_VERSION", required=True)
+    assert python_version is not None
+    current_python_version = _clean_scalar(
+        platform.python_version(), "CPython full version"
+    )
+    if python_version != current_python_version:
+        raise FingerprintError(
+            "PYTHON_VERSION must equal the running CPython full version {}".format(
+                current_python_version
+            )
+        )
+
+    python_architecture = _environment_value(indexed, "PYTHON_ARCH", required=True)
+    if python_architecture != "64":
+        raise FingerprintError("PYTHON_ARCH must be exactly 64")
+    pointer_bits = 8 * struct.calcsize("P")
+    if pointer_bits != 64:
+        raise FingerprintError(
+            "wheel fingerprinting requires a 64-bit CPython interpreter"
+        )
+
+    scripts_directory = _require_directory(
+        virtual_environment / "Scripts", "VIRTUAL_ENV Scripts directory"
+    )
+    venv_executable = _require_regular_file(
+        sys.executable, "virtual-environment CPython executable"
+    )
+    if not _is_within(venv_executable, scripts_directory):
+        raise FingerprintError(
+            "sys.executable must be under VIRTUAL_ENV/Scripts"
+        )
+
+    base_executable_value = getattr(sys, "_base_executable", None)
+    base_executable = _require_regular_file(
+        base_executable_value, "CPython base executable"
+    )
+    if not _is_within(base_executable, base_prefix):
+        raise FingerprintError(
+            "sys._base_executable must be under sys.base_prefix"
+        )
+
+    version_info = sys.version_info
+    runtime_library_name = "python{}{}.dll".format(
+        version_info.major, version_info.minor
+    )
+    runtime_library = _require_regular_file(
+        base_prefix / runtime_library_name, runtime_library_name
+    )
+    if not _is_within(runtime_library, base_prefix):
+        raise FingerprintError(
+            "{} must be under sys.base_prefix".format(runtime_library_name)
+        )
+
+    artifact_keys = {
+        _path_key(venv_executable),
+        _path_key(base_executable),
+        _path_key(runtime_library),
+    }
+    if len(artifact_keys) != 3:
+        raise FingerprintError("CPython build artifacts must be three distinct files")
+
+    return PythonBuildEnvironment(
+        base_executable=base_executable,
+        runtime_library=runtime_library,
+        venv_executable=venv_executable,
+        python_version=current_python_version,
+    )
+
+
+def _portable_python_artifact(
+    path: Path, role: str, label: str
+) -> Dict[str, Any]:
+    """Hash a Python artifact without serializing its ephemeral cache path."""
+
+    record = _fingerprint_file(path, label)
+    return {
+        "basename": Path(record["path"]).name,
+        "bytes": record["bytes"],
+        "role": role,
+        "sha256": record["sha256"],
+    }
+
+
+def _python_record(build_environment: PythonBuildEnvironment) -> Dict[str, Any]:
     implementation = platform.python_implementation()
     if implementation != "CPython" or sys.implementation.name != "cpython":
         raise FingerprintError("wheel fingerprinting requires CPython")
     compiler = _clean_scalar(platform.python_compiler(), "CPython compiler")
     version = _clean_scalar(sys.version, "CPython sys.version")
     cache_tag = _clean_scalar(sys.implementation.cache_tag, "CPython cache tag")
-    executable = _fingerprint_file(sys.executable, "CPython executable")
+    soabi_value = sysconfig.get_config_var("SOABI")
+    soabi = (
+        None
+        if soabi_value is None
+        else _clean_scalar(soabi_value, "CPython SOABI")
+    )
+    extension_suffix = _clean_scalar(
+        sysconfig.get_config_var("EXT_SUFFIX"), "CPython EXT_SUFFIX"
+    )
+    sysconfig_platform = _clean_scalar(
+        sysconfig.get_platform(), "CPython sysconfig platform"
+    )
     version_info = sys.version_info
     return {
+        "artifacts": {
+            "baseExecutable": _portable_python_artifact(
+                build_environment.base_executable,
+                "baseExecutable",
+                "CPython base executable",
+            ),
+            "runtimeLibrary": _portable_python_artifact(
+                build_environment.runtime_library,
+                "runtimeLibrary",
+                "CPython runtime library",
+            ),
+            "venvExecutable": _portable_python_artifact(
+                build_environment.venv_executable,
+                "venvExecutable",
+                "virtual-environment CPython executable",
+            ),
+        },
         "cacheTag": cache_tag,
         "compiler": compiler,
-        "executable": executable,
         "hexVersion": sys.hexversion,
         "implementation": implementation,
-        "pointerBits": 8 * __import__("struct").calcsize("P"),
+        "pointerBits": 8 * struct.calcsize("P"),
         "sysVersion": version,
+        "sysconfig": {
+            "EXT_SUFFIX": extension_suffix,
+            "SOABI": soabi,
+            "platform": sysconfig_platform,
+        },
+        "version": build_environment.python_version,
         "versionInfo": {
             "major": version_info.major,
             "micro": version_info.micro,
@@ -525,6 +678,9 @@ def collect_windows_fingerprint(
     image_os = _environment_value(indexed, "ImageOS", required=True)
     image_version = _environment_value(indexed, "ImageVersion", required=True)
     assert image_os is not None and image_version is not None
+    python_environment = _validate_cibuildwheel_python_environment(
+        source_environment
+    )
 
     provisioner: Dict[str, str] = {}
     for output_name, environment_name in (
@@ -584,7 +740,7 @@ def collect_windows_fingerprint(
 
     return {
         "python": {
-            **_python_record(),
+            **_python_record(python_environment),
             "packages": _package_versions(),
         },
         "runner": {

@@ -21,6 +21,7 @@ def recipe(name: str) -> str:
 def test_one_authoritative_runner_discovers_every_release_contract_module() -> None:
     expected = {
         "test_atomic_release_manifest.py",
+        "test_atomic_python_wheel_release_recipe.py",
         "test_atomic_release_verification.py",
         "test_atomic_release_workflow.py",
         "test_atomic_reproducible_sdist.py",
@@ -54,31 +55,31 @@ def test_python_wheels_consume_only_the_authenticated_source_job_sdist() -> None
     assert "atomic_verify_release_asset.py" in wheels
     assert "EXPECTED_SDIST_SHA256: ${{ needs.source.outputs.sdist_sha256 }}" in wheels
     assert "setup.py sdist" not in wheels
-    assert wheels.count('python -m cibuildwheel "$RELEASE_SDIST"') == 3
-    assert "SOURCE_DATE_EPOCH=${{ needs.validate.outputs.epoch }}" in wheels
-    assert 'CIBW_BUILD_FRONTEND: "pip; args: --no-build-isolation"' in wheels
-    assert "CIBW_BEFORE_BUILD: >-" in wheels
-    assert "-r {project}/tests/release-build-requirements.txt" in wheels
-    assert "CIBW_TEST_REQUIRES" not in wheels
-    assert "CIBW_BEFORE_TEST: >-" in wheels
-    assert "-r {project}/tests/release-wheel-test-requirements.txt" in wheels
+    assert wheels.count("scripts/build_atomic_python_wheel_release.sh") == 2
+    assert 'for build_id in a b; do' in wheels
+    assert '"build/wheelhouse-$build_id" "build/cibw-cache-$build_id"' in wheels
+    assert "SOURCE_DATE_EPOCH: ${{ needs.validate.outputs.epoch }}" in wheels
     assert "-r tests/release-ci-requirements.txt" in wheels
-    assert "python -m mypy -m pyffish" in wheels
     assert 'cmp "${first[0]}" "${second[0]}"' in wheels
+    assert "windows-wheel-fingerprint-a.json" in wheels
+    assert "windows-wheel-fingerprint-b.json" in wheels
     assert 'python -m abi3audit --strict "${first[0]}"' in wheels
 
 
 def test_release_python_installs_are_closed_or_pre_authenticated() -> None:
     text = workflow()
-    commands = text.count("python -m pip install")
-    assert commands == 6
-    assert text.count("--only-binary=:all: --require-hashes") == 5
-    assert text.count("-r tests/release-ci-requirements.txt") == 2
-    assert text.count("-r {project}/tests/release-build-requirements.txt") == 2
-    assert (
-        text.count("-r {project}/tests/release-wheel-test-requirements.txt")
-        == 1
-    )
+    wheel_recipe = recipe("build_atomic_python_wheel_release.sh")
+    source_recipe = recipe("build_atomic_source_release.sh")
+    assert text.count("python -m pip install") == 5
+    assert text.count("--only-binary=:all: --require-hashes") == 4
+    assert text.count("-r tests/release-ci-requirements.txt") == 3
+    assert wheel_recipe.count("python -m pip install") == 2
+    assert wheel_recipe.count("--force-reinstall --no-deps") == 2
+    assert wheel_recipe.count("--only-binary=:all: --require-hashes") == 2
+    assert wheel_recipe.count('-r "{project}/tests/release-build-requirements.txt"') == 1
+    assert wheel_recipe.count('-r "{project}/tests/release-wheel-test-requirements.txt"') == 1
+    assert source_recipe.count("python3 -m pip install") == 1
+    assert "--force-reinstall --no-deps --only-binary=:all: --require-hashes" in source_recipe
     assert text.count("--no-index --no-deps") == 1
 
 
@@ -90,16 +91,64 @@ def test_python_wheel_builder_is_digest_pinned_and_in_provenance() -> None:
         "853663dc8253b62be437bb52a5caecffd020792af4442f55d927d22e0ea795ae"
     )
     assert f"PYTHON_MANYLINUX_X86_64_IMAGE: {image}" in text
-    assert 'if [[ "$WHEEL_PLATFORM" == linux ]]; then' in wheels
-    assert (
-        'export CIBW_MANYLINUX_X86_64_IMAGE="$PYTHON_MANYLINUX_X86_64_IMAGE"'
-        in wheels
-    )
+    wheel_recipe = recipe("build_atomic_python_wheel_release.sh")
+    assert image in wheel_recipe
+    assert "export CIBW_MANYLINUX_X86_64_IMAGE=$MANYLINUX_X86_64_IMAGE" in wheel_recipe
     assert 'builder="$PYTHON_MANYLINUX_X86_64_IMAGE"' in wheels
     assert "builder=$builder" in wheels
+    assert "python-version: '3.9.13'" not in wheels
+    assert "/opt/python/cp39-cp39/bin/python -VV" in wheels
+    assert '["python"]["sysVersion"]' in wheels
+    assert "CPython 3.9 stable ABI" in wheels
+    assert "pip 26.0.1 / setuptools 80.9.0 / wheel 0.45.1" in wheels
+    assert "fingerprintSha256=$fingerprint_sha256" in wheels
+    assert "build/cibw-cache-a" in wheels and "build/cibw-cache-$build_id" in wheels
+    assert (
+        "WINDOWS_WHEEL_FINGERPRINT_SHA256: "
+        "2dcc7d539fd325a27a4ccf2dbab018176b02d810faa05dc244162ae6ef8dd4e4"
+        in text
+    )
+    assert "WINDOWS_WHEEL_IMAGE_OS: win22" in text
+    assert "WINDOWS_WHEEL_IMAGE_VERSION: 20260714.244.1" in text
+    assert '"runner"]["imageOS"]' in wheels
+    assert '"runner"]["imageVersion"]' in wheels
+    atomic_ci = (ROOT / ".github" / "workflows" / "atomic.yml").read_text(
+        encoding="utf-8"
+    )
+    assert "atomic_windows_wheel_fingerprint.py" not in atomic_ci
     for line in text.splitlines():
         if "manylinux_2_28_x86_64" in line:
             assert "@sha256:" in line
+
+
+def test_windows_fingerprint_capture_is_real_cibuildwheel_and_cannot_publish() -> None:
+    text = workflow()
+    capture = job(text, "windows-fingerprint-capture", "native-linux")
+    assert "capture_windows_fingerprint" in text
+    assert "inputs.capture_windows_fingerprint" in capture
+    assert "runs-on: windows-2022" in capture
+    assert "python-version: '3.12.11'" in capture
+    assert "foreach ($buildId in @('a', 'b'))" in capture
+    assert "build/fingerprint-cache-$buildId" in capture
+    assert "$env:CIBW_BUILD = 'cp39-*'" in capture
+    assert "$env:CIBW_ARCHS = 'AMD64'" in capture
+    assert "$env:CIBW_BEFORE_BUILD" in capture
+    assert "scripts/atomic_windows_wheel_fingerprint.py" in capture
+    assert "--force-reinstall --no-deps --only-binary=:all: --require-hashes" in capture
+    assert "-r tests/release-ci-requirements.txt" in capture
+    assert "-r \"{project}/tests/release-build-requirements.txt\"" in capture
+    assert "--expected-sha256" not in capture
+    assert "SequenceEqual" in capture
+    assert "windows-wheel-fingerprint-v2.json" in capture
+    assert "actions/upload-artifact@" in capture
+    for forbidden in (
+        "contents: write",
+        "gh release",
+        "releases/",
+        "draft=false",
+        "ATOMIC_RELEASE_POLICY_TOKEN",
+    ):
+        assert forbidden not in capture
 
 
 def test_native_toolchains_are_digest_pinned_and_reproduced_in_isolated_roots() -> None:
