@@ -78,7 +78,8 @@ else
     dependencies="$temporary/build-dependencies"
     mkdir -p "$raw_dist" "$dependencies" "$release_dir"
     python3 -m pip install --disable-pip-version-check --no-cache-dir \
-        --only-binary=:all: --require-hashes --target "$dependencies" \
+        --force-reinstall --no-deps --only-binary=:all: --require-hashes \
+        --target "$dependencies" \
         -r tests/release-build-requirements.txt
     PYTHONPATH="$dependencies" python3 setup.py sdist --dist-dir "$raw_dist"
     set -- "$raw_dist"/atomic_pyffish-*.tar.gz

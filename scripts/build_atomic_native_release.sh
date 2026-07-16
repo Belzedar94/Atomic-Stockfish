@@ -103,8 +103,8 @@ else
     [[ -n "${CXX:-}" ]] || die "CXX must name the pinned MinGW compiler"
     [[ "$CXX" == /* && -x "$CXX" ]] \
         || die "CXX must be an executable absolute path: $CXX"
-    [[ "$("$CXX" -dumpmachine)" == x86_64-w64-mingw32 ]] \
-        || die "MinGW release compiler does not target x86_64-w64-mingw32"
+    [[ "$("$CXX" -dumpmachine)" == x86_64-w64-mingw32.static ]] \
+        || die "MinGW release compiler does not use the pinned static x86_64 target"
     if [[ ${#source_date_epoch} -gt 10 ]] \
         || (( 10#$source_date_epoch < 315532800 )); then
         die "Windows ZIP epoch must be representable on or after 1980-01-01"

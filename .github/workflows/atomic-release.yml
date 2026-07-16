@@ -237,7 +237,7 @@ jobs:
               */x86_64-w64-mingw32.static-g++) ;;
               *) echo "Unexpected Dockcross CXX: $CXX" >&2; exit 1 ;;
             esac
-            test "$("$CXX" -dumpmachine)" = x86_64-w64-mingw32
+            test "$("$CXX" -dumpmachine)" = x86_64-w64-mingw32.static
             "$CXX" --version | head -n 1
             cmake --version | head -n 1
           ')
@@ -471,7 +471,7 @@ jobs:
             --source-date-epoch "$SOURCE_DATE_EPOCH" \
             --kind python --platform '${{ matrix.platform }}' \
             --architecture '${{ matrix.architecture }}' \
-            --toolchain "cibuildwheel 3.4.1 / CPython 3.9 stable ABI / abi3audit 0.0.26 / builder=$builder / sourceSha256=$RELEASE_SDIST_SHA256 / buildLockSha256=1e4f6c667fd5fab07e2016986bfd330bca57a9562875869323c8c1fd09245f34 / frontend=pip-no-build-isolation" -- \
+            --toolchain "cibuildwheel 3.4.1 / CPython 3.9 stable ABI / abi3audit 0.0.26 / builder=$builder / sourceSha256=$RELEASE_SDIST_SHA256 / buildLockSha256=a2d6f8f099bbaf88509c38910f6d2aed1d0913ddf162813906ca7a667b260289 / frontend=pip-no-build-isolation" -- \
             env "CIBW_BUILD_FRONTEND=pip; args: --no-build-isolation" \
               "CIBW_BEFORE_BUILD=python -m pip install --disable-pip-version-check --only-binary=:all: --require-hashes -r {project}/tests/release-build-requirements.txt" \
               python -m cibuildwheel "$RELEASE_SDIST" \
@@ -580,7 +580,7 @@ jobs:
             --version "$RELEASE_VERSION" --commit "$COMMIT" \
             --source-date-epoch "$SOURCE_DATE_EPOCH" \
             --kind python --platform source --architecture source \
-            --toolchain "$toolchain / buildLockSha256=1e4f6c667fd5fab07e2016986bfd330bca57a9562875869323c8c1fd09245f34" -- \
+            --toolchain "$toolchain / buildLockSha256=a2d6f8f099bbaf88509c38910f6d2aed1d0913ddf162813906ca7a667b260289" -- \
             "${sdist_recipe_a[@]}"
           cp build/source-a/build/release/* build/release/
           cp build/sdist-a/build/release/* build/release/

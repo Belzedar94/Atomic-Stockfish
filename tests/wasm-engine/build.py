@@ -177,11 +177,10 @@ def build(out_dir: Path, compiler: str, debug: bool) -> None:
         "externalNetwork": True,
         "artifacts": artifacts,
     }
-    (out_dir / "manifest.json").write_text(
-        json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-        newline="\n",
-    )
+    with (out_dir / "manifest.json").open(
+        "w", encoding="utf-8", newline="\n"
+    ) as manifest_stream:
+        manifest_stream.write(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n")
 
     for artifact in artifacts:
         print(

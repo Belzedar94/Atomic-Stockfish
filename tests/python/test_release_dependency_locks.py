@@ -131,7 +131,8 @@ def test_cibuildwheel_test_lock_is_complete_and_hash_closed() -> None:
 
 def test_pep517_build_lock_is_complete_and_hash_closed() -> None:
     locked = load_lock("release-build-requirements.txt")
-    assert set(locked) == {"setuptools", "wheel"}
+    assert set(locked) == {"pip", "setuptools", "wheel"}
+    assert locked["pip"].version == "26.0.1"
     assert locked["setuptools"].version == "80.9.0"
     assert locked["wheel"].version == "0.45.1"
     assert all(requirement.marker is None for requirement in locked.values())
@@ -142,7 +143,7 @@ def test_source_recipe_installs_build_dependencies_only_from_the_hash_lock() -> 
         encoding="utf-8"
     )
     assert recipe.count("python3 -m pip install") == 1
-    assert "--only-binary=:all: --require-hashes" in recipe
+    assert "--force-reinstall --no-deps --only-binary=:all: --require-hashes" in recipe
     assert "tests/release-build-requirements.txt" in recipe
     assert "setup.py sdist" in recipe
     assert "scripts/atomic_reproducible_sdist.py" in recipe
@@ -155,6 +156,7 @@ def test_pep517_build_requirements_are_exactly_pinned() -> None:
         "build-backend": "setuptools.build_meta",
     }
     manifest = (ROOT / "MANIFEST.in").read_text(encoding="utf-8").splitlines()
+    assert "include scripts/atomic_windows_wheel_fingerprint.py" in manifest
     assert "include tests/release-build-requirements.txt" in manifest
     assert "include tests/release-wheel-test-requirements.txt" in manifest
 

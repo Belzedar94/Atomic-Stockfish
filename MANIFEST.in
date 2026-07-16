@@ -3,6 +3,7 @@ include CITATION.cff
 include Copying.txt
 include README.md
 include pyffish.pyi
+include scripts/atomic_windows_wheel_fingerprint.py
 include tests/release-build-requirements.txt
 include tests/release-wheel-test-requirements.txt
 recursive-include src *.h

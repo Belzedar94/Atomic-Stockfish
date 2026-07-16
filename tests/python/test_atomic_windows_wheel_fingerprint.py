@@ -170,6 +170,7 @@ def test_collects_complete_canonical_windows_fingerprint(tmp_path, monkeypatch):
         fingerprint,
         "_package_versions",
         lambda: {
+            "pip": {"version": "26.0.1"},
             "setuptools": {"version": "80.9.0"},
             "wheel": {"version": "0.46.1"},
         },
@@ -190,6 +191,7 @@ def test_collects_complete_canonical_windows_fingerprint(tmp_path, monkeypatch):
     assert document["visualStudio"]["installationVersion"] == "17.14.36310.24"
     assert document["visualStudio"]["vcToolsVersion"] == "14.44.35207"
     assert document["visualStudio"]["windowsSDKVersion"] == "10.0.26100.0\\"
+    assert document["python"]["packages"]["pip"]["version"] == "26.0.1"
     assert document["python"]["packages"]["wheel"]["version"] == "0.46.1"
     assert document["tools"]["cl"]["sha256"] == hashlib.sha256(b"cl-binary").hexdigest()
     assert document["tools"]["cl"]["versionCommand"]["returnCode"] == 2
@@ -292,6 +294,32 @@ def test_rejects_ambiguous_tool_lookup(tmp_path):
         fingerprint._locate_tool("cl.exe", layout.captured, runner)
 
 
+def test_accepts_unrelated_later_path_after_authenticated_msvc_tool(tmp_path):
+    layout = _make_layout(tmp_path)
+    unrelated = _write(tmp_path / "Git" / "usr" / "bin" / "link.exe", b"other")
+    runner, _ = _fake_runner(
+        layout, where_paths={"link.exe": [layout.link, unrelated]}
+    )
+    assert (
+        fingerprint._locate_tool(
+            "link.exe", layout.captured, runner, expected_path=layout.link
+        )
+        == layout.link
+    )
+
+
+def test_rejects_unrelated_tool_selected_before_authenticated_msvc_tool(tmp_path):
+    layout = _make_layout(tmp_path)
+    unrelated = _write(tmp_path / "Git" / "usr" / "bin" / "link.exe", b"other")
+    runner, _ = _fake_runner(
+        layout, where_paths={"link.exe": [unrelated, layout.link]}
+    )
+    with pytest.raises(fingerprint.FingerprintError, match="VCToolsInstallDir"):
+        fingerprint._locate_tool(
+            "link.exe", layout.captured, runner, expected_path=layout.link
+        )
+
+
 def test_rejects_tool_output_without_a_version(tmp_path):
     tool = _write(tmp_path / "tool.exe")
 
@@ -365,12 +393,14 @@ def test_package_versions_are_exact_and_unambiguous(monkeypatch):
         fingerprint.importlib_metadata,
         "distributions",
         lambda: [
+            _Distribution("pip", "26.0.1"),
             _Distribution("setuptools", "80.9.0"),
             _Distribution("Wheel", "0.46.1"),
             _Distribution("unrelated", "1.0"),
         ],
     )
     assert fingerprint._package_versions() == {
+        "pip": {"version": "26.0.1"},
         "setuptools": {"version": "80.9.0"},
         "wheel": {"version": "0.46.1"},
     }
@@ -379,9 +409,13 @@ def test_package_versions_are_exact_and_unambiguous(monkeypatch):
 @pytest.mark.parametrize(
     "distributions, expected_count",
     [
-        ([_Distribution("setuptools", "1")], 0),
+        (
+            [_Distribution("setuptools", "1"), _Distribution("wheel", "1")],
+            0,
+        ),
         (
             [
+                _Distribution("pip", "1"),
                 _Distribution("setuptools", "1"),
                 _Distribution("setuptools", "2"),
                 _Distribution("wheel", "1"),

@@ -71,7 +71,7 @@ def test_release_version_is_consistent_across_packaging_surfaces() -> None:
         "33f274924a8f41ca9cf4ddc891c0d488dc30491c29d2b034de9088d9d032dd28"
     )
     assert policy["releaseBuildRequirementsSha256"] == (
-        "1e4f6c667fd5fab07e2016986bfd330bca57a9562875869323c8c1fd09245f34"
+        "a2d6f8f099bbaf88509c38910f6d2aed1d0913ddf162813906ca7a667b260289"
     )
     assert policy["releaseWheelTestRequirementsSha256"] == (
         "b877081ac9f4a6aa56eff9c5ed6c7b832a9fc02ca2dca39f786401e1a03f842b"

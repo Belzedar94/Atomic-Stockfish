@@ -125,6 +125,8 @@ def test_native_toolchains_are_digest_pinned_and_reproduced_in_isolated_roots() 
     native_recipe = recipe("build_atomic_native_release.sh")
     assert 'COMP=gcc' in native_recipe
     assert 'COMP=mingw COMPCXX="$CXX"' in native_recipe
+    assert "x86_64-w64-mingw32.static" in native_recipe
+    assert 'test "$("$CXX" -dumpmachine)" = x86_64-w64-mingw32.static' in windows
     assert 'xz --threads=1 -9e --check=crc64' in native_recipe
     assert 'cmake -E tar' in native_recipe
     assert "runs-on: windows-2022" in smoke

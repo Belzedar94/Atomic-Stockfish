@@ -367,7 +367,10 @@ def _required_captured_environment(
 
 
 def _locate_tool(
-    tool_name: str, environment: Mapping[str, str], runner: CommandRunner
+    tool_name: str,
+    environment: Mapping[str, str],
+    runner: CommandRunner,
+    expected_path: Optional[Path] = None,
 ) -> Path:
     indexed = _index_environment(environment)
     system_root_value = _environment_value(indexed, "SystemRoot", required=True)
@@ -385,12 +388,25 @@ def _locate_tool(
     if result.stderr:
         raise FingerprintError("where.exe produced stderr while locating {}".format(tool_name))
     output = _decode_native(result.stdout, "where.exe output for {}".format(tool_name))
-    paths = [line.strip() for line in output.replace("\r", "\n").split("\n") if line.strip()]
-    if len(paths) != 1:
+    path_values = [
+        line.strip()
+        for line in output.replace("\r", "\n").split("\n")
+        if line.strip()
+    ]
+    paths = [_require_regular_file(value, tool_name) for value in path_values]
+    if expected_path is None and len(paths) != 1:
         raise FingerprintError(
             "expected exactly one {} path, found {}".format(tool_name, len(paths))
         )
-    return _require_regular_file(paths[0], tool_name)
+    if expected_path is None:
+        return paths[0]
+
+    expected = _require_regular_file(expected_path, "expected {}".format(tool_name))
+    if not paths or _path_key(paths[0]) != _path_key(expected):
+        raise FingerprintError(
+            "{} selected by VsDevCmd does not match VCToolsInstallDir".format(tool_name)
+        )
+    return expected
 
 
 def _path_key(path: Path) -> str:
@@ -463,7 +479,7 @@ def _canonical_package_name(name: str) -> str:
 
 
 def _package_versions() -> Dict[str, Dict[str, str]]:
-    targets = {"setuptools", "wheel"}
+    targets = {"pip", "setuptools", "wheel"}
     matches: Dict[str, list] = {name: [] for name in targets}
     try:
         distributions = list(importlib_metadata.distributions())
@@ -553,8 +569,13 @@ def collect_windows_fingerprint(
     if not _is_within(vc_tools_directory, installation_path):
         raise FingerprintError("VCToolsInstallDir is outside the selected Visual Studio instance")
 
-    cl_path = _locate_tool("cl.exe", vc_environment, runner)
-    link_path = _locate_tool("link.exe", vc_environment, runner)
+    expected_tool_directory = vc_tools_directory / "bin" / "Hostx64" / "x64"
+    cl_path = _locate_tool(
+        "cl.exe", vc_environment, runner, expected_tool_directory / "cl.exe"
+    )
+    link_path = _locate_tool(
+        "link.exe", vc_environment, runner, expected_tool_directory / "link.exe"
+    )
     if _path_key(cl_path) == _path_key(link_path):
         raise FingerprintError("cl.exe and link.exe resolve to the same file")
     for label, tool_path in (("cl.exe", cl_path), ("link.exe", link_path)):

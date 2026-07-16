@@ -12,7 +12,7 @@
     "linuxNativeImage": "gcc:14.2.0-bookworm@sha256:b99b86a28812b1e6453a231a947dc43d76fe192788a12f344a9b568bf9f5d24c",
     "nativeBuildRepetitions": 2,
     "pythonManylinuxX86_64Image": "quay.io/pypa/manylinux_2_28_x86_64:2026.03.20-1@sha256:853663dc8253b62be437bb52a5caecffd020792af4442f55d927d22e0ea795ae",
-    "releaseBuildRequirementsSha256": "1e4f6c667fd5fab07e2016986bfd330bca57a9562875869323c8c1fd09245f34",
+    "releaseBuildRequirementsSha256": "a2d6f8f099bbaf88509c38910f6d2aed1d0913ddf162813906ca7a667b260289",
     "releaseCiRequirementsSha256": "33f274924a8f41ca9cf4ddc891c0d488dc30491c29d2b034de9088d9d032dd28",
     "releaseWheelTestRequirementsSha256": "b877081ac9f4a6aa56eff9c5ed6c7b832a9fc02ca2dca39f786401e1a03f842b",
     "pythonWheelBuildRepetitions": 2,
