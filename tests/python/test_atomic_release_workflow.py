@@ -128,7 +128,8 @@ def test_windows_fingerprint_capture_is_real_cibuildwheel_and_cannot_publish() -
     assert "capture_windows_fingerprint" in text
     assert "inputs.capture_windows_fingerprint" in capture
     assert "runs-on: windows-2022" in capture
-    assert "python-version: '3.12.11'" in capture
+    assert "python-version: '3.12.10'" in capture
+    assert "python-version: '3.12.11'" not in text
     assert "foreach ($buildId in @('a', 'b'))" in capture
     assert "build/fingerprint-cache-$buildId" in capture
     assert "$env:CIBW_BUILD = 'cp39-*'" in capture
