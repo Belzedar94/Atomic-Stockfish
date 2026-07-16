@@ -86,10 +86,10 @@ def test_release_version_is_consistent_across_packaging_surfaces() -> None:
         "docs/atomic/windows-wheel-fingerprint-v2.json"
     )
     assert policy["windowsWheelFingerprintSha256"] == (
-        "ac9883ee4de2e5911c2e91a5f1f547cb464530090b5ae6513d7c5c0db3baf09f"
+        "9af3078f7f7d2635e5fe20c913c6948e53dbdc5f1ec81ba22f081d21e6a3f23d"
     )
     assert policy["windowsWheelImageOS"] == "win22"
-    assert policy["windowsWheelImageVersion"] == "20260706.237.1"
+    assert policy["windowsWheelImageVersion"] == "20260714.244.1"
     assert policy["windowsWheelPythonVersion"] == "3.9.13"
 
     fingerprint_path = ROOT / policy["windowsWheelFingerprintDocument"]

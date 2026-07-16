@@ -14,7 +14,7 @@ WINDOWS_FINGERPRINT_DOCUMENT = (
     ROOT / "docs" / "atomic" / "windows-wheel-fingerprint-v2.json"
 )
 WINDOWS_FINGERPRINT_SHA256 = (
-    "ac9883ee4de2e5911c2e91a5f1f547cb464530090b5ae6513d7c5c0db3baf09f"
+    "9af3078f7f7d2635e5fe20c913c6948e53dbdc5f1ec81ba22f081d21e6a3f23d"
 )
 MANYLINUX_IMAGE = (
     "quay.io/pypa/manylinux_2_28_x86_64:2026.03.20-1@sha256:"

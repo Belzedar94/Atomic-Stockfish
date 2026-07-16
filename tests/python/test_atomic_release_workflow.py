@@ -115,11 +115,11 @@ def test_python_wheel_builder_is_digest_pinned_and_in_provenance() -> None:
     assert "build/cibw-cache-a" in wheels and "build/cibw-cache-$build_id" in wheels
     assert (
         "WINDOWS_WHEEL_FINGERPRINT_SHA256: "
-        "ac9883ee4de2e5911c2e91a5f1f547cb464530090b5ae6513d7c5c0db3baf09f"
+        "9af3078f7f7d2635e5fe20c913c6948e53dbdc5f1ec81ba22f081d21e6a3f23d"
         in text
     )
     assert "WINDOWS_WHEEL_IMAGE_OS: win22" in text
-    assert "WINDOWS_WHEEL_IMAGE_VERSION: 20260706.237.1" in text
+    assert "WINDOWS_WHEEL_IMAGE_VERSION: 20260714.244.1" in text
     assert wheels.count("docs/atomic/windows-wheel-fingerprint-v2.json") >= 2
     assert '"runner"]["imageOS"]' in wheels
     assert '"runner"]["imageVersion"]' in wheels
