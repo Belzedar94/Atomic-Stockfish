@@ -1183,6 +1183,43 @@ void run_reset_mode_contract(const Network& network) {
     pass("AtomicNNUEV3 reset execution-mode contract");
 }
 
+void run_runtime_identity(const Network& network) {
+    constexpr std::array<std::string_view, 7> Fens{StartFEN,
+                                                   "r6k/8/8/8/8/8/N7/R6K w - - 0 1",
+                                                   "7k/8/8/8/8/8/8/3K4 w - - 0 1",
+                                                   "7k/p7/8/8/8/8/R7/K6N w - - 0 1",
+                                                   "7k/8/2N1b3/2ppP3/8/8/8/K7 w - d6 0 2",
+                                                   "7k/P7/8/8/8/8/8/K7 w - - 0 1",
+                                                   "7k/8/8/2pBn3/3r4/2PQN3/8/K7 w - - 0 1"};
+
+    auto diagnosticStack = make_incremental_stack(network);
+    auto runtimeStack    = make_incremental_stack(network);
+    for (std::size_t index = 0; index < Fens.size(); ++index)
+    {
+        Position          position;
+        StateInfo         state{};
+        const std::string label = "runtime-identity-" + std::to_string(index);
+        set_position(position, state, Fens[index], false, label);
+
+        auto                    diagnostic = std::make_unique<IncrementalDiagnostic>();
+        RuntimeOutput           runtime{};
+        const IncrementalStatus diagnosticStatus =
+          diagnosticStack->evaluate(network, position, *diagnostic);
+        const IncrementalStatus runtimeStatus =
+          runtimeStack->evaluate_runtime(network, position, runtime);
+        require(bool(diagnosticStatus) && bool(runtimeStatus), label, position.fen(),
+                "diagnostic or production evaluation failed");
+        require(runtime.psqtDifference == diagnostic->scalar.psqtDifference, label, position.fen(),
+                "production PSQT differs from the exact diagnostic path");
+        require(runtime.rawOutput == diagnostic->scalar.rawOutput, label, position.fen(),
+                "production raw dense output differs from the exact diagnostic path");
+        require(runtime.scaledOutput == diagnostic->scalar.scaledOutput, label, position.fen(),
+                "production scaled dense output differs from the exact diagnostic path");
+    }
+
+    pass("AtomicNNUEV3 production/diagnostic identity corpus");
+}
+
 }  // namespace
 }  // namespace Stockfish::Eval::NNUE::AtomicV3
 
@@ -1252,6 +1289,7 @@ int main(int argc, char* argv[]) {
     run_material_bucket(*loaded.network);
     run_special_moves(*loaded.network);
     run_null_ep(*loaded.network);
+    run_runtime_identity(*loaded.network);
     run_failure_transactionality(*loaded.network, netPath);
     run_reset_mode_contract(*loaded.network);
     run_unsupported_isa_transactionality(*loaded.network);

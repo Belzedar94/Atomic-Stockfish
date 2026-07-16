@@ -64,8 +64,14 @@ struct NetworkArchitecture {
             && fc_2.write_parameters(stream);
     }
 
-    i32 propagate(const TransformedFeatureType* transformedFeatures,
-                  const NNZInfo<L1>&            nnzInfo) const {
+    struct PropagationComponents {
+        i32 fc2Output       = 0;
+        i32 fc0SkipAdd      = 0;
+        i32 fc0SkipSubtract = 0;
+    };
+
+    PropagationComponents propagate_components(const TransformedFeatureType* transformedFeatures,
+                                               const NNZInfo<L1>&            nnzInfo) const {
         struct alignas(CacheLineSize) Buffer {
             alignas(CacheLineSize) typename decltype(fc_0)::OutputBuffer fc_0_out;
             alignas(CacheLineSize) typename decltype(ac_sqr_0)::OutputType
@@ -87,8 +93,15 @@ struct NetworkArchitecture {
         fc_2.propagate(buffer.concat_buffer, buffer.fc_2_out);
 
         static_assert(FC_0_OUTPUTS >= 2);
-        i32 fwdOut = buffer.fc_2_out[0];
-        fwdOut += buffer.fc_0_out[FC_0_OUTPUTS - 2] - buffer.fc_0_out[FC_0_OUTPUTS - 1];
+        return {buffer.fc_2_out[0], buffer.fc_0_out[FC_0_OUTPUTS - 2],
+                buffer.fc_0_out[FC_0_OUTPUTS - 1]};
+    }
+
+    i32 propagate(const TransformedFeatureType* transformedFeatures,
+                  const NNZInfo<L1>&            nnzInfo) const {
+        const PropagationComponents components = propagate_components(transformedFeatures, nnzInfo);
+        i32                         fwdOut     = components.fc2Output;
+        fwdOut += components.fc0SkipAdd - components.fc0SkipSubtract;
 
         constexpr i64 Multiplier = 600 * OutputScale;
         constexpr i64 Denominator =

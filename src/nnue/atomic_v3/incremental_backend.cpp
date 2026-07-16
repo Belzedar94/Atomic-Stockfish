@@ -17,6 +17,7 @@
 
 #include "../../position.h"
 #include "incremental_simd_kernels.h"
+#include "../atomic_v2/nnz_helper.h"
 #include "wire_io.h"
 
 namespace Stockfish::Eval::NNUE::AtomicV3 {
@@ -61,6 +62,154 @@ IncrementalStatus fail(IncrementalDiagnostic& result,
                        ScalarStatus           scalarStatus = {}) noexcept {
     result = {};
     return {error, featureError, scalarStatus};
+}
+
+IncrementalStatus fail(RuntimeOutput&   result,
+                       IncrementalError error,
+                       FullRefreshError featureError = FullRefreshError::None,
+                       ScalarStatus     scalarStatus = {}) noexcept {
+    result = {};
+    return {error, featureError, scalarStatus};
+}
+
+constexpr ScalarStatus scalar_failure(ScalarError      error,
+                                      FullRefreshError featureError = FullRefreshError::None,
+                                      NumericError     numericError = NumericError::None) noexcept {
+    return {error, featureError, numericError};
+}
+
+template<typename WeightType>
+bool add_runtime_row(std::array<i32, AccumulatorDimensions>& accumulator,
+                     const WeightType*                       weights,
+                     std::size_t                             row,
+                     std::size_t                             rowCount) noexcept {
+    if (!weights || row >= rowCount)
+        return false;
+
+    const WeightType* const source = weights + row * AccumulatorDimensions;
+    for (std::size_t output = 0; output < accumulator.size(); ++output)
+        accumulator[output] += static_cast<i32>(source[output]);
+    return true;
+}
+
+bool add_runtime_relations(const Network&                          network,
+                           const FullRefreshEmission&              emission,
+                           std::array<i32, AccumulatorDimensions>& accumulator) noexcept {
+    for (IndexType index = 0; index < emission.capturePairs.size; ++index)
+    {
+        const std::size_t physical = emission.capturePairs.features[index].physicalIndex;
+        if (physical < CapturePairPhysicalOffset
+            || !add_runtime_row(accumulator, network.capture_pair_weights(),
+                                physical - CapturePairPhysicalOffset,
+                                CapturePairPhysicalDimensions))
+            return false;
+    }
+
+    for (IndexType index = 0; index < emission.kingBlastEp.size; ++index)
+    {
+        const std::size_t physical = emission.kingBlastEp.features[index].physicalIndex;
+        if (physical < KingBlastEpPhysicalOffset
+            || !add_runtime_row(accumulator, network.king_blast_ep_weights(),
+                                physical - KingBlastEpPhysicalOffset,
+                                KingBlastEpPhysicalDimensions))
+            return false;
+    }
+
+    for (IndexType index = 0; index < emission.blastRing.size; ++index)
+    {
+        const std::size_t physical = emission.blastRing.features[index].physicalIndex;
+        if (physical < BlastRingPhysicalOffset
+            || !add_runtime_row(accumulator, network.blast_ring_weights(),
+                                physical - BlastRingPhysicalOffset, BlastRingPhysicalDimensions))
+            return false;
+    }
+    return true;
+}
+
+u8 runtime_transform_value(i32 first, i32 second) noexcept {
+    const i32 clippedFirst  = std::clamp(first, 0, 255);
+    const i32 clippedSecond = std::clamp(second, 0, 255);
+    return static_cast<u8>((static_cast<u32>(clippedFirst) * static_cast<u32>(clippedSecond))
+                           / 512U);
+}
+
+IncrementalStatus compose_runtime(const Network&                                          network,
+                                  const CapturePairSnapshot&                              snapshot,
+                                  const std::array<FullRefreshEmission, COLOR_NB>&        emissions,
+                                  const std::array<const ScalarHmPerspective*, COLOR_NB>& hmStates,
+                                  std::array<i32, AccumulatorDimensions>&                 internal,
+                                  std::array<u8, Fc0Inputs>& transformed,
+                                  RuntimeOutput&             result) noexcept {
+    result = {};
+    if ((snapshot.sideToMove != WHITE && snapshot.sideToMove != BLACK)
+        || !network.dense_runtime_ready())
+        return fail(result, IncrementalError::ScalarCompositionError,
+                    snapshot.sideToMove == WHITE || snapshot.sideToMove == BLACK
+                      ? FullRefreshError::None
+                      : FullRefreshError::InvalidSideToMove,
+                    scalar_failure(ScalarError::InvalidFeatureIndex));
+
+    const IndexType bucket = emissions[WHITE].hm.networkBucket;
+    if (bucket >= LayerStacks || emissions[BLACK].hm.networkBucket != bucket)
+        return fail(result, IncrementalError::ScalarCompositionError, FullRefreshError::None,
+                    scalar_failure(ScalarError::InconsistentPerspectiveBucket));
+
+    for (const Color perspective : {snapshot.sideToMove, ~snapshot.sideToMove})
+    {
+        const std::size_t                color    = color_index(perspective);
+        const ScalarHmPerspective* const hm       = hmStates[color];
+        const auto&                      emission = emissions[color];
+        if (!hm || emission.hm.networkBucket != bucket)
+            return fail(result, IncrementalError::ScalarCompositionError, FullRefreshError::None,
+                        scalar_failure(ScalarError::InvalidFeatureIndex));
+
+        for (std::size_t canonical = 0; canonical < AccumulatorDimensions; ++canonical)
+        {
+            const std::size_t runtime = WireIO::internal_index_from_canonical<i16, 16>(canonical);
+            internal[runtime]         = hm->accumulator[canonical];
+        }
+        if (!add_runtime_relations(network, emission, internal))
+            return fail(result, IncrementalError::ScalarCompositionError, FullRefreshError::None,
+                        scalar_failure(ScalarError::InvalidFeatureIndex));
+
+        const std::size_t destination =
+          perspective == snapshot.sideToMove ? 0 : AccumulatorDimensions / 2;
+        for (std::size_t output = 0; output < AccumulatorDimensions / 2; ++output)
+        {
+            const std::size_t first = WireIO::internal_index_from_canonical<i16, 16>(output);
+            const std::size_t second =
+              WireIO::internal_index_from_canonical<i16, 16>(output + AccumulatorDimensions / 2);
+            if (!feature_transformer_accumulator_in_range(internal[first])
+                || !feature_transformer_accumulator_in_range(internal[second]))
+                return fail(result, IncrementalError::HmAccumulatorOutOfRange,
+                            FullRefreshError::None,
+                            scalar_failure(ScalarError::FeatureAccumulatorOutOfRange));
+            transformed[destination + output] =
+              runtime_transform_value(internal[first], internal[second]);
+        }
+    }
+
+    const auto&  stm = *hmStates[color_index(snapshot.sideToMove)];
+    const auto&  opp = *hmStates[color_index(~snapshot.sideToMove)];
+    NumericError numeric =
+      psqt_perspective_difference(stm.psqt[bucket], opp.psqt[bucket], result.psqtDifference);
+    if (numeric != NumericError::None)
+        return fail(
+          result, IncrementalError::ScalarCompositionError, FullRefreshError::None,
+          scalar_failure(ScalarError::NumericContractError, FullRefreshError::None, numeric));
+
+    AtomicV2::NNZInfo<AtomicV2::L1> nnzInfo{};
+    nnzInfo.reset_from(transformed.data());
+    const auto components =
+      network.dense_runtime_stacks()[bucket].propagate_components(transformed.data(), nnzInfo);
+    numeric =
+      compose_dense_output(components.fc2Output, components.fc0SkipAdd, components.fc0SkipSubtract,
+                           result.rawOutput, result.scaledOutput);
+    if (numeric != NumericError::None)
+        return fail(
+          result, IncrementalError::ScalarCompositionError, FullRefreshError::None,
+          scalar_failure(ScalarError::NumericContractError, FullRefreshError::None, numeric));
+    return {};
 }
 
 }  // namespace
@@ -448,6 +597,96 @@ IncrementalStatus IncrementalStack::evaluate(const Network&         network,
                                              const Position&        position,
                                              IncrementalDiagnostic& result) noexcept {
     return evaluate(network, make_capture_pair_snapshot(position), result);
+}
+
+IncrementalStatus IncrementalStack::evaluate_runtime(const Network&             network,
+                                                     const CapturePairSnapshot& snapshot,
+                                                     RuntimeOutput&             result) noexcept {
+    result = {};
+    if (network_ != &network)
+        return {IncrementalError::NetworkMismatch};
+    if (hmDeltaExecutionEnabled_ && !simd_isa_available(requestedIsa_))
+        return {IncrementalError::UnsupportedIsa};
+
+    const Frame&        previous = latest();
+    IncrementalCounters eventCounters{};
+    HmDeltaCounters     deltaCounters{};
+
+    if (previous.snapshotComputed)
+    {
+        eventCounters.epSquareMismatches = previous.epSquareWhenComputed != snapshot.epSquare;
+        eventCounters.snapshotMismatches = !same_snapshot(previous.snapshotWhenComputed, snapshot);
+    }
+
+    auto& emissions = scratch_.emissions;
+    for (const Color perspective : {WHITE, BLACK})
+    {
+        const auto featureError =
+          emit_full_refresh(snapshot, perspective, emissions[color_index(perspective)]);
+        if (featureError != FullRefreshError::None)
+            return fail(result, IncrementalError::FeatureOracleError, featureError);
+        ++eventCounters.relationRefreshes;
+    }
+
+    Frame candidateFrame{};
+    candidateFrame.dirtyPiece = previous.dirtyPiece;
+    for (const Color perspective : {WHITE, BLACK})
+    {
+        const std::size_t       index = color_index(perspective);
+        HmUpdateDiagnostic      update{};
+        const IncrementalStatus status =
+          build_hm_perspective(network, perspective, emissions[index].hm,
+                               candidateFrame.perspectives[index], update, deltaCounters);
+        if (!status)
+            return status;
+
+        switch (update.source)
+        {
+        case HmSourceKind::SameFrameReuse :
+            ++eventCounters.hmReuses;
+            break;
+        case HmSourceKind::StackDelta :
+            ++eventCounters.hmDeltas;
+            break;
+        case HmSourceKind::FullRefresh :
+            ++eventCounters.hmRefreshes;
+            break;
+        case HmSourceKind::None :
+            return fail(result, IncrementalError::InvalidHmRows);
+        }
+
+        if (perspective == WHITE && testFault_ == IncrementalFaultPoint::AfterFirstPerspective)
+            return fail(result, IncrementalError::InjectedFailure);
+    }
+
+    if (testFault_ == IncrementalFaultPoint::BeforeComposition)
+        return fail(result, IncrementalError::InjectedFailure);
+
+    const std::array<const ScalarHmPerspective*, COLOR_NB> hmStates{
+      &candidateFrame.perspectives[WHITE].hm, &candidateFrame.perspectives[BLACK].hm};
+    const IncrementalStatus composition =
+      compose_runtime(network, snapshot, emissions, hmStates, scratch_.internalRuntimeAccumulator,
+                      scratch_.transformed, result);
+    if (!composition)
+        return composition;
+
+    if (testFault_ == IncrementalFaultPoint::AfterCompositionBeforeCommit)
+        return fail(result, IncrementalError::InjectedFailure);
+
+    candidateFrame.snapshotWhenComputed = snapshot;
+    candidateFrame.epSquareWhenComputed = snapshot.epSquare;
+    candidateFrame.snapshotComputed     = true;
+
+    latest() = std::move(candidateFrame);
+    add_counters(counters_, eventCounters);
+    add_hm_delta_counters(hmDeltaCounters_, deltaCounters);
+    return {};
+}
+
+IncrementalStatus IncrementalStack::evaluate_runtime(const Network&  network,
+                                                     const Position& position,
+                                                     RuntimeOutput&  result) noexcept {
+    return evaluate_runtime(network, make_capture_pair_snapshot(position), result);
 }
 
 const char* incremental_error_message(IncrementalError error) noexcept {

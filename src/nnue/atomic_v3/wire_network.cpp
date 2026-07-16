@@ -11,9 +11,12 @@
 #include "wire_network.h"
 
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <fstream>
+#include <iostream>
 #include <new>
+#include <streambuf>
 #include <utility>
 
 #include "numeric.h"
@@ -21,6 +24,24 @@
 
 namespace Stockfish::Eval::NNUE::AtomicV3 {
 namespace {
+
+class DenseRuntimeBuffer final: public std::streambuf {
+   public:
+    DenseRuntimeBuffer() noexcept {
+        char* const begin = storage_.data();
+        setp(begin, begin + storage_.size());
+    }
+
+    bool prepare_read() noexcept {
+        if (pptr() < pbase() || pptr() > epptr())
+            return false;
+        setg(pbase(), pbase(), pptr());
+        return true;
+    }
+
+   private:
+    std::array<char, DenseStackWireBytes> storage_{};
+};
 
 void set_error(WireError code, std::string message, WireError& resultCode, std::string& result) {
     resultCode = code;
@@ -141,6 +162,8 @@ const char* wire_error_message(WireError error) noexcept {
         return "Atomic V3 raw output numeric envelope exceeded";
     case WireError::InvalidPermutationShape :
         return "Atomic V3 parameter tensor cannot be permuted canonically";
+    case WireError::InvalidDenseRuntimeLayout :
+        return "Atomic V3 dense tail cannot be materialized for runtime execution";
     case WireError::TrailingBytes :
         return "trailing bytes after Atomic V3 network";
     case WireError::IoError :
@@ -298,6 +321,32 @@ bool Network::permute_feature_parameters() noexcept {
         return false;
 
     simdPermuted_ = true;
+    return true;
+}
+
+bool Network::materialize_dense_runtime() noexcept {
+    denseRuntimeReady_ = false;
+    for (std::size_t bucket = 0; bucket < denseStacks_.size(); ++bucket)
+    {
+        const auto&        stack = denseStacks_[bucket];
+        DenseRuntimeBuffer buffer;
+        std::iostream      stream(&buffer);
+        if (!write_dense_biases(stream, stack.fc0Biases.data(), stack.fc0Biases.size())
+            || !WireIO::write_exact(stream, stack.fc0Weights.data(), stack.fc0Weights.size())
+            || !write_dense_biases(stream, stack.fc1Biases.data(), stack.fc1Biases.size())
+            || !WireIO::write_exact(stream, stack.fc1Weights.data(), stack.fc1Weights.size())
+            || !write_dense_biases(stream, stack.fc2Biases.data(), stack.fc2Biases.size())
+            || !WireIO::write_exact(stream, stack.fc2Weights.data(), stack.fc2Weights.size())
+            || !buffer.prepare_read())
+            return false;
+
+        stream.clear();
+        if (!denseRuntimeStacks_[bucket].read_parameters(stream)
+            || stream.peek() != std::char_traits<char>::eof())
+            return false;
+    }
+
+    denseRuntimeReady_ = true;
     return true;
 }
 
@@ -460,6 +509,12 @@ LoadResult load_candidate(std::istream& stream) {
     if (!staging->permute_feature_parameters())
     {
         result.code  = WireError::InvalidPermutationShape;
+        result.error = wire_error_message(result.code);
+        return result;
+    }
+    if (!staging->materialize_dense_runtime())
+    {
+        result.code  = WireError::InvalidDenseRuntimeLayout;
         result.error = wire_error_message(result.code);
         return result;
     }

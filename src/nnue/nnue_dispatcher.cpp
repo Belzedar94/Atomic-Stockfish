@@ -308,7 +308,8 @@ bool AnyNetwork::verify(const std::function<void(std::string_view)>& onVerify,
     if (backend_ == NetworkBackend::AtomicNNUEV2)
         return true;
 
-    if (!storage_.atomicV3.simd_permuted() || storage_.atomicV3.get_content_hash() == 0)
+    if (!storage_.atomicV3.simd_permuted() || !storage_.atomicV3.dense_runtime_ready()
+        || storage_.atomicV3.get_content_hash() == 0)
     {
         report_incompatible(onVerify, evalfilePath);
         return false;

@@ -15,6 +15,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <functional>
+#include <memory>
 #include <new>
 #include <optional>
 #include <string_view>
@@ -218,11 +219,6 @@ class AnyAccumulator {
         return storage_.atomicV2.stack.latest();
     }
 
-    [[nodiscard]] const AtomicV3::IncrementalDiagnostic& v3_latest() const noexcept {
-        assert(backend_ == NetworkBackend::AtomicNNUEV3);
-        return storage_.atomicV3.diagnostic;
-    }
-
    private:
     struct LegacyState: private LegacyAtomicV1::AccumulatorCaches {
         explicit LegacyState(const LegacyAtomicV1::Network& network) :
@@ -253,7 +249,6 @@ class AnyAccumulator {
         void reset() noexcept {
             assert(network);
             stack.reset(*network, AtomicV3::maximum_simd_isa());
-            diagnostic = {};
         }
 
         void rebind(const AtomicV3::Network& replacement) noexcept {
@@ -261,9 +256,8 @@ class AnyAccumulator {
             reset();
         }
 
-        const AtomicV3::Network*        network = nullptr;
-        AtomicV3::IncrementalStack      stack;
-        AtomicV3::IncrementalDiagnostic diagnostic{};
+        const AtomicV3::Network*   network = nullptr;
+        AtomicV3::IncrementalStack stack;
     };
 
     union Storage {
@@ -324,13 +318,14 @@ inline NetworkOutput AnyNetwork::evaluate(const Position& pos, AnyAccumulator& a
         return storage_.atomicV2.evaluate(pos, accumulator.storage_.atomicV2.stack,
                                           accumulator.storage_.atomicV2.caches);
     case NetworkBackend::AtomicNNUEV3 : {
-        auto& state  = accumulator.storage_.atomicV3;
-        auto  status = state.stack.evaluate(storage_.atomicV3, pos, state.diagnostic);
+        auto&                   state = accumulator.storage_.atomicV3;
+        AtomicV3::RuntimeOutput output{};
+        auto status = state.stack.evaluate_runtime(storage_.atomicV3, pos, output);
         assert(status);
         if (!status)
             std::abort();
-        return {static_cast<Value>(state.diagnostic.scalar.psqtValue),
-                static_cast<Value>(state.diagnostic.scalar.positionalValue)};
+        return {static_cast<Value>(output.psqtDifference / OutputScale),
+                static_cast<Value>(output.scaledOutput / OutputScale)};
     }
     }
     assert(false);
@@ -349,12 +344,13 @@ inline RawNetworkOutput AnyNetwork::evaluate_raw(const Position& pos,
         return storage_.atomicV2.evaluate_raw(pos, accumulator.storage_.atomicV2.stack,
                                               accumulator.storage_.atomicV2.caches);
     case NetworkBackend::AtomicNNUEV3 : {
-        auto& state  = accumulator.storage_.atomicV3;
-        auto  status = state.stack.evaluate(storage_.atomicV3, pos, state.diagnostic);
+        auto&                   state = accumulator.storage_.atomicV3;
+        AtomicV3::RuntimeOutput output{};
+        auto status = state.stack.evaluate_runtime(storage_.atomicV3, pos, output);
         assert(status);
         if (!status)
             std::abort();
-        return {state.diagnostic.scalar.psqtDifference, state.diagnostic.scalar.scaledOutput};
+        return {output.psqtDifference, output.scaledOutput};
     }
     }
     assert(false);
@@ -373,17 +369,18 @@ inline NnueEvalTrace AnyNetwork::trace_evaluate(const Position& pos,
         return storage_.atomicV2.trace_evaluate(pos, accumulator.storage_.atomicV2.stack,
                                                 accumulator.storage_.atomicV2.caches);
     case NetworkBackend::AtomicNNUEV3 : {
-        auto& state  = accumulator.storage_.atomicV3;
-        auto  status = state.stack.evaluate(storage_.atomicV3, pos, state.diagnostic);
+        auto& state      = accumulator.storage_.atomicV3;
+        auto  diagnostic = std::make_unique<AtomicV3::IncrementalDiagnostic>();
+        auto  status     = state.stack.evaluate(storage_.atomicV3, pos, *diagnostic);
         assert(status);
         NnueEvalTrace trace{};
         if (!status)
             std::abort();
 
-        const auto& diagnostic = state.diagnostic.scalar;
-        const auto& stm        = diagnostic.perspectives[diagnostic.sideToMove];
-        const auto& opp        = diagnostic.perspectives[~diagnostic.sideToMove];
-        trace.correctBucket    = diagnostic.networkBucket;
+        const auto& scalar  = diagnostic->scalar;
+        const auto& stm     = scalar.perspectives[scalar.sideToMove];
+        const auto& opp     = scalar.perspectives[~scalar.sideToMove];
+        trace.correctBucket = scalar.networkBucket;
         for (IndexType bucket = 0; bucket < LayerStacks; ++bucket)
         {
             i32        psqtDifference = 0;
@@ -391,7 +388,7 @@ inline NnueEvalTrace AnyNetwork::trace_evaluate(const Position& pos,
               stm.psqt[bucket], opp.psqt[bucket], psqtDifference);
             AtomicV3::ScalarDenseResult dense{};
             const auto                  denseStatus = AtomicV3::propagate_dense_scalar(
-              storage_.atomicV3.dense_stacks()[bucket], diagnostic.transformed, dense);
+              storage_.atomicV3.dense_stacks()[bucket], scalar.transformed, dense);
             assert(psqt == AtomicV3::NumericError::None
                    && denseStatus == AtomicV3::NumericError::None);
             if (psqt != AtomicV3::NumericError::None || denseStatus != AtomicV3::NumericError::None)

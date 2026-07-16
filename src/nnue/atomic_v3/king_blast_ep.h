@@ -156,6 +156,13 @@ KingBlastEpError project_king_blast_ep(const CapturePairSnapshot& snapshot,
                                        const CapturePairEmission& capturePairs,
                                        KingBlastEpEmission&       result);
 
+// Faster internal seam for a CapturePair emission produced in the same call
+// chain. The caller owns the proof that capturePairs is exact and canonical.
+KingBlastEpError project_king_blast_ep_trusted(const CapturePairSnapshot& snapshot,
+                                               Color                      perspective,
+                                               const CapturePairEmission& capturePairs,
+                                               KingBlastEpEmission&       result);
+
 }  // namespace Detail
 
 KingBlastEpError emit_king_blast_ep(const CapturePairSnapshot& snapshot,

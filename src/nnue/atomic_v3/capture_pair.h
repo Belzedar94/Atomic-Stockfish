@@ -149,6 +149,49 @@ constexpr IndexType capture_pair_geometry_count(PieceType                pieceTy
     return count;
 }
 
+constexpr int capture_pair_geometry_piece_index(PieceType pieceType) noexcept {
+    return pieceType >= PAWN && pieceType <= QUEEN ? int(pieceType) - int(PAWN) : -1;
+}
+
+constexpr IndexType capture_pair_popcount(Bitboard bits) noexcept {
+    bits = bits - ((bits >> 1) & 0x5555555555555555ULL);
+    bits = (bits & 0x3333333333333333ULL) + ((bits >> 2) & 0x3333333333333333ULL);
+    bits = (bits + (bits >> 4)) & 0x0F0F0F0F0F0F0F0FULL;
+    return static_cast<IndexType>((bits * 0x0101010101010101ULL) >> 56);
+}
+
+struct CapturePairGeometryLookup {
+    std::array<std::array<std::array<Bitboard, SQUARE_NB>, CapturePairActorRelations>, 5> targets{};
+    std::array<std::array<std::array<IndexType, SQUARE_NB>, CapturePairActorRelations>, 5>
+      prefixes{};
+};
+
+constexpr CapturePairGeometryLookup make_capture_pair_geometry_lookup() noexcept {
+    CapturePairGeometryLookup lookup{};
+    for (int pieceIndex = 0; pieceIndex < 5; ++pieceIndex)
+        for (IndexType relationIndex = 0; relationIndex < CapturePairActorRelations;
+             ++relationIndex)
+        {
+            IndexType  prefix    = 0;
+            const auto relation  = CapturePairActorRelation(relationIndex);
+            const auto pieceType = PieceType(int(PAWN) + pieceIndex);
+            for (int from = 0; from < SQUARE_NB; ++from)
+            {
+                lookup.prefixes[pieceIndex][relationIndex][from] = prefix;
+                Bitboard targets                                 = 0;
+                for (int to = 0; to < SQUARE_NB; ++to)
+                    if (capture_pair_geometric_edge(pieceType, relation, Square(from), Square(to)))
+                        targets |= Bitboard(1) << to;
+                lookup.targets[pieceIndex][relationIndex][from] = targets;
+                prefix += capture_pair_popcount(targets);
+            }
+        }
+    return lookup;
+}
+
+inline constexpr CapturePairGeometryLookup CapturePairGeometry =
+  make_capture_pair_geometry_lookup();
+
 constexpr bool capture_pair_edge_ordinal(PieceType                pieceType,
                                          CapturePairActorRelation relation,
                                          Square                   from,
@@ -157,21 +200,14 @@ constexpr bool capture_pair_edge_ordinal(PieceType                pieceType,
     if (!capture_pair_geometric_edge(pieceType, relation, from, to))
         return false;
 
-    IndexType ordinal = capture_pair_geometry_base(pieceType);
-    for (int candidateFrom = 0; candidateFrom < SQUARE_NB; ++candidateFrom)
-        for (int candidateTo = 0; candidateTo < SQUARE_NB; ++candidateTo)
-        {
-            if (!capture_pair_geometric_edge(pieceType, relation, Square(candidateFrom),
-                                             Square(candidateTo)))
-                continue;
-            if (candidateFrom == int(from) && candidateTo == int(to))
-            {
-                result = ordinal;
-                return true;
-            }
-            ++ordinal;
-        }
-    return false;
+    const int      pieceIndex    = capture_pair_geometry_piece_index(pieceType);
+    const auto     relationIndex = static_cast<IndexType>(relation);
+    const Bitboard targets       = CapturePairGeometry.targets[pieceIndex][relationIndex][from];
+    const Bitboard lowerTargets  = to == SQ_A1 ? 0 : targets & ((Bitboard(1) << int(to)) - 1);
+    result                       = capture_pair_geometry_base(pieceType)
+           + CapturePairGeometry.prefixes[pieceIndex][relationIndex][from]
+           + capture_pair_popcount(lowerTargets);
+    return true;
 }
 
 constexpr bool capture_pair_normal_index(CapturePairActorRelation relation,
@@ -201,20 +237,11 @@ constexpr bool capture_pair_ep_ordinal(CapturePairActorRelation relation,
                                        IndexType&               result) {
     if (!capture_pair_ep_edge(relation, from, center))
         return false;
-    IndexType ordinal = 0;
-    for (int candidateFrom = 0; candidateFrom < SQUARE_NB; ++candidateFrom)
-        for (int candidateCenter = 0; candidateCenter < SQUARE_NB; ++candidateCenter)
-        {
-            if (!capture_pair_ep_edge(relation, Square(candidateFrom), Square(candidateCenter)))
-                continue;
-            if (candidateFrom == int(from) && candidateCenter == int(center))
-            {
-                result = ordinal;
-                return true;
-            }
-            ++ordinal;
-        }
-    return false;
+
+    const IndexType fromFile = static_cast<IndexType>(file_of(from));
+    const IndexType prefix   = fromFile == 0 ? 0 : 2 * fromFile - 1;
+    result                   = prefix + (file_of(center) > file_of(from) && fromFile != 0 ? 1 : 0);
+    return true;
 }
 
 constexpr bool

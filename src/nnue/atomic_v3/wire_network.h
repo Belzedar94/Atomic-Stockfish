@@ -20,6 +20,7 @@
 #include <string_view>
 #include <type_traits>
 
+#include "../atomic_v2/architecture.h"
 #include "wire_contract.h"
 
 namespace Stockfish::Eval::NNUE {
@@ -51,6 +52,7 @@ enum class WireError : u8 {
     AffineRangeExceeded,
     RawOutputRangeExceeded,
     InvalidPermutationShape,
+    InvalidDenseRuntimeLayout,
     TrailingBytes,
     IoError,
     NotInitialized,
@@ -148,6 +150,11 @@ class Network final {
     dense_stacks() const noexcept {
         return denseStacks_;
     }
+    [[nodiscard]] const std::array<AtomicV2::NetworkArchitecture, LayerStacks>&
+    dense_runtime_stacks() const noexcept {
+        return denseRuntimeStacks_;
+    }
+    [[nodiscard]] bool dense_runtime_ready() const noexcept { return denseRuntimeReady_; }
 
     // Save uses the original authenticated description unless a replacement is
     // explicitly supplied. Both paths serialize canonical bytes from small
@@ -163,6 +170,7 @@ class Network final {
     bool       read_dense_parameters(std::istream& stream, WireError& code, std::string& error);
     bool       validate_numeric(WireError& code, std::string& error) const;
     bool       permute_feature_parameters() noexcept;
+    bool       materialize_dense_runtime() noexcept;
     void       set_description(std::string_view description) noexcept;
     void       compute_content_hash() noexcept;
     SaveResult write_parameters(std::ostream& stream, std::string_view description) const;
@@ -174,11 +182,13 @@ class Network final {
     BlastRingParameterStorage   blastRingWeights_{};
     HmPsqtParameterStorage      hmPsqtWeights_{};
 
-    std::array<DenseStackParameters, LayerStacks> denseStacks_;
-    std::array<char, MaximumDescriptionBytes>     description_{};
-    u32                                           descriptionSize_ = 0;
-    usize                                         contentHash_     = 0;
-    bool                                          simdPermuted_    = false;
+    std::array<DenseStackParameters, LayerStacks>          denseStacks_;
+    std::array<AtomicV2::NetworkArchitecture, LayerStacks> denseRuntimeStacks_;
+    std::array<char, MaximumDescriptionBytes>              description_{};
+    u32                                                    descriptionSize_   = 0;
+    usize                                                  contentHash_       = 0;
+    bool                                                   simdPermuted_      = false;
+    bool                                                   denseRuntimeReady_ = false;
 
     friend LoadResult load_candidate(std::istream&);
     friend class ::Stockfish::Eval::NNUE::AnyNetwork;
@@ -209,6 +219,11 @@ static_assert(Network::feature_transformer_hash() == 0x6FCAD592u);
 static_assert(Network::architecture_hash() == 0x63337116u);
 static_assert(Network::network_hash() == 0x0CF9A484u);
 static_assert(sizeof(DenseStackParameters) == DenseStackWireBytes);
+static_assert(AtomicV2::ArchitectureHash == ArchitectureHash);
+static_assert(AtomicV2::NetworkArchitecture::TransformedFeatureDimensions == Fc0Inputs);
+static_assert(AtomicV2::NetworkArchitecture::FC_0_OUTPUTS == Fc0Outputs);
+static_assert(AtomicV2::NetworkArchitecture::FC_1_OUTPUTS == Fc1Outputs);
+static_assert(AtomicV2::LayerStacks == LayerStacks);
 static_assert(alignof(BiasParameterStorage) == ParameterAlignment);
 static_assert(alignof(HmParameterStorage) == ParameterAlignment);
 static_assert(alignof(CapturePairParameterStorage) == ParameterAlignment);

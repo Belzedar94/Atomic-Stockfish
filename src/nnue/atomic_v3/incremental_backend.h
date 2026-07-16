@@ -117,6 +117,14 @@ struct IncrementalDiagnostic {
     Color                                     currentSideToMove         = WHITE;
 };
 
+// Compact production result. The verbose IncrementalDiagnostic remains the
+// exact trace/test oracle, while search consumes only these wire-scale values.
+struct RuntimeOutput {
+    i32 psqtDifference = 0;
+    i64 rawOutput      = 0;
+    i32 scaledOutput   = 0;
+};
+
 class IncrementalStack {
    public:
     static constexpr usize MaxSize = MAX_PLY + 1;
@@ -139,6 +147,14 @@ class IncrementalStack {
     [[nodiscard]] IncrementalStatus evaluate(const Network&         network,
                                              const Position&        position,
                                              IncrementalDiagnostic& result) noexcept;
+
+    [[nodiscard]] IncrementalStatus evaluate_runtime(const Network&             network,
+                                                     const CapturePairSnapshot& snapshot,
+                                                     RuntimeOutput&             result) noexcept;
+
+    [[nodiscard]] IncrementalStatus evaluate_runtime(const Network&  network,
+                                                     const Position& position,
+                                                     RuntimeOutput&  result) noexcept;
 
     [[nodiscard]] usize                      size() const noexcept { return size_; }
     [[nodiscard]] usize                      ply() const noexcept { return size_ - 1; }
@@ -184,6 +200,8 @@ class IncrementalStack {
     struct alignas(CacheLineSize) EvaluationScratch {
         std::array<FullRefreshEmission, COLOR_NB> emissions{};
         std::array<i64, AccumulatorDimensions>    internalHmAccumulator{};
+        std::array<i32, AccumulatorDimensions>    internalRuntimeAccumulator{};
+        std::array<u8, Fc0Inputs>                 transformed{};
     };
 
     [[nodiscard]] Frame&       latest() noexcept { return frames_[size_ - 1]; }

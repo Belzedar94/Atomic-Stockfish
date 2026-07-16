@@ -123,6 +123,12 @@ NumericError validate_forward_interval(const SignedInterval& fc2,
 
 NumericError checked_narrow_i32(i64 value, i32& result);
 
+// Composes the three authenticated i32 tail components in i64 before scaling.
+// This is required because a valid V3 raw output may exceed INT32 even though
+// each affine component is individually representable as i32.
+NumericError compose_dense_output(
+  i32 fc2, i32 fc0SkipAdd, i32 fc0SkipSubtract, i64& rawOutput, i32& scaledOutput);
+
 // Scales in i64 and relies on C++ signed integer division for truncation toward
 // zero, then performs an explicit checked i32 narrowing.
 NumericError scale_raw_output(i64 rawOutput, i32& result);
