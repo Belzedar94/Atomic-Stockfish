@@ -499,3 +499,28 @@ engine-NPS, Elo, LOS, OpenBench or training claim applies. The exact contract is
 [ADR 0005](adr/0005-atomic-nnue-v3-incremental-simd.md); the acceptance status
 and remaining reviewed-head CI/PR artifacts are indexed under
 [`hito9-3j-b-v3-incremental-simd`](evidence/hito9-3j-b-v3-incremental-simd/README.md).
+
+## H9.3n public runtime gates
+
+H9.3n supersedes only the final H9.3j-b staging boundary. AtomicNNUEV3 becomes
+the third accepted inline dispatcher backend without changing its frozen wire,
+feature or numeric contracts. Native production, the isolated data generator
+and the complete pthread Node UCI/NNUE WASM artifact link the reviewed V3
+runtime sources. Test-only scalar, SIMD, stress and instruction-audit runners
+remain independent targets.
+
+The public gate authenticates the canonical synthetic fixture by exact size,
+header and SHA-256 before launch. It then requires V3 `bestmove` searches in
+`Use NNUE=true` and `pure` with 1/2/4/8 threads, a clean classical search in
+`false`, and byte-exact export, reimport and second export. UCI perft, XBoard
+and the repeatable bench accept and identify all three backend markers. A
+focused V3 generator smoke publishes one `atomic-bin-v2` record in `pure` and
+checks the manifest network hash and mode.
+
+The full Node artifact authenticates and switches V1/V2/V3, reimports a
+byte-exact V3 export, retains transactional invalid-load rollback and repeats
+thread changes under its fixed-memory RSS gate. Python `pyffish` and the
+CommonJS/ES-module Board WASM remain rules APIs rather than evaluator bindings;
+their existing Atomic/Atomic960 suites remain mandatory alongside the complete
+NNUE WASM job. Runtime acceptance is a compatibility/correctness milestone and
+does not by itself claim Elo or LOS for an untrained synthetic V3 network.

@@ -147,8 +147,11 @@ def require_search(output: list[str], label: str, backend: str) -> None:
 def require_rejection(output: list[str], label: str) -> None:
     if output[-1] != "bestmove (none)":
         raise AssertionError(f"{label} was not rejected: {output}")
-    if not any("compatible Legacy Atomic V1 or AtomicNNUEV2" in line for line in output):
-        raise AssertionError(f"{label} omitted the dual-backend error: {output}")
+    if not any(
+        "compatible Legacy Atomic V1, AtomicNNUEV2, or AtomicNNUEV3" in line
+        for line in output
+    ):
+        raise AssertionError(f"{label} omitted the three-backend error: {output}")
 
 
 def require_controlled_eval(

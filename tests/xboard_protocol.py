@@ -4,7 +4,7 @@
 The test deliberately uses ``ping`` as a protocol barrier instead of sleeps.
 It covers feature negotiation, state editing, Atomic960, ``go``, the
 historically missing ``playother`` command, clocks, terminal results, invalid
-NNUE rejection, valid AtomicNNUEV2 search, Atomic Syzygy path wiring, and the
+NNUE rejection, valid V1/V2/V3 search, Atomic Syzygy path wiring, and the
 analysis lifecycle.
 """
 
@@ -312,6 +312,7 @@ def run(engine: Path, timeout: float, eval_file: Path | None = None) -> None:
             if not any(
                 "NNUE evaluation using Legacy Atomic V1" in line
                 or "NNUE evaluation using AtomicNNUEV2" in line
+                or "NNUE evaluation using AtomicNNUEV3" in line
                 for line in nnue_output
             ):
                 raise AssertionError(
@@ -484,7 +485,10 @@ def main() -> int:
     parser.add_argument(
         "--eval-file",
         type=Path,
-        help="optional authenticated Legacy Atomic V1 or AtomicNNUEV2 fixture used for a CECP search",
+        help=(
+            "optional authenticated Legacy Atomic V1, AtomicNNUEV2 or "
+            "AtomicNNUEV3 fixture used for a CECP search"
+        ),
     )
     args = parser.parse_args()
     if args.timeout <= 0:
