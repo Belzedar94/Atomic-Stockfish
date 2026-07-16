@@ -1,6 +1,6 @@
 # ADR 0003: Add AtomicNNUEV2 as an isolated SFNNv15 backend
 
-- Status: accepted; implementation in progress
+- Status: accepted; engine implementation merged in PR #28; trained V2 strength candidate remains pending
 - Date: 2026-07-14
 
 ## Context

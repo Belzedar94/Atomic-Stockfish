@@ -26,6 +26,7 @@ env:
   LINUX_NATIVE_IMAGE: gcc:14.2.0-bookworm@sha256:b99b86a28812b1e6453a231a947dc43d76fe192788a12f344a9b568bf9f5d24c
   LINUX_NATIVE_AMD64_MANIFEST: sha256:82549aa8f90ada3236a8be70c74543132a76662ef33f0c3271ed802b81584a82
   WINDOWS_NATIVE_IMAGE: dockcross/windows-static-x64@sha256:e5fde458b54dda21d0265516f0310bc017532dd6f4fdad0b7239dc6ccd0f8ca9
+  PYTHON_MANYLINUX_X86_64_IMAGE: quay.io/pypa/manylinux_2_28_x86_64:2026.03.20-1@sha256:853663dc8253b62be437bb52a5caecffd020792af4442f55d927d22e0ea795ae
 
 jobs:
   validate:
@@ -48,7 +49,8 @@ jobs:
       - name: Install pinned release-contract test tools
         run: >-
           python -m pip install --disable-pip-version-check
-          pytest==8.3.5 setuptools==80.9.0
+          --only-binary=:all: --require-hashes
+          -r tests/release-ci-requirements.txt
       - name: Validate exact version and freeze annotated tag identity
         id: identity
         shell: bash
@@ -462,7 +464,10 @@ jobs:
           CIBW_ENVIRONMENT: >-
             SOURCE_DATE_EPOCH=${{ needs.validate.outputs.epoch }}
             PYTHONHASHSEED=0
-          CIBW_TEST_REQUIRES: mypy==1.19.1
+          CIBW_BEFORE_TEST: >-
+            python -m pip install --disable-pip-version-check
+            --only-binary=:all: --require-hashes
+            -r {project}/tests/release-wheel-test-requirements.txt
           CIBW_TEST_COMMAND: >-
             python -c "import pyffish;
             assert pyffish.version() == (1, 0, 0);
@@ -470,11 +475,17 @@ jobs:
             assert pyffish.perft('atomic', pyffish.start_fen('atomic'), 1) == 20;
             assert pyffish.info().startswith('Atomic-Stockfish 1.0.0 ')"
             && python -m mypy -m pyffish --no-incremental --no-error-summary
+          WHEEL_PLATFORM: ${{ matrix.platform }}
         run: |
           set -euo pipefail
           python -m pip install --disable-pip-version-check \
-            setuptools==80.9.0 wheel==0.45.1 cibuildwheel==3.4.1 \
-            mypy==1.19.1 abi3audit==0.0.26
+            --only-binary=:all: --require-hashes \
+            -r tests/release-ci-requirements.txt
+          if [[ "$WHEEL_PLATFORM" == linux ]]; then
+            export CIBW_MANYLINUX_X86_64_IMAGE="$PYTHON_MANYLINUX_X86_64_IMAGE"
+            echo "CIBW_MANYLINUX_X86_64_IMAGE=$CIBW_MANYLINUX_X86_64_IMAGE" \
+              >> "$GITHUB_ENV"
+          fi
           python -m cibuildwheel "$RELEASE_SDIST" --output-dir build/wheelhouse-a
           python -m cibuildwheel "$RELEASE_SDIST" --output-dir build/wheelhouse-b
 
@@ -493,6 +504,11 @@ jobs:
           SOURCE_DATE_EPOCH: ${{ needs.validate.outputs.epoch }}
         run: |
           set -euo pipefail
+          builder=windows-2022
+          if [[ '${{ matrix.platform }}' == linux ]]; then
+            builder="$PYTHON_MANYLINUX_X86_64_IMAGE"
+            test "$CIBW_MANYLINUX_X86_64_IMAGE" = "$builder"
+          fi
           mkdir -p build/release
           mapfile -t wheels < <(find build/wheelhouse-a -maxdepth 1 -type f -name '*.whl')
           test "${#wheels[@]}" -eq 1
@@ -503,7 +519,7 @@ jobs:
             --source-date-epoch "$SOURCE_DATE_EPOCH" \
             --kind python --platform '${{ matrix.platform }}' \
             --architecture '${{ matrix.architecture }}' \
-            --toolchain "cibuildwheel 3.4.1 / CPython 3.9 stable ABI / abi3audit 0.0.26 / sourceSha256=$RELEASE_SDIST_SHA256" -- \
+            --toolchain "cibuildwheel 3.4.1 / CPython 3.9 stable ABI / abi3audit 0.0.26 / builder=$builder / sourceSha256=$RELEASE_SDIST_SHA256" -- \
             python -m cibuildwheel "$RELEASE_SDIST" --output-dir build/wheelhouse-a
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -539,7 +555,8 @@ jobs:
           mkdir -p build/release build/sdist-a build/sdist-b \
             build/repro-source build/repro-sdist-b
           python -m pip install --disable-pip-version-check \
-            setuptools==80.9.0 wheel==0.45.1
+            --only-binary=:all: --require-hashes \
+            -r tests/release-ci-requirements.txt
           source_asset="Atomic-Stockfish-${RELEASE_VERSION}-source.tar.xz"
           git archive --format=tar --prefix="Atomic-Stockfish-${RELEASE_VERSION}/" "$COMMIT" | \
             xz -9e > "build/release/$source_asset"

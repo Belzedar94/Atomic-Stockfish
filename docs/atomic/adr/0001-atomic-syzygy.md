@@ -1,6 +1,6 @@
 # ADR 0001: Atomic Syzygy is a required native subsystem
 
-- Status: accepted; implementation pending
+- Status: accepted; implemented; release aggregate validation pending
 - Date: 2026-07-10
 
 ## Context

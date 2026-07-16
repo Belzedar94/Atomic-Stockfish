@@ -496,6 +496,39 @@ cannot affect moves.
 
 Because V3 is still excluded from every production and binding graph, no
 engine-NPS, Elo, LOS, OpenBench or training claim applies. The exact contract is
-[ADR 0005](adr/0005-atomic-nnue-v3-incremental-simd.md); the acceptance status
-and remaining reviewed-head CI/PR artifacts are indexed under
+[ADR 0005](adr/0005-atomic-nnue-v3-incremental-simd.md); the reviewed head and
+merged acceptance artifacts are indexed under
 [`hito9-3j-b-v3-incremental-simd`](evidence/hito9-3j-b-v3-incremental-simd/README.md).
+
+## H9.3l-a distributed publication contract
+
+PR #42 merged the frozen acyclic evidence contract as
+`dde43fc08fb2bd45eec09d3dbe9f6d06845eeb24`. It binds distributed Atomic BIN
+V2 chunks into one campaign without erasing per-chunk seeds or provenance,
+authenticates the producer build set, and separates semantic replay,
+reachability evidence and controlled training outputs. Publication remains
+fail-closed: structural V1 validation alone cannot claim V3 dataset or training
+readiness.
+
+The contract deliberately leaves Legacy Atomic V1, AtomicNNUEV2, Atomic BIN V2
+and the existing V3 schemas byte-identical. The separately scheduled 500M
+Atomic BIN V2 bootstrap remains a transport and throughput pilot and can never
+be relabelled as a V3 release dataset.
+
+## H9.3l-b audited trajectory producer
+
+PR #43 merged the production trajectory writer as
+`420c9f35266fbdc2167dc5b9d8d20d90281c60c9` after 34/34 checks and a clean
+exact-head review. Each game owns a private transposition table and cleared
+history state, public sidecars are staged transactionally, and deterministic
+external sorting uses bounded 64 MiB runs and at most 64 readers. Threads 1, 2
+and 4 reproduce the same authenticated V3 trajectory result; Atomic960,
+rollback and the unchanged seven Legacy/V2 fixtures are covered.
+
+`variant-nnue-pytorch` PR #13 merged the isolated trainer core into `atomic` as
+`44663e28c3e5464ff3be2cdaa26c8518b3951c5f`. It authenticates the earlier
+H9.3l-a contract boundary and does not yet claim controlled training or V3
+publication. The final `variant-nnue-tools/atomic` pin to engine merge
+`420c9f35266fbdc2167dc5b9d8d20d90281c60c9` remains a release input until its
+reviewed PR is merged and its repository merge SHA is frozen in the pipeline
+lock.

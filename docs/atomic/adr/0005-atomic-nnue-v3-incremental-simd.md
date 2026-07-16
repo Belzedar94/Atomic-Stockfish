@@ -1,6 +1,6 @@
 # ADR 0005: Vectorize only AtomicNNUEV3 incremental HM row application
 
-- Status: accepted for H9.3j-b; local validation complete, reviewed-head CI/PR pending
+- Status: accepted and implemented for H9.3j-b; reviewed-head PR #40 merged as `933f331e8a8b9ab9c89f5e107d341240e4a3bdad` from head `9387ea45fb020e62682328ace169de1aaad3e835`
 - Date: 2026-07-15
 
 ## Context
@@ -77,6 +77,7 @@ not authorize them implicitly.
 
 Until V3 is connected to the production dispatcher and a trained V3 network
 can alter moves, this milestone makes no engine-NPS, Elo, LOS, OpenBench,
-data-generation or training claim. The validation index, completed local
-evidence and outstanding reviewed-head CI/PR artifacts are recorded in
+data-generation or training claim. The merged reviewed-head implementation is
+PR #40, merge `933f331e8a8b9ab9c89f5e107d341240e4a3bdad`. Its validation
+index and completed evidence are recorded in
 [`hito9-3j-b-v3-incremental-simd`](../evidence/hito9-3j-b-v3-incremental-simd/README.md).

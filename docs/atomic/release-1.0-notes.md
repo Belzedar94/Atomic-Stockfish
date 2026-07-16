@@ -41,8 +41,9 @@ architecture and bytes rather than trusting a filename.
   blocks are research infrastructure. Version 1.0 does not dispatch V3 networks
   in the playing engine.
 - UCCI, USI and non-Atomic variants are deliberately out of scope.
-- The 500M bootstrap campaign used to validate distributed data generation is
-  an Atomic BIN V2 pilot, not a V3 publication dataset.
+- The separately scheduled 500-million-position Atomic BIN V2 bootstrap is a
+  distributed-generation pilot, not a V3 publication dataset, and its
+  completion is not a 1.0 release dependency.
 
 Verify every downloaded asset with `SHA256SUMS` and
 `atomic-stockfish-release-manifest.json` before use.

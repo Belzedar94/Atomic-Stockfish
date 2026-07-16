@@ -24,10 +24,46 @@ def test_python_wheels_consume_only_the_authenticated_source_job_sdist() -> None
     assert "setup.py sdist" not in wheels
     assert wheels.count('python -m cibuildwheel "$RELEASE_SDIST"') == 3
     assert "SOURCE_DATE_EPOCH=${{ needs.validate.outputs.epoch }}" in wheels
-    assert "CIBW_TEST_REQUIRES: mypy==1.19.1" in wheels
-    assert "mypy==1.19.1 abi3audit==0.0.26" in wheels
+    assert "CIBW_TEST_REQUIRES" not in wheels
+    assert "CIBW_BEFORE_TEST: >-" in wheels
+    assert "-r {project}/tests/release-wheel-test-requirements.txt" in wheels
+    assert "-r tests/release-ci-requirements.txt" in wheels
+    assert "python -m mypy -m pyffish" in wheels
     assert 'cmp "${first[0]}" "${second[0]}"' in wheels
     assert 'python -m abi3audit --strict "${first[0]}"' in wheels
+
+
+def test_release_python_installs_are_closed_or_pre_authenticated() -> None:
+    text = workflow()
+    commands = text.count("python -m pip install")
+    assert commands == 5
+    assert text.count("--only-binary=:all: --require-hashes") == 4
+    assert text.count("-r tests/release-ci-requirements.txt") == 3
+    assert (
+        text.count("-r {project}/tests/release-wheel-test-requirements.txt")
+        == 1
+    )
+    assert text.count("--no-index --no-deps") == 1
+
+
+def test_python_wheel_builder_is_digest_pinned_and_in_provenance() -> None:
+    text = workflow()
+    wheels = job(text, "python-wheels", "source")
+    image = (
+        "quay.io/pypa/manylinux_2_28_x86_64:2026.03.20-1@sha256:"
+        "853663dc8253b62be437bb52a5caecffd020792af4442f55d927d22e0ea795ae"
+    )
+    assert f"PYTHON_MANYLINUX_X86_64_IMAGE: {image}" in text
+    assert 'if [[ "$WHEEL_PLATFORM" == linux ]]; then' in wheels
+    assert (
+        'export CIBW_MANYLINUX_X86_64_IMAGE="$PYTHON_MANYLINUX_X86_64_IMAGE"'
+        in wheels
+    )
+    assert 'builder="$PYTHON_MANYLINUX_X86_64_IMAGE"' in wheels
+    assert "builder=$builder" in wheels
+    for line in text.splitlines():
+        if "manylinux_2_28_x86_64" in line:
+            assert "@sha256:" in line
 
 
 def test_native_toolchains_are_digest_pinned_and_reproduced_in_isolated_roots() -> None:

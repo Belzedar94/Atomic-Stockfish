@@ -2021,7 +2021,7 @@ atomic_data_generator_%.o: data/%.cpp $(HEADERS) $(ATOMIC_DATA_GENERATOR_HEADERS
 %.o: %.cpp
 	$(strip $(CXX) $(CPPFLAGS) $(CXXFLAGS)) -c -o $@ $<
 
-misc.o: misc.cpp $(BUILD_SHA_FILE) $(BUILD_DATE_FILE)
+misc.o: misc.cpp atomic_version.h $(BUILD_SHA_FILE) $(BUILD_DATE_FILE)
 	$(strip $(CXX) $(CPPFLAGS) $(CXXFLAGS) $(if $(GIT_SHA),-DGIT_SHA=$(GIT_SHA)) $(if $(GIT_DATE),-DGIT_DATE=$(GIT_DATE))) -c -o $@ $<
 
 clang-profile-make:

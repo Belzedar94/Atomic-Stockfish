@@ -57,6 +57,16 @@ def test_release_version_is_consistent_across_packaging_surfaces() -> None:
     }
     assert policy["windowsMakeComp"] == "mingw"
     assert policy["abi3AuditVersion"] == "0.0.26"
+    assert policy["pythonManylinuxX86_64Image"] == (
+        "quay.io/pypa/manylinux_2_28_x86_64:2026.03.20-1@sha256:"
+        "853663dc8253b62be437bb52a5caecffd020792af4442f55d927d22e0ea795ae"
+    )
+    assert policy["releaseCiRequirementsSha256"] == (
+        "33f274924a8f41ca9cf4ddc891c0d488dc30491c29d2b034de9088d9d032dd28"
+    )
+    assert policy["releaseWheelTestRequirementsSha256"] == (
+        "b877081ac9f4a6aa56eff9c5ed6c7b832a9fc02ca2dca39f786401e1a03f842b"
+    )
     assert policy["pythonWheelRuntimeSmoke"] == {
         "operatingSystems": ["ubuntu-24.04", "windows-2022"],
         "pythonVersions": ["3.9", "3.12", "3.14"],
@@ -103,3 +113,9 @@ def test_release_version_is_consistent_across_packaging_surfaces() -> None:
 def test_compiled_python_surface_reports_release_version() -> None:
     assert pyffish.version() == (1, 0, 0)
     assert pyffish.info().startswith("Atomic-Stockfish 1.0.0 ")
+
+
+def test_native_incremental_build_tracks_the_release_version_header() -> None:
+    makefile = (ROOT / "src" / "Makefile").read_text(encoding="utf-8")
+    rule = makefile.split("misc.o: misc.cpp", 1)[1].split("\n\n", 1)[0]
+    assert "atomic_version.h" in rule.splitlines()[0]

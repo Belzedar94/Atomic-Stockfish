@@ -7,9 +7,17 @@ release manifest.
 
 ## Frozen inputs
 
-- Atomic-Stockfish `main` contains every accepted H9.3l milestone PR.
-- `variant-nnue-tools/atomic` and `variant-nnue-pytorch/atomic` pin the exact
-  merged engine commit and have clean exact-head Codex reviews.
+- Atomic-Stockfish `main` contains engine PR #42 merge
+  `dde43fc08fb2bd45eec09d3dbe9f6d06845eeb24` and PR #43 merge
+  `420c9f35266fbdc2167dc5b9d8d20d90281c60c9`.
+- `variant-nnue-pytorch/atomic` contains trainer PR #13 merge
+  `44663e28c3e5464ff3be2cdaa26c8518b3951c5f` and intentionally authenticates
+  the H9.3l-a contract commit where required.
+- `variant-nnue-tools/atomic` pins final engine merge
+  `420c9f35266fbdc2167dc5b9d8d20d90281c60c9`; its final reviewed merge SHA is
+  recorded after the pending pin PR merges.
+- Before tagging, `tests/legacy_pipeline.lock.json` records the final merged
+  tools and trainer repository SHAs, not branch-head commits.
 - The 500M bootstrap campaign remains an independent Atomic BIN V2 pilot, not a
   V3 publication-ready release dataset. Its live progress and exact engine,
   network, book and command are recorded, but completion does not alter the
