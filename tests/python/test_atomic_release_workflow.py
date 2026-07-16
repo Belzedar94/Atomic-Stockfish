@@ -173,6 +173,8 @@ def test_release_pr_reproduces_real_windows_wheel_and_frozen_fingerprint() -> No
     assert "ref: ${{ github.event.pull_request.head.sha }}" in source
     assert "EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}" in source
     assert 'test "$commit" = "$EXPECTED_HEAD"' in source
+    assert "--only-binary=:all: --require-hashes" in source
+    assert "-r tests/release-ci-requirements.txt" in source
     assert "build_atomic_source_release.sh" in source
     assert "git archive \"$commit\"" in source
     assert "build/sdist-a" in source and "build/sdist-b" in source
