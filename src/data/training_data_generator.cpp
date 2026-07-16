@@ -2111,6 +2111,7 @@ class AtomicV3Generator {
             privateTts.push_back(std::make_unique<TranspositionTable>());
             privateTts.back()->resize(perWorkerMb, threads);
             privateHistories.push_back(std::make_unique<SharedHistories>(1));
+            privateHistories.back()->clear_for_search(0, 1);
         }
 
         for (usize i = 0; i < workerCount; ++i)

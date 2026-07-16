@@ -42,13 +42,43 @@ def test_manifest_oracle_uses_the_same_authenticated_ci_pin(
     assert data_generator.current_repository_commit() == commit
 
 
-@pytest.mark.parametrize("commit", ("", "ABC", "A" * 40, "0" * 39, "g" * 40))
+@pytest.mark.parametrize(
+    "commit",
+    (
+        "",
+        "ABC",
+        "A" * 40,
+        "0" * 39,
+        "g" * 40,
+        " " + "0" * 40,
+        "0" * 40 + " ",
+        "0" * 40 + "\n",
+    ),
+)
 def test_manifest_oracle_rejects_invalid_ci_pin(
     commit: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("GIT_SHA_FULL", commit)
     with pytest.raises(AssertionError, match="40 lower-case hexadecimal"):
         data_generator.current_repository_commit()
+
+
+def test_private_v3_histories_use_the_canonical_worker_baseline() -> None:
+    history = (TESTS_DIR.parent / "src" / "history.h").read_text(encoding="utf-8")
+    search = (TESTS_DIR.parent / "src" / "search.cpp").read_text(encoding="utf-8")
+    generator = (
+        TESTS_DIR.parent / "src" / "data" / "training_data_generator.cpp"
+    ).read_text(encoding="utf-8")
+
+    assert "void clear_for_search(usize threadIdx, usize numaTotal)" in history
+    assert "correctionHistory.clear_range(-6, threadIdx, numaTotal);" in history
+    assert "pawnHistory.clear_range(-1262, threadIdx, numaTotal);" in history
+    assert "h.fill(-552);" in history
+    assert "sharedHistory.clear_for_search(numaThreadIdx, numaTotal);" in search
+    assert "privateHistories.back()->clear_for_search(0, 1);" in generator
+    for baseline in ("clear_range(-6", "clear_range(-1262", "fill(-552"):
+        assert baseline not in search
+        assert baseline not in generator
 
 
 @pytest.mark.parametrize(

@@ -924,21 +924,14 @@ void Search::Worker::clear() {
     mainHistory.fill(-5);
     captureHistory.fill(-699);
 
-    // Each thread is responsible for clearing their part of shared history
-    sharedHistory.correctionHistory.clear_range(-6, numaThreadIdx, numaTotal);
-    sharedHistory.pawnHistory.clear_range(-1262, numaThreadIdx, numaTotal);
+    // Each thread is responsible for clearing its part of shared history.
+    sharedHistory.clear_for_search(numaThreadIdx, numaTotal);
 
     ttMoveHistory = 0;
 
     for (auto& to : continuationCorrectionHistory)
         for (auto& h : to)
             h.fill(5);
-
-    for (bool inCheck : {false, true})
-        for (StatsType c : {NoCaptures, Captures})
-            for (auto& to : continuationHistory[inCheck][c])
-                for (auto& h : to)
-                    h.fill(-552);
 
     for (usize i = 1; i < reductions.size(); ++i)
         reductions[i] = int(2834 / 128.0 * std::log(i));

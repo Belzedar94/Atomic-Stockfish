@@ -642,7 +642,10 @@ AtomicV3TrajectoryLedgerStager::AtomicV3TrajectoryLedgerStager(
     validationThreshold(validationThreshold_),
     expectedMaximumPly(expectedMaximumPly_) {}
 
-AtomicV3TrajectoryLedgerStager::~AtomicV3TrajectoryLedgerStager() { (void) abort(); }
+AtomicV3TrajectoryLedgerStager::~AtomicV3TrajectoryLedgerStager() {
+    if (!finalized)
+        (void) abort();
+}
 
 DataResult AtomicV3TrajectoryLedgerStager::open_staging() {
     if (entriesFile && movesFile && groupsFile)
@@ -895,15 +898,19 @@ DataResult AtomicV3TrajectoryLedgerStager::finalize(const std::filesystem::path&
     finalizedPath = finalPath;
     finalized     = true;
     metadata = {finalPath, recordCount, trajectoryCount, moveCount, bytes, std::move(checksum)};
-    for (const auto& path : {groupsPath, sortedGroupsPath})
+    // Finalization owns all private staging files. Keep only the authenticated
+    // public ledger on success; explicit abort() remains able to remove that
+    // ledger when a higher-level multi-artifact publication rolls back.
+    for (const auto& path : {entriesPath, movesPath, groupsPath, sortedGroupsPath})
     {
         std::error_code removeError;
         if (!std::filesystem::remove(path, removeError) || removeError)
         {
             finalized = false;
+            metadata  = {};
             return DataResult::failure(DataError::ABORT_FAILED,
-                                       "Cannot remove Atomic V3 split-group audit staging file: "
-                                         + removeError.message());
+                                       "Cannot remove Atomic V3 trajectory staging file "
+                                         + path.string() + ": " + removeError.message());
         }
     }
     return DataResult::success();

@@ -337,6 +337,12 @@ void test_partition_and_ledger() {
                  && metadata.moves == trajectory.playedMoves.size()
                  && metadata.bytes == 160 + 112 + 4 * trajectory.playedMoves.size(),
                "ledger.metadata", "counts or fixed-size framing differ");
+        bool stagingRemoved = true;
+        for (const auto* suffix :
+             {".entries.partial", ".moves.partial", ".groups.partial", ".groups.sorted.partial"})
+            stagingRemoved &= !std::filesystem::exists(directory / (std::string("role") + suffix));
+        expect(stagingRemoved, "ledger.finalized-staging-cleanup",
+               "successful finalize leaked a private staging file");
 
         std::ifstream                  input(ledgerPath, std::ios::binary);
         std::array<unsigned char, 160> header{};
@@ -361,6 +367,22 @@ void test_partition_and_ledger() {
         expect(bool(rollback.abort()) && !std::filesystem::exists(abortEntries), "ledger.rollback",
                "abort left a staged file");
 
+        const auto                     finalizedAbortPath = directory / "finalized-abort.attraj";
+        AtomicV3TrajectoryLedgerStager finalizedRollback(
+          directory, "finalized-abort", role, seed, threshold, u32(trajectory.playedMoves.size()));
+        expect(bool(finalizedRollback.append(trajectory, 0)), "ledger.finalized-abort-append",
+               "append before explicit finalized rollback failed");
+        AtomicV3LedgerMetadata finalizedAbortMetadata;
+        expect(
+          bool(finalizedRollback.finalize(
+            finalizedAbortPath, "0000000000000000000000000000000000000000000000000000000000000000",
+            finalizedAbortMetadata))
+            && std::filesystem::exists(finalizedAbortPath),
+          "ledger.finalized-abort-finalize", "finalized rollback fixture was not published");
+        expect(bool(finalizedRollback.abort()) && !std::filesystem::exists(finalizedAbortPath),
+               "ledger.finalized-explicit-abort",
+               "explicit abort did not remove a finalized rollback output");
+
         const auto                     duplicatePath = directory / "duplicate.attraj";
         AtomicV3TrajectoryLedgerStager duplicateLedger(
           directory, "duplicate", role, seed, threshold, u32(trajectory.playedMoves.size()));
@@ -375,6 +397,9 @@ void test_partition_and_ledger() {
         expect(!duplicateFinalized && !std::filesystem::exists(duplicatePath),
                "ledger.duplicate-group", "duplicate split_group_id was published");
     }
+
+    expect(std::filesystem::exists(ledgerPath), "ledger.finalized-survives-destruction",
+           "destructor removed a successfully finalized trajectory ledger");
 
     std::error_code ec;
     std::filesystem::remove_all(directory, ec);
