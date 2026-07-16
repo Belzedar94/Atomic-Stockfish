@@ -14,6 +14,7 @@ if str(TESTS_DIR) not in sys.path:
 import legacy_pipeline_build_manifest as build_manifest
 import legacy_pipeline_e2e as pipeline
 import run_hito5
+import data_generator
 
 
 IDENTITY_ARGUMENTS = (
@@ -31,6 +32,23 @@ def test_ci_pins_generator_identity_without_weakening_clean_tree_fallback() -> N
     assert "GIT_SHA_FULL    ?=" in makefile
     assert "git status --porcelain --untracked-files=normal" in makefile
     assert "GIT_SHA_FULL: ${{ github.sha }}" in workflow
+
+
+def test_manifest_oracle_uses_the_same_authenticated_ci_pin(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    commit = "89abcdef0123456789abcdef0123456789abcdef"
+    monkeypatch.setenv("GIT_SHA_FULL", commit)
+    assert data_generator.current_repository_commit() == commit
+
+
+@pytest.mark.parametrize("commit", ("", "ABC", "A" * 40, "0" * 39, "g" * 40))
+def test_manifest_oracle_rejects_invalid_ci_pin(
+    commit: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("GIT_SHA_FULL", commit)
+    with pytest.raises(AssertionError, match="40 lower-case hexadecimal"):
+        data_generator.current_repository_commit()
 
 
 @pytest.mark.parametrize(

@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import shutil
@@ -235,6 +236,15 @@ def assert_atomic_bin_v2_dataset(
 
 
 def current_repository_commit() -> str | None:
+    pinned_commit = os.environ.get("GIT_SHA_FULL")
+    if pinned_commit is not None:
+        pinned_commit = pinned_commit.strip()
+        if re.fullmatch(r"[0-9a-f]{40}", pinned_commit) is None:
+            raise AssertionError(
+                "GIT_SHA_FULL must be exactly 40 lower-case hexadecimal digits"
+            )
+        return pinned_commit
+
     try:
         result = subprocess.run(
             ["git", "-C", str(REPO_ROOT), "rev-parse", "HEAD"],
