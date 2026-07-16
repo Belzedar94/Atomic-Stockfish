@@ -1,0 +1,303 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Belzedar94/Atomic-Stockfish/schemas/atomic-v3-producer-attestation-v1.json",
+  "title": "AtomicNNUEV3 producer attestation",
+  "description": "Evidence that the exact distributed campaign was emitted by a pinned data-generator with release-candidate adjudications disabled. It binds the campaign by hash and never points back from the campaign, preserving an acyclic publication graph.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "campaign",
+    "producer_builds",
+    "generation_policy",
+    "verification",
+    "evidence_sha256"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "campaign": {
+      "$ref": "#/$defs/artifact"
+    },
+    "producer_builds": {
+      "$ref": "#/$defs/producerBuildSet"
+    },
+    "generation_policy": {
+      "$ref": "#/$defs/generationPolicy"
+    },
+    "verification": {
+      "$ref": "#/$defs/verification"
+    },
+    "evidence_sha256": {
+      "$ref": "#/$defs/sha256"
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "gitCommit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "positiveUint64": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]{0,19}$",
+      "x-decimal-maximum": "18446744073709551615"
+    },
+    "uint64": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]{0,19})$",
+      "x-decimal-maximum": "18446744073709551615"
+    },
+    "basename": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!\\.{1,2}$)[^/\\\\:\\u0000<>\\\"|?*]+$"
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "file",
+        "bytes",
+        "sha256",
+        "schema_sha256"
+      ],
+      "properties": {
+        "file": {
+          "$ref": "#/$defs/basename"
+        },
+        "bytes": {
+          "$ref": "#/$defs/positiveUint64"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "schema_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "blobArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "file",
+        "bytes",
+        "sha256"
+      ],
+      "properties": {
+        "file": {
+          "$ref": "#/$defs/basename"
+        },
+        "bytes": {
+          "$ref": "#/$defs/positiveUint64"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "producerBuild": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "commit",
+        "binary"
+      ],
+      "properties": {
+        "commit": {
+          "$ref": "#/$defs/gitCommit"
+        },
+        "binary": {
+          "$ref": "#/$defs/blobArtifact"
+        }
+      }
+    },
+    "chunkBuild": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "chunk_index",
+        "binary_sha256"
+      ],
+      "properties": {
+        "chunk_index": {
+          "$ref": "#/$defs/uint64"
+        },
+        "binary_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "producerBuildSet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "algorithm_version",
+        "build_role",
+        "build_set_sha256",
+        "builds",
+        "chunk_builds"
+      ],
+      "properties": {
+        "algorithm_version": {
+          "const": "atomic-v3-trajectory-producer-v1"
+        },
+        "build_role": {
+          "const": "data-generator"
+        },
+        "build_set_sha256": {
+          "description": "Domain-separated digest of the strictly sorted unique binary SHA-256 values in builds; it must equal campaign.producer_build_set_sha256.",
+          "$ref": "#/$defs/sha256"
+        },
+        "builds": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1000,
+          "items": {
+            "$ref": "#/$defs/producerBuild"
+          }
+        },
+        "chunk_builds": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 100000,
+          "items": {
+            "$ref": "#/$defs/chunkBuild"
+          }
+        }
+      }
+    },
+    "generationPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "use_nnue",
+        "adjudicate_draws_by_score",
+        "adjudicate_resignations",
+        "syzygy_disabled",
+        "complete_trajectory_moves_preserved",
+        "role_partition_before_publication"
+      ],
+      "properties": {
+        "use_nnue": {
+          "const": "pure"
+        },
+        "adjudicate_draws_by_score": {
+          "const": false
+        },
+        "adjudicate_resignations": {
+          "const": false
+        },
+        "syzygy_disabled": {
+          "const": true
+        },
+        "complete_trajectory_moves_preserved": {
+          "const": true
+        },
+        "role_partition_before_publication": {
+          "const": true
+        }
+      }
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "campaign_authenticated",
+        "all_chunk_manifests_authenticated",
+        "all_chunk_ledgers_authenticated",
+        "all_partition_hashes_recomputed",
+        "all_stop_reasons_evidenced",
+        "all_chunks_bound_to_authenticated_builds",
+        "no_post_manifest_mutation",
+        "transactional_publication",
+        "strict_eof"
+      ],
+      "properties": {
+        "campaign_authenticated": {
+          "const": true
+        },
+        "all_chunk_manifests_authenticated": {
+          "const": true
+        },
+        "all_chunk_ledgers_authenticated": {
+          "const": true
+        },
+        "all_partition_hashes_recomputed": {
+          "const": true
+        },
+        "all_stop_reasons_evidenced": {
+          "const": true
+        },
+        "all_chunks_bound_to_authenticated_builds": {
+          "const": true
+        },
+        "no_post_manifest_mutation": {
+          "const": true
+        },
+        "transactional_publication": {
+          "const": true
+        },
+        "strict_eof": {
+          "const": true
+        }
+      }
+    }
+  },
+  "x-evidence-hash": {
+    "algorithm": "SHA-256",
+    "domain_ascii_hex": "61746f6d69632d76332d70726f64756365722d6174746573746174696f6e2d763100",
+    "component_order": [
+      "campaign_sha256_raw32",
+      "algorithm_version_length_u16_le",
+      "algorithm_version_ascii",
+      "build_role_length_u16_le",
+      "build_role_ascii",
+      "build_set_sha256_raw32",
+      "build_count_u32_le",
+      "for_each_build_sorted_by_binary_sha256: producer_commit_raw20 then producer_binary_sha256_raw32",
+      "chunk_mapping_count_u32_le",
+      "for_each_chunk_mapping_in_campaign_order: chunk_index_u64_le then producer_binary_sha256_raw32",
+      "generation_policy_use_nnue_length_u16_le",
+      "generation_policy_use_nnue_ascii",
+      "five_generation_policy_booleans_in_declaration_order",
+      "nine_verification_values_in_declaration_order"
+    ],
+    "boolean_encoding": "false=0,true=1",
+    "formula": "SHA256(domain || declared components); evidence_sha256 is excluded",
+    "ordering": "builds are strictly sorted by binary.sha256 and unique; build_set_sha256 is recomputed over that exact list; chunk_builds exactly follow campaign chunk order and every digest equals the producer_build_sha256 declared by that campaign chunk"
+  },
+  "x-producer-build-set-hash": {
+    "algorithm": "SHA-256",
+    "domain_ascii_hex": "61746f6d69632d76332d70726f64756365722d6275696c642d7365742d763100",
+    "component_order": [
+      "build_count_u32_le",
+      "each_unique_binary_sha256_raw32_in_strict_lexicographic_order"
+    ],
+    "formula": "SHA256(domain || declared components)"
+  },
+  "x-wire": {
+    "encoding": "utf-8",
+    "bom": "forbidden",
+    "canonical_json": {
+      "key_order": "schema-declaration-order",
+      "separators": [
+        ",",
+        ":"
+      ],
+      "ensure_ascii": false,
+      "allow_nan": false,
+      "insignificant_whitespace": "forbidden"
+    },
+    "trailing_lf_count": 1,
+    "maximum_bytes": 16777216,
+    "file_type": "regular",
+    "symbolic_links": "forbidden",
+    "snapshot_stability": "same-handle-fstat-before-and-after"
+  }
+}

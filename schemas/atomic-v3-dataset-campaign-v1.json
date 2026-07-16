@@ -1,0 +1,416 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Belzedar94/Atomic-Stockfish/schemas/atomic-v3-dataset-campaign-v1.json",
+  "title": "AtomicNNUEV3 distributed dataset campaign",
+  "description": "Acyclic root for an ordered multi-chunk AtomicNNUEV3 dataset. Every chunk retains its own truthful Atomic BIN V2 seed and role artifacts; the campaign never invents one synthetic seed for distributed generation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "campaign_id",
+    "status",
+    "schemas",
+    "homogeneous_profile_sha256",
+    "producer_build_set_sha256",
+    "seed_schedule",
+    "chunks",
+    "totals",
+    "collection_sha256",
+    "verification"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "campaign_id": {
+      "$ref": "#/$defs/id"
+    },
+    "status": {
+      "const": "completed"
+    },
+    "schemas": {
+      "$ref": "#/$defs/schemas"
+    },
+    "homogeneous_profile_sha256": {
+      "description": "Domain-separated hash shared by every chunk. It binds engine/generator/tools commits, teacher network, opening book and all semantic generation options while deliberately excluding only the per-chunk seed and output volume/layout fields.",
+      "$ref": "#/$defs/sha256"
+    },
+    "producer_build_set_sha256": {
+      "description": "Domain-separated digest of the exact sorted set of content-addressed producer binaries allowed to emit chunks in this campaign.",
+      "$ref": "#/$defs/sha256"
+    },
+    "seed_schedule": {
+      "$ref": "#/$defs/seedSchedule"
+    },
+    "chunks": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 100000,
+      "items": {
+        "$ref": "#/$defs/chunk"
+      }
+    },
+    "totals": {
+      "$ref": "#/$defs/totals"
+    },
+    "collection_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "verification": {
+      "$ref": "#/$defs/verification"
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "uint64": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]{0,19})$",
+      "x-decimal-maximum": "18446744073709551615"
+    },
+    "positiveUint64": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]{0,19}$",
+      "x-decimal-maximum": "18446744073709551615"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"
+    },
+    "basename": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!\\.{1,2}$)[^/\\\\:\\u0000<>\\\"|?*]+$"
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "file",
+        "bytes",
+        "sha256",
+        "schema_sha256"
+      ],
+      "properties": {
+        "file": {
+          "$ref": "#/$defs/basename"
+        },
+        "bytes": {
+          "$ref": "#/$defs/positiveUint64"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "schema_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "schemas": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "feature",
+        "data",
+        "manifest",
+        "trajectory_ledger",
+        "index_coverage",
+        "statistics",
+        "coverage_policy",
+        "split_audit"
+      ],
+      "properties": {
+        "feature": {
+          "$ref": "#/$defs/sha256"
+        },
+        "data": {
+          "$ref": "#/$defs/sha256"
+        },
+        "manifest": {
+          "$ref": "#/$defs/sha256"
+        },
+        "trajectory_ledger": {
+          "$ref": "#/$defs/sha256"
+        },
+        "index_coverage": {
+          "$ref": "#/$defs/sha256"
+        },
+        "statistics": {
+          "$ref": "#/$defs/sha256"
+        },
+        "coverage_policy": {
+          "$ref": "#/$defs/sha256"
+        },
+        "split_audit": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "seedSchedule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "base_seed",
+        "first_chunk_index",
+        "chunk_count"
+      ],
+      "properties": {
+        "method": {
+          "const": "openbench-add-chunk-index-v1"
+        },
+        "base_seed": {
+          "$ref": "#/$defs/uint64"
+        },
+        "first_chunk_index": {
+          "$ref": "#/$defs/uint64"
+        },
+        "chunk_count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100000
+        }
+      }
+    },
+    "partition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "first_record",
+        "records",
+        "trajectories",
+        "moves",
+        "manifest",
+        "trajectory_ledger",
+        "index_coverage",
+        "statistics"
+      ],
+      "properties": {
+        "first_record": {
+          "$ref": "#/$defs/uint64"
+        },
+        "records": {
+          "$ref": "#/$defs/positiveUint64"
+        },
+        "trajectories": {
+          "$ref": "#/$defs/positiveUint64"
+        },
+        "moves": {
+          "$ref": "#/$defs/positiveUint64"
+        },
+        "manifest": {
+          "$ref": "#/$defs/artifact"
+        },
+        "trajectory_ledger": {
+          "$ref": "#/$defs/artifact"
+        },
+        "index_coverage": {
+          "$ref": "#/$defs/artifact"
+        },
+        "statistics": {
+          "$ref": "#/$defs/artifact"
+        }
+      }
+    },
+    "chunk": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "index",
+        "generation_seed",
+        "producer_build_sha256",
+        "partition_config_sha256",
+        "coverage_policy",
+        "train",
+        "validation",
+        "split_audit"
+      ],
+      "properties": {
+        "index": {
+          "$ref": "#/$defs/uint64"
+        },
+        "generation_seed": {
+          "$ref": "#/$defs/uint64"
+        },
+        "producer_build_sha256": {
+          "description": "SHA-256 of the authenticated data-generator binary that produced this chunk.",
+          "$ref": "#/$defs/sha256"
+        },
+        "partition_config_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "coverage_policy": {
+          "$ref": "#/$defs/artifact"
+        },
+        "train": {
+          "$ref": "#/$defs/partition"
+        },
+        "validation": {
+          "$ref": "#/$defs/partition"
+        },
+        "split_audit": {
+          "$ref": "#/$defs/artifact"
+        }
+      }
+    },
+    "totals": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "train_records",
+        "validation_records",
+        "train_trajectories",
+        "validation_trajectories",
+        "train_moves",
+        "validation_moves",
+        "records"
+      ],
+      "properties": {
+        "train_records": {
+          "$ref": "#/$defs/positiveUint64"
+        },
+        "validation_records": {
+          "$ref": "#/$defs/positiveUint64"
+        },
+        "train_trajectories": {
+          "$ref": "#/$defs/positiveUint64"
+        },
+        "validation_trajectories": {
+          "$ref": "#/$defs/positiveUint64"
+        },
+        "train_moves": {
+          "$ref": "#/$defs/positiveUint64"
+        },
+        "validation_moves": {
+          "$ref": "#/$defs/positiveUint64"
+        },
+        "records": {
+          "$ref": "#/$defs/positiveUint64"
+        }
+      }
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "chunk_indices_contiguous",
+        "generation_seeds_recomputed",
+        "role_offsets_contiguous",
+        "totals_recomputed",
+        "all_artifacts_distinct",
+        "all_chunk_structural_bundles_validated",
+        "homogeneous_profile_recomputed",
+        "collection_hash_recomputed",
+        "strict_eof"
+      ],
+      "properties": {
+        "chunk_indices_contiguous": {
+          "const": true
+        },
+        "generation_seeds_recomputed": {
+          "const": true
+        },
+        "role_offsets_contiguous": {
+          "const": true
+        },
+        "totals_recomputed": {
+          "const": true
+        },
+        "all_artifacts_distinct": {
+          "const": true
+        },
+        "all_chunk_structural_bundles_validated": {
+          "const": true
+        },
+        "homogeneous_profile_recomputed": {
+          "const": true
+        },
+        "collection_hash_recomputed": {
+          "const": true
+        },
+        "strict_eof": {
+          "const": true
+        }
+      }
+    }
+  },
+  "x-collection-hash": {
+    "algorithm": "SHA-256",
+    "domain_ascii_hex": "61746f6d69632d76332d646174617365742d63616d706169676e2d763100",
+    "component_order": [
+      "campaign_id_length_u16_le",
+      "campaign_id_utf8",
+      "eight_schema_sha256_values_raw32_in_declaration_order",
+      "homogeneous_profile_sha256_raw32",
+      "producer_build_set_sha256_raw32",
+      "seed_method_length_u16_le",
+      "seed_method_ascii",
+      "base_seed_u64_le",
+      "first_chunk_index_u64_le",
+      "chunk_count_u32_le",
+      "each_chunk_in_array_order",
+      "seven_totals_u64_le_in_declaration_order"
+    ],
+    "chunk_component_order": [
+      "index_u64_le",
+      "generation_seed_u64_le",
+      "producer_build_sha256_raw32",
+      "partition_config_sha256_raw32",
+      "coverage_policy_sha256_raw32",
+      "train_first_record_records_trajectories_moves_u64_le",
+      "train_manifest_ledger_coverage_statistics_sha256_raw32",
+      "validation_first_record_records_trajectories_moves_u64_le",
+      "validation_manifest_ledger_coverage_statistics_sha256_raw32",
+      "split_audit_sha256_raw32"
+    ],
+    "formula": "SHA256(domain || declared components); collection_sha256 and verification are excluded to avoid self-reference"
+  },
+  "x-homogeneous-profile": {
+    "algorithm": "SHA-256",
+    "domain_ascii_hex": "61746f6d69632d76332d63616d706169676e2d70726f66696c652d763100",
+    "includes": [
+      "partition.method",
+      "partition.split_seed",
+      "partition.validation_threshold_u64",
+      "partition.provenance.engine_commit",
+      "partition.provenance.generator_commit",
+      "partition.provenance.tools_commit",
+      "partition.provenance.teacher_network_sha256",
+      "partition.provenance.opening_book_sha256",
+      "generation_profile qsearch/filter/opening/adjudication fields",
+      "manifest generation atomic960/threads/hash/use_nnue and every semantic option"
+    ],
+    "excludes": [
+      "generation.resolved_seed",
+      "generation.options.requested_records",
+      "generation.options.records_per_shard",
+      "generation.options.random_file_name",
+      "generation_profile.generation_seed",
+      "generation_profile.atomic_bin_v2_generation_sha256"
+    ],
+    "rule": "Every authenticated campaign chunk must recompute exactly the one top-level homogeneous_profile_sha256."
+  },
+  "x-seed-derivation": "generation_seed = base_seed + chunk.index, checked in uint64; chunk indices start at first_chunk_index and are strictly contiguous",
+  "x-publication-dag": "policy/manifests/ledgers/coverage/stats/split-audit -> campaign -> producer-attestation -> semantic/reachability attestations -> training-run-v2",
+  "x-wire": {
+    "encoding": "utf-8",
+    "bom": "forbidden",
+    "canonical_json": {
+      "key_order": "schema-declaration-order",
+      "separators": [
+        ",",
+        ":"
+      ],
+      "ensure_ascii": false,
+      "allow_nan": false,
+      "insignificant_whitespace": "forbidden"
+    },
+    "trailing_lf_count": 1,
+    "maximum_bytes": 16777216,
+    "file_type": "regular",
+    "symbolic_links": "forbidden",
+    "snapshot_stability": "same-handle-fstat-before-and-after"
+  }
+}

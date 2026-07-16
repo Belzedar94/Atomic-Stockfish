@@ -1,0 +1,451 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Belzedar94/Atomic-Stockfish/schemas/atomic-v3-reachability-attestation-v1.json",
+  "title": "AtomicNNUEV3 independent reachability attestation",
+  "description": "Authenticated evidence that a pinned dataset-independent oracle reproduced every physical AtomicNNUEV3 reachability mask, derived the HM training and virtual-factor masks, and matched the aggregate precommitted by every coverage policy authenticated by the distributed campaign.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "campaign",
+    "producer_attestation",
+    "feature_schema",
+    "oracle",
+    "oracle_output",
+    "roles",
+    "reachability_mask_sha256",
+    "verification",
+    "evidence_sha256"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "campaign": {
+      "$ref": "#/$defs/artifact"
+    },
+    "producer_attestation": {
+      "$ref": "#/$defs/artifact"
+    },
+    "feature_schema": {
+      "$ref": "#/$defs/blobArtifact"
+    },
+    "oracle": {
+      "$ref": "#/$defs/oracle"
+    },
+    "oracle_output": {
+      "$ref": "#/$defs/oracleOutputArtifact"
+    },
+    "roles": {
+      "$ref": "#/$defs/roles"
+    },
+    "reachability_mask_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "verification": {
+      "$ref": "#/$defs/verification"
+    },
+    "evidence_sha256": {
+      "$ref": "#/$defs/sha256"
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "gitCommit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "positiveUint64": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]{0,19}$",
+      "x-decimal-maximum": "18446744073709551615"
+    },
+    "basename": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!\\.{1,2}$)[^/\\\\:\\u0000<>\\\"|?*]+$"
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "file",
+        "bytes",
+        "sha256",
+        "schema_sha256"
+      ],
+      "properties": {
+        "file": {
+          "$ref": "#/$defs/basename"
+        },
+        "bytes": {
+          "$ref": "#/$defs/positiveUint64"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "schema_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "blobArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "file",
+        "bytes",
+        "sha256"
+      ],
+      "properties": {
+        "file": {
+          "$ref": "#/$defs/basename"
+        },
+        "bytes": {
+          "$ref": "#/$defs/positiveUint64"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "oracleOutputArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "file",
+        "bytes",
+        "sha256"
+      ],
+      "properties": {
+        "file": {
+          "$ref": "#/$defs/basename"
+        },
+        "bytes": {
+          "const": "18772"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "oracle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "commit",
+        "binary",
+        "algorithm_version"
+      ],
+      "properties": {
+        "commit": {
+          "$ref": "#/$defs/gitCommit"
+        },
+        "binary": {
+          "$ref": "#/$defs/blobArtifact"
+        },
+        "algorithm_version": {
+          "const": "atomic-v3-symbolic-reachability-v1"
+        }
+      }
+    },
+    "halfKaMask": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "indices",
+        "bytes",
+        "sha256"
+      ],
+      "properties": {
+        "indices": {
+          "const": 22528
+        },
+        "bytes": {
+          "const": 2816
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "capturePairMask": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "indices",
+        "bytes",
+        "sha256"
+      ],
+      "properties": {
+        "indices": {
+          "const": 40012
+        },
+        "bytes": {
+          "const": 5002
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "kingBlastEpMask": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "indices",
+        "bytes",
+        "sha256"
+      ],
+      "properties": {
+        "indices": {
+          "const": 2304
+        },
+        "bytes": {
+          "const": 288
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "blastRingMask": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "indices",
+        "bytes",
+        "sha256"
+      ],
+      "properties": {
+        "indices": {
+          "const": 10240
+        },
+        "bytes": {
+          "const": 1280
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "hmTrainingMask": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "indices",
+        "bytes",
+        "sha256"
+      ],
+      "properties": {
+        "indices": {
+          "const": 24576
+        },
+        "bytes": {
+          "const": 3072
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "hmVirtualMask": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "indices",
+        "bytes",
+        "sha256"
+      ],
+      "properties": {
+        "indices": {
+          "const": 768
+        },
+        "bytes": {
+          "const": 96
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "roleEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "half_ka_v2_atomic_hm",
+        "atomic_capture_pair",
+        "atomic_king_blast_ep",
+        "atomic_blast_ring",
+        "hm_training",
+        "hm_virtual_factors"
+      ],
+      "properties": {
+        "half_ka_v2_atomic_hm": {
+          "$ref": "#/$defs/halfKaMask"
+        },
+        "atomic_capture_pair": {
+          "$ref": "#/$defs/capturePairMask"
+        },
+        "atomic_king_blast_ep": {
+          "$ref": "#/$defs/kingBlastEpMask"
+        },
+        "atomic_blast_ring": {
+          "$ref": "#/$defs/blastRingMask"
+        },
+        "hm_training": {
+          "$ref": "#/$defs/hmTrainingMask"
+        },
+        "hm_virtual_factors": {
+          "$ref": "#/$defs/hmVirtualMask"
+        }
+      }
+    },
+    "roles": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "WHITE",
+        "BLACK"
+      ],
+      "properties": {
+        "WHITE": {
+          "$ref": "#/$defs/roleEvidence"
+        },
+        "BLACK": {
+          "$ref": "#/$defs/roleEvidence"
+        }
+      }
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "campaign_authenticated",
+        "producer_attestation_authenticated",
+        "feature_schema_authenticated",
+        "oracle_binary_authenticated",
+        "oracle_used_no_dataset_artifacts",
+        "all_physical_masks_reproduced",
+        "hm_training_projection_recomputed",
+        "hm_virtual_projection_recomputed",
+        "aggregate_hash_recomputed",
+        "all_campaign_policy_masks_matched",
+        "strict_eof"
+      ],
+      "properties": {
+        "campaign_authenticated": {
+          "const": true
+        },
+        "producer_attestation_authenticated": {
+          "const": true
+        },
+        "feature_schema_authenticated": {
+          "const": true
+        },
+        "oracle_binary_authenticated": {
+          "const": true
+        },
+        "oracle_used_no_dataset_artifacts": {
+          "const": true
+        },
+        "all_physical_masks_reproduced": {
+          "const": true
+        },
+        "hm_training_projection_recomputed": {
+          "const": true
+        },
+        "hm_virtual_projection_recomputed": {
+          "const": true
+        },
+        "aggregate_hash_recomputed": {
+          "const": true
+        },
+        "all_campaign_policy_masks_matched": {
+          "const": true
+        },
+        "strict_eof": {
+          "const": true
+        }
+      }
+    }
+  },
+  "x-oracle-output-wire": {
+    "description": "The oracle output contains only the eight independent physical bitmaps. HM training and virtual-factor masks are derived during validation and are not trusted oracle outputs.",
+    "byte_order": "canonical bitmap bits; index i is bit i modulo 8, least-significant-bit first",
+    "file_size": 18772,
+    "layout": [
+      "WHITE.half_ka_v2_atomic_hm@0+2816",
+      "WHITE.atomic_capture_pair@2816+5002",
+      "WHITE.atomic_king_blast_ep@7818+288",
+      "WHITE.atomic_blast_ring@8106+1280",
+      "BLACK.half_ka_v2_atomic_hm@9386+2816",
+      "BLACK.atomic_capture_pair@12202+5002",
+      "BLACK.atomic_king_blast_ep@17204+288",
+      "BLACK.atomic_blast_ring@17492+1280"
+    ]
+  },
+  "x-mask-hash": {
+    "source_contract": "schemas/atomic-v3-index-coverage-v1.json#reachability_masks.per_mask_hash",
+    "verification": "Recompute each physical digest from oracle_output and the authenticated feature schema. Derive both HM masks from each physical HM bitmap and then recompute their digests with the frozen kind IDs."
+  },
+  "x-aggregate-hash": {
+    "source_contract": "schemas/atomic-v3-index-coverage-v1.json#reachability_masks.aggregate_hash",
+    "digest_order": [
+      "WHITE.half_ka_v2_atomic_hm",
+      "WHITE.atomic_capture_pair",
+      "WHITE.atomic_king_blast_ep",
+      "WHITE.atomic_blast_ring",
+      "WHITE.hm_training",
+      "WHITE.hm_virtual_factors",
+      "BLACK.half_ka_v2_atomic_hm",
+      "BLACK.atomic_capture_pair",
+      "BLACK.atomic_king_blast_ep",
+      "BLACK.atomic_blast_ring",
+      "BLACK.hm_training",
+      "BLACK.hm_virtual_factors"
+    ]
+  },
+  "x-evidence-hash": {
+    "algorithm": "SHA-256",
+    "domain_ascii_hex": "61746f6d69632d76332d72656163686162696c6974792d6174746573746174696f6e2d763100",
+    "component_order": [
+      "campaign_sha256_raw32",
+      "producer_attestation_sha256_raw32",
+      "feature_schema_sha256_raw32",
+      "oracle_commit_raw20",
+      "oracle_binary_sha256_raw32",
+      "oracle_algorithm_length_u16_le",
+      "oracle_algorithm_ascii",
+      "oracle_output_sha256_raw32",
+      "twelve_mask_sha256_values_raw32_in_aggregate_order",
+      "reachability_mask_sha256_raw32",
+      "eleven_verification_values_in_declaration_order"
+    ],
+    "boolean_encoding": "false=0,true=1",
+    "formula": "SHA256(domain || declared components); evidence_sha256 is excluded"
+  },
+  "x-publication-dag": "campaign -> producer-attestation -> reachability-attestation -> training-run-v2; neither campaign nor producer-attestation points back to this document",
+  "x-wire": {
+    "encoding": "utf-8",
+    "bom": "forbidden",
+    "canonical_json": {
+      "key_order": "schema-declaration-order",
+      "separators": [
+        ",",
+        ":"
+      ],
+      "ensure_ascii": false,
+      "allow_nan": false,
+      "insignificant_whitespace": "forbidden"
+    },
+    "trailing_lf_count": 1,
+    "maximum_bytes": 16777216,
+    "file_type": "regular",
+    "symbolic_links": "forbidden",
+    "snapshot_stability": "same-handle-fstat-before-and-after"
+  }
+}

@@ -1,0 +1,477 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Belzedar94/Atomic-Stockfish/schemas/atomic-v3-training-run-manifest-v2.json",
+  "title": "AtomicNNUEV3 completed distributed training-run manifest",
+  "description": "Version 2 structural/authentication manifest for a claimed completed V3 training run over a distributed dataset campaign. It authenticates the declared campaign, producer, semantic and independent reachability evidence through an acyclic input-bundle hash while preserving V1 byte-for-byte. It does not by itself prove controlled execution or make training outputs publication-ready.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run_id",
+    "status",
+    "run_definition_sha256",
+    "input_bundle_sha256",
+    "inputs",
+    "trainer",
+    "schedule",
+    "outputs",
+    "verification"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 2
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"
+    },
+    "status": {
+      "const": "completed"
+    },
+    "run_definition_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "input_bundle_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "inputs": {
+      "$ref": "#/$defs/inputs"
+    },
+    "trainer": {
+      "$ref": "#/$defs/trainer"
+    },
+    "schedule": {
+      "$ref": "#/$defs/schedule"
+    },
+    "outputs": {
+      "$ref": "#/$defs/outputs"
+    },
+    "verification": {
+      "$ref": "#/$defs/verification"
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "gitCommit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "uint64": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]{0,19})$",
+      "x-decimal-maximum": "18446744073709551615"
+    },
+    "positiveUint64": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]{0,19}$",
+      "x-decimal-maximum": "18446744073709551615"
+    },
+    "basename": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!\\.{1,2}$)[^/\\\\:\\u0000<>\\\"|?*]+$"
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "file",
+        "bytes",
+        "sha256"
+      ],
+      "properties": {
+        "file": {
+          "$ref": "#/$defs/basename"
+        },
+        "bytes": {
+          "$ref": "#/$defs/uint64"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "typedArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "file",
+        "bytes",
+        "sha256",
+        "schema_sha256"
+      ],
+      "properties": {
+        "file": {
+          "$ref": "#/$defs/basename"
+        },
+        "bytes": {
+          "$ref": "#/$defs/positiveUint64"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "schema_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "nonEmptyArtifact": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/artifact"
+        },
+        {
+          "properties": {
+            "bytes": {
+              "$ref": "#/$defs/positiveUint64"
+            }
+          }
+        }
+      ]
+    },
+    "inputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "feature_schema",
+        "dataset_schema",
+        "manifest_schema",
+        "trajectory_ledger_schema",
+        "index_coverage_schema",
+        "statistics_schema",
+        "coverage_policy_schema",
+        "split_audit_schema",
+        "training_environment_schema",
+        "dataset_campaign_schema",
+        "producer_attestation_schema",
+        "semantic_audit_schema",
+        "reachability_attestation_schema",
+        "campaign",
+        "producer_attestation",
+        "semantic_audit",
+        "reachability_attestation"
+      ],
+      "properties": {
+        "feature_schema": {
+          "$ref": "#/$defs/artifact"
+        },
+        "dataset_schema": {
+          "$ref": "#/$defs/artifact"
+        },
+        "manifest_schema": {
+          "$ref": "#/$defs/artifact"
+        },
+        "trajectory_ledger_schema": {
+          "$ref": "#/$defs/artifact"
+        },
+        "index_coverage_schema": {
+          "$ref": "#/$defs/artifact"
+        },
+        "statistics_schema": {
+          "$ref": "#/$defs/artifact"
+        },
+        "coverage_policy_schema": {
+          "$ref": "#/$defs/artifact"
+        },
+        "split_audit_schema": {
+          "$ref": "#/$defs/artifact"
+        },
+        "training_environment_schema": {
+          "$ref": "#/$defs/typedArtifact"
+        },
+        "dataset_campaign_schema": {
+          "$ref": "#/$defs/artifact"
+        },
+        "producer_attestation_schema": {
+          "$ref": "#/$defs/artifact"
+        },
+        "semantic_audit_schema": {
+          "$ref": "#/$defs/artifact"
+        },
+        "reachability_attestation_schema": {
+          "$ref": "#/$defs/artifact"
+        },
+        "campaign": {
+          "$ref": "#/$defs/typedArtifact"
+        },
+        "producer_attestation": {
+          "$ref": "#/$defs/typedArtifact"
+        },
+        "semantic_audit": {
+          "$ref": "#/$defs/typedArtifact"
+        },
+        "reachability_attestation": {
+          "$ref": "#/$defs/typedArtifact"
+        }
+      }
+    },
+    "trainer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "commit",
+        "artifact_sha256",
+        "binary",
+        "dependency_lock",
+        "config",
+        "training_seed",
+        "deterministic_algorithms",
+        "environment"
+      ],
+      "properties": {
+        "commit": {
+          "$ref": "#/$defs/gitCommit"
+        },
+        "artifact_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "binary": {
+          "$ref": "#/$defs/nonEmptyArtifact",
+          "description": "Exact trainer executable or immutable trainer package; its SHA-256 must equal artifact_sha256 and an operator trust pin."
+        },
+        "dependency_lock": {
+          "$ref": "#/$defs/nonEmptyArtifact",
+          "description": "Exact lockfile or immutable dependency manifest consumed by the trainer."
+        },
+        "config": {
+          "$ref": "#/$defs/artifact"
+        },
+        "training_seed": {
+          "$ref": "#/$defs/uint64"
+        },
+        "deterministic_algorithms": {
+          "const": true
+        },
+        "environment": {
+          "$ref": "#/$defs/typedArtifact",
+          "description": "Canonical environment descriptor authenticated by its pinned schema and run_definition_sha256. Its content cross-binds the trainer binary and dependency lock."
+        }
+      }
+    },
+    "schedule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "batch_size",
+        "optimizer_steps",
+        "epochs",
+        "validation_interval_steps"
+      ],
+      "properties": {
+        "batch_size": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295
+        },
+        "optimizer_steps": {
+          "$ref": "#/$defs/positiveUint64"
+        },
+        "epochs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295
+        },
+        "validation_interval_steps": {
+          "$ref": "#/$defs/positiveUint64"
+        }
+      }
+    },
+    "outputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "checkpoint",
+        "network",
+        "training_log",
+        "metrics"
+      ],
+      "properties": {
+        "checkpoint": {
+          "$ref": "#/$defs/nonEmptyArtifact"
+        },
+        "network": {
+          "$ref": "#/$defs/nonEmptyArtifact"
+        },
+        "training_log": {
+          "$ref": "#/$defs/artifact"
+        },
+        "metrics": {
+          "$ref": "#/$defs/artifact"
+        }
+      }
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "all_inputs_authenticated",
+        "campaign_passed",
+        "producer_attestation_passed",
+        "semantic_audit_passed",
+        "reachability_attestation_passed",
+        "cross_artifact_hash_chain_passed",
+        "run_definition_recomputed",
+        "checkpoint_input_bundle_matches",
+        "checkpoint_run_definition_matches",
+        "checkpoint_campaign_matches",
+        "checkpoint_producer_attestation_matches",
+        "checkpoint_semantic_audit_matches",
+        "checkpoint_reachability_attestation_matches",
+        "network_strict_reimport_passed",
+        "network_engine_load_passed",
+        "strict_eof"
+      ],
+      "properties": {
+        "all_inputs_authenticated": {
+          "const": true
+        },
+        "campaign_passed": {
+          "const": true
+        },
+        "producer_attestation_passed": {
+          "const": true
+        },
+        "semantic_audit_passed": {
+          "const": true
+        },
+        "reachability_attestation_passed": {
+          "const": true
+        },
+        "cross_artifact_hash_chain_passed": {
+          "const": true
+        },
+        "run_definition_recomputed": {
+          "const": true
+        },
+        "checkpoint_input_bundle_matches": {
+          "const": true
+        },
+        "checkpoint_run_definition_matches": {
+          "const": true
+        },
+        "checkpoint_campaign_matches": {
+          "const": true
+        },
+        "checkpoint_producer_attestation_matches": {
+          "const": true
+        },
+        "checkpoint_semantic_audit_matches": {
+          "const": true
+        },
+        "checkpoint_reachability_attestation_matches": {
+          "const": true
+        },
+        "network_strict_reimport_passed": {
+          "const": true
+        },
+        "network_engine_load_passed": {
+          "const": true
+        },
+        "strict_eof": {
+          "const": true
+        }
+      }
+    }
+  },
+  "x-run-definition": {
+    "algorithm": "SHA-256",
+    "domain_ascii_hex": "61746f6d69632d76332d72756e2d646566696e6974696f6e2d763200",
+    "component_order": [
+      "trainer.commit_raw20",
+      "trainer.artifact_sha256_raw32",
+      "trainer.dependency_lock.sha256_raw32",
+      "trainer.config.sha256_raw32",
+      "trainer.environment.schema_sha256_raw32",
+      "trainer.environment.sha256_raw32",
+      "trainer.training_seed_u64_le",
+      "trainer.deterministic_algorithms_u8",
+      "schedule.batch_size_u32_le",
+      "schedule.optimizer_steps_u64_le",
+      "schedule.epochs_u32_le",
+      "schedule.validation_interval_steps_u64_le"
+    ],
+    "component_encodings": {
+      "trainer.commit_raw20": "20 decoded bytes of the lowercase 40-hex Git commit",
+      "trainer.deterministic_algorithms_u8": "0 for false, 1 for true",
+      "trainer.training_seed_u64_le": "the decimal-string value encoded as unsigned uint64 little-endian",
+      "schedule.batch_size_u32_le": "the JSON integer encoded as unsigned uint32 little-endian",
+      "schedule.optimizer_steps_u64_le": "the decimal-string value encoded as unsigned uint64 little-endian",
+      "schedule.epochs_u32_le": "the JSON integer encoded as unsigned uint32 little-endian",
+      "schedule.validation_interval_steps_u64_le": "the decimal-string value encoded as unsigned uint64 little-endian"
+    },
+    "formula": "SHA256(domain || trainer.commit_raw20 || trainer.artifact_sha256_raw32 || trainer.dependency_lock.sha256_raw32 || trainer.config.sha256_raw32 || trainer.environment.schema_sha256_raw32 || trainer.environment.sha256_raw32 || trainer.training_seed_u64_le || trainer.deterministic_algorithms_u8 || schedule.batch_size_u32_le || schedule.optimizer_steps_u64_le || schedule.epochs_u32_le || schedule.validation_interval_steps_u64_le)",
+    "result_field": "run_definition_sha256",
+    "acyclicity": "Only pre-run trainer, dependency lock, configuration, authenticated environment, seed and schedule values are hashed. Campaign evidence, outputs, manifest bytes and input_bundle_sha256 are excluded."
+  },
+  "x-input-bundle": {
+    "algorithm": "SHA-256",
+    "domain_ascii_hex": "61746f6d69632d76332d696e7075742d62756e646c652d763200",
+    "component_order": [
+      "inputs.feature_schema.sha256_raw32",
+      "inputs.dataset_schema.sha256_raw32",
+      "inputs.manifest_schema.sha256_raw32",
+      "inputs.trajectory_ledger_schema.sha256_raw32",
+      "inputs.index_coverage_schema.sha256_raw32",
+      "inputs.statistics_schema.sha256_raw32",
+      "inputs.coverage_policy_schema.sha256_raw32",
+      "inputs.split_audit_schema.sha256_raw32",
+      "inputs.training_environment_schema.sha256_raw32",
+      "inputs.dataset_campaign_schema.sha256_raw32",
+      "inputs.producer_attestation_schema.sha256_raw32",
+      "inputs.semantic_audit_schema.sha256_raw32",
+      "inputs.reachability_attestation_schema.sha256_raw32",
+      "inputs.campaign.sha256_raw32",
+      "inputs.producer_attestation.sha256_raw32",
+      "inputs.semantic_audit.sha256_raw32",
+      "inputs.reachability_attestation.sha256_raw32",
+      "run_definition_sha256_raw32"
+    ],
+    "formula": "SHA256(domain || seventeen-input-artifact-sha256-values-as-raw32-in-declared-order || run_definition_sha256_raw32)",
+    "cross_artifact_bindings": [
+      "producer_attestation.campaign.sha256 equals inputs.campaign.sha256",
+      "semantic_audit.campaign.sha256 equals inputs.campaign.sha256",
+      "semantic_audit.producer_attestation.sha256 equals inputs.producer_attestation.sha256",
+      "reachability_attestation.campaign.sha256 equals inputs.campaign.sha256",
+      "reachability_attestation.producer_attestation.sha256 equals inputs.producer_attestation.sha256",
+      "campaign.schemas equal the first eight schema input hashes",
+      "inputs.training_environment_schema.schema_sha256 is operator-pinned and inputs.training_environment_schema.sha256 identifies the exact environment schema",
+      "trainer.environment.schema_sha256 equals inputs.training_environment_schema.sha256",
+      "the authenticated environment content binds trainer.binary.sha256 and trainer.dependency_lock.sha256",
+      "all four evidence artifact schema_sha256 fields equal their corresponding schema input hashes"
+    ],
+    "checkpoint_fields": [
+      "input_bundle_sha256",
+      "run_definition_sha256",
+      "feature_schema_sha256",
+      "campaign_sha256",
+      "producer_attestation_sha256",
+      "semantic_audit_sha256",
+      "reachability_attestation_sha256"
+    ],
+    "acyclicity": "The bundle contains only schemas, completed input evidence and the pre-run definition. It excludes outputs, the completed manifest bytes and input_bundle_sha256."
+  },
+  "x-publication-dag": "campaign -> producer-attestation -> semantic-audit and reachability-attestation -> training-run-v2 -> checkpoint/network; no earlier artifact points at a later artifact",
+  "x-publication": "Write outputs and manifest to temporary paths, fsync, re-read and authenticate, then atomically publish; never overwrite or append.",
+  "x-wire": {
+    "encoding": "utf-8",
+    "bom": "forbidden",
+    "canonical_json": {
+      "key_order": "schema-declaration-order",
+      "separators": [
+        ",",
+        ":"
+      ],
+      "ensure_ascii": false,
+      "allow_nan": false,
+      "insignificant_whitespace": "forbidden"
+    },
+    "trailing_lf_count": 1,
+    "maximum_bytes": 16777216,
+    "file_type": "regular",
+    "symbolic_links": "forbidden",
+    "snapshot_stability": "same-handle-fstat-before-and-after"
+  }
+}

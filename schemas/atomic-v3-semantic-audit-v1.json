@@ -1,0 +1,359 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Belzedar94/Atomic-Stockfish/schemas/atomic-v3-semantic-audit-v1.json",
+  "title": "AtomicNNUEV3 engine-backed semantic audit",
+  "description": "Authenticated evidence that every campaign trajectory and retained record was legally replayed by a pinned Atomic engine, that terminal labels were reproduced, and that the exact ordered V3 feature-input-key sets are disjoint.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "campaign",
+    "producer_attestation",
+    "scanner",
+    "roles",
+    "intersections",
+    "verification",
+    "evidence_sha256"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "campaign": {
+      "$ref": "#/$defs/artifact"
+    },
+    "producer_attestation": {
+      "$ref": "#/$defs/artifact"
+    },
+    "scanner": {
+      "$ref": "#/$defs/scanner"
+    },
+    "roles": {
+      "$ref": "#/$defs/roles"
+    },
+    "intersections": {
+      "$ref": "#/$defs/intersections"
+    },
+    "verification": {
+      "$ref": "#/$defs/verification"
+    },
+    "evidence_sha256": {
+      "$ref": "#/$defs/sha256"
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "gitCommit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "uint64": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]{0,19})$",
+      "x-decimal-maximum": "18446744073709551615"
+    },
+    "positiveUint64": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]{0,19}$",
+      "x-decimal-maximum": "18446744073709551615"
+    },
+    "basename": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!\\.{1,2}$)[^/\\\\:\\u0000<>\\\"|?*]+$"
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "file",
+        "bytes",
+        "sha256",
+        "schema_sha256"
+      ],
+      "properties": {
+        "file": {
+          "$ref": "#/$defs/basename"
+        },
+        "bytes": {
+          "$ref": "#/$defs/positiveUint64"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "schema_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "blobArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "file",
+        "bytes",
+        "sha256"
+      ],
+      "properties": {
+        "file": {
+          "$ref": "#/$defs/basename"
+        },
+        "bytes": {
+          "$ref": "#/$defs/positiveUint64"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "scanner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "commit",
+        "binary",
+        "algorithm_version"
+      ],
+      "properties": {
+        "commit": {
+          "$ref": "#/$defs/gitCommit",
+          "description": "Atomic engine commit; it must equal partition.provenance.engine_commit in every campaign coverage policy."
+        },
+        "binary": {
+          "$ref": "#/$defs/blobArtifact"
+        },
+        "algorithm_version": {
+          "const": "atomic-v3-engine-semantic-replay-v1"
+        }
+      }
+    },
+    "orderedKeySet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact",
+        "observations",
+        "unique_keys",
+        "ordered_set_sha256"
+      ],
+      "properties": {
+        "artifact": {
+          "$ref": "#/$defs/blobArtifact"
+        },
+        "observations": {
+          "$ref": "#/$defs/positiveUint64"
+        },
+        "unique_keys": {
+          "$ref": "#/$defs/positiveUint64"
+        },
+        "ordered_set_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "stopReasons": {
+      "type": "array",
+      "prefixItems": [
+        {
+          "$ref": "#/$defs/uint64"
+        },
+        {
+          "$ref": "#/$defs/uint64"
+        },
+        {
+          "$ref": "#/$defs/uint64"
+        },
+        {
+          "$ref": "#/$defs/uint64"
+        },
+        {
+          "$ref": "#/$defs/uint64"
+        },
+        {
+          "$ref": "#/$defs/uint64"
+        },
+        {
+          "$ref": "#/$defs/uint64"
+        },
+        {
+          "const": "0"
+        },
+        {
+          "const": "0"
+        }
+      ],
+      "items": false,
+      "minItems": 9,
+      "maxItems": 9
+    },
+    "roleEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "records_replayed",
+        "trajectories_replayed",
+        "moves_replayed",
+        "feature_input_keys",
+        "stop_reasons"
+      ],
+      "properties": {
+        "records_replayed": {
+          "$ref": "#/$defs/positiveUint64"
+        },
+        "trajectories_replayed": {
+          "$ref": "#/$defs/positiveUint64"
+        },
+        "moves_replayed": {
+          "$ref": "#/$defs/positiveUint64"
+        },
+        "feature_input_keys": {
+          "$ref": "#/$defs/orderedKeySet"
+        },
+        "stop_reasons": {
+          "$ref": "#/$defs/stopReasons"
+        }
+      }
+    },
+    "roles": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "train",
+        "validation"
+      ],
+      "properties": {
+        "train": {
+          "$ref": "#/$defs/roleEvidence"
+        },
+        "validation": {
+          "$ref": "#/$defs/roleEvidence"
+        }
+      }
+    },
+    "intersections": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "raw_record_keys",
+        "feature_input_keys",
+        "split_group_ids"
+      ],
+      "properties": {
+        "raw_record_keys": {
+          "const": "0"
+        },
+        "feature_input_keys": {
+          "const": "0"
+        },
+        "split_group_ids": {
+          "const": "0"
+        }
+      }
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "campaign_authenticated",
+        "producer_attestation_authenticated",
+        "all_roots_legal",
+        "all_played_moves_legal",
+        "all_retained_positions_matched",
+        "all_best_moves_legal",
+        "all_results_matched",
+        "all_terminals_matched",
+        "all_feature_input_keys_recomputed",
+        "validation_feature_inputs_decontaminated",
+        "strict_eof"
+      ],
+      "properties": {
+        "campaign_authenticated": {
+          "const": true
+        },
+        "producer_attestation_authenticated": {
+          "const": true
+        },
+        "all_roots_legal": {
+          "const": true
+        },
+        "all_played_moves_legal": {
+          "const": true
+        },
+        "all_retained_positions_matched": {
+          "const": true
+        },
+        "all_best_moves_legal": {
+          "const": true
+        },
+        "all_results_matched": {
+          "const": true
+        },
+        "all_terminals_matched": {
+          "const": true
+        },
+        "all_feature_input_keys_recomputed": {
+          "const": true
+        },
+        "validation_feature_inputs_decontaminated": {
+          "const": true
+        },
+        "strict_eof": {
+          "const": true
+        }
+      }
+    }
+  },
+  "x-key-set-wire": {
+    "element_size": 32,
+    "order": "strictly increasing unsigned-byte lexicographic SHA-256 keys",
+    "duplicates": "forbidden",
+    "file_size": "unique_keys * 32",
+    "ordered_set_digest": "SHA256(ascii('atomic-ordered-set-v1\\0') || unique_keys_u64_le || key_bytes)"
+  },
+  "x-evidence-hash": {
+    "algorithm": "SHA-256",
+    "domain_ascii_hex": "61746f6d69632d76332d73656d616e7469632d61756469742d763100",
+    "component_order": [
+      "campaign_sha256_raw32",
+      "producer_attestation_sha256_raw32",
+      "scanner_commit_raw20",
+      "scanner_binary_sha256_raw32",
+      "scanner_algorithm_length_u16_le",
+      "scanner_algorithm_ascii",
+      "train_role_evidence",
+      "validation_role_evidence",
+      "three_intersections_u64_le",
+      "eleven_verification_values_in_declaration_order"
+    ],
+    "role_component_order": [
+      "records_trajectories_moves_u64_le",
+      "feature_key_artifact_sha256_raw32",
+      "feature_observations_unique_u64_le",
+      "feature_ordered_set_sha256_raw32",
+      "nine_stop_reason_counts_u64_le"
+    ],
+    "formula": "SHA256(domain || declared components); evidence_sha256 is excluded"
+  },
+  "x-wire": {
+    "encoding": "utf-8",
+    "bom": "forbidden",
+    "canonical_json": {
+      "key_order": "schema-declaration-order",
+      "separators": [
+        ",",
+        ":"
+      ],
+      "ensure_ascii": false,
+      "allow_nan": false,
+      "insignificant_whitespace": "forbidden"
+    },
+    "trailing_lf_count": 1,
+    "maximum_bytes": 16777216,
+    "file_type": "regular",
+    "symbolic_links": "forbidden",
+    "snapshot_stability": "same-handle-fstat-before-and-after"
+  }
+}
