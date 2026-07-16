@@ -369,12 +369,19 @@ def test_python_record_is_canonical_across_cibuildwheel_scratch_roots(
     first_environment = fingerprint._validate_cibuildwheel_python_environment(
         first_layout.environment
     )
-    first = fingerprint._python_record(first_environment)
-
     second_layout = _make_python_layout(tmp_path / "second-cache", monkeypatch)
     second_environment = fingerprint._validate_cibuildwheel_python_environment(
         second_layout.environment
     )
+
+    python_version = platform.python_version()
+    monkeypatch.setattr(
+        sys,
+        "version",
+        "{} (tags/v{}:fixture, Jul 1 2026, 12:00:00) "
+        "[MSC v.1929 64 bit (AMD64)]".format(python_version, python_version),
+    )
+    first = fingerprint._python_record(first_environment)
     second = fingerprint._python_record(second_environment)
 
     assert first == second

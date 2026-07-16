@@ -1,3 +1,4 @@
+import hashlib
 import os
 import shutil
 import subprocess
@@ -9,6 +10,12 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 RECIPE = ROOT / "scripts" / "build_atomic_python_wheel_release.sh"
+WINDOWS_FINGERPRINT_DOCUMENT = (
+    ROOT / "docs" / "atomic" / "windows-wheel-fingerprint-v2.json"
+)
+WINDOWS_FINGERPRINT_SHA256 = (
+    "ac9883ee4de2e5911c2e91a5f1f547cb464530090b5ae6513d7c5c0db3baf09f"
+)
 MANYLINUX_IMAGE = (
     "quay.io/pypa/manylinux_2_28_x86_64:2026.03.20-1@sha256:"
     "853663dc8253b62be437bb52a5caecffd020792af4442f55d927d22e0ea795ae"
@@ -186,8 +193,25 @@ def test_linux_contract_has_no_host_fingerprint_and_uses_digest_pinned_image() -
 
 def test_windows_fingerprint_runs_in_actual_build_interpreter() -> None:
     text = recipe_text()
+    assert (
+        "readonly WINDOWS_WHEEL_FINGERPRINT_DOCUMENT="
+        "'docs/atomic/windows-wheel-fingerprint-v2.json'"
+    ) in text
+    assert '"$WINDOWS_WHEEL_FINGERPRINT_DOCUMENT" \\' in text
+    assert "command -v python >/dev/null 2>&1" in text
     assert "Windows FINGERPRINT_OUTPUT must be absolute" in text
     assert "^[0-9A-Fa-f]{64}$" in text
+    assert "frozen_fingerprint_sha256=$(python -I -c" in text
+    assert "hashlib.sha256(pathlib.Path(sys.argv[1]).read_bytes()).hexdigest()" in text
+    assert '"$WINDOWS_WHEEL_FINGERPRINT_DOCUMENT")' in text
+    assert '[ "$frozen_fingerprint_sha256" = "$normalized_expected" ]' in text
+    assert (
+        "Windows expected fingerprint SHA-256 does not match the frozen document"
+        in text
+    )
+    assert text.index("frozen_fingerprint_sha256=$(python -I -c") < text.index(
+        'mkdir -- "$output_absolute"'
+    )
     assert 'command -v cygpath >/dev/null 2>&1' in text
     assert 'fingerprint_for_cibuildwheel=$(cygpath -w -- "$fingerprint_output")' in text
     fingerprint_invocation = (
@@ -201,6 +225,21 @@ def test_windows_fingerprint_runs_in_actual_build_interpreter() -> None:
         "atomic_windows_wheel_fingerprint.py\\\" --output"
     )
     assert "Windows build did not create its toolchain fingerprint" in text
+
+
+def test_recipe_is_bound_to_the_exact_frozen_windows_fingerprint() -> None:
+    payload = WINDOWS_FINGERPRINT_DOCUMENT.read_bytes()
+    assert payload
+    assert hashlib.sha256(payload).hexdigest() == WINDOWS_FINGERPRINT_SHA256
+
+    text = recipe_text()
+    assert text.count("normalized_expected=$(printf") == 1
+    assert text.index("normalized_expected=$(printf") < text.index(
+        "frozen_fingerprint_sha256=$(python -I -c"
+    )
+    assert text.index("frozen_fingerprint_sha256=$(python -I -c") < text.index(
+        "fingerprint_command="
+    )
 
 
 def test_recipe_accepts_only_one_nonempty_regular_wheel() -> None:

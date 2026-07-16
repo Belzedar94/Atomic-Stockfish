@@ -1,3 +1,4 @@
+import hashlib
 import json
 from pathlib import Path
 import subprocess
@@ -81,12 +82,82 @@ def test_release_version_is_consistent_across_packaging_surfaces() -> None:
         "pythonVersions": ["3.9", "3.12", "3.14"],
     }
     assert policy["windowsWheelFingerprintSchemaVersion"] == 2
+    assert policy["windowsWheelFingerprintDocument"] == (
+        "docs/atomic/windows-wheel-fingerprint-v2.json"
+    )
     assert policy["windowsWheelFingerprintSha256"] == (
-        "2dcc7d539fd325a27a4ccf2dbab018176b02d810faa05dc244162ae6ef8dd4e4"
+        "ac9883ee4de2e5911c2e91a5f1f547cb464530090b5ae6513d7c5c0db3baf09f"
     )
     assert policy["windowsWheelImageOS"] == "win22"
-    assert policy["windowsWheelImageVersion"] == "20260714.244.1"
+    assert policy["windowsWheelImageVersion"] == "20260706.237.1"
     assert policy["windowsWheelPythonVersion"] == "3.9.13"
+
+    fingerprint_path = ROOT / policy["windowsWheelFingerprintDocument"]
+    assert fingerprint_path.is_file()
+    assert not fingerprint_path.is_symlink()
+    attributes = (ROOT / ".gitattributes").read_text(encoding="utf-8").splitlines()
+    assert (
+        "docs/atomic/windows-wheel-fingerprint-v2.json text eol=lf" in attributes
+    )
+    fingerprint_bytes = fingerprint_path.read_bytes()
+    assert hashlib.sha256(fingerprint_bytes).hexdigest() == policy[
+        "windowsWheelFingerprintSha256"
+    ]
+    fingerprint = json.loads(fingerprint_bytes)
+    canonical_bytes = (
+        json.dumps(
+            fingerprint,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+        + b"\n"
+    )
+    assert fingerprint_bytes == canonical_bytes
+    assert set(fingerprint) == {
+        "python",
+        "runner",
+        "schemaVersion",
+        "tools",
+        "visualStudio",
+    }
+    assert fingerprint["schemaVersion"] == policy[
+        "windowsWheelFingerprintSchemaVersion"
+    ]
+    assert fingerprint["runner"]["imageOS"] == policy["windowsWheelImageOS"]
+    assert fingerprint["runner"]["imageVersion"] == policy[
+        "windowsWheelImageVersion"
+    ]
+    python_fingerprint = fingerprint["python"]
+    assert python_fingerprint["version"] == policy["windowsWheelPythonVersion"]
+    assert python_fingerprint["implementation"] == "CPython"
+    assert python_fingerprint["pointerBits"] == 64
+    assert python_fingerprint["compiler"] == "MSC v.1929 64 bit (AMD64)"
+    assert python_fingerprint["sysconfig"] == {
+        "EXT_SUFFIX": ".cp39-win_amd64.pyd",
+        "SOABI": None,
+        "platform": "win-amd64",
+    }
+    assert python_fingerprint["packages"] == {
+        "pip": {"version": "26.0.1"},
+        "setuptools": {"version": "80.9.0"},
+        "wheel": {"version": "0.45.1"},
+    }
+    assert {
+        name: record["role"]
+        for name, record in python_fingerprint["artifacts"].items()
+    } == {
+        "baseExecutable": "baseExecutable",
+        "runtimeLibrary": "runtimeLibrary",
+        "venvExecutable": "venvExecutable",
+    }
+    assert all(
+        set(record) == {"basename", "bytes", "role", "sha256"}
+        and record["bytes"] > 0
+        and len(record["sha256"]) == 64
+        and record["sha256"] == record["sha256"].lower()
+        for record in python_fingerprint["artifacts"].values()
+    )
     patterns = [item["namePattern"] for item in inventory["assets"]]
     assert len(patterns) == 12
     assert len(patterns) == len(set(patterns))

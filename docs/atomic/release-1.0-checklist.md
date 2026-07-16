@@ -61,7 +61,10 @@ release manifest.
    CPython micro-version; cibuildwheel supplies CPython 3.9.13 on Windows. Each
    producer's two builds use separate caches. On Windows, both build interpreters must
    emit the same canonical runner/Visual Studio/SDK/CPython fingerprint and its
-   SHA-256 must equal the value frozen in the release inventory.
+   bytes and SHA-256 must equal the reviewed document named in the release inventory.
+   The release PR workflow first reproduces the normalized sdist twice and then
+   runs this exact Windows wheel recipe twice against that authenticated sdist;
+   the tag workflow repeats the same authority chain for publication.
 6. Build the CommonJS and ES-module Board package twice with the same pinned
    Emscripten image, require byte-identical JavaScript/WASM, and run lifecycle,
    exception and cross-surface parity tests.

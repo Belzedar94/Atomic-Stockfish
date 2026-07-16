@@ -7,11 +7,21 @@ from scripts.run_atomic_release_contract_tests import (
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = ROOT / ".github" / "workflows" / "atomic-release.yml"
+ATOMIC_WORKFLOW = ROOT / ".github" / "workflows" / "atomic.yml"
+RELEASE_PR_WORKFLOW = ROOT / ".github" / "workflows" / "atomic-release-pr.yml"
 CHECKLIST = ROOT / "docs" / "atomic" / "release-1.0-checklist.md"
 
 
 def workflow() -> str:
     return WORKFLOW.read_text(encoding="utf-8")
+
+
+def atomic_workflow() -> str:
+    return ATOMIC_WORKFLOW.read_text(encoding="utf-8")
+
+
+def release_pr_workflow() -> str:
+    return RELEASE_PR_WORKFLOW.read_text(encoding="utf-8")
 
 
 def recipe(name: str) -> str:
@@ -105,11 +115,12 @@ def test_python_wheel_builder_is_digest_pinned_and_in_provenance() -> None:
     assert "build/cibw-cache-a" in wheels and "build/cibw-cache-$build_id" in wheels
     assert (
         "WINDOWS_WHEEL_FINGERPRINT_SHA256: "
-        "2dcc7d539fd325a27a4ccf2dbab018176b02d810faa05dc244162ae6ef8dd4e4"
+        "ac9883ee4de2e5911c2e91a5f1f547cb464530090b5ae6513d7c5c0db3baf09f"
         in text
     )
     assert "WINDOWS_WHEEL_IMAGE_OS: win22" in text
-    assert "WINDOWS_WHEEL_IMAGE_VERSION: 20260714.244.1" in text
+    assert "WINDOWS_WHEEL_IMAGE_VERSION: 20260706.237.1" in text
+    assert wheels.count("docs/atomic/windows-wheel-fingerprint-v2.json") >= 2
     assert '"runner"]["imageOS"]' in wheels
     assert '"runner"]["imageVersion"]' in wheels
     atomic_ci = (ROOT / ".github" / "workflows" / "atomic.yml").read_text(
@@ -151,6 +162,43 @@ def test_windows_fingerprint_capture_is_real_cibuildwheel_and_cannot_publish() -
         "ATOMIC_RELEASE_POLICY_TOKEN",
     ):
         assert forbidden not in capture
+
+
+def test_release_pr_reproduces_real_windows_wheel_and_frozen_fingerprint() -> None:
+    text = release_pr_workflow()
+    assert "pull_request:" in text
+    assert "paths:" in text
+    source = job(text, "source_sdist", "windows_wheel")
+    gate = text.split("  windows_wheel:\n", 1)[1]
+    assert "ref: ${{ github.event.pull_request.head.sha }}" in source
+    assert "EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}" in source
+    assert 'test "$commit" = "$EXPECTED_HEAD"' in source
+    assert "build_atomic_source_release.sh" in source
+    assert "git archive \"$commit\"" in source
+    assert "build/sdist-a" in source and "build/sdist-b" in source
+    assert 'cmp "$first" "$second"' in source
+    assert "atomic_release_provenance.py" in source
+    assert 'cp "$first.provenance.json"' in source
+    assert "buildLockSha256=" in source
+    assert "name: release-pr-source" in source
+    assert "needs: source_sdist" in gate
+    assert "runs-on: windows-2022" in gate
+    assert "python-version: '3.12.10'" in gate
+    assert "atomic_verify_release_asset.py" in gate
+    assert "name: release-pr-source" in gate
+    assert "for build_id in a b; do" in gate
+    assert "scripts/build_atomic_python_wheel_release.sh" in gate
+    assert 'windows "${sdists[0]}"' in gate
+    assert '"build/wheelhouse-$build_id" "build/cibw-cache-$build_id"' in gate
+    assert "docs/atomic/windows-wheel-fingerprint-v2.json" in gate
+    assert "WINDOWS_WHEEL_FINGERPRINT_SHA256" in gate
+    assert "WINDOWS_WHEEL_IMAGE_VERSION" in gate
+    assert 'cmp "${first[0]}" "${second[0]}"' in gate
+    assert "python -m abi3audit --strict" in gate
+    assert "test_wheel_layout.py" in gate
+    assert "name: release-pr-windows-wheel" in gate
+    for forbidden in ("contents: write", "gh release", "releases/", "draft=false"):
+        assert forbidden not in text
 
 
 def test_native_toolchains_are_digest_pinned_and_reproduced_in_isolated_roots() -> None:

@@ -5,6 +5,7 @@ IFS=$'\n\t'
 
 readonly RECIPE_VERSION=1
 readonly MANYLINUX_X86_64_IMAGE='quay.io/pypa/manylinux_2_28_x86_64:2026.03.20-1@sha256:853663dc8253b62be437bb52a5caecffd020792af4442f55d927d22e0ea795ae'
+readonly WINDOWS_WHEEL_FINGERPRINT_DOCUMENT='docs/atomic/windows-wheel-fingerprint-v2.json'
 
 usage() {
     echo "usage: $0 PLATFORM SDIST OUTPUT_DIR CACHE_DIR VERSION SOURCE_DATE_EPOCH FINGERPRINT_OUTPUT EXPECTED_FINGERPRINT_SHA256" >&2
@@ -74,12 +75,15 @@ repo_root=$(CDPATH= cd -- "$script_dir/.." && pwd -P)
 [ "$(pwd -P)" = "$repo_root" ] || die "run this recipe from the repository root"
 
 for required in \
+    "$WINDOWS_WHEEL_FINGERPRINT_DOCUMENT" \
     scripts/atomic_windows_wheel_fingerprint.py \
     tests/release-build-requirements.txt \
     tests/release-wheel-test-requirements.txt; do
-    [ -f "$required" ] && [ ! -L "$required" ] || \
+    [ -f "$required" ] && [ ! -L "$required" ] && [ -s "$required" ] || \
         die "missing regular release input: $required"
 done
+
+command -v python >/dev/null 2>&1 || die "python is unavailable"
 
 sdist_absolute=$(canonical_existing_file "$sdist" "sdist")
 [ "$(basename -- "$sdist_absolute")" = "atomic_pyffish-$version.tar.gz" ] || \
@@ -106,6 +110,13 @@ case "$platform" in
             die "Windows EXPECTED_FINGERPRINT_SHA256 must be 64 hexadecimal characters"
         [[ "$fingerprint_output" != *'"'* ]] || \
             die "Windows FINGERPRINT_OUTPUT cannot contain a double quote"
+        normalized_expected=$(printf '%s' "$expected_fingerprint_sha256" | tr 'A-F' 'a-f')
+        frozen_fingerprint_sha256=$(python -I -c \
+            'import hashlib, pathlib, sys; print(hashlib.sha256(pathlib.Path(sys.argv[1]).read_bytes()).hexdigest())' \
+            "$WINDOWS_WHEEL_FINGERPRINT_DOCUMENT") || \
+            die "cannot hash frozen Windows wheel fingerprint document"
+        [ "$frozen_fingerprint_sha256" = "$normalized_expected" ] || \
+            die "Windows expected fingerprint SHA-256 does not match the frozen document"
         ;;
 esac
 
@@ -172,13 +183,11 @@ case "$platform" in
         ;;
     windows)
         export CIBW_ARCHS=AMD64
-        normalized_expected=$(printf '%s' "$expected_fingerprint_sha256" | tr 'A-F' 'a-f')
         fingerprint_command="python \"{project}/scripts/atomic_windows_wheel_fingerprint.py\" --output \"$fingerprint_for_cibuildwheel\" --expected-sha256 $normalized_expected"
         export CIBW_BEFORE_BUILD="$CIBW_BEFORE_BUILD && $fingerprint_command"
         ;;
 esac
 
-command -v python >/dev/null 2>&1 || die "python is unavailable"
 python -m cibuildwheel "$sdist_for_cibuildwheel" --output-dir "$output_for_cibuildwheel"
 
 shopt -s nullglob

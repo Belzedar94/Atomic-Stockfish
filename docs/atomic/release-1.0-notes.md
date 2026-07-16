@@ -61,7 +61,9 @@ restricted to CPython 3.9.13 and the exact hosted-runner, Visual Studio, SDK,
 packaging-tool and compiler fingerprint frozen in the inventory. Because GitHub
 hosted runner images cannot be selected by immutable digest, this guarantee
 applies only while that exact image remains schedulable; image rotation requires
-a new reviewed release commit and fingerprint. Board and UCI WASM provenance
+a new reviewed release commit and fingerprint. The canonical fingerprint JSON is
+versioned beside the inventory and compared byte-for-byte by both Windows builds.
+Board and UCI WASM provenance
 records the exact digest-pinned Docker command used for each artifact. Every
 provenance record also freezes the producer-side asset SHA-256, which is
 rechecked during assembly.

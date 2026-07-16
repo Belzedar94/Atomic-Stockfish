@@ -33,9 +33,10 @@
     "windowsNativeImage": "dockcross/windows-static-x64@sha256:e5fde458b54dda21d0265516f0310bc017532dd6f4fdad0b7239dc6ccd0f8ca9",
     "windowsRuntimeSmoke": "windows-2022",
     "windowsWheelFingerprintSchemaVersion": 2,
-    "windowsWheelFingerprintSha256": "2dcc7d539fd325a27a4ccf2dbab018176b02d810faa05dc244162ae6ef8dd4e4",
+    "windowsWheelFingerprintDocument": "docs/atomic/windows-wheel-fingerprint-v2.json",
+    "windowsWheelFingerprintSha256": "ac9883ee4de2e5911c2e91a5f1f547cb464530090b5ae6513d7c5c0db3baf09f",
     "windowsWheelImageOS": "win22",
-    "windowsWheelImageVersion": "20260714.244.1",
+    "windowsWheelImageVersion": "20260706.237.1",
     "windowsWheelPythonVersion": "3.9.13",
     "wasmBuildRepetitions": 2
   },
