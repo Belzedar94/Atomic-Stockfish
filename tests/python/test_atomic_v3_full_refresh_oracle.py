@@ -252,12 +252,12 @@ def test_cpp_source_contract_proves_single_enumeration_and_shared_cp() -> None:
     assert not re.search(r"\bemit_blast_ring\s*\(", source)
 
     king_call = re.search(
-        r"project_king_blast_ep\s*\([^;]*candidate\.capturePairs[^;]*\)",
+        r"project_king_blast_ep_trusted\s*\([^;]*candidate\.capturePairs[^;]*\)",
         source,
         re.DOTALL,
     )
     ring_call = re.search(
-        r"project_blast_ring\s*\([^;]*candidate\.capturePairs[^;]*\)",
+        r"project_blast_ring_trusted\s*\([^;]*candidate\.capturePairs[^;]*\)",
         source,
         re.DOTALL,
     )
