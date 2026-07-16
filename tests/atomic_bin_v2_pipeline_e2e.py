@@ -2203,7 +2203,14 @@ def python_environment(config: GateConfig, archive: Archive) -> Mapping[str, obj
     )
     result = archive.run(
         "python environment",
-        (str(config.python), "-B", "-c", probe),
+        (
+            str(config.python),
+            "-B",
+            "-W",
+            "ignore:pkg_resources is deprecated as an API:UserWarning",
+            "-c",
+            probe,
+        ),
         cwd=config.trainer.root,
         timeout=config.timeout_seconds,
     )

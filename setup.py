@@ -71,6 +71,10 @@ if platform.python_compiler().startswith("MSC"):
         "/permissive-",
         "/utf-8",
         "/Zc:__cplusplus",
+        # MSVC otherwise hashes the absolute translation-unit path into
+        # anonymous-namespace symbols, making equivalent isolated wheel
+        # builds differ solely because cibuildwheel uses fresh temp roots.
+        f"/d1trimfile:{ROOT.resolve()}\\",
     ]
     link_args = ["/Brepro"]
 else:

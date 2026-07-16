@@ -1,9 +1,11 @@
 import hashlib
 import os
+import runpy
 import shutil
 import subprocess
 from functools import lru_cache
 from pathlib import Path
+from unittest import mock
 
 import pytest
 
@@ -85,6 +87,18 @@ def test_recipe_has_valid_bash_syntax() -> None:
         check=False,
     )
     assert completed.returncode == 0, completed.stderr
+
+
+def test_windows_extension_normalizes_absolute_source_paths() -> None:
+    with (
+        mock.patch("platform.python_compiler", return_value="MSC v.1944 64 bit"),
+        mock.patch("setuptools.setup") as setup,
+    ):
+        runpy.run_path(str(ROOT / "setup.py"), run_name="__main__")
+
+    extension = setup.call_args.kwargs["ext_modules"][0]
+    assert extension.extra_compile_args[-1] == f"/d1trimfile:{ROOT.resolve()}\\"
+    assert extension.extra_link_args == ["/Brepro"]
 
 
 def test_recipe_usage_and_scalar_validation_fail_before_any_build() -> None:

@@ -1331,6 +1331,51 @@ def test_python_environment_wrappers_capture_verify_and_reject_path_overrides(
         gate.verify_gate_python_environment(expected)  # type: ignore[arg-type]
 
 
+def test_python_environment_suppresses_only_the_known_pkg_resources_warning(
+    tmp_path: Path,
+) -> None:
+    cfg = config(tmp_path)
+    commands: list[tuple[str, ...]] = []
+    payload = gate.canonical_json(
+        {
+            "python": "3.9.13",
+            "implementation": "CPython",
+            "platform": "test-platform",
+            "numpy": "1.26.4",
+            "torch": "2.0.0",
+            "pytorch_lightning": "1.9.5",
+            "executable": str(cfg.python),
+        }
+    )
+
+    class FakeArchive:
+        def run(
+            self,
+            label: str,
+            argv: tuple[str, ...],
+            *,
+            cwd: Path,
+            timeout: float,
+        ) -> gate.CommandResult:
+            assert label == "python environment"
+            assert cwd == cfg.trainer.root
+            assert timeout == cfg.timeout_seconds
+            commands.append(argv)
+            return gate.CommandResult(label, argv, str(cwd), 0, payload, b"")
+
+    environment = gate.python_environment(cfg, FakeArchive())  # type: ignore[arg-type]
+    assert environment["pytorch_lightning"] == "1.9.5"
+    assert len(commands) == 1
+    assert commands[0][:5] == (
+        str(cfg.python),
+        "-B",
+        "-W",
+        "ignore:pkg_resources is deprecated as an API:UserWarning",
+        "-c",
+    )
+    assert "import json,platform,sys,numpy,torch,pytorch_lightning" in commands[0][5]
+
+
 def test_inventory_reconciles_candidate_and_roundtrip_hashes(tmp_path: Path) -> None:
     archive = gate.Archive(tmp_path / "audit")
     payload = b"same network bytes"
