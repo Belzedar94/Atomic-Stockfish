@@ -3,6 +3,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = ROOT / ".github" / "workflows" / "atomic-release.yml"
+CHECKLIST = ROOT / "docs" / "atomic" / "release-1.0-checklist.md"
 
 
 def workflow() -> str:
@@ -144,6 +145,66 @@ def test_wasm_provenance_records_real_digest_pinned_docker_commands() -> None:
     assert 'toolchain="image=$EMSCRIPTEN_IMAGE;' in uci
     assert "docker run --rm --env" in uci
     assert "tests/wasm-engine/build.py" in uci
+
+
+def test_board_wasm_executes_both_exports_from_the_exact_installed_tgz() -> None:
+    board = job(workflow(), "board-wasm", "uci-wasm")
+
+    assert 'cmp "${first[0]}" "${second[0]}"' in board
+    assert 'PACKAGE_TGZ=/src/build/release/$package_file' in board
+    assert "mktemp -d /tmp/atomic-installed-npm.XXXXXX" in board
+    assert "npm install --package-lock=false --ignore-scripts" in board
+    assert "ATOMIC_FORBIDDEN_SOURCE_ROOT=/src" in board
+    assert '--volume "$GITHUB_WORKSPACE:/src:ro" --workdir /tmp' in board
+    assert "test-installed-commonjs.cjs" in board
+    assert "test-installed-esm.mjs" in board
+    assert "--workdir /src/tests/js" not in board.split(
+        'package_file="$(basename "${assets[0]}")"', 1
+    )[1].split('toolchain="image=$EMSCRIPTEN_IMAGE;', 1)[0]
+
+
+def test_uci_wasm_archive_uses_and_authenticates_release_documentation() -> None:
+    uci = job(workflow(), "uci-wasm", "assemble")
+
+    assert 'cp docs/atomic/node-uci-wasm-release.md "$root/README.md"' in uci
+    assert "cp tests/wasm-engine/README.md" not in uci
+    assert "atomic_verify_uci_wasm_archive.py" in uci
+    assert '--source-date-epoch "$SOURCE_DATE_EPOCH"' in uci
+    assert "build/wasm-archive-smoke" in uci
+    assert '--volume "$GITHUB_WORKSPACE:/src:ro"' in uci
+    assert "node ./atomic-stockfish-nnue-node.mjs" in uci
+    assert "Nodes searched: 20" in uci
+
+
+def test_manual_publish_requires_immediate_pre_and_post_trust_rechecks() -> None:
+    checklist = CHECKLIST.read_text(encoding="utf-8")
+    pre = checklist.index("Immediately before the manual publish click")
+    publish = checklist.index("Manually publish release notes")
+    post = checklist.index("Immediately after publication")
+
+    assert pre < publish < post
+    before = checklist[pre:publish]
+    after = checklist[post:]
+    for marker in (
+        "exact tag ref",
+        "annotated tag object",
+        "direct peeled commit",
+        "immutable-releases policy",
+        "exact names and bytes",
+        "SHA256SUMS",
+    ):
+        assert marker in before
+    for marker in (
+        "immutable-releases policy",
+        "same exact ID",
+        "draft=false",
+        "annotated tag object",
+        "direct peeled commit",
+        "recorded SHAs unchanged",
+        "byte equality",
+        "SHA256SUMS",
+    ):
+        assert marker in after
 
 
 def test_uci_wasm_precreates_every_later_host_write_root() -> None:

@@ -727,6 +727,24 @@ jobs:
           tar -tzf "${assets[0]}" | grep -Fx 'package/AUTHORS'
           tar -tzf "${assets[0]}" | grep -Fx 'package/CITATION.cff'
           tar -tzf "${assets[0]}" | grep -Fx 'package/LICENSE'
+          package_file="$(basename "${assets[0]}")"
+          docker run --rm \
+            --env "PACKAGE_TGZ=/src/build/release/$package_file" \
+            --env "ATOMIC_FORBIDDEN_SOURCE_ROOT=/src" \
+            --volume "$GITHUB_WORKSPACE:/src:ro" --workdir /tmp \
+            "$EMSCRIPTEN_IMAGE" sh -lc '
+              set -eu
+              smoke_root=$(mktemp -d /tmp/atomic-installed-npm.XXXXXX)
+              trap "rm -rf \"$smoke_root\"" EXIT
+              cp /src/tests/js/test-installed-commonjs.cjs "$smoke_root/"
+              cp /src/tests/js/test-installed-esm.mjs "$smoke_root/"
+              cd "$smoke_root"
+              npm init --yes >/dev/null
+              npm install --package-lock=false --ignore-scripts \
+                --no-audit --no-fund "$PACKAGE_TGZ"
+              node ./test-installed-commonjs.cjs
+              node ./test-installed-esm.mjs
+            '
           toolchain="image=$EMSCRIPTEN_IMAGE; $(docker run --rm "$EMSCRIPTEN_IMAGE" sh -lc \
             'em++ --version | head -n 1; node --version; npm --version')"
           python3 scripts/atomic_release_provenance.py \
@@ -808,12 +826,32 @@ jobs:
           root="build/wasm-stage/Atomic-Stockfish-${RELEASE_VERSION}-node-uci-nnue-wasm"
           mkdir -p "$root" build/release
           cp -R --no-preserve=ownership build/wasm-release-a/. "$root/"
-          cp tests/wasm-engine/README.md "$root/README.md"
+          cp docs/atomic/node-uci-wasm-release.md "$root/README.md"
           cp AUTHORS CITATION.cff Copying.txt "$root/"
           tar --sort=name --mtime="@$SOURCE_DATE_EPOCH" \
             --owner=0 --group=0 --numeric-owner \
             -C build/wasm-stage -cJf "build/release/$asset" \
             "Atomic-Stockfish-${RELEASE_VERSION}-node-uci-nnue-wasm"
+          python3 scripts/atomic_verify_uci_wasm_archive.py \
+            --archive "build/release/$asset" \
+            --version "$RELEASE_VERSION" \
+            --source-date-epoch "$SOURCE_DATE_EPOCH" \
+            --readme docs/atomic/node-uci-wasm-release.md
+          rm -rf build/wasm-archive-smoke
+          mkdir -p build/wasm-archive-smoke
+          tar -xJf "build/release/$asset" -C build/wasm-archive-smoke
+          extracted="build/wasm-archive-smoke/Atomic-Stockfish-${RELEASE_VERSION}-node-uci-nnue-wasm"
+          smoke_output=$(
+            printf 'uci\nisready\nsetoption name Use NNUE value false\nposition startpos\ngo perft 1\nquit\n' |
+              docker run --rm -i \
+                --volume "$GITHUB_WORKSPACE:/src:ro" \
+                --workdir "/src/$extracted" \
+                "$EMSCRIPTEN_IMAGE" node ./atomic-stockfish-nnue-node.mjs
+          )
+          grep -F 'id name Atomic-Stockfish 1.0.0' <<<"$smoke_output"
+          grep -Fx 'uciok' <<<"$smoke_output"
+          grep -Fx 'readyok' <<<"$smoke_output"
+          grep -Fx 'Nodes searched: 20' <<<"$smoke_output"
           toolchain="image=$EMSCRIPTEN_IMAGE; $(docker run --rm "$EMSCRIPTEN_IMAGE" sh -lc \
             'em++ --version | head -n 1; node --version')"
           python3 scripts/atomic_release_provenance.py \

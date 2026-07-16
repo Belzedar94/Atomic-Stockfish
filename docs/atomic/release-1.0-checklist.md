@@ -115,9 +115,25 @@ is no separate protocol binary.
    reserves a unique draft ID and its `always()` cleanup may delete only that
    reserved ID, including after a partial upload failure. This workflow contains
    no automatic publish transition.
-8. Manually publish release notes that state the external NNUE/Syzygy requirements,
+8. Immediately before the manual publish click, repeat the remote trust checks
+   rather than relying on the earlier workflow run. Re-read the exact tag ref,
+   annotated tag object and direct peeled commit through the GitHub Git Database
+   API and require all three recorded SHAs to remain byte-for-byte identical.
+   Re-read the immutable-releases policy and require it to remain enabled. Fetch
+   the reserved release by its exact ID and require it to remain the unique draft
+   for `v1.0.0`; download that draft again into a new empty directory, compare its
+   exact names and bytes with the frozen candidate, and re-run `SHA256SUMS`.
+9. Manually publish release notes that state the external NNUE/Syzygy requirements,
    supported protocols/bindings and exact known limitations.
-9. Preserve the build logs and gate manifest under `docs/atomic/evidence` in a
+10. Immediately after publication, re-read the immutable-releases policy and
+    require it still enabled. Fetch the release by the same exact ID and require
+    `draft=false`, a non-null publication timestamp and the unchanged `v1.0.0`
+    tag. Re-read the tag ref, annotated tag object and direct peeled commit and
+    require the recorded SHAs unchanged. Download the now-published assets into
+    another new empty directory, require byte equality with the frozen candidate,
+    and re-run `SHA256SUMS`. Any discrepancy is a release incident; do not move
+    or recreate the tag.
+11. Preserve the build logs and gate manifest under `docs/atomic/evidence` in a
    follow-up evidence PR without rewriting the tagged source.
 
 If any downloaded asset, tag object, peeled commit, version, bench, CI ref or
