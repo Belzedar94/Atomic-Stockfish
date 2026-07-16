@@ -40,10 +40,20 @@ LEGACY_NNUE_VERSION = 0x7AF32F20
 LEGACY_NNUE_ARCHITECTURE = 0x3C103E72
 LEGACY_NNUE_LOAD_SUFFIX = " (45MiB, (45056, 1024, 16, 32, 1))"
 
-NORMATIVE_CONTRACT_ENGINE_COMMIT = "76764c3c01ce5965a793a65e4580dd5c95cd2916"
-NORMATIVE_TOOLS_COMMIT = "40d2db224ef890f76b346ff4687e18fb33c98e23"
-NORMATIVE_TRAINER_COMMIT = "3e5651a977eca1351d7ef101acb8ff5c45588b12"
-NORMATIVE_SOURCE_NET_SHA256 = "99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f92a04a6"
+NORMATIVE_TOOLS_COMMIT = "450049ee7a0ece32694b11f6c55deb7df1d42a84"
+NORMATIVE_TOOLS_ENGINE_COMMIT = "420c9f35266fbdc2167dc5b9d8d20d90281c60c9"
+NORMATIVE_TRAINER_COMMIT = "44663e28c3e5464ff3be2cdaa26c8518b3951c5f"
+NORMATIVE_TRAINER_ENGINE_COMMIT = "76764c3c01ce5965a793a65e4580dd5c95cd2916"
+NORMATIVE_STRONG_LOCAL_SOURCE_NET_SHA256 = (
+    "99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f92a04a6"
+)
+NORMATIVE_SYNTHETIC_CI_SOURCE_NET_SHA256 = (
+    "9cf054ca00b82ab53a34473de52d1104aeddaa19b2e7b24091b5e613af485985"
+)
+NORMATIVE_SOURCE_NET_SHA256_BY_PROFILE = {
+    "strong-local": NORMATIVE_STRONG_LOCAL_SOURCE_NET_SHA256,
+    "synthetic-ci": NORMATIVE_SYNTHETIC_CI_SOURCE_NET_SHA256,
+}
 
 RECORDS = 128
 RECORDS_PER_SHARD = 64
@@ -172,7 +182,9 @@ class GateConfig:
     atomic: CheckoutSpec
     tools: CheckoutSpec
     trainer: CheckoutSpec
-    contract_engine_commit: str
+    profile: str
+    tools_engine_commit: str
+    trainer_engine_commit: str
     engine: Path
     engine_sha256: str
     data_generator: Path
@@ -211,6 +223,14 @@ def require_sha1(value: str, label: str) -> str:
     if SHA1_RE.fullmatch(value) is None:
         raise GateError(f"{label} must be one lowercase 40-character Git SHA")
     return value
+
+
+def normative_source_net_sha256(profile: str) -> str:
+    require(
+        isinstance(profile, str) and profile in NORMATIVE_SOURCE_NET_SHA256_BY_PROFILE,
+        "profile must be exactly strong-local or synthetic-ci",
+    )
+    return NORMATIVE_SOURCE_NET_SHA256_BY_PROFILE[profile]
 
 
 def require_sha256(value: str, label: str) -> str:
@@ -707,7 +727,7 @@ def expected_data_tools_capabilities_bytes() -> bytes:
     return canonical_json_preserving_order(expected_data_tools_capabilities())
 
 
-def verify_tools_lock(tools_root: Path, contract_engine_commit: str) -> None:
+def verify_tools_lock(tools_root: Path, tools_engine_commit: str) -> None:
     path = require_regular_file(tools_root / "atomic-engine.lock.json", "tools engine lock")
     payload = path.read_bytes()
     lock = parse_strict_json(payload, "tools engine lock")
@@ -715,8 +735,8 @@ def verify_tools_lock(tools_root: Path, contract_engine_commit: str) -> None:
     submodule = lock.get("submodule")
     require(isinstance(submodule, dict), "tools engine lock has no submodule object")
     require(
-        submodule.get("commit") == contract_engine_commit,
-        "tools engine lock does not pin the requested contract engine commit",
+        submodule.get("commit") == tools_engine_commit,
+        "tools engine lock does not pin the requested tools engine commit",
     )
     contract = lock.get("data_tools_contract")
     require(isinstance(contract, dict), "tools engine lock has no data_tools_contract")
@@ -924,10 +944,19 @@ def preflight(config: GateConfig, *, allow_output: bool = False) -> Preflight:
         "validation seed must be nonzero and fit uint64",
     )
     require(config.train_seed != config.validation_seed, "train and validation seeds must differ")
-    contract_commit = require_sha1(config.contract_engine_commit, "contract engine commit")
+    tools_engine_commit = require_sha1(
+        config.tools_engine_commit, "tools engine commit"
+    )
+    trainer_engine_commit = require_sha1(
+        config.trainer_engine_commit, "trainer engine commit"
+    )
     require(
-        contract_commit == NORMATIVE_CONTRACT_ENGINE_COMMIT,
-        "contract engine commit differs from the normative H7 pin",
+        tools_engine_commit == NORMATIVE_TOOLS_ENGINE_COMMIT,
+        "tools engine commit differs from the normative H7 pin",
+    )
+    require(
+        trainer_engine_commit == NORMATIVE_TRAINER_ENGINE_COMMIT,
+        "trainer engine commit differs from the normative H7 pin",
     )
     require(
         config.tools.commit == NORMATIVE_TOOLS_COMMIT,
@@ -938,8 +967,8 @@ def preflight(config: GateConfig, *, allow_output: bool = False) -> Preflight:
         "trainer commit differs from the normative H7 atomic merge",
     )
     require(
-        config.source_net_sha256 == NORMATIVE_SOURCE_NET_SHA256,
-        "source network differs from the normative H7 playing network",
+        config.source_net_sha256 == normative_source_net_sha256(config.profile),
+        f"source network differs from the normative {config.profile} network",
     )
 
     states = {
@@ -963,19 +992,19 @@ def preflight(config: GateConfig, *, allow_output: bool = False) -> Preflight:
     tools_engine = verify_submodule_pin(
         config.tools.root.resolve(),
         "engine/Atomic-Stockfish",
-        contract_commit,
+        tools_engine_commit,
         label="tools Atomic-Stockfish submodule",
     )
     trainer_engine = verify_submodule_pin(
         config.trainer.root.resolve(),
         "external/Atomic-Stockfish",
-        contract_commit,
+        trainer_engine_commit,
         label="trainer Atomic-Stockfish submodule",
     )
     verify_schema_tree(config.atomic.root.resolve(), "Atomic checkout")
     verify_schema_tree(tools_engine, "tools engine submodule")
     verify_schema_tree(trainer_engine, "trainer engine submodule")
-    verify_tools_lock(config.tools.root.resolve(), contract_commit)
+    verify_tools_lock(config.tools.root.resolve(), tools_engine_commit)
 
     canonical_sources = {
         "tools_wrapper": (config.tools_wrapper, config.tools.root, "script/atomic_bin_v2_tools.py"),
@@ -2383,6 +2412,16 @@ def archive_failure(archive: Archive, error: BaseException) -> None:
     verify_public_text_redaction(archive)
 
 
+def pipeline_identity(config: GateConfig) -> Mapping[str, str]:
+    """Return the profile and asymmetric engine pins recorded by every pass."""
+
+    return {
+        "profile": config.profile,
+        "tools_engine_commit": config.tools_engine_commit,
+        "trainer_engine_commit": config.trainer_engine_commit,
+    }
+
+
 def run_gate(config: GateConfig) -> Mapping[str, object]:
     before = preflight(config)
     archive = Archive(config.output_dir, archive_redactions(config))
@@ -2495,7 +2534,7 @@ def run_gate(config: GateConfig) -> Mapping[str, object]:
                 for path in dataset["shard_paths"]
             ]
         provenance = {
-            "schema_version": 1,
+            "schema_version": 2,
             "contract": {
                 "records_per_dataset": RECORDS,
                 "records_per_shard": RECORDS_PER_SHARD,
@@ -2516,7 +2555,7 @@ def run_gate(config: GateConfig) -> Mapping[str, object]:
                 "manifest": MANIFEST_SCHEMA_SHA256,
                 "decode": DECODE_SCHEMA_SHA256,
             },
-            "contract_engine_commit": config.contract_engine_commit,
+            **pipeline_identity(config),
             "checkouts": {name: asdict(state) for name, state in before.checkouts.items()},
             "inputs": {name: asdict(item) for name, item in before.fingerprints.items()},
             "seeds": {"train": str(config.train_seed), "validation": str(config.validation_seed)},
@@ -2542,12 +2581,12 @@ def run_gate(config: GateConfig) -> Mapping[str, object]:
         }
         archive.write_json("provenance.json", provenance)
         result = {
-            "schema_version": 1,
+            "schema_version": 2,
             "status": "passed",
             "atomic_commit": config.atomic.commit,
             "tools_commit": config.tools.commit,
             "trainer_commit": config.trainer.commit,
-            "contract_engine_commit": config.contract_engine_commit,
+            **pipeline_identity(config),
             "train_manifest_sha256": datasets["train"]["manifest_sha256"],
             "validation_manifest_sha256": datasets["validation"]["manifest_sha256"],
             "candidate_sha256": candidate_hash,
@@ -2598,6 +2637,12 @@ def build_parser() -> argparse.ArgumentParser:
         )
     )
     checkout = parser.add_argument_group("authenticated checkouts")
+    checkout.add_argument(
+        "--profile",
+        choices=tuple(NORMATIVE_SOURCE_NET_SHA256_BY_PROFILE),
+        required=True,
+        help="required fail-closed source-network identity profile",
+    )
     for label in ("atomic", "tools", "trainer"):
         checkout.add_argument(
             f"--{label}-root",
@@ -2616,9 +2661,14 @@ def build_parser() -> argparse.ArgumentParser:
             help=f"Git ref that must resolve to --{label}-commit",
         )
     checkout.add_argument(
-        "--contract-engine-commit",
+        "--tools-engine-commit",
         required=True,
-        help="exact Atomic commit pinned by both tools and trainer submodules",
+        help="exact Atomic commit pinned by the tools submodule and lock",
+    )
+    checkout.add_argument(
+        "--trainer-engine-commit",
+        required=True,
+        help="exact Atomic commit pinned by the trainer submodule",
     )
 
     artifacts = parser.add_argument_group("authenticated executable artifacts")
@@ -2696,7 +2746,13 @@ def config_from_args(arguments: argparse.Namespace) -> GateConfig:
     atomic_commit = require_sha1(arguments.atomic_commit, "Atomic commit")
     tools_commit = require_sha1(arguments.tools_commit, "tools commit")
     trainer_commit = require_sha1(arguments.trainer_commit, "trainer commit")
-    contract_commit = require_sha1(arguments.contract_engine_commit, "contract engine commit")
+    profile = str(arguments.profile)
+    tools_engine_commit = require_sha1(
+        arguments.tools_engine_commit, "tools engine commit"
+    )
+    trainer_engine_commit = require_sha1(
+        arguments.trainer_engine_commit, "trainer engine commit"
+    )
     hashes = {
         name: require_sha256(getattr(arguments, name), name.replace("_", " "))
         for name in (
@@ -2709,12 +2765,19 @@ def config_from_args(arguments: argparse.Namespace) -> GateConfig:
             "source_net_sha256",
         )
     }
-    require(contract_commit == NORMATIVE_CONTRACT_ENGINE_COMMIT, "contract engine pin changed")
+    require(
+        tools_engine_commit == NORMATIVE_TOOLS_ENGINE_COMMIT,
+        "tools engine pin changed",
+    )
+    require(
+        trainer_engine_commit == NORMATIVE_TRAINER_ENGINE_COMMIT,
+        "trainer engine pin changed",
+    )
     require(tools_commit == NORMATIVE_TOOLS_COMMIT, "tools atomic merge pin changed")
     require(trainer_commit == NORMATIVE_TRAINER_COMMIT, "trainer atomic merge pin changed")
     require(
-        hashes["source_net_sha256"] == NORMATIVE_SOURCE_NET_SHA256,
-        "source network pin changed",
+        hashes["source_net_sha256"] == normative_source_net_sha256(profile),
+        f"source network pin does not match profile {profile}",
     )
     require(
         1 <= arguments.train_seed <= 0xFFFFFFFF,
@@ -2750,7 +2813,9 @@ def config_from_args(arguments: argparse.Namespace) -> GateConfig:
             arguments.trainer_ref,
             TRAINER_REPOSITORY,
         ),
-        contract_engine_commit=contract_commit,
+        profile=profile,
+        tools_engine_commit=tools_engine_commit,
+        trainer_engine_commit=trainer_engine_commit,
         engine=resolved("engine"),
         engine_sha256=hashes["engine_sha256"],
         data_generator=resolved("data_generator"),

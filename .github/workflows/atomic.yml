@@ -499,7 +499,7 @@ jobs:
           persist-credentials: false
       - name: Build debug engine
         working-directory: src
-        run: make -j2 ARCH=x86-64 debug=yes optimize=no build
+        run: make -j2 ARCH=x86-64 COMP=gcc COMPCXX=g++ debug=yes optimize=no build
       - name: Create authenticated Legacy V1 and AtomicNNUEV2 fixtures
         run: |
           python3 tests/create_synthetic_zero_nnue.py --output "$RUNNER_TEMP/atomic-zero.nnue"
@@ -563,6 +563,26 @@ jobs:
           python3 tests/atomic_v3_trajectory_producer.py \
             --generator src/atomic-stockfish-data-generator \
             --net "$RUNNER_TEMP/atomic-zero.nnue"
+
+  debug-clang:
+    name: Clang debug/assert smoke
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Build Clang debug engine and focused units
+        run: |
+          make -C src -j2 ARCH=x86-64 COMP=clang COMPCXX=clang++ debug=yes optimize=no build
+          make -C src -j2 ARCH=x86-64 COMP=clang COMPCXX=clang++ debug=yes optimize=no atomic-unit-tests
+          make -C src -j2 ARCH=x86-64 COMP=clang COMPCXX=clang++ debug=yes optimize=no atomic-api-tests
+          make -C src -j2 ARCH=x86-64 COMP=clang COMPCXX=clang++ debug=yes optimize=no atomic-v2-backend-core-tests.bin
+      - name: Run Clang debug assertion smoke
+        run: |
+          python3 tests/create_synthetic_atomic_v2_nnue.py --output "$RUNNER_TEMP/atomic-v2.nnue"
+          src/atomic-v2-backend-core-tests.bin "$RUNNER_TEMP/atomic-v2.nnue"
+          python3 tests/release_protocol_smoke.py --engine src/atomic-stockfish
 
   data-generator-windows:
     name: Data generator Windows MinGW
@@ -661,6 +681,13 @@ jobs:
           python tests/atomic_v3_trajectory_producer.py \
             --generator src/atomic-stockfish-data-generator.exe \
             --net "$RUNNER_TEMP/atomic-zero.nnue"
+      - name: MinGW debug/assert build and protocol smoke
+        run: |
+          make -C src ARCH=x86-64 COMP=mingw clean
+          make -C src -j2 ARCH=x86-64 COMP=mingw debug=yes optimize=no build
+          make -C src -j2 ARCH=x86-64 COMP=mingw debug=yes optimize=no atomic-unit-tests
+          make -C src -j2 ARCH=x86-64 COMP=mingw debug=yes optimize=no atomic-api-tests
+          python tests/release_protocol_smoke.py --engine src/atomic-stockfish.exe
 
   sanitizers:
     name: ${{ matrix.name }}
@@ -1180,6 +1207,7 @@ jobs:
           tests/python/test_atomic_los_gate.py
           tests/python/test_atomic_syzygy_uci.py
           tests/python/test_atomic_compiler_preflight.py
+          tests/python/test_atomic_debug_ci_contract.py
           tests/python/test_atomic_training_data_schema.py
           tests/python/test_atomic_bin_v2_schema.py
           tests/python/test_atomic_bin_v2_manifest_schema.py
@@ -1273,7 +1301,7 @@ jobs:
   legacy-pipeline:
     name: Pinned Legacy Atomic V1 pipeline
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - name: Check out Atomic-Stockfish
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -1341,6 +1369,7 @@ jobs:
             --repository-root .pipeline/tools \
             --output "$RUNNER_TEMP/tools-build.json"
           make -C .pipeline/tools pin-tests verify-delegated-tsan tools-unit
+          make -C .pipeline/tools -j2 ARCH=x86-64 COMP=gcc v2-data-tools
           python .pipeline/tools/tests/tools_integration.py --engine .pipeline/tools/src/atomic-data-tools
       - name: Clean-build trainer native loader
         run: |
@@ -1372,6 +1401,7 @@ jobs:
           make -C src -j2 ARCH=x86-64 atomic-bin-v2-manifest-tests
           make -C src -j2 ARCH=x86-64 atomic-bin-v2-manifest-reader-tests
           make -C src -j2 ARCH=x86-64 atomic-bin-v2-reader-tests
+          make -C src -j2 ARCH=x86-64 data-tools
           bash tests/perft.sh src/atomic-stockfish
           python tests/atomic_search.py --candidate src/atomic-stockfish --use-nnue false
       - name: Enforce locked clean checkouts
@@ -1421,3 +1451,61 @@ jobs:
           --atomic-data-generator-build-manifest "$RUNNER_TEMP/atomic-data-generator-build.json"
           --atomic-root .
           --atomic-commit "$(git rev-parse HEAD)"
+      - name: Synthetic Atomic BIN V2 generate-train-load E2E
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          set -euo pipefail
+          SOURCE_NET="$RUNNER_TEMP/atomic-h7-zero.nnue"
+          OUTPUT_DIR="$RUNNER_TEMP/atomic-h7-v2-e2e"
+          PYTHON_BIN="$(python -c 'import pathlib,sys; print(pathlib.Path(sys.executable).resolve())')"
+          test ! -e "$SOURCE_NET"
+          test ! -e "$OUTPUT_DIR"
+          python -B tests/create_synthetic_zero_nnue.py --output "$SOURCE_NET"
+          echo "9CF054CA00B82AB53A34473DE52D1104AEDDAA19B2E7B24091B5E613AF485985  $SOURCE_NET" | sha256sum --check --strict
+
+          sha256_file() {
+            sha256sum "$1" | awk '{print tolower($1)}'
+          }
+
+          python -B tests/atomic_bin_v2_pipeline_e2e.py \
+            --profile synthetic-ci \
+            --atomic-root . \
+            --atomic-commit "$(git rev-parse HEAD)" \
+            --atomic-ref "$(git rev-parse HEAD)" \
+            --tools-root .pipeline/tools \
+            --tools-commit 450049ee7a0ece32694b11f6c55deb7df1d42a84 \
+            --tools-ref 450049ee7a0ece32694b11f6c55deb7df1d42a84 \
+            --trainer-root .pipeline/trainer \
+            --trainer-commit 44663e28c3e5464ff3be2cdaa26c8518b3951c5f \
+            --trainer-ref 44663e28c3e5464ff3be2cdaa26c8518b3951c5f \
+            --tools-engine-commit 420c9f35266fbdc2167dc5b9d8d20d90281c60c9 \
+            --trainer-engine-commit 76764c3c01ce5965a793a65e4580dd5c95cd2916 \
+            --engine src/atomic-stockfish-pipeline \
+            --engine-sha256 "$(sha256_file src/atomic-stockfish-pipeline)" \
+            --data-generator src/atomic-stockfish-data-generator-pipeline \
+            --data-generator-sha256 "$(sha256_file src/atomic-stockfish-data-generator-pipeline)" \
+            --data-tools src/atomic-stockfish-data-tools \
+            --data-tools-sha256 "$(sha256_file src/atomic-stockfish-data-tools)" \
+            --tools-wrapper .pipeline/tools/script/atomic_bin_v2_tools.py \
+            --wrapper-data-tools .pipeline/tools/engine/Atomic-Stockfish/src/atomic-stockfish-data-tools \
+            --wrapper-data-tools-sha256 "$(sha256_file .pipeline/tools/engine/Atomic-Stockfish/src/atomic-stockfish-data-tools)" \
+            --trainer-loader .pipeline/trainer/libtraining_data_loader.so \
+            --trainer-loader-sha256 "$(sha256_file .pipeline/trainer/libtraining_data_loader.so)" \
+            --train-script .pipeline/trainer/train.py \
+            --serialize-script .pipeline/trainer/serialize.py \
+            --python "$PYTHON_BIN" \
+            --python-sha256 "$(sha256_file "$PYTHON_BIN")" \
+            --source-net "$SOURCE_NET" \
+            --source-net-sha256 9cf054ca00b82ab53a34473de52d1104aeddaa19b2e7b24091b5e613af485985 \
+            --output-dir "$OUTPUT_DIR" \
+            --train-seed 2026071301 \
+            --validation-seed 2026071302
+      - name: Preserve sanitized Atomic BIN V2 evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: atomic-bin-v2-e2e-evidence
+          path: ${{ runner.temp }}/atomic-h7-v2-e2e
+          if-no-files-found: warn
+          retention-days: 14

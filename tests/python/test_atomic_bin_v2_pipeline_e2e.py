@@ -19,6 +19,7 @@ import pytest
 
 
 TESTS_DIR = Path(__file__).resolve().parents[1]
+REPO_ROOT = TESTS_DIR.parent
 if str(TESTS_DIR) not in sys.path:
     sys.path.insert(0, str(TESTS_DIR))
 
@@ -26,9 +27,10 @@ import atomic_bin_v2_pipeline_e2e as gate
 
 
 COMMIT = "a" * 40
-CONTRACT_COMMIT = gate.NORMATIVE_CONTRACT_ENGINE_COMMIT
 TOOLS_COMMIT = gate.NORMATIVE_TOOLS_COMMIT
+TOOLS_ENGINE_COMMIT = gate.NORMATIVE_TOOLS_ENGINE_COMMIT
 TRAINER_COMMIT = gate.NORMATIVE_TRAINER_COMMIT
+TRAINER_ENGINE_COMMIT = gate.NORMATIVE_TRAINER_ENGINE_COMMIT
 SHA256 = "c" * 64
 DELETE = object()
 
@@ -110,7 +112,9 @@ def config(tmp_path: Path, **overrides: object) -> gate.GateConfig:
             "refs/heads/atomic",
             gate.TRAINER_REPOSITORY,
         ),
-        "contract_engine_commit": CONTRACT_COMMIT,
+        "profile": "strong-local",
+        "tools_engine_commit": TOOLS_ENGINE_COMMIT,
+        "trainer_engine_commit": TRAINER_ENGINE_COMMIT,
         "engine": tmp_path / "atomic" / "src" / "engine.exe",
         "engine_sha256": SHA256,
         "data_generator": tmp_path / "atomic" / "src" / "generator.exe",
@@ -150,7 +154,7 @@ def config(tmp_path: Path, **overrides: object) -> gate.GateConfig:
         "python": Path(sys.executable).resolve(),
         "python_sha256": gate.sha256_file(Path(sys.executable).resolve()),
         "source_net": tmp_path / "networks" / "arbitrary-compatible-name.nnue",
-        "source_net_sha256": gate.NORMATIVE_SOURCE_NET_SHA256,
+        "source_net_sha256": gate.NORMATIVE_STRONG_LOCAL_SOURCE_NET_SHA256,
         "output_dir": tmp_path / "audit",
         "train_seed": 2026071301,
         "validation_seed": 2026071302,
@@ -1018,22 +1022,39 @@ def test_preflight_authenticates_every_executed_artifact_and_canonical_wrapper_c
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     cfg = preflight_fixture(tmp_path)
-    monkeypatch.setattr(gate, "NORMATIVE_SOURCE_NET_SHA256", cfg.source_net_sha256)
+    monkeypatch.setattr(
+        gate,
+        "NORMATIVE_SOURCE_NET_SHA256_BY_PROFILE",
+        {**gate.NORMATIVE_SOURCE_NET_SHA256_BY_PROFILE, cfg.profile: cfg.source_net_sha256},
+    )
 
     def checkout(spec: gate.CheckoutSpec) -> gate.CheckoutState:
         return gate.CheckoutState(
             spec.label, str(spec.root.resolve()), spec.commit, spec.ref, spec.repository
         )
 
+    submodule_pins: list[tuple[str, str]] = []
+    tools_lock_pins: list[str] = []
+
     def submodule(parent: Path, relative: str, commit: str, *, label: str) -> Path:
-        del commit, label
+        del label
+        submodule_pins.append((relative, commit))
         return (parent / relative).resolve()
+
+    def tools_lock(root: Path, commit: str) -> None:
+        del root
+        tools_lock_pins.append(commit)
 
     monkeypatch.setattr(gate, "verify_checkout", checkout)
     monkeypatch.setattr(gate, "verify_submodule_pin", submodule)
     monkeypatch.setattr(gate, "verify_schema_tree", lambda root, label: None)
-    monkeypatch.setattr(gate, "verify_tools_lock", lambda root, commit: None)
+    monkeypatch.setattr(gate, "verify_tools_lock", tools_lock)
     state = gate.preflight(cfg)
+    assert submodule_pins == [
+        ("engine/Atomic-Stockfish", TOOLS_ENGINE_COMMIT),
+        ("external/Atomic-Stockfish", TRAINER_ENGINE_COMMIT),
+    ]
+    assert tools_lock_pins == [TOOLS_ENGINE_COMMIT]
     assert set(state.fingerprints) == {
         "engine",
         "data_generator",
@@ -1643,7 +1664,9 @@ def namespace(tmp_path: Path, **overrides: object) -> SimpleNamespace:
         "trainer_root": tmp_path / "trainer",
         "trainer_commit": TRAINER_COMMIT,
         "trainer_ref": "refs/heads/atomic",
-        "contract_engine_commit": CONTRACT_COMMIT,
+        "profile": "strong-local",
+        "tools_engine_commit": TOOLS_ENGINE_COMMIT,
+        "trainer_engine_commit": TRAINER_ENGINE_COMMIT,
         "engine": tmp_path / "engine",
         "engine_sha256": SHA256,
         "data_generator": tmp_path / "generator",
@@ -1660,7 +1683,7 @@ def namespace(tmp_path: Path, **overrides: object) -> SimpleNamespace:
         "python": Path(sys.executable).resolve(),
         "python_sha256": gate.sha256_file(Path(sys.executable).resolve()),
         "source_net": tmp_path / "network.nnue",
-        "source_net_sha256": gate.NORMATIVE_SOURCE_NET_SHA256,
+        "source_net_sha256": gate.NORMATIVE_STRONG_LOCAL_SOURCE_NET_SHA256,
         "output_dir": tmp_path / "output",
         "train_seed": 1,
         "validation_seed": 2,
@@ -1672,9 +1695,15 @@ def namespace(tmp_path: Path, **overrides: object) -> SimpleNamespace:
 
 def test_cli_config_requires_exact_hashes_commits_and_distinct_seeds(tmp_path: Path) -> None:
     cfg = gate.config_from_args(namespace(tmp_path))
+    assert cfg.profile == "strong-local"
     assert cfg.atomic.repository == gate.ATOMIC_REPOSITORY
     assert cfg.tools.repository == gate.TOOLS_REPOSITORY
     assert cfg.trainer.repository == gate.TRAINER_REPOSITORY
+    assert gate.pipeline_identity(cfg) == {
+        "profile": "strong-local",
+        "tools_engine_commit": TOOLS_ENGINE_COMMIT,
+        "trainer_engine_commit": TRAINER_ENGINE_COMMIT,
+    }
     assert cfg.train_seed == 1 and cfg.validation_seed == 2
     with pytest.raises(gate.GateError, match="seeds must differ"):
         gate.config_from_args(namespace(tmp_path, validation_seed=1))
@@ -1684,10 +1713,23 @@ def test_cli_config_requires_exact_hashes_commits_and_distinct_seeds(tmp_path: P
         gate.config_from_args(namespace(tmp_path, python_sha256="C" * 64))
 
 
+def test_cli_config_accepts_the_exact_synthetic_ci_identity(tmp_path: Path) -> None:
+    cfg = gate.config_from_args(
+        namespace(
+            tmp_path,
+            profile="synthetic-ci",
+            source_net_sha256=gate.NORMATIVE_SYNTHETIC_CI_SOURCE_NET_SHA256,
+        )
+    )
+    assert cfg.profile == "synthetic-ci"
+    assert cfg.source_net_sha256 == gate.NORMATIVE_SYNTHETIC_CI_SOURCE_NET_SHA256
+
+
 @pytest.mark.parametrize(
     ("field", "value", "message"),
     (
-        ("contract_engine_commit", "d" * 40, "contract engine pin"),
+        ("tools_engine_commit", "d" * 40, "tools engine pin"),
+        ("trainer_engine_commit", "d" * 40, "trainer engine pin"),
         ("tools_commit", "d" * 40, "tools atomic merge pin"),
         ("trainer_commit", "d" * 40, "trainer atomic merge pin"),
         ("source_net_sha256", "d" * 64, "source network pin"),
@@ -1702,6 +1744,66 @@ def test_cli_config_rejects_non_normative_pins_and_seed_domains(
 ) -> None:
     with pytest.raises(gate.GateError, match=message):
         gate.config_from_args(namespace(tmp_path, **{field: value}))
+
+
+@pytest.mark.parametrize(
+    ("profile", "source_sha256"),
+    (
+        ("strong-local", gate.NORMATIVE_SYNTHETIC_CI_SOURCE_NET_SHA256),
+        ("synthetic-ci", gate.NORMATIVE_STRONG_LOCAL_SOURCE_NET_SHA256),
+    ),
+)
+def test_cli_config_rejects_cross_profile_networks(
+    tmp_path: Path, profile: str, source_sha256: str
+) -> None:
+    with pytest.raises(gate.GateError, match="source network pin does not match profile"):
+        gate.config_from_args(
+            namespace(tmp_path, profile=profile, source_net_sha256=source_sha256)
+        )
+
+
+def test_profile_is_required_and_closed_over_two_named_identities() -> None:
+    action = next(
+        item for item in gate.build_parser()._actions if item.dest == "profile"
+    )
+    assert action.required is True
+    assert tuple(action.choices or ()) == ("strong-local", "synthetic-ci")
+    with pytest.raises(gate.GateError, match="profile must be exactly"):
+        gate.normative_source_net_sha256("unreviewed")
+
+
+def test_atomic_ci_runs_the_real_synthetic_v2_gate_with_final_pins() -> None:
+    workflow = (REPO_ROOT / ".github" / "workflows" / "atomic.yml").read_text(
+        encoding="utf-8"
+    )
+    required = (
+        "Synthetic Atomic BIN V2 generate-train-load E2E",
+        "python -B tests/create_synthetic_zero_nnue.py",
+        "python -B tests/atomic_bin_v2_pipeline_e2e.py",
+        "make -C .pipeline/tools -j2 ARCH=x86-64 COMP=gcc v2-data-tools",
+        "make -C src -j2 ARCH=x86-64 data-tools",
+        "--profile synthetic-ci",
+        f"--tools-commit {TOOLS_COMMIT}",
+        f"--tools-engine-commit {TOOLS_ENGINE_COMMIT}",
+        f"--trainer-commit {TRAINER_COMMIT}",
+        f"--trainer-engine-commit {TRAINER_ENGINE_COMMIT}",
+        (
+            "--source-net-sha256 "
+            f"{gate.NORMATIVE_SYNTHETIC_CI_SOURCE_NET_SHA256}"
+        ),
+        (
+            "--wrapper-data-tools "
+            ".pipeline/tools/engine/Atomic-Stockfish/src/atomic-stockfish-data-tools"
+        ),
+        "--trainer-loader .pipeline/trainer/libtraining_data_loader.so",
+        "name: atomic-bin-v2-e2e-evidence",
+    )
+    for marker in required:
+        assert marker in workflow
+    assert workflow.index("Enforce locked clean checkouts") < workflow.index(
+        "Synthetic Atomic BIN V2 generate-train-load E2E"
+    )
+    assert "--contract-engine-commit" not in workflow
 
 
 def test_fingerprints_must_remain_identical_after_gate() -> None:
