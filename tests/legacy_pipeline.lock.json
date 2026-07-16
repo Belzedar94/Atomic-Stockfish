@@ -9,12 +9,12 @@
   "repositories": {
     "tools": {
       "repository": "Belzedar94/variant-nnue-tools",
-      "commit": "521f841098eeee19c4234417181b0b441feb3499",
+      "commit": "450049ee7a0ece32694b11f6c55deb7df1d42a84",
       "resolved": true
     },
     "trainer": {
       "repository": "Belzedar94/variant-nnue-pytorch",
-      "commit": "350a28f2cee225c546333aded75b9db64caa526d",
+      "commit": "44663e28c3e5464ff3be2cdaa26c8518b3951c5f",
       "resolved": true
     }
   },

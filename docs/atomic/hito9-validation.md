@@ -528,7 +528,8 @@ rollback and the unchanged seven Legacy/V2 fixtures are covered.
 `variant-nnue-pytorch` PR #13 merged the isolated trainer core into `atomic` as
 `44663e28c3e5464ff3be2cdaa26c8518b3951c5f`. It authenticates the earlier
 H9.3l-a contract boundary and does not yet claim controlled training or V3
-publication. The final `variant-nnue-tools/atomic` pin to engine merge
-`420c9f35266fbdc2167dc5b9d8d20d90281c60c9` remains a release input until its
-reviewed PR is merged and its repository merge SHA is frozen in the pipeline
-lock.
+publication. `variant-nnue-tools` PR #33 then merged the final pin to engine
+merge `420c9f35266fbdc2167dc5b9d8d20d90281c60c9` into `atomic` as
+`450049ee7a0ece32694b11f6c55deb7df1d42a84`. The release pipeline lock freezes
+that reviewed tools merge together with trainer merge
+`44663e28c3e5464ff3be2cdaa26c8518b3951c5f`.

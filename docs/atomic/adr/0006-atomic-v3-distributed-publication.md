@@ -1,6 +1,6 @@
 # ADR 0006: Publish distributed AtomicNNUEV3 datasets through an acyclic evidence chain
 
-- Status: accepted; H9.3l-a contract, H9.3l-b audited producer and the isolated trainer core are merged; semantic scanning, controlled training execution and the final tools pin remain pending
+- Status: accepted; H9.3l-a contract, H9.3l-b audited producer, isolated trainer core and final tools pin are merged; semantic scanning and controlled training execution remain pending
 - Date: 2026-07-16
 
 ## Implementation status
@@ -13,9 +13,10 @@
   as `44663e28c3e5464ff3be2cdaa26c8518b3951c5f`. This core intentionally
   authenticates the H9.3l-a contract commit; it does not claim controlled
   training or publication readiness.
-- `variant-nnue-tools/atomic` must still merge its final engine pin to
-  `420c9f35266fbdc2167dc5b9d8d20d90281c60c9`. Its resulting merge commit is
-  recorded only after that PR is reviewed and merged.
+- `variant-nnue-tools` PR #33 merged the final engine pin to
+  `420c9f35266fbdc2167dc5b9d8d20d90281c60c9` into `atomic` as
+  `450049ee7a0ece32694b11f6c55deb7df1d42a84` after exact-head review and all
+  five platform/instrumentation checks passed.
 
 ## Context
 

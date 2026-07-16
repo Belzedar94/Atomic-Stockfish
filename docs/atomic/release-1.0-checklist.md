@@ -14,10 +14,11 @@ release manifest.
   `44663e28c3e5464ff3be2cdaa26c8518b3951c5f` and intentionally authenticates
   the H9.3l-a contract commit where required.
 - `variant-nnue-tools/atomic` pins final engine merge
-  `420c9f35266fbdc2167dc5b9d8d20d90281c60c9`; its final reviewed merge SHA is
-  recorded after the pending pin PR merges.
-- Before tagging, `tests/legacy_pipeline.lock.json` records the final merged
-  tools and trainer repository SHAs, not branch-head commits.
+  `420c9f35266fbdc2167dc5b9d8d20d90281c60c9` in reviewed PR #33 merge
+  `450049ee7a0ece32694b11f6c55deb7df1d42a84`.
+- `tests/legacy_pipeline.lock.json` records tools merge
+  `450049ee7a0ece32694b11f6c55deb7df1d42a84` and trainer merge
+  `44663e28c3e5464ff3be2cdaa26c8518b3951c5f`, never branch-head commits.
 - The 500M bootstrap campaign remains an independent Atomic BIN V2 pilot, not a
   V3 publication-ready release dataset. Its live progress and exact engine,
   network, book and command are recorded, but completion does not alter the

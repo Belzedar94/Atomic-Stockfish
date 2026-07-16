@@ -97,7 +97,11 @@ def test_checked_in_lock_is_structurally_valid() -> None:
     assert lock.training_data_schema.record_size == 72
     assert (
         lock.repositories["tools"].commit
-        == "521f841098eeee19c4234417181b0b441feb3499"
+        == "450049ee7a0ece32694b11f6c55deb7df1d42a84"
+    )
+    assert (
+        lock.repositories["trainer"].commit
+        == "44663e28c3e5464ff3be2cdaa26c8518b3951c5f"
     )
     assert (
         lock.profiles["strong-local"].data_sha256
