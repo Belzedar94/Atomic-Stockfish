@@ -1,3 +1,12 @@
+# Atomic-Stockfish project
+Belzedar94 (project lead)
+
+# Fairy-Stockfish Atomic rules, NNUE, protocol, and binding lineage
+Fabian Fichter (ianfab)
+Bajusz Tamás (gbtami) - Python binding lineage
+Johannes Czech (QueensGambit) - JavaScript binding lineage
+The Fairy-Stockfish contributors
+
 # Founders of the Stockfish project and Fishtest infrastructure
 Tord Romstad (romstad)
 Marco Costalba (mcostalba)

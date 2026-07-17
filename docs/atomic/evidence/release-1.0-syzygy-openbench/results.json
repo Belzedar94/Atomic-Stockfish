@@ -1,0 +1,426 @@
+{
+  "schema": "atomic-stockfish.syzygy-openbench-evidence.v1",
+  "recorded_utc": "2026-07-16T15:30:37Z",
+  "claim": {
+    "accepted_by_owner": true,
+    "completion_policy": "owner-waiver-after-positive-healthcheck",
+    "owner_statement": "He parado los tests porque los he dado por buenos. Healthcheck hecho.",
+    "point_estimate_positive_tests": 6,
+    "total_tests": 6,
+    "accepted_games": 660,
+    "explicitly_not_claimed": [
+      "six-of-six-openbench-pass",
+      "six-of-six-2000-games-complete",
+      "six-of-six-los-gate",
+      "aggregate-elo-across-heterogeneous-comparators"
+    ]
+  },
+  "authority": {
+    "kind": "frozen-openbench-sqlite-backup",
+    "filename": "db.sqlite3.bak-predatagen-20260715-1638",
+    "bytes": 299008,
+    "sha256": "4E967DB2381129B66EC85E12EE5EC83977A07A69AD62862FCC0613A042C58291",
+    "openbench_commit_at_execution": "75ef3f220584daf780869f12984470a7ca2c6b74",
+    "result_policy": "OpenBench_test and OpenBench_result accepted counters are authoritative; raw worker attempts are not"
+  },
+  "supporting_artifacts": [
+    {
+      "role": "worker-stdout-non-authoritative",
+      "filename": "worker-20260713-141725.stdout.log",
+      "bytes": 2002447,
+      "sha256": "F0E438165EE7C2CFAF75E29011261FEE2CB9198E14856A592538EB174A7B95E0"
+    },
+    {
+      "role": "worker-stderr-non-authoritative",
+      "filename": "worker-20260713-141725.stderr.log",
+      "bytes": 19270,
+      "sha256": "6FECBFC01783F84A6FA9ECEF96943E396BE52808F2EB09D545C3F1EB84B33AFE"
+    }
+  ],
+  "inputs": {
+    "atomic_tested_commit": "388bae077f3c6bd17182ac6883b3436e9eb85e42",
+    "atomic_release_head_at_recording": "2e97f07afea0810bad7862de5f145216d1a1eb8e",
+    "atomic_bench_signature": 338376,
+    "syzygy_source_tree_tested": "48d8f935642ca495022c7288820c94c49abf791b",
+    "syzygy_source_tree_release": "48d8f935642ca495022c7288820c94c49abf791b",
+    "syzygy_driver_test_blob_tested_and_release": "47bc64144088fa28f24e4062e6b52fe88d3e7e8a",
+    "syzygy_uci_test_blob_tested_and_release": "82b6950ce308f711e0c9981ac2f6ac7b4329ebbb",
+    "syzygy_fixture_tree_tested_and_release": "1af350115e39ae68f5f2ffd74c149fa62356994b",
+    "fairy_harness_commit": "756810e8925d095d9c569c1a51451d9d1349c290",
+    "fairy_upstream_commit": "fb78cb561aa01708338e35b3dc3b65a42149a3c4",
+    "network": {
+      "name": "atomic_run3b_e202_l05.nnue",
+      "sha256": "99DC67EABF26A64FAEECA3A88B4C38597A840B8D4A874B9F2CF658C6F92A04A6"
+    },
+    "book": {
+      "name": "ATOMIC_syzygy_6man.epd",
+      "bytes": 176,
+      "sha256": "AD83B0F3B8EE08D0F61F2F9AFA11C1C72978AD0462D63A306C32697C92C5B449"
+    },
+    "tables": {
+      "inventory_sha256": "3D4B7FD0AB387F4F60DA2078F612C9E8890E6026F551AEBE8631EFC157788F23",
+      "files": 1020,
+      "bytes": 236554027392,
+      "parts": [
+        {
+          "name": "3-4-5-man",
+          "files": 290,
+          "bytes": 1381616864,
+          "official_md5_verification": "pass"
+        },
+        {
+          "name": "6-man-wdl",
+          "files": 365,
+          "bytes": 97194780688,
+          "official_md5_verification": "pass"
+        },
+        {
+          "name": "6-man-dtz",
+          "files": 365,
+          "bytes": 137977629840,
+          "official_md5_verification": "pass"
+        }
+      ]
+    }
+  },
+  "healthcheck": {
+    "database_error_tests": 0,
+    "worker_crashes": 0,
+    "worker_illegal_results": 0,
+    "candidate_time_losses": 20,
+    "base_time_losses": 0,
+    "baseline_uci_variant_warnings": 24,
+    "baseline_warning_followup": "The stored Fairy baseline UCI handshake advertised UCI_Variant with atomic; no crash or illegal result was recorded",
+    "raw_test_38_attempted_games": 140,
+    "database_test_38_accepted_games": 134,
+    "pgns_uploaded": false
+  },
+  "tests": [
+    {
+      "id": 37,
+      "comparison": "same-binary-syzygy-on-vs-off",
+      "evaluation": "nnue",
+      "tc_class": "STC",
+      "time_control": "8.0+0.08",
+      "hash_mb": 32,
+      "book_index": 145,
+      "dev": {
+        "engine": "Atomic-Stockfish",
+        "commit": "388bae077f3c6bd17182ac6883b3436e9eb85e42",
+        "options": "Threads=1 Hash=32 \"Use NNUE=true\" SyzygyProbeLimit=6 SyzygyProbeDepth=1 Syzygy50MoveRule=true"
+      },
+      "base": {
+        "engine": "Atomic-Stockfish",
+        "commit": "388bae077f3c6bd17182ac6883b3436e9eb85e42",
+        "options": "Threads=1 Hash=32 \"Use NNUE=true\" SyzygyProbeLimit=0 SyzygyProbeDepth=1 Syzygy50MoveRule=true"
+      },
+      "games": {
+        "requested": 2000,
+        "accepted": 240,
+        "wins": 117,
+        "draws": 51,
+        "losses": 72,
+        "pentanomial": [2, 1, 67, 50, 0],
+        "crashes": 0,
+        "time_losses": 10,
+        "time_loss_side": "dev",
+        "worker_illegal_results": 0
+      },
+      "statistics": {
+        "elo_point": 65.92,
+        "elo_error_95": 19.30,
+        "diagnostic_los_percent": 99.946844,
+        "diagnostic_los_display": "99.9%"
+      },
+      "database_status": {
+        "approved": true,
+        "finished": true,
+        "passed": false,
+        "failed": false,
+        "error": false,
+        "created_utc": "2026-07-13T12:16:23.105625Z",
+        "updated_utc": "2026-07-13T13:01:36.415061Z",
+        "stop_event_utc": "2026-07-13T13:10:13.664542Z",
+        "completion": "manually-stopped-before-requested-games"
+      }
+    },
+    {
+      "id": 38,
+      "comparison": "same-binary-syzygy-on-vs-off",
+      "evaluation": "nnue",
+      "tc_class": "LTC",
+      "time_control": "40.0+0.40",
+      "hash_mb": 128,
+      "book_index": 73,
+      "dev": {
+        "engine": "Atomic-Stockfish",
+        "commit": "388bae077f3c6bd17182ac6883b3436e9eb85e42",
+        "options": "Threads=1 Hash=128 \"Use NNUE=true\" SyzygyProbeLimit=6 SyzygyProbeDepth=1 Syzygy50MoveRule=true"
+      },
+      "base": {
+        "engine": "Atomic-Stockfish",
+        "commit": "388bae077f3c6bd17182ac6883b3436e9eb85e42",
+        "options": "Threads=1 Hash=128 \"Use NNUE=true\" SyzygyProbeLimit=0 SyzygyProbeDepth=1 Syzygy50MoveRule=true"
+      },
+      "games": {
+        "requested": 2000,
+        "accepted": 134,
+        "wins": 67,
+        "draws": 17,
+        "losses": 50,
+        "pentanomial": [0, 0, 50, 17, 0],
+        "crashes": 0,
+        "time_losses": 0,
+        "time_loss_side": "none",
+        "worker_illegal_results": 0
+      },
+      "statistics": {
+        "elo_point": 44.32,
+        "elo_error_95": 18.54,
+        "diagnostic_los_percent": 94.198419,
+        "diagnostic_los_display": "94.2%"
+      },
+      "database_status": {
+        "approved": true,
+        "finished": true,
+        "passed": false,
+        "failed": false,
+        "error": false,
+        "created_utc": "2026-07-13T12:16:24.200729Z",
+        "updated_utc": "2026-07-13T13:09:42.206795Z",
+        "stop_event_utc": "2026-07-13T13:10:13.665542Z",
+        "completion": "manually-stopped-before-requested-games"
+      }
+    },
+    {
+      "id": 39,
+      "comparison": "same-binary-syzygy-on-vs-off",
+      "evaluation": "classical",
+      "tc_class": "STC",
+      "time_control": "8.0+0.08",
+      "hash_mb": 32,
+      "book_index": 97,
+      "dev": {
+        "engine": "Atomic-Stockfish",
+        "commit": "388bae077f3c6bd17182ac6883b3436e9eb85e42",
+        "options": "Threads=1 Hash=32 \"Use NNUE=false\" SyzygyProbeLimit=6 SyzygyProbeDepth=1 Syzygy50MoveRule=true"
+      },
+      "base": {
+        "engine": "Atomic-Stockfish",
+        "commit": "388bae077f3c6bd17182ac6883b3436e9eb85e42",
+        "options": "Threads=1 Hash=32 \"Use NNUE=false\" SyzygyProbeLimit=0 SyzygyProbeDepth=1 Syzygy50MoveRule=true"
+      },
+      "games": {
+        "requested": 2000,
+        "accepted": 144,
+        "wins": 68,
+        "draws": 45,
+        "losses": 31,
+        "pentanomial": [2, 2, 25, 43, 0],
+        "crashes": 0,
+        "time_losses": 6,
+        "time_loss_side": "dev",
+        "worker_illegal_results": 0
+      },
+      "statistics": {
+        "elo_point": 91.32,
+        "elo_error_95": 30.25,
+        "diagnostic_los_percent": 99.989985,
+        "diagnostic_los_display": "100.0%"
+      },
+      "database_status": {
+        "approved": true,
+        "finished": true,
+        "passed": false,
+        "failed": false,
+        "error": false,
+        "created_utc": "2026-07-13T12:16:25.239441Z",
+        "updated_utc": "2026-07-13T13:04:44.742872Z",
+        "stop_event_utc": "2026-07-13T13:10:13.665542Z",
+        "completion": "manually-stopped-before-requested-games"
+      }
+    },
+    {
+      "id": 40,
+      "comparison": "same-binary-syzygy-on-vs-off",
+      "evaluation": "classical",
+      "tc_class": "LTC",
+      "time_control": "40.0+0.40",
+      "hash_mb": 128,
+      "book_index": 73,
+      "dev": {
+        "engine": "Atomic-Stockfish",
+        "commit": "388bae077f3c6bd17182ac6883b3436e9eb85e42",
+        "options": "Threads=1 Hash=128 \"Use NNUE=false\" SyzygyProbeLimit=6 SyzygyProbeDepth=1 Syzygy50MoveRule=true"
+      },
+      "base": {
+        "engine": "Atomic-Stockfish",
+        "commit": "388bae077f3c6bd17182ac6883b3436e9eb85e42",
+        "options": "Threads=1 Hash=128 \"Use NNUE=false\" SyzygyProbeLimit=0 SyzygyProbeDepth=1 Syzygy50MoveRule=true"
+      },
+      "games": {
+        "requested": 2000,
+        "accepted": 48,
+        "wins": 24,
+        "draws": 17,
+        "losses": 7,
+        "pentanomial": [0, 0, 7, 17, 0],
+        "crashes": 0,
+        "time_losses": 0,
+        "time_loss_side": "none",
+        "worker_illegal_results": 0
+      },
+      "statistics": {
+        "elo_point": 128.62,
+        "elo_error_95": 37.65,
+        "diagnostic_los_percent": 99.886827,
+        "diagnostic_los_display": "99.9%"
+      },
+      "database_status": {
+        "approved": true,
+        "finished": true,
+        "passed": false,
+        "failed": false,
+        "error": false,
+        "created_utc": "2026-07-13T12:16:26.247598Z",
+        "updated_utc": "2026-07-13T13:01:36.969313Z",
+        "stop_event_utc": "2026-07-13T13:10:13.665542Z",
+        "completion": "manually-stopped-before-requested-games"
+      }
+    },
+    {
+      "id": 41,
+      "comparison": "atomic-syzygy-vs-fairy-no-syzygy",
+      "evaluation": "nnue",
+      "tc_class": "STC",
+      "time_control": "8.0+0.08",
+      "hash_mb": 32,
+      "book_index": 25,
+      "dev": {
+        "engine": "Atomic-Stockfish",
+        "commit": "388bae077f3c6bd17182ac6883b3436e9eb85e42",
+        "options": "Threads=1 Hash=32 \"Use NNUE=true\" SyzygyProbeLimit=6 SyzygyProbeDepth=1 Syzygy50MoveRule=true"
+      },
+      "base": {
+        "engine": "Fairy-Stockfish-Atomic-Baseline",
+        "commit": "756810e8925d095d9c569c1a51451d9d1349c290",
+        "options": "UCI_Variant=atomic Threads=1 Hash=32 \"Use NNUE=true\" SyzygyProbeLimit=0 SyzygyProbeDepth=1 Syzygy50MoveRule=true"
+      },
+      "games": {
+        "requested": 2000,
+        "accepted": 48,
+        "wins": 23,
+        "draws": 17,
+        "losses": 8,
+        "pentanomial": [0, 1, 7, 16, 0],
+        "crashes": 0,
+        "time_losses": 4,
+        "time_loss_side": "dev",
+        "worker_illegal_results": 0
+      },
+      "statistics": {
+        "elo_point": 112.33,
+        "elo_error_95": 45.44,
+        "diagnostic_los_percent": 99.647083,
+        "diagnostic_los_display": "99.6%"
+      },
+      "database_status": {
+        "approved": true,
+        "finished": true,
+        "passed": false,
+        "failed": false,
+        "error": false,
+        "created_utc": "2026-07-13T13:12:24.859255Z",
+        "updated_utc": "2026-07-13T13:30:30.018516Z",
+        "stop_event_utc": "2026-07-13T13:30:30.012519Z",
+        "completion": "manually-stopped-before-requested-games"
+      }
+    },
+    {
+      "id": 42,
+      "comparison": "atomic-syzygy-vs-fairy-no-syzygy",
+      "evaluation": "nnue",
+      "tc_class": "LTC",
+      "time_control": "40.0+0.40",
+      "hash_mb": 128,
+      "book_index": 25,
+      "dev": {
+        "engine": "Atomic-Stockfish",
+        "commit": "388bae077f3c6bd17182ac6883b3436e9eb85e42",
+        "options": "Threads=1 Hash=128 \"Use NNUE=true\" SyzygyProbeLimit=6 SyzygyProbeDepth=1 Syzygy50MoveRule=true"
+      },
+      "base": {
+        "engine": "Fairy-Stockfish-Atomic-Baseline",
+        "commit": "756810e8925d095d9c569c1a51451d9d1349c290",
+        "options": "UCI_Variant=atomic Threads=1 Hash=128 \"Use NNUE=true\" SyzygyProbeLimit=0 SyzygyProbeDepth=1 Syzygy50MoveRule=true"
+      },
+      "games": {
+        "requested": 2000,
+        "accepted": 46,
+        "wins": 23,
+        "draws": 14,
+        "losses": 9,
+        "pentanomial": [0, 0, 9, 14, 0],
+        "crashes": 0,
+        "time_losses": 0,
+        "time_loss_side": "none",
+        "worker_illegal_results": 0
+      },
+      "statistics": {
+        "elo_point": 109.20,
+        "elo_error_95": 39.68,
+        "diagnostic_los_percent": 99.333584,
+        "diagnostic_los_display": "99.3%"
+      },
+      "database_status": {
+        "approved": true,
+        "finished": true,
+        "passed": false,
+        "failed": false,
+        "error": false,
+        "created_utc": "2026-07-13T13:12:25.727376Z",
+        "updated_utc": "2026-07-13T13:30:33.000907Z",
+        "stop_event_utc": "2026-07-13T13:30:32.996889Z",
+        "completion": "manually-stopped-before-requested-games"
+      }
+    }
+  ],
+  "subgroups": [
+    {
+      "name": "same-binary-nnue",
+      "test_ids": [37, 38],
+      "games": 374,
+      "wins": 184,
+      "draws": 68,
+      "losses": 122,
+      "pentanomial": [2, 1, 117, 67, 0],
+      "elo_point": 58.13,
+      "elo_error_95": 14.04,
+      "diagnostic_los_percent": 99.980317
+    },
+    {
+      "name": "same-binary-classical",
+      "test_ids": [39, 40],
+      "games": 192,
+      "wins": 92,
+      "draws": 62,
+      "losses": 38,
+      "pentanomial": [2, 2, 32, 60, 0],
+      "elo_point": 100.42,
+      "elo_error_95": 24.77,
+      "diagnostic_los_percent": 99.999891
+    },
+    {
+      "name": "fairy-baseline-nnue",
+      "test_ids": [41, 42],
+      "games": 94,
+      "wins": 46,
+      "draws": 31,
+      "losses": 17,
+      "pentanomial": [0, 1, 16, 30, 0],
+      "elo_point": 110.80,
+      "elo_error_95": 29.82,
+      "diagnostic_los_percent": 99.987073
+    }
+  ]
+}

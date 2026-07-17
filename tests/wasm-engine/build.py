@@ -27,6 +27,7 @@ SOURCE_LIST = re.compile(
     r"\$relativeSources\s*=\s*@\((?P<body>.*?)^\)", re.MULTILINE | re.DOTALL
 )
 SINGLE_QUOTED = re.compile(r"'([^']+)'")
+SOURCE_DATE_EPOCH_PATTERN = re.compile(r"(?:0|[1-9][0-9]*)\Z")
 
 
 def parse_sources() -> list[Path]:
@@ -52,6 +53,17 @@ def sha256(path: Path) -> str:
         while chunk := stream.read(1024 * 1024):
             digest.update(chunk)
     return digest.hexdigest().lower()
+
+
+def normalized_source_date_epoch(environment: dict[str, str]) -> str:
+    """Return the caller's frozen epoch, with zero as the local default."""
+
+    value = environment.get("SOURCE_DATE_EPOCH", "0")
+    if SOURCE_DATE_EPOCH_PATTERN.fullmatch(value) is None:
+        raise ValueError(
+            "SOURCE_DATE_EPOCH must be zero or a canonical positive decimal integer"
+        )
+    return value
 
 
 def build(out_dir: Path, compiler: str, debug: bool) -> None:
@@ -110,7 +122,8 @@ def build(out_dir: Path, compiler: str, debug: bool) -> None:
         flags.extend(["-O3", "-flto", "-DNDEBUG", "-sASSERTIONS=0"])
 
     environment = os.environ.copy()
-    environment["SOURCE_DATE_EPOCH"] = "0"
+    source_date_epoch = normalized_source_date_epoch(environment)
+    environment["SOURCE_DATE_EPOCH"] = source_date_epoch
     command = [compiler, *flags, *(str(source) for source in sources), "-o", str(output_js)]
     print(f"Building complete Atomic-Stockfish NNUE WASM in {out_dir}", flush=True)
     subprocess.run(command, check=True, env=environment)
@@ -143,6 +156,7 @@ def build(out_dir: Path, compiler: str, debug: bool) -> None:
     manifest = {
         "schemaVersion": 2,
         "target": "node-uci-nnue",
+        "sourceDateEpoch": int(source_date_epoch),
         "debug": debug,
         "compiler": compiler_line,
         "initialMemoryBytes": 536870912,
@@ -167,11 +181,10 @@ def build(out_dir: Path, compiler: str, debug: bool) -> None:
         "externalNetwork": True,
         "artifacts": artifacts,
     }
-    (out_dir / "manifest.json").write_text(
-        json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-        newline="\n",
-    )
+    with (out_dir / "manifest.json").open(
+        "w", encoding="utf-8", newline="\n"
+    ) as manifest_stream:
+        manifest_stream.write(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n")
 
     for artifact in artifacts:
         print(

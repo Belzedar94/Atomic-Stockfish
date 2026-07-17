@@ -1,23 +1,24 @@
-# This CITATION.cff file was generated with cffinit.
-# Visit https://bit.ly/cffinit to generate yours today!
-
 cff-version: 1.2.0
-title: Stockfish
+title: Atomic-Stockfish
 message: >-
   Please cite this software using the metadata from this
   file.
 type: software
+version: 1.0.0
 authors:
-  - name: The Stockfish developers (see AUTHORS file)
-repository-code: 'https://github.com/official-stockfish/Stockfish'
-url: 'https://stockfishchess.org/'
-repository-artifact: 'https://stockfishchess.org/download/'
-abstract: Stockfish is a free and strong UCI chess engine.
+  - name: The Atomic-Stockfish developers (see AUTHORS file)
+repository-code: 'https://github.com/Belzedar94/Atomic-Stockfish'
+url: 'https://github.com/Belzedar94/Atomic-Stockfish'
+repository-artifact: 'https://github.com/Belzedar94/Atomic-Stockfish/releases'
+abstract: >-
+  Atomic-Stockfish is a dedicated Atomic Chess engine derived from Stockfish
+  and the Atomic rules, NNUE, protocol, and binding work in Fairy-Stockfish.
 keywords:
+  - atomic chess
   - chess
   - artificial intelligence (AI)
   - tree search
   - alpha-beta search
   - neural networks (NN)
   - efficiently updatable neural networks (NNUE)
-license: GPL-3.0
+license: GPL-3.0-or-later

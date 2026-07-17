@@ -6,28 +6,32 @@ synthetic Legacy V1 E2E. This gate generates real data, performs one real CPU
 optimizer update, serializes the resulting network and proves that the current
 Atomic playing engine can evaluate and search with it.
 
-The gate is implemented and covered by mocked/unit tests. The final tools
-decode-wrapper dependency is available on its `atomic` branch. The final
-normative real execution passed on 2026-07-13 against the immutable gate-code
-commit `a7b89b118a055bf5b111c7ccbbd74f3c8aab064d`. Its compact, path-free evidence
-is recorded in [`evidence/hito7-final-e2e/summary.log`](evidence/hito7-final-e2e/summary.log)
+The gate is implemented, covered by unit tests and executed as a real
+`synthetic-ci` generate/train/load job in the main Atomic workflow. The
+historical first real execution passed on 2026-07-13 against gate-code commit
+`a7b89b118a055bf5b111c7ccbbd74f3c8aab064d`; its compact evidence remains in
+[`evidence/hito7-final-e2e/summary.log`](evidence/hito7-final-e2e/summary.log)
 and [`evidence/hito7-final-e2e/result.json`](evidence/hito7-final-e2e/result.json).
-Unit-test evidence alone must still never be reported as a real gate pass.
+Those files authenticate that historical run and its older dependency pins;
+they are not a substitute for the current release-head CI pass. Unit-test
+evidence alone must still never be reported as a real gate pass.
 
 | Dependency | Immutable commit |
 | --- | --- |
-| Contract engine pinned by tools/trainer | `76764c3c01ce5965a793a65e4580dd5c95cd2916` |
-| `variant-nnue-tools` `atomic` | `40d2db224ef890f76b346ff4687e18fb33c98e23` |
-| `variant-nnue-pytorch` `atomic` | `3e5651a977eca1351d7ef101acb8ff5c45588b12` |
-| Atomic gate code | `a7b89b118a055bf5b111c7ccbbd74f3c8aab064d` |
+| `variant-nnue-tools` `atomic` merge | `450049ee7a0ece32694b11f6c55deb7df1d42a84` |
+| Engine gitlink and lock inside tools | `420c9f35266fbdc2167dc5b9d8d20d90281c60c9` |
+| `variant-nnue-pytorch` `atomic` merge | `3a19c16fc3d477b1ee7602ccc6510736bc7604cc` |
+| Engine gitlink inside trainer | `420c9f35266fbdc2167dc5b9d8d20d90281c60c9` |
+| Atomic gate code | current authenticated Atomic release head |
 
 ## Frozen workload
 
 The run has no tuning switches. It performs all of the following:
 
 1. Authenticates clean Atomic-Stockfish, tools and trainer checkouts at exact
-   commits and exact refs. The tools and trainer gitlinks must both point to the
-   requested contract-engine commit.
+   commits and exact refs. The tools and trainer gitlinks are authenticated
+   independently even though their reviewed integrations now pin the same
+   engine commit. The tools lock must repeat the tools engine pin exactly.
 2. Authenticates all three schema hashes, the tools lock, every executed binary,
    the Python executable, the sole root-level trainer loader and the source
    network. CPython plus the imported NumPy, PyTorch, PyTorch Lightning and
@@ -72,10 +76,28 @@ The run has no tuning switches. It performs all of the following:
 `pure` is confined to data generation. The final engine-load probe uses
 `Use NNUE=true`.
 
-Network compatibility is never inferred from a filename. The source bytes are
-authenticated by SHA-256, the generator authenticates and records them, the
-serialized candidate header is checked, and the engine must load the exact
-candidate path. The manifest basename is provenance only.
+Network compatibility is never inferred from a filename. `--profile` is
+mandatory and accepts only two fail-closed identities:
+
+| Profile | Required source SHA-256 | Purpose |
+| --- | --- | --- |
+| `strong-local` | `99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f92a04a6` | Local release evidence with the frozen strongest playing network |
+| `synthetic-ci` | `9cf054ca00b82ab53a34473de52d1104aeddaa19b2e7b24091b5e613af485985` | Public CI with the deterministic byte-exact zero network |
+
+A network from one profile is rejected under the other profile, as is any
+unlisted digest. The generator authenticates and records the selected source
+bytes, the serialized candidate header is checked, and the engine must load the
+exact candidate path. The manifest basename is provenance only.
+
+The `legacy-pipeline` CI job preserves the Legacy V1 E2E and then runs this V2
+gate with `synthetic-ci`. It creates the zero network locally, checks its exact
+digest, generates 128 training plus 128 validation records at depth 3, performs
+exactly one CPU optimizer update and loads the resulting network in the current
+playing engine. Public CI therefore exercises real native tools, trainer and
+engine processes without redistributing the strong network. The sanitized
+public archive is retained for 14 days as the
+`atomic-bin-v2-e2e-evidence` workflow artifact; failure evidence is uploaded
+when archive creation progressed far enough to produce it.
 
 ## Invocation
 
@@ -95,16 +117,18 @@ to `--python` (the gate rejects a launcher/interpreter mismatch):
 
 ```powershell
 C:\AtomicH7\venv\Scripts\python.exe -B tests/atomic_bin_v2_pipeline_e2e.py `
+  --profile strong-local `
   --atomic-root C:\AtomicH7\Atomic-Stockfish `
   --atomic-commit <atomic-gate-commit> `
   --atomic-ref <atomic-gate-ref-resolving-to-that-commit> `
   --tools-root C:\AtomicH7\variant-nnue-tools `
-  --tools-commit 40d2db224ef890f76b346ff4687e18fb33c98e23 `
+  --tools-commit 450049ee7a0ece32694b11f6c55deb7df1d42a84 `
   --tools-ref refs/remotes/origin/atomic `
   --trainer-root C:\AtomicH7\variant-nnue-pytorch `
-  --trainer-commit 3e5651a977eca1351d7ef101acb8ff5c45588b12 `
+  --trainer-commit 3a19c16fc3d477b1ee7602ccc6510736bc7604cc `
   --trainer-ref refs/remotes/origin/atomic `
-  --contract-engine-commit 76764c3c01ce5965a793a65e4580dd5c95cd2916 `
+  --tools-engine-commit 420c9f35266fbdc2167dc5b9d8d20d90281c60c9 `
+  --trainer-engine-commit 420c9f35266fbdc2167dc5b9d8d20d90281c60c9 `
   --engine C:\AtomicH7\Atomic-Stockfish\src\atomic-stockfish.exe `
   --engine-sha256 <sha256> `
   --data-generator C:\AtomicH7\Atomic-Stockfish\src\atomic-stockfish-data-generator.exe `
@@ -127,8 +151,11 @@ C:\AtomicH7\venv\Scripts\python.exe -B tests/atomic_bin_v2_pipeline_e2e.py `
   --validation-seed 2026071302
 ```
 
-Only the Atomic gate HEAD is dynamic. The contract engine, tools, trainer and
-source-network digests above are normative constants. On Linux the loader is
+Only the Atomic gate HEAD is dynamic. Both engine gitlinks, tools, trainer and
+the two profile-specific source-network digests above are normative constants.
+`provenance.json` and `result.json` record the selected profile and both engine
+pins, so an asymmetric checkout cannot be mistaken for the former shared-pin
+contract. On Linux the loader is
 the sole trainer-root `*training_data_loader*.so`; on macOS it is the sole
 trainer-root `*training_data_loader*.dylib`. The training seed domain is
 `1..4294967295`; the validation/generator seed domain is
@@ -179,12 +206,13 @@ not generate positions or train a network:
 python -B -m pytest -q tests/python/test_atomic_bin_v2_pipeline_e2e.py
 ```
 
-It covers CLI domains, exact generation/training policies, strict manifests,
-WDL reconciliation, all decode fields/indexes/provenance and adversarial field
-mutations, capability byte parity, Windows-safe explicit-LF Python probes,
-checkpoint step count, NNUE header validation, exclusive archives, canonical
-wrapper-child authentication, public-path redaction and pre/post artifact
-immutability.
+It covers required profile selection, cross-profile network rejection,
+independent tools/trainer gitlinks, final CI pin wiring, CLI domains, exact
+generation/training policies, strict manifests, WDL reconciliation, all decode
+fields/indexes/provenance and adversarial field mutations, capability byte
+parity, Windows-safe explicit-LF Python probes, checkpoint step count, NNUE
+header validation, exclusive archives, canonical wrapper-child authentication,
+public-path redaction and pre/post artifact immutability.
 
 This pipeline-only gate does not change search, evaluation, move generation or
 playing-network bytes, so it does not itself trigger an Elo/LOS match. Any

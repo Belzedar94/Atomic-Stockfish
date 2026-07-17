@@ -1,0 +1,89 @@
+{
+  "schemaVersion": 2,
+  "project": "Atomic-Stockfish",
+  "version": "1.0.0",
+  "releasePolicy": {
+    "abi3AuditVersion": "0.0.26",
+    "artifactAttestations": {
+      "actionCommit": "a1948c3f048ba23858d222213b7c278aabede763",
+      "required": true,
+      "subjects": ["release-assets", "exact-tag-evidence"]
+    },
+    "draftOnly": true,
+    "emscriptenImage": "emscripten/emsdk:4.0.10@sha256:90b757eb11fa9a0e3ce4d2d9f76d932a56018e4accc37b5a28b2783751e60eb7",
+    "exactTagExternalGates": {
+      "allowSkips": false,
+      "commandPlan": "scripts/atomic-release-exact-tag-plan-v1.json",
+      "environment": "atomic-release-gates",
+      "evidenceExtensions": [".json", ".log", ".txt"],
+      "jobTimeoutMinutes": 1260,
+      "outputLimitBytes": 33554432,
+      "requiredGates": ["hito4-release", "legacy-v1-strong-local", "hito5-release", "syzygy-real-3-to-6", "atomic-bin-v2-strong-local", "bmi2-vs-fairy"],
+      "runnerLabels": ["self-hosted", "Windows", "X64", "atomic-release-gates"],
+      "schema": "schemas/atomic-release-exact-tag-gates-v1.json",
+      "syzygyTableSha256": {
+        "KBBBvK.atbw": "114f101f74ab1469d749777b5b7e8b2ada5f47d31627ff60031f4832e6bf76a8",
+        "KBBBvK.atbz": "f731d407f3ad8a0368d7f29762d0a70e407ee791dc0f5dcb88fc94eba987e31f",
+        "KRvK.atbw": "a17ff195ef2738f00f180e3dd8eb8bcd1d21e57642e78ff8f7b7ebffd233cceb",
+        "KPPPPvK.atbw": "897a15846a4b027cbd0a31e425fdf0690f68c0bd4e62105cca2055678e2910f9",
+        "KPPPPvK.atbz": "e740168d8cbb0bf662863f278ef470c5d7eb395ece0c8bf80fed004a47991bc6"
+      },
+      "timeoutBudgetSeconds": 66600
+    },
+    "immutableReleasesReadSecret": "ATOMIC_RELEASE_POLICY_TOKEN",
+    "immutableReleasesRequired": true,
+    "linuxNativeAmd64Manifest": "sha256:82549aa8f90ada3236a8be70c74543132a76662ef33f0c3271ed802b81584a82",
+    "linuxNativeImage": "gcc:14.2.0-bookworm@sha256:b99b86a28812b1e6453a231a947dc43d76fe192788a12f344a9b568bf9f5d24c",
+    "mainTagTrust": {
+      "defaultBranch": "main",
+      "mergeCommitParents": 2,
+      "mergeMethod": "merge",
+      "onlineRequired": true,
+      "releasePullRequest": 44,
+      "revalidatedBy": ["main-trust", "exact-tag-external", "publication-gate", "publish"]
+    },
+    "nativeBuildRepetitions": 2,
+    "pythonManylinuxX86_64Image": "quay.io/pypa/manylinux_2_28_x86_64:2026.03.20-1@sha256:853663dc8253b62be437bb52a5caecffd020792af4442f55d927d22e0ea795ae",
+    "releaseBuildRequirementsSha256": "a2d6f8f099bbaf88509c38910f6d2aed1d0913ddf162813906ca7a667b260289",
+    "releaseCiRequirementsSha256": "f155cfda7577ee6a652e87ca54ebf8fecd49b2c8a158294c1fa1cd368b771b5a",
+    "releaseWheelTestRequirementsSha256": "b877081ac9f4a6aa56eff9c5ed6c7b832a9fc02ca2dca39f786401e1a03f842b",
+    "pythonWheelBuildRepetitions": 2,
+    "pythonWheelRuntimeSmoke": {
+      "operatingSystems": ["ubuntu-24.04", "windows-2022"],
+      "pythonVersions": ["3.9", "3.12", "3.14"]
+    },
+    "requiredWorkflow": {
+      "event": "push",
+      "name": "Atomic CI",
+      "path": ".github/workflows/atomic.yml",
+      "ref": "refs/tags/v1.0.0"
+    },
+    "sdistAuthority": "source-job-normalized-artifact",
+    "sourceBuildRepetitions": 2,
+    "tagObjectType": "annotated",
+    "windowsMakeComp": "mingw",
+    "windowsNativeImage": "dockcross/windows-static-x64@sha256:e5fde458b54dda21d0265516f0310bc017532dd6f4fdad0b7239dc6ccd0f8ca9",
+    "windowsRuntimeSmoke": "windows-2022",
+    "windowsWheelFingerprintSchemaVersion": 2,
+    "windowsWheelFingerprintDocument": "docs/atomic/windows-wheel-fingerprint-v2.json",
+    "windowsWheelFingerprintSha256": "9af3078f7f7d2635e5fe20c913c6948e53dbdc5f1ec81ba22f081d21e6a3f23d",
+    "windowsWheelImageOS": "win22",
+    "windowsWheelImageVersion": "20260714.244.1",
+    "windowsWheelPythonVersion": "3.9.13",
+    "wasmBuildRepetitions": 2
+  },
+  "assets": [
+    {"namePattern": "Atomic-Stockfish-1.0.0-linux-x86-64.tar.xz", "kind": "native", "platform": "linux", "architecture": "x86-64"},
+    {"namePattern": "Atomic-Stockfish-1.0.0-linux-x86-64-avx2.tar.xz", "kind": "native", "platform": "linux", "architecture": "x86-64-avx2"},
+    {"namePattern": "Atomic-Stockfish-1.0.0-linux-x86-64-bmi2.tar.xz", "kind": "native", "platform": "linux", "architecture": "x86-64-bmi2"},
+    {"namePattern": "Atomic-Stockfish-1.0.0-windows-x86-64.zip", "kind": "native", "platform": "windows", "architecture": "x86-64"},
+    {"namePattern": "Atomic-Stockfish-1.0.0-windows-x86-64-avx2.zip", "kind": "native", "platform": "windows", "architecture": "x86-64-avx2"},
+    {"namePattern": "Atomic-Stockfish-1.0.0-windows-x86-64-bmi2.zip", "kind": "native", "platform": "windows", "architecture": "x86-64-bmi2"},
+    {"namePattern": "atomic_pyffish-1.0.0-cp39-abi3-manylinux*x86_64.whl", "kind": "python", "platform": "linux", "architecture": "x86-64"},
+    {"namePattern": "atomic_pyffish-1.0.0-cp39-abi3-win_amd64.whl", "kind": "python", "platform": "windows", "architecture": "x86-64"},
+    {"namePattern": "atomic_pyffish-1.0.0.tar.gz", "kind": "python", "platform": "source", "architecture": "source"},
+    {"namePattern": "atomic-stockfish-ffish-1.0.0.tgz", "kind": "board-wasm", "platform": "web-node", "architecture": "wasm32"},
+    {"namePattern": "Atomic-Stockfish-1.0.0-node-uci-nnue-wasm.tar.xz", "kind": "uci-wasm", "platform": "node", "architecture": "wasm32-pthreads"},
+    {"namePattern": "Atomic-Stockfish-1.0.0-source.tar.xz", "kind": "source", "platform": "source", "architecture": "source"}
+  ]
+}

@@ -1,7 +1,23 @@
 # ADR 0006: Publish distributed AtomicNNUEV3 datasets through an acyclic evidence chain
 
-- Status: accepted for H9.3l contract implementation; producer, scanner and trainer integration pending
+- Status: accepted; H9.3l-a contract, H9.3l-b audited producer, controlled non-publication bootstrap training and final tools pin are merged; publication campaign evidence remains pending
 - Date: 2026-07-16
+
+## Implementation status
+
+- Atomic-Stockfish PR #42 merged the publication contract as
+  `dde43fc08fb2bd45eec09d3dbe9f6d06845eeb24`.
+- Atomic-Stockfish PR #43 merged the audited trajectory producer as
+  `420c9f35266fbdc2167dc5b9d8d20d90281c60c9`.
+- `variant-nnue-pytorch` PR #14 merged the authenticated provider, strict
+  serializer, checkpoint/resume and four-run production launcher into `atomic`
+  as `3a19c16fc3d477b1ee7602ccc6510736bc7604cc`. It accepts the owner-capped
+  bootstrap only as `non-publication-bootstrap`; its outputs cannot claim
+  dataset publication or release-candidate readiness.
+- `variant-nnue-tools` PR #33 merged the final engine pin to
+  `420c9f35266fbdc2167dc5b9d8d20d90281c60c9` into `atomic` as
+  `450049ee7a0ece32694b11f6c55deb7df1d42a84` after exact-head review and all
+  five platform/instrumentation checks passed.
 
 ## Context
 
@@ -231,11 +247,13 @@ make the dataset reproducible from authenticated inputs; they do not claim
 that a network is reproducible until controlled training execution is
 implemented and verified.
 
-The first 500-million-position Atomic BIN V2 bootstrap remains a valid pilot;
-it does not become a V3 release-candidate dataset retroactively because it has
-no complete trajectory ledgers or evidence chain. OpenBench transport may add
-a later multi-artifact envelope, but that transport must preserve these exact
-hashes and cannot replace any publication gate.
+The completed, owner-capped 375-million-position Atomic BIN V2 bootstrap is a
+distributed-generation transport and throughput pilot only. Its completion
+does not alter its provenance: it began without complete V3 trajectory ledgers
+or this evidence chain and can never be
+relabelled as a V3 release-candidate dataset. OpenBench v39 contains a reviewed
+multi-artifact transport, but that transport must preserve these exact hashes
+and cannot replace any publication gate.
 
 The evidence documents are cryptographic attestations, not signatures. A
 hostile party controlling both the files and the validator invocation could

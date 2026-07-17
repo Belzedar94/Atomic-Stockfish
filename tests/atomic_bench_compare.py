@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
+import os
 import queue
 import statistics
 import subprocess
@@ -16,8 +18,9 @@ import sys
 import threading
 from contextlib import ExitStack
 from dataclasses import dataclass
+from decimal import Decimal, ROUND_HALF_UP, localcontext
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Any, Callable, Mapping, Optional, Sequence
 
 import psutil
 
@@ -27,6 +30,7 @@ if str(TESTS_DIR) not in sys.path:
 
 from atomic_compiler_preflight import (
     CompilerPreflightError,
+    FileFingerprint,
     NORMATIVE_BASELINE_SHA256,
     fingerprint_files,
     require_matching_compilation_settings,
@@ -44,7 +48,12 @@ EXPECTED_NET_SHA256 = "99DC67EABF26A64FAEECA3A88B4C38597A840B8D4A874B9F2CF658C6F
 MEASURED_REPETITIONS = 5
 NORMATIVE_NODES_PER_FEN = 100_000
 NORMATIVE_HASH_MB = 64
+NORMATIVE_SEARCH_TIMEOUT_SECONDS = 60
 CANDIDATE_NNUE_ARCHITECTURE_MARKER = "(45MiB, (45056, 1024, 16, 32, 1))"
+BENCHMARK_JSON_SCHEMA_VERSION = 1
+BENCHMARK_GATE = "bmi2-vs-fairy"
+BENCHMARK_METRIC = "median-nps"
+BENCHMARK_DECIMAL_QUANTUM = Decimal("0.000001")
 
 
 @dataclass(frozen=True)
@@ -136,6 +145,7 @@ def require_nnue_output(label: str, net: Path, output: list[str]) -> None:
     if any("ERROR:" in line.upper() for line in output):
         raise RuntimeError(f"{label} reported an NNUE/protocol error: {output[-10:]}")
     selected_net = str(net)
+    expected_prefixes: tuple[str, ...]
     if label in {"candidate", "control"}:
         expected_prefixes = (
             f"NNUE evaluation using Legacy Atomic V1 {selected_net} ",
@@ -371,6 +381,123 @@ def print_measurement(prefix: str, measurement: Measurement) -> None:
     )
 
 
+def measurement_nps(measurement: Measurement) -> Decimal:
+    """Return an exact decimal NPS value from the recorded integer evidence."""
+
+    if measurement.nodes <= 0 or measurement.elapsed_ms <= 0:
+        raise ValueError("benchmark samples require positive nodes and elapsed time")
+    with localcontext() as context:
+        context.prec = 50
+        return Decimal(measurement.nodes) * Decimal(1000) / Decimal(
+            measurement.elapsed_ms
+        )
+
+
+def median_nps(measurements: Sequence[Measurement]) -> Decimal:
+    if len(measurements) != MEASURED_REPETITIONS:
+        raise ValueError(
+            f"benchmark requires exactly {MEASURED_REPETITIONS} measured repetitions"
+        )
+    return statistics.median(measurement_nps(item) for item in measurements)
+
+
+def fixed_six(value: Decimal) -> str:
+    if not value.is_finite() or value <= 0:
+        raise ValueError("benchmark decimal values must be finite and positive")
+    with localcontext() as context:
+        context.prec = 50
+        return format(
+            value.quantize(BENCHMARK_DECIMAL_QUANTUM, rounding=ROUND_HALF_UP),
+            ".6f",
+        )
+
+
+def benchmark_document(
+    *,
+    candidate_fingerprint: FileFingerprint,
+    baseline_fingerprint: FileFingerprint,
+    eval_fingerprint: FileFingerprint,
+    candidate_samples: Sequence[Measurement],
+    baseline_samples: Sequence[Measurement],
+    affinity: int,
+) -> Mapping[str, Any]:
+    """Build the one canonical, independently recomputable release-gate record."""
+
+    candidate_median = median_nps(candidate_samples)
+    baseline_median = median_nps(baseline_samples)
+    with localcontext() as context:
+        context.prec = 50
+        ratio = candidate_median / baseline_median
+    passed = candidate_median > baseline_median
+
+    def artifact(fingerprint: FileFingerprint) -> Mapping[str, Any]:
+        return {
+            "bytes": fingerprint.size,
+            "fileName": fingerprint.path.name,
+            "sha256": fingerprint.sha256.lower(),
+        }
+
+    def samples(values: Sequence[Measurement]) -> list[Mapping[str, int]]:
+        return [
+            {"nodes": value.nodes, "timeMillis": value.elapsed_ms} for value in values
+        ]
+
+    return {
+        "baseline": artifact(baseline_fingerprint),
+        "baselineMedianNps": fixed_six(baseline_median),
+        "baselineSamples": samples(baseline_samples),
+        "candidate": artifact(candidate_fingerprint),
+        "candidateMedianNps": fixed_six(candidate_median),
+        "candidateSamples": samples(candidate_samples),
+        "corpusSha256": corpus_sha256(),
+        "cpuAffinity": affinity,
+        "evalFileSha256": eval_fingerprint.sha256.lower(),
+        "gate": BENCHMARK_GATE,
+        "hashMb": NORMATIVE_HASH_MB,
+        "metric": BENCHMARK_METRIC,
+        "nodesPerFen": NORMATIVE_NODES_PER_FEN,
+        "pass": passed,
+        "positions": len(CORPUS),
+        "ratio": fixed_six(ratio),
+        "repetitions": MEASURED_REPETITIONS,
+        "schemaVersion": BENCHMARK_JSON_SCHEMA_VERSION,
+        "searchTimeoutSeconds": NORMATIVE_SEARCH_TIMEOUT_SECONDS,
+        "threads": 1,
+        "warmups": 1,
+    }
+
+
+def write_benchmark_json(path: Path, document: Mapping[str, Any]) -> None:
+    """Write canonical JSON exactly once; a failed write leaves no false evidence."""
+
+    payload = (
+        json.dumps(
+            document,
+            ensure_ascii=True,
+            allow_nan=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        + "\n"
+    ).encode("ascii")
+    descriptor: Optional[int] = None
+    created = False
+    try:
+        descriptor = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        created = True
+        with os.fdopen(descriptor, "wb") as output:
+            descriptor = None
+            output.write(payload)
+            output.flush()
+            os.fsync(output.fileno())
+    except BaseException:
+        if descriptor is not None:
+            os.close(descriptor)
+        if created:
+            path.unlink(missing_ok=True)
+        raise
+
+
 def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser(
         description="Strict Atomic-Stockfish versus Fairy-Stockfish speed gate"
@@ -393,7 +520,17 @@ def main(argv: Optional[list[str]] = None) -> int:
         required=True,
         help="explicit logical CPU used for every serialized search",
     )
-    parser.add_argument("--timeout", type=float, default=60.0, help="per-search seconds")
+    parser.add_argument(
+        "--timeout",
+        type=float,
+        default=float(NORMATIVE_SEARCH_TIMEOUT_SECONDS),
+        help="normative per-search timeout is 60 seconds",
+    )
+    parser.add_argument(
+        "--json-output",
+        type=Path,
+        help="exclusive canonical JSON evidence written after the real postflight",
+    )
     args = parser.parse_args(argv)
 
     candidate = args.candidate.resolve()
@@ -420,6 +557,17 @@ def main(argv: Optional[list[str]] = None) -> int:
             f"--hash must be exactly {NORMATIVE_HASH_MB} for the normative "
             "performance gate"
         )
+    if args.timeout != float(NORMATIVE_SEARCH_TIMEOUT_SECONDS):
+        parser.error(
+            f"--timeout must be exactly {NORMATIVE_SEARCH_TIMEOUT_SECONDS} for "
+            "the normative performance gate"
+        )
+    if args.json_output is not None:
+        output = args.json_output.absolute()
+        if os.path.lexists(output):
+            parser.error(f"--json-output already exists: {output}")
+        if not output.parent.is_dir():
+            parser.error(f"--json-output parent is not a directory: {output.parent}")
 
     try:
         artifacts = normative_psutil_fingerprints() + fingerprint_files(
@@ -528,8 +676,8 @@ def main(argv: Optional[list[str]] = None) -> int:
     except Exception as exc:
         parser.error(f"benchmark infrastructure failure: {exc}")
 
-    candidate_median = statistics.median(sample.nps for sample in samples["candidate"])
-    baseline_median = statistics.median(sample.nps for sample in samples["baseline"])
+    candidate_median = median_nps(samples["candidate"])
+    baseline_median = median_nps(samples["baseline"])
     ratio = candidate_median / baseline_median
     candidate_size = artifact_map["candidate"].size
     baseline_size = artifact_map["baseline"].size
@@ -538,10 +686,25 @@ def main(argv: Optional[list[str]] = None) -> int:
     )
     print(f"Baseline: median_nps={baseline_median:.0f} binary_bytes={baseline_size}")
     print(
-        f"Comparison: nps_ratio={ratio:.4f} speed_delta_pct={(ratio - 1.0) * 100:.2f} "
+        f"Comparison: nps_ratio={ratio:.4f} "
+        f"speed_delta_pct={(ratio - Decimal(1)) * Decimal(100):.2f} "
         f"size_ratio={candidate_size / baseline_size:.4f} "
         f"size_delta_bytes={candidate_size - baseline_size:+d}"
     )
+
+    document = benchmark_document(
+        candidate_fingerprint=artifact_map["candidate"],
+        baseline_fingerprint=artifact_map["baseline"],
+        eval_fingerprint=artifact_map["eval_file"],
+        candidate_samples=samples["candidate"],
+        baseline_samples=samples["baseline"],
+        affinity=affinity,
+    )
+    if args.json_output is not None:
+        try:
+            write_benchmark_json(args.json_output.absolute(), document)
+        except OSError as exc:
+            parser.error(f"cannot write --json-output exclusively: {exc}")
 
     if candidate_median <= baseline_median:
         print("PERFORMANCE GATE: FAIL (candidate median NPS is not strictly higher)")

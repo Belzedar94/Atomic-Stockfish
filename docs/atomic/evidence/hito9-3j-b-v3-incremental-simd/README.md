@@ -113,13 +113,15 @@ conditions, binary and fixture hashes, per-case samples, medians and aggregate
 ratio. It measures private incremental V3 evaluation, not search NPS or
 playing strength.
 
-## Acceptance artifacts still outstanding
+## Merged acceptance artifacts
 
-- reviewed PR head and final CI URL;
-- green reviewed-head Linux GCC/Clang, forced-layout, MinGW and instrumented CI
-  matrix, including the complete object-code audit;
-- an exact-head release/soak rerun if those two long profiles are to be claimed
-  as final-head rather than supporting pre-reset-fix evidence.
+- reviewed head `9387ea45fb020e62682328ace169de1aaad3e835`;
+- merge commit `933f331e8a8b9ab9c89f5e107d341240e4a3bdad`;
+- 34/34 required checks successful;
+- exact-head Codex review reported no major issues.
+
+The release and soak signatures remain supporting pre-reset-correction evidence
+and are deliberately not relabelled as exact-head runs.
 
 No H9.3j-b Elo or OpenBench run is applicable: the backend is still
 unreachable from the engine's playing path.

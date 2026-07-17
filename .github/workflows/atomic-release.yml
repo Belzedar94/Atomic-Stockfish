@@ -1,0 +1,2611 @@
+name: Atomic 1.0 Release Assets
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Exact reviewed ref to build without publishing
+        required: true
+        default: main
+        type: string
+      capture_windows_fingerprint:
+        description: Capture the real cibuildwheel identity twice for reviewed runner rotation
+        required: false
+        default: false
+        type: boolean
+  push:
+    tags:
+      - v1.0.0
+
+concurrency:
+  group: atomic-release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  RELEASE_VERSION: 1.0.0
+  GITHUB_API_VERSION: 2026-03-10
+  EMSCRIPTEN_IMAGE: emscripten/emsdk:4.0.10@sha256:90b757eb11fa9a0e3ce4d2d9f76d932a56018e4accc37b5a28b2783751e60eb7
+  LINUX_NATIVE_IMAGE: gcc:14.2.0-bookworm@sha256:b99b86a28812b1e6453a231a947dc43d76fe192788a12f344a9b568bf9f5d24c
+  LINUX_NATIVE_AMD64_MANIFEST: sha256:82549aa8f90ada3236a8be70c74543132a76662ef33f0c3271ed802b81584a82
+  WINDOWS_NATIVE_IMAGE: dockcross/windows-static-x64@sha256:e5fde458b54dda21d0265516f0310bc017532dd6f4fdad0b7239dc6ccd0f8ca9
+  PYTHON_MANYLINUX_X86_64_IMAGE: quay.io/pypa/manylinux_2_28_x86_64:2026.03.20-1@sha256:853663dc8253b62be437bb52a5caecffd020792af4442f55d927d22e0ea795ae
+  WINDOWS_WHEEL_FINGERPRINT_SHA256: 9af3078f7f7d2635e5fe20c913c6948e53dbdc5f1ec81ba22f081d21e6a3f23d
+  WINDOWS_WHEEL_IMAGE_OS: win22
+  WINDOWS_WHEEL_IMAGE_VERSION: 20260714.244.1
+
+jobs:
+  validate:
+    name: Freeze release identity
+    runs-on: ubuntu-24.04
+    outputs:
+      commit: ${{ steps.identity.outputs.commit }}
+      epoch: ${{ steps.identity.outputs.epoch }}
+      tag_object: ${{ steps.identity.outputs.tag_object }}
+      tag_commit: ${{ steps.identity.outputs.tag_commit }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.12.10'
+      - name: Install pinned release-contract test tools
+        run: >-
+          python -m pip install --disable-pip-version-check
+          --only-binary=:all: --require-hashes
+          -r tests/release-ci-requirements.txt
+      - name: Validate exact version and freeze annotated tag identity
+        id: identity
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$(python setup.py --version)" = "$RELEASE_VERSION"
+          python scripts/run_atomic_release_contract_tests.py
+
+          commit=$(git rev-parse HEAD)
+          tag_object=not-a-tag
+          tag_commit="$commit"
+          if [[ "${GITHUB_REF_TYPE:-}" == tag ]]; then
+            tag="v$RELEASE_VERSION"
+            test "$GITHUB_EVENT_NAME" = push
+            test "$GITHUB_REF_NAME" = "$tag"
+            test "$GITHUB_REF" = "refs/tags/$tag"
+
+            ref_json=$(gh api \
+              -H "X-GitHub-Api-Version: $GITHUB_API_VERSION" \
+              "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag")
+            test "$(jq -r '.object.type' <<<"$ref_json")" = tag
+            tag_object=$(jq -r '.object.sha' <<<"$ref_json")
+            [[ "$tag_object" =~ ^[0-9a-f]{40}$ ]]
+
+            tag_json=$(gh api \
+              -H "X-GitHub-Api-Version: $GITHUB_API_VERSION" \
+              "repos/$GITHUB_REPOSITORY/git/tags/$tag_object")
+            test "$(jq -r '.object.type' <<<"$tag_json")" = commit
+            tag_commit=$(jq -r '.object.sha' <<<"$tag_json")
+            [[ "$tag_commit" =~ ^[0-9a-f]{40}$ ]]
+
+            test "$(git cat-file -t "$tag_object")" = tag
+            test "$(git rev-parse "refs/tags/$tag^{tag}")" = "$tag_object"
+            test "$(git rev-parse "refs/tags/$tag^{}")" = "$tag_commit"
+            test "$commit" = "$tag_commit"
+          fi
+
+          epoch=$(git show -s --format=%ct "$commit")
+          [[ "$commit" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$epoch" =~ ^[0-9]+$ ]]
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          echo "epoch=$epoch" >> "$GITHUB_OUTPUT"
+          echo "tag_object=$tag_object" >> "$GITHUB_OUTPUT"
+          echo "tag_commit=$tag_commit" >> "$GITHUB_OUTPUT"
+
+  main-trust:
+    name: Authenticate main and release PR ancestry online
+    if: github.event_name == 'push' && github.ref == 'refs/tags/v1.0.0'
+    needs: validate
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      trust_sha256: ${{ steps.main_trust.outputs.release_trust_sha256 }}
+      main_commit: ${{ steps.main_trust.outputs.main_commit_sha }}
+      merge_commit: ${{ steps.main_trust.outputs.release_pr_merge_commit_sha }}
+      tag_object: ${{ steps.main_trust.outputs.tag_object_sha }}
+      tag_commit: ${{ steps.main_trust.outputs.tag_commit_sha }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ needs.validate.outputs.commit }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.12.10'
+      - name: Re-fetch and authenticate the exact release ancestry
+        id: main_trust
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = 'Belzedar94/Atomic-Stockfish'
+          test "$GITHUB_REF" = 'refs/tags/v1.0.0'
+          test "$(git rev-parse HEAD)" = '${{ needs.validate.outputs.commit }}'
+          python scripts/atomic_release_main_trust.py \
+            --repository Belzedar94/Atomic-Stockfish \
+            --tag v1.0.0 \
+            --repository-root . \
+            --release-pr 44 \
+            --query-gh \
+            --require-online \
+            --json-output "$RUNNER_TEMP/release-main-trust.json" \
+            --github-output "$GITHUB_OUTPUT"
+          test '${{ needs.validate.outputs.tag_object }}' = \
+            "$(jq -r '.tag.objectSha' "$RUNNER_TEMP/release-main-trust.json")"
+          test '${{ needs.validate.outputs.commit }}' = \
+            "$(jq -r '.tag.peeledCommitSha' "$RUNNER_TEMP/release-main-trust.json")"
+
+  windows-fingerprint-capture:
+    name: Capture Windows wheel toolchain twice
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.capture_windows_fingerprint }}
+    needs: validate
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ needs.validate.outputs.commit }}
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.12.10'
+      - name: Capture two independent canonical fingerprints
+        shell: pwsh
+        env:
+          SOURCE_DATE_EPOCH: ${{ needs.validate.outputs.epoch }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -m pip install --disable-pip-version-check `
+            --only-binary=:all: --require-hashes `
+            -r tests/release-ci-requirements.txt
+          if ($LASTEXITCODE -ne 0) { throw 'release tooling installation failed' }
+
+          Get-ChildItem Env: | Where-Object Name -Like 'CIBW_*' |
+            ForEach-Object { Remove-Item -LiteralPath "Env:$($_.Name)" }
+          $env:PYTHONHASHSEED = '0'
+          $env:CIBW_BUILD = 'cp39-*'
+          $env:CIBW_ARCHS = 'AMD64'
+          $env:CIBW_ENVIRONMENT = "SOURCE_DATE_EPOCH=$env:SOURCE_DATE_EPOCH PYTHONHASHSEED=0"
+          $env:CIBW_BUILD_FRONTEND = 'pip; args: --no-build-isolation'
+          $install = 'python -m pip install --disable-pip-version-check --force-reinstall --no-deps --only-binary=:all: --require-hashes -r "{project}/tests/release-build-requirements.txt"'
+
+          foreach ($buildId in @('a', 'b')) {
+            $fingerprint = Join-Path $env:GITHUB_WORKSPACE "build/windows-wheel-fingerprint-$buildId.json"
+            $wheelhouse = Join-Path $env:GITHUB_WORKSPACE "build/fingerprint-wheelhouse-$buildId"
+            $env:CIBW_CACHE_PATH = Join-Path $env:GITHUB_WORKSPACE "build/fingerprint-cache-$buildId"
+            $env:CIBW_BEFORE_BUILD = $install + ' && python "{project}/scripts/atomic_windows_wheel_fingerprint.py" --output "' + $fingerprint + '"'
+            python -m cibuildwheel --platform windows --output-dir $wheelhouse .
+            if ($LASTEXITCODE -ne 0) {
+              throw "cibuildwheel fingerprint capture $buildId failed"
+            }
+            if (-not (Test-Path -LiteralPath $fingerprint -PathType Leaf)) {
+              throw "cibuildwheel fingerprint capture $buildId produced no JSON"
+            }
+          }
+
+          $first = Join-Path $env:GITHUB_WORKSPACE 'build/windows-wheel-fingerprint-a.json'
+          $second = Join-Path $env:GITHUB_WORKSPACE 'build/windows-wheel-fingerprint-b.json'
+          $firstBytes = [IO.File]::ReadAllBytes($first)
+          $secondBytes = [IO.File]::ReadAllBytes($second)
+          if (-not [System.Linq.Enumerable]::SequenceEqual($firstBytes, $secondBytes)) {
+            throw 'independent cibuildwheel fingerprints are not byte-identical'
+          }
+          $digest = (Get-FileHash -LiteralPath $first -Algorithm SHA256).Hash.ToLowerInvariant()
+          New-Item -ItemType Directory -Path build/fingerprint-capture | Out-Null
+          Copy-Item -LiteralPath $first -Destination build/fingerprint-capture/windows-wheel-fingerprint-v2.json
+          "### Windows wheel fingerprint" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+          "- Commit: ``${{ needs.validate.outputs.commit }}``" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+          "- SHA-256: ``$digest``" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+          Get-Content -LiteralPath $first
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: windows-wheel-fingerprint-capture
+          path: build/fingerprint-capture/windows-wheel-fingerprint-v2.json
+          if-no-files-found: error
+          retention-days: 14
+
+  native-linux:
+    name: Linux ${{ matrix.arch }}
+    needs: validate
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x86-64, x86-64-avx2, x86-64-bmi2]
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ needs.validate.outputs.commit }}
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.12.10'
+      - name: Verify immutable Linux toolchain image and target
+        id: toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker manifest inspect "$LINUX_NATIVE_IMAGE" > build-linux-manifest.json
+          jq -e --arg digest "$LINUX_NATIVE_AMD64_MANIFEST" '
+            [.manifests[] |
+              select(.platform.os == "linux" and .platform.architecture == "amd64") |
+              .digest] == [$digest]
+          ' build-linux-manifest.json
+          docker pull --platform linux/amd64 "$LINUX_NATIVE_IMAGE"
+          docker image inspect \
+            --format '{{range .RepoDigests}}{{println .}}{{end}}' \
+            "$LINUX_NATIVE_IMAGE" |
+            grep -Fqx 'gcc@sha256:b99b86a28812b1e6453a231a947dc43d76fe192788a12f344a9b568bf9f5d24c'
+          description=$(docker run --rm --platform linux/amd64 \
+            "$LINUX_NATIVE_IMAGE" sh -ceu '
+              test "$(g++ -dumpfullversion)" = 14.2.0
+              test "$(g++ -dumpmachine)" = x86_64-linux-gnu
+              g++ --version | head -n 1
+              tar --version | head -n 1
+              xz --version | head -n 1
+            ')
+          {
+            echo 'description<<EOF'
+            echo "image=$LINUX_NATIVE_IMAGE"
+            echo "platformManifest=$LINUX_NATIVE_AMD64_MANIFEST"
+            echo "$description"
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
+      - name: Build and package twice with the versioned release recipe
+        shell: bash
+        env:
+          COMMIT: ${{ needs.validate.outputs.commit }}
+          SOURCE_DATE_EPOCH: ${{ needs.validate.outputs.epoch }}
+        run: |
+          set -euo pipefail
+          for build_id in a b; do
+            root="build/native-linux-$build_id"
+            mkdir -p "$root"
+            git archive "$COMMIT" | tar -x -C "$root"
+            docker run --rm --platform linux/amd64 \
+              --env "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" \
+              --volume "$GITHUB_WORKSPACE/$root:/work" \
+              --workdir /work \
+              "$LINUX_NATIVE_IMAGE" \
+              bash scripts/build_atomic_native_release.sh \
+                linux '${{ matrix.arch }}' "$RELEASE_VERSION" "$SOURCE_DATE_EPOCH"
+          done
+          cmp \
+            build/native-linux-a/src/atomic-stockfish \
+            build/native-linux-b/src/atomic-stockfish
+          asset="Atomic-Stockfish-${RELEASE_VERSION}-linux-${{ matrix.arch }}.tar.xz"
+          cmp \
+            "build/native-linux-a/build/release/$asset" \
+            "build/native-linux-b/build/release/$asset"
+          mkdir -p build/release
+          cp "build/native-linux-a/build/release/$asset" build/release/
+      - name: Smoke both protocols and write container-authenticated provenance
+        shell: bash
+        env:
+          COMMIT: ${{ needs.validate.outputs.commit }}
+          SOURCE_DATE_EPOCH: ${{ needs.validate.outputs.epoch }}
+          TOOLCHAIN: ${{ steps.toolchain.outputs.description }}
+        run: |
+          set -euo pipefail
+          python tests/release_protocol_smoke.py \
+            --engine build/native-linux-a/src/atomic-stockfish \
+            --version "$RELEASE_VERSION"
+          asset="Atomic-Stockfish-${RELEASE_VERSION}-linux-${{ matrix.arch }}.tar.xz"
+          python scripts/atomic_release_provenance.py \
+            --asset "build/release/$asset" \
+            --version "$RELEASE_VERSION" --commit "$COMMIT" \
+            --source-date-epoch "$SOURCE_DATE_EPOCH" \
+            --kind native --platform linux --architecture '${{ matrix.arch }}' \
+            --toolchain "$TOOLCHAIN" -- \
+            docker run --rm --platform linux/amd64 \
+              --env "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" \
+              --volume "$GITHUB_WORKSPACE/build/native-linux-a:/work" \
+              --workdir /work "$LINUX_NATIVE_IMAGE" \
+              bash scripts/build_atomic_native_release.sh \
+                linux '${{ matrix.arch }}' "$RELEASE_VERSION" "$SOURCE_DATE_EPOCH"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-linux-${{ matrix.arch }}
+          path: build/release/*
+          if-no-files-found: error
+          retention-days: 14
+
+  native-windows:
+    name: Windows ${{ matrix.arch }}
+    needs: validate
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x86-64, x86-64-avx2, x86-64-bmi2]
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ needs.validate.outputs.commit }}
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.12.10'
+      - name: Verify immutable MinGW toolchain image and target
+        id: toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker pull --platform linux/amd64 "$WINDOWS_NATIVE_IMAGE"
+          docker image inspect \
+            --format '{{range .RepoDigests}}{{println .}}{{end}}' \
+            "$WINDOWS_NATIVE_IMAGE" |
+            grep -Fqx 'dockcross/windows-static-x64@sha256:e5fde458b54dda21d0265516f0310bc017532dd6f4fdad0b7239dc6ccd0f8ca9'
+          description=$(docker run --rm --platform linux/amd64 \
+            "$WINDOWS_NATIVE_IMAGE" sh -ceu '
+            test -x "$CXX"
+            case "$CXX" in
+              */x86_64-w64-mingw32.static-g++) ;;
+              *) echo "Unexpected Dockcross CXX: $CXX" >&2; exit 1 ;;
+            esac
+            test "$("$CXX" -dumpmachine)" = x86_64-w64-mingw32.static
+            "$CXX" --version | head -n 1
+            cmake --version | head -n 1
+          ')
+          {
+            echo 'description<<EOF'
+            echo "image=$WINDOWS_NATIVE_IMAGE"
+            echo "$description"
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
+      - name: Build and package twice with the versioned MinGW recipe
+        shell: bash
+        env:
+          COMMIT: ${{ needs.validate.outputs.commit }}
+          SOURCE_DATE_EPOCH: ${{ needs.validate.outputs.epoch }}
+        run: |
+          set -euo pipefail
+          grep -Fq 'ifeq ($(COMP),mingw)' src/Makefile
+          for build_id in a b; do
+            root="build/native-windows-$build_id"
+            mkdir -p "$root"
+            git archive "$COMMIT" | tar -x -C "$root"
+            docker run --rm --platform linux/amd64 \
+              --env "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" \
+              --env "RELEASE_VERSION=$RELEASE_VERSION" \
+              --env 'ARCHITECTURE=${{ matrix.arch }}' \
+              --volume "$GITHUB_WORKSPACE/$root:/work" \
+              --workdir /work \
+              "$WINDOWS_NATIVE_IMAGE" sh -ceu '
+                test -x "$CXX"
+                bash scripts/build_atomic_native_release.sh \
+                  windows "$ARCHITECTURE" "$RELEASE_VERSION" "$SOURCE_DATE_EPOCH"
+              '
+          done
+          cmp \
+            build/native-windows-a/src/atomic-stockfish.exe \
+            build/native-windows-b/src/atomic-stockfish.exe
+          asset="Atomic-Stockfish-${RELEASE_VERSION}-windows-${{ matrix.arch }}.zip"
+          cmp \
+            "build/native-windows-a/build/release/$asset" \
+            "build/native-windows-b/build/release/$asset"
+          mkdir -p build/release
+          cp "build/native-windows-a/build/release/$asset" build/release/
+      - name: Write container-authenticated provenance
+        shell: bash
+        env:
+          COMMIT: ${{ needs.validate.outputs.commit }}
+          SOURCE_DATE_EPOCH: ${{ needs.validate.outputs.epoch }}
+          TOOLCHAIN: ${{ steps.toolchain.outputs.description }}
+        run: |
+          set -euo pipefail
+          asset="Atomic-Stockfish-${RELEASE_VERSION}-windows-${{ matrix.arch }}.zip"
+          python scripts/atomic_release_provenance.py \
+            --asset "build/release/$asset" \
+            --version "$RELEASE_VERSION" --commit "$COMMIT" \
+            --source-date-epoch "$SOURCE_DATE_EPOCH" \
+            --kind native --platform windows --architecture '${{ matrix.arch }}' \
+            --toolchain "$TOOLCHAIN" -- \
+            docker run --rm --platform linux/amd64 \
+              --env "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" \
+              --env "RELEASE_VERSION=$RELEASE_VERSION" \
+              --env 'ARCHITECTURE=${{ matrix.arch }}' \
+              --volume "$GITHUB_WORKSPACE/build/native-windows-a:/work" \
+              --workdir /work "$WINDOWS_NATIVE_IMAGE" \
+              bash scripts/build_atomic_native_release.sh \
+                windows '${{ matrix.arch }}' "$RELEASE_VERSION" "$SOURCE_DATE_EPOCH"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-windows-${{ matrix.arch }}
+          path: build/release/*
+          if-no-files-found: error
+          retention-days: 14
+
+  native-windows-smoke:
+    name: Windows runtime smoke ${{ matrix.arch }}
+    needs:
+      - validate
+      - native-windows
+    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x86-64, x86-64-avx2, x86-64-bmi2]
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ needs.validate.outputs.commit }}
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.12.10'
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-windows-${{ matrix.arch }}
+          path: build/windows-download
+      - name: Download, extract and smoke the cross-built Windows executable
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $archives = @(Get-ChildItem -LiteralPath build/windows-download -Filter '*.zip')
+          if ($archives.Count -ne 1) {
+            throw "Expected one Windows release archive, found $($archives.Count)"
+          }
+          Expand-Archive -LiteralPath $archives[0].FullName -DestinationPath build/windows-smoke
+          $engines = @(
+            Get-ChildItem -LiteralPath build/windows-smoke -Recurse -Filter atomic-stockfish.exe
+          )
+          if ($engines.Count -ne 1) {
+            throw "Expected one packaged Windows engine, found $($engines.Count)"
+          }
+          python tests/release_protocol_smoke.py `
+            --engine $engines[0].FullName --version $env:RELEASE_VERSION
+
+  python-wheels:
+    name: Python ABI3 ${{ matrix.platform }}
+    needs:
+      - validate
+      - source
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            platform: linux
+            architecture: x86-64
+          - os: windows-2022
+            platform: windows
+            architecture: x86-64
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ needs.validate.outputs.commit }}
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.12.10'
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-source
+          path: build/source-authority
+      - name: Authenticate the normalized sdist published by the source job
+        shell: bash
+        env:
+          EXPECTED_SDIST_NAME: ${{ needs.source.outputs.sdist_name }}
+          EXPECTED_SDIST_SHA256: ${{ needs.source.outputs.sdist_sha256 }}
+          COMMIT: ${{ needs.validate.outputs.commit }}
+          SOURCE_DATE_EPOCH: ${{ needs.validate.outputs.epoch }}
+        run: |
+          set -euo pipefail
+          mapfile -t sdists < <(
+            find build/source-authority -maxdepth 1 -type f \
+              -name 'atomic_pyffish-*.tar.gz' | LC_ALL=C sort
+          )
+          test "${#sdists[@]}" -eq 1
+          test "$(basename "${sdists[0]}")" = "$EXPECTED_SDIST_NAME"
+          python scripts/atomic_verify_release_asset.py \
+            --asset "${sdists[0]}" --sha256 "$EXPECTED_SDIST_SHA256" \
+            --version "$RELEASE_VERSION" --commit "$COMMIT" \
+            --source-date-epoch "$SOURCE_DATE_EPOCH" \
+            --kind python --platform source --architecture source
+          echo "RELEASE_SDIST=${sdists[0]}" >> "$GITHUB_ENV"
+          echo "RELEASE_SDIST_SHA256=$EXPECTED_SDIST_SHA256" >> "$GITHUB_ENV"
+      - name: Build wheels twice from the authoritative sdist
+        shell: bash
+        env:
+          SOURCE_DATE_EPOCH: ${{ needs.validate.outputs.epoch }}
+          WHEEL_PLATFORM: ${{ matrix.platform }}
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check \
+            --only-binary=:all: --require-hashes \
+            -r tests/release-ci-requirements.txt
+          for build_id in a b; do
+            fingerprint=none
+            expected_fingerprint=none
+            if [[ "$WHEEL_PLATFORM" == windows ]]; then
+              fingerprint="$GITHUB_WORKSPACE/build/windows-wheel-fingerprint-$build_id.json"
+              expected_fingerprint="$WINDOWS_WHEEL_FINGERPRINT_SHA256"
+            fi
+            bash scripts/build_atomic_python_wheel_release.sh \
+              "$WHEEL_PLATFORM" "$RELEASE_SDIST" \
+              "build/wheelhouse-$build_id" "build/cibw-cache-$build_id" \
+              "$RELEASE_VERSION" "$SOURCE_DATE_EPOCH" \
+              "$fingerprint" "$expected_fingerprint"
+          done
+
+          mapfile -t first < <(find build/wheelhouse-a -maxdepth 1 -type f -name '*.whl')
+          mapfile -t second < <(find build/wheelhouse-b -maxdepth 1 -type f -name '*.whl')
+          test "${#first[@]}" -eq 1
+          test "${#second[@]}" -eq 1
+          test "$(basename "${first[0]}")" = "$(basename "${second[0]}")"
+          cmp "${first[0]}" "${second[0]}"
+          if [[ "$WHEEL_PLATFORM" == windows ]]; then
+            cmp \
+              build/windows-wheel-fingerprint-a.json \
+              build/windows-wheel-fingerprint-b.json
+            cmp \
+              build/windows-wheel-fingerprint-a.json \
+              docs/atomic/windows-wheel-fingerprint-v2.json
+            fingerprint_sha256=$(python -c \
+              'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' \
+              build/windows-wheel-fingerprint-a.json)
+            test "$fingerprint_sha256" = "$WINDOWS_WHEEL_FINGERPRINT_SHA256"
+            cmp \
+              build/windows-wheel-fingerprint-b.json \
+              docs/atomic/windows-wheel-fingerprint-v2.json
+            test "$(python -c \
+              'import json,sys; print(json.load(open(sys.argv[1], encoding="ascii"))["runner"]["imageOS"])' \
+              build/windows-wheel-fingerprint-a.json)" = "$WINDOWS_WHEEL_IMAGE_OS"
+            test "$(python -c \
+              'import json,sys; print(json.load(open(sys.argv[1], encoding="ascii"))["runner"]["imageVersion"])' \
+              build/windows-wheel-fingerprint-a.json)" = "$WINDOWS_WHEEL_IMAGE_VERSION"
+          fi
+          python -m abi3audit --strict "${first[0]}"
+          python tests/python/test_wheel_layout.py "${first[0]}"
+      - name: Write wheel provenance
+        shell: bash
+        env:
+          COMMIT: ${{ needs.validate.outputs.commit }}
+          SOURCE_DATE_EPOCH: ${{ needs.validate.outputs.epoch }}
+        run: |
+          set -euo pipefail
+          builder=windows-2022
+          python_toolchain=
+          fingerprint=none
+          expected_fingerprint=none
+          if [[ '${{ matrix.platform }}' == linux ]]; then
+            builder="$PYTHON_MANYLINUX_X86_64_IMAGE"
+            python_toolchain=$(docker run --rm "$PYTHON_MANYLINUX_X86_64_IMAGE" \
+              /opt/python/cp39-cp39/bin/python -VV | tr '\n' ' ')
+            test -n "$python_toolchain"
+          else
+            fingerprint="$GITHUB_WORKSPACE/build/windows-wheel-fingerprint-a.json"
+            expected_fingerprint="$WINDOWS_WHEEL_FINGERPRINT_SHA256"
+            test -s "$fingerprint"
+            fingerprint_sha256=$(python -c \
+              'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' \
+              "$fingerprint")
+            test "$fingerprint_sha256" = "$WINDOWS_WHEEL_FINGERPRINT_SHA256"
+            python_toolchain=$(python -c \
+              'import json,sys; print(json.load(open(sys.argv[1], encoding="ascii"))["python"]["sysVersion"])' \
+              "$fingerprint")
+            test -n "$python_toolchain"
+            builder="windows-2022 / imageOS=$WINDOWS_WHEEL_IMAGE_OS / imageVersion=$WINDOWS_WHEEL_IMAGE_VERSION / fingerprintSha256=$fingerprint_sha256"
+          fi
+          mkdir -p build/release
+          mapfile -t wheels < <(find build/wheelhouse-a -maxdepth 1 -type f -name '*.whl')
+          test "${#wheels[@]}" -eq 1
+          cp "${wheels[0]}" build/release/
+          asset="build/release/$(basename "${wheels[0]}")"
+          python scripts/atomic_release_provenance.py \
+            --asset "$asset" --version "$RELEASE_VERSION" --commit "$COMMIT" \
+            --source-date-epoch "$SOURCE_DATE_EPOCH" \
+            --kind python --platform '${{ matrix.platform }}' \
+            --architecture '${{ matrix.architecture }}' \
+            --toolchain "cibuildwheel 3.4.1 / CPython=$python_toolchain / CPython 3.9 stable ABI / pip 26.0.1 / setuptools 80.9.0 / wheel 0.45.1 / abi3audit 0.0.26 / builder=$builder / sourceSha256=$RELEASE_SDIST_SHA256 / buildLockSha256=a2d6f8f099bbaf88509c38910f6d2aed1d0913ddf162813906ca7a667b260289 / frontend=pip-no-build-isolation" -- \
+            bash scripts/build_atomic_python_wheel_release.sh \
+              '${{ matrix.platform }}' "$RELEASE_SDIST" \
+              build/wheelhouse-a build/cibw-cache-a \
+              "$RELEASE_VERSION" "$SOURCE_DATE_EPOCH" \
+              "$fingerprint" "$expected_fingerprint"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-python-${{ matrix.platform }}
+          path: build/release/*
+          if-no-files-found: error
+          retention-days: 14
+
+  source:
+    name: Source archives
+    needs: validate
+    runs-on: ubuntu-24.04
+    outputs:
+      sdist_name: ${{ steps.source.outputs.sdist_name }}
+      sdist_sha256: ${{ steps.source.outputs.sdist_sha256 }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ needs.validate.outputs.commit }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.12.10'
+      - name: Build each source artifact twice in the pinned release image
+        id: source
+        shell: bash
+        env:
+          COMMIT: ${{ needs.validate.outputs.commit }}
+          SOURCE_DATE_EPOCH: ${{ needs.validate.outputs.epoch }}
+        run: |
+          set -euo pipefail
+          mkdir -p build/release
+          docker pull "$EMSCRIPTEN_IMAGE"
+          docker image inspect \
+            --format '{{range .RepoDigests}}{{println .}}{{end}}' \
+            "$EMSCRIPTEN_IMAGE" |
+            grep -Fqx 'emscripten/emsdk@sha256:90b757eb11fa9a0e3ce4d2d9f76d932a56018e4accc37b5a28b2783751e60eb7'
+          toolchain="image=$EMSCRIPTEN_IMAGE; $(docker run --rm \
+            "$EMSCRIPTEN_IMAGE" sh -ceu '
+              xz --version | head -n 1
+              tar --version | head -n 1
+              python3 --version
+              python3 -m pip --version
+            ')"
+
+          for root in \
+            build/source-a build/source-b build/sdist-a build/sdist-b; do
+            mkdir -p "$root"
+            git archive "$COMMIT" | tar -x -C "$root"
+          done
+          docker_prefix=(
+            docker run --rm
+            --user "$(id -u):$(id -g)"
+            --env HOME=/tmp
+            --env "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH"
+          )
+          source_asset="Atomic-Stockfish-${RELEASE_VERSION}-source.tar.xz"
+          sdist_asset="atomic_pyffish-${RELEASE_VERSION}.tar.gz"
+          source_recipe_a=(
+            "${docker_prefix[@]}"
+            --volume "$GITHUB_WORKSPACE/build/source-a:/work" --workdir /work
+            "$EMSCRIPTEN_IMAGE" sh scripts/build_atomic_source_release.sh
+            source "$RELEASE_VERSION" "$SOURCE_DATE_EPOCH"
+          )
+          source_recipe_b=(
+            "${docker_prefix[@]}"
+            --volume "$GITHUB_WORKSPACE/build/source-b:/work" --workdir /work
+            "$EMSCRIPTEN_IMAGE" sh scripts/build_atomic_source_release.sh
+            source "$RELEASE_VERSION" "$SOURCE_DATE_EPOCH"
+          )
+          sdist_recipe_a=(
+            "${docker_prefix[@]}"
+            --volume "$GITHUB_WORKSPACE/build/sdist-a:/work" --workdir /work
+            "$EMSCRIPTEN_IMAGE" sh scripts/build_atomic_source_release.sh
+            sdist "$RELEASE_VERSION" "$SOURCE_DATE_EPOCH"
+          )
+          sdist_recipe_b=(
+            "${docker_prefix[@]}"
+            --volume "$GITHUB_WORKSPACE/build/sdist-b:/work" --workdir /work
+            "$EMSCRIPTEN_IMAGE" sh scripts/build_atomic_source_release.sh
+            sdist "$RELEASE_VERSION" "$SOURCE_DATE_EPOCH"
+          )
+          "${source_recipe_a[@]}"
+          "${source_recipe_b[@]}"
+          "${sdist_recipe_a[@]}"
+          "${sdist_recipe_b[@]}"
+          cmp \
+            "build/source-a/build/release/$source_asset" \
+            "build/source-b/build/release/$source_asset"
+          cmp \
+            "build/sdist-a/build/release/$sdist_asset" \
+            "build/sdist-b/build/release/$sdist_asset"
+
+          python scripts/atomic_release_provenance.py \
+            --asset "build/source-a/build/release/$source_asset" \
+            --version "$RELEASE_VERSION" --commit "$COMMIT" \
+            --source-date-epoch "$SOURCE_DATE_EPOCH" \
+            --kind source --platform source --architecture source \
+            --toolchain "$toolchain" -- "${source_recipe_a[@]}"
+          python scripts/atomic_release_provenance.py \
+            --asset "build/sdist-a/build/release/$sdist_asset" \
+            --version "$RELEASE_VERSION" --commit "$COMMIT" \
+            --source-date-epoch "$SOURCE_DATE_EPOCH" \
+            --kind python --platform source --architecture source \
+            --toolchain "$toolchain / buildLockSha256=a2d6f8f099bbaf88509c38910f6d2aed1d0913ddf162813906ca7a667b260289" -- \
+            "${sdist_recipe_a[@]}"
+          cp build/source-a/build/release/* build/release/
+          cp build/sdist-a/build/release/* build/release/
+          sdist_name=$sdist_asset
+          sdist_sha256=$(sha256sum "build/release/$sdist_asset" | cut -d ' ' -f 1)
+          [[ "$sdist_sha256" =~ ^[0-9a-f]{64}$ ]]
+          echo "sdist_name=$sdist_name" >> "$GITHUB_OUTPUT"
+          echo "sdist_sha256=$sdist_sha256" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-source
+          path: build/release/*
+          if-no-files-found: error
+          retention-days: 14
+
+  python-wheel-smoke:
+    name: Installed release wheel ${{ matrix.platform }} Python ${{ matrix.python }}
+    needs:
+      - validate
+      - python-wheels
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            platform: linux
+            python: '3.9'
+          - os: ubuntu-24.04
+            platform: linux
+            python: '3.12'
+          - os: ubuntu-24.04
+            platform: linux
+            python: '3.14'
+          - os: windows-2022
+            platform: windows
+            python: '3.9'
+          - os: windows-2022
+            platform: windows
+            python: '3.12'
+          - os: windows-2022
+            platform: windows
+            python: '3.14'
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ needs.validate.outputs.commit }}
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-python-${{ matrix.platform }}
+          path: build/wheel-download
+      - name: Authenticate, install and execute the exact release wheel
+        shell: bash
+        env:
+          COMMIT: ${{ needs.validate.outputs.commit }}
+          SOURCE_DATE_EPOCH: ${{ needs.validate.outputs.epoch }}
+          WHEEL_PLATFORM: ${{ matrix.platform }}
+        run: |
+          set -euo pipefail
+          mapfile -t wheels < <(
+            find build/wheel-download -maxdepth 1 -type f -name '*.whl' |
+              LC_ALL=C sort
+          )
+          test "${#wheels[@]}" -eq 1
+          wheel_sha256=$(python -c \
+            "import json,sys; print(json.load(open(sys.argv[1], encoding='utf-8'))['sha256'])" \
+            "${wheels[0]}.provenance.json")
+          python scripts/atomic_verify_release_asset.py \
+            --asset "${wheels[0]}" --sha256 "$wheel_sha256" \
+            --version "$RELEASE_VERSION" --commit "$COMMIT" \
+            --source-date-epoch "$SOURCE_DATE_EPOCH" \
+            --kind python --platform "$WHEEL_PLATFORM" --architecture x86-64
+          python -m pip install --disable-pip-version-check --no-index --no-deps \
+            --force-reinstall "${wheels[0]}"
+          cd "$RUNNER_TEMP"
+          python - <<'PY'
+          from pathlib import Path
+          import os
+          import pyffish
+
+          module = Path(pyffish.__file__).resolve()
+          workspace = Path(os.environ["GITHUB_WORKSPACE"]).resolve()
+          assert not module.is_relative_to(workspace), module
+          assert pyffish.version() == (1, 0, 0)
+          assert pyffish.variants() == ["atomic"]
+          assert pyffish.perft("atomic", pyffish.start_fen("atomic"), 1) == 20
+          assert pyffish.info().startswith("Atomic-Stockfish 1.0.0 ")
+          PY
+
+  board-wasm:
+    name: CommonJS and ES-module Board WASM
+    needs: validate
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ needs.validate.outputs.commit }}
+          persist-credentials: false
+      - name: Build, test and pack twice with the versioned Board recipe
+        shell: bash
+        env:
+          COMMIT: ${{ needs.validate.outputs.commit }}
+          SOURCE_DATE_EPOCH: ${{ needs.validate.outputs.epoch }}
+        run: |
+          set -euo pipefail
+          docker pull "$EMSCRIPTEN_IMAGE"
+          docker image inspect \
+            --format '{{range .RepoDigests}}{{println .}}{{end}}' \
+            "$EMSCRIPTEN_IMAGE" |
+            grep -Fqx 'emscripten/emsdk@sha256:90b757eb11fa9a0e3ce4d2d9f76d932a56018e4accc37b5a28b2783751e60eb7'
+          for build_id in a b; do
+            root="build/board-wasm-$build_id"
+            mkdir -p "$root"
+            git archive "$COMMIT" | tar -x -C "$root"
+            docker run --rm \
+              --user "$(id -u):$(id -g)" --env HOME=/tmp \
+              --env "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" \
+              --volume "$GITHUB_WORKSPACE/$root:/work" --workdir /work \
+              "$EMSCRIPTEN_IMAGE" \
+              bash scripts/build_atomic_board_wasm_release.sh \
+                "$RELEASE_VERSION" "$SOURCE_DATE_EPOCH"
+          done
+          diff -r \
+            build/board-wasm-a/tests/js/dist \
+            build/board-wasm-b/tests/js/dist
+          asset="atomic-stockfish-ffish-${RELEASE_VERSION}.tgz"
+          cmp \
+            "build/board-wasm-a/build/release/$asset" \
+            "build/board-wasm-b/build/release/$asset"
+          mkdir -p build/release
+          cp "build/board-wasm-a/build/release/$asset" build/release/
+      - name: Authenticate installed npm artifact and write exact provenance
+        shell: bash
+        env:
+          COMMIT: ${{ needs.validate.outputs.commit }}
+          SOURCE_DATE_EPOCH: ${{ needs.validate.outputs.epoch }}
+        run: |
+          set -euo pipefail
+          mapfile -t assets < <(find build/release -maxdepth 1 -type f -name '*.tgz')
+          test "${#assets[@]}" -eq 1
+          tar -tzf "${assets[0]}" | grep -Fx 'package/AUTHORS'
+          tar -tzf "${assets[0]}" | grep -Fx 'package/CITATION.cff'
+          tar -tzf "${assets[0]}" | grep -Fx 'package/LICENSE'
+          package_file="$(basename "${assets[0]}")"
+          docker run --rm \
+            --env "PACKAGE_TGZ=/src/build/release/$package_file" \
+            --env "ATOMIC_FORBIDDEN_SOURCE_ROOT=/src" \
+            --volume "$GITHUB_WORKSPACE:/src:ro" --workdir /tmp \
+            "$EMSCRIPTEN_IMAGE" sh -lc '
+              set -eu
+              smoke_root=$(mktemp -d /tmp/atomic-installed-npm.XXXXXX)
+              trap "rm -rf \"$smoke_root\"" EXIT
+              cp /src/tests/js/test-installed-commonjs.cjs "$smoke_root/"
+              cp /src/tests/js/test-installed-esm.mjs "$smoke_root/"
+              cd "$smoke_root"
+              npm init --yes >/dev/null
+              npm install --package-lock=false --ignore-scripts \
+                --no-audit --no-fund "$PACKAGE_TGZ"
+              node ./test-installed-commonjs.cjs
+              node ./test-installed-esm.mjs
+            '
+          toolchain="image=$EMSCRIPTEN_IMAGE; $(docker run --rm "$EMSCRIPTEN_IMAGE" sh -lc \
+            'em++ --version | head -n 1; node --version; npm --version')"
+          python3 scripts/atomic_release_provenance.py \
+            --asset "${assets[0]}" --version "$RELEASE_VERSION" --commit "$COMMIT" \
+            --source-date-epoch "$SOURCE_DATE_EPOCH" \
+            --kind board-wasm --platform web-node --architecture wasm32 \
+            --toolchain "$toolchain" -- \
+            docker run --rm \
+              --user "$(id -u):$(id -g)" --env HOME=/tmp \
+              --env "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" \
+              --volume "$GITHUB_WORKSPACE/build/board-wasm-a:/work" \
+              --workdir /work "$EMSCRIPTEN_IMAGE" \
+              bash scripts/build_atomic_board_wasm_release.sh \
+                "$RELEASE_VERSION" "$SOURCE_DATE_EPOCH"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-board-wasm
+          path: build/release/*
+          if-no-files-found: error
+          retention-days: 14
+
+  uci-wasm:
+    name: Node UCI dual-NNUE WASM
+    needs: validate
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ needs.validate.outputs.commit }}
+          persist-credentials: false
+      - name: Build and package twice with the versioned UCI WASM recipe
+        shell: bash
+        env:
+          COMMIT: ${{ needs.validate.outputs.commit }}
+          SOURCE_DATE_EPOCH: ${{ needs.validate.outputs.epoch }}
+        run: |
+          set -euo pipefail
+          docker pull "$EMSCRIPTEN_IMAGE"
+          docker image inspect \
+            --format '{{range .RepoDigests}}{{println .}}{{end}}' \
+            "$EMSCRIPTEN_IMAGE" |
+            grep -Fqx 'emscripten/emsdk@sha256:90b757eb11fa9a0e3ce4d2d9f76d932a56018e4accc37b5a28b2783751e60eb7'
+          for build_id in a b; do
+            root="build/uci-wasm-$build_id"
+            mkdir -p "$root"
+            git archive "$COMMIT" | tar -x -C "$root"
+            docker run --rm \
+              --user "$(id -u):$(id -g)" --env HOME=/tmp \
+              --env "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" \
+              --volume "$GITHUB_WORKSPACE/$root:/work" --workdir /work \
+              "$EMSCRIPTEN_IMAGE" \
+              bash scripts/build_atomic_uci_wasm_release.sh \
+                "$RELEASE_VERSION" "$SOURCE_DATE_EPOCH"
+          done
+          diff -r \
+            build/uci-wasm-a/build/uci-wasm-runtime \
+            build/uci-wasm-b/build/uci-wasm-runtime
+          asset="Atomic-Stockfish-${RELEASE_VERSION}-node-uci-nnue-wasm.tar.xz"
+          cmp \
+            "build/uci-wasm-a/build/release/$asset" \
+            "build/uci-wasm-b/build/release/$asset"
+          mkdir -p build/release
+          cp "build/uci-wasm-a/build/release/$asset" build/release/
+      - name: Authenticate and exercise the exact packaged dual-NNUE engine
+        shell: bash
+        env:
+          COMMIT: ${{ needs.validate.outputs.commit }}
+          SOURCE_DATE_EPOCH: ${{ needs.validate.outputs.epoch }}
+        run: |
+          set -euo pipefail
+          asset="Atomic-Stockfish-${RELEASE_VERSION}-node-uci-nnue-wasm.tar.xz"
+          python3 scripts/atomic_verify_uci_wasm_archive.py \
+            --archive "build/release/$asset" \
+            --version "$RELEASE_VERSION" \
+            --source-date-epoch "$SOURCE_DATE_EPOCH" \
+            --readme docs/atomic/node-uci-wasm-release.md
+          rm -rf build/wasm-archive-smoke
+          mkdir -p build/wasm-archive-smoke build/wasm-fixtures
+          tar -xJf "build/release/$asset" -C build/wasm-archive-smoke
+          extracted="build/wasm-archive-smoke/Atomic-Stockfish-${RELEASE_VERSION}-node-uci-nnue-wasm"
+          python3 tests/create_synthetic_zero_nnue.py \
+            --output build/wasm-fixtures/atomic-zero.nnue
+          python3 tests/create_synthetic_atomic_v2_nnue.py \
+            --output build/wasm-fixtures/atomic-v2.nnue
+          docker run --rm --env "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" \
+            --volume "$GITHUB_WORKSPACE:/src:ro" --workdir /src \
+            "$EMSCRIPTEN_IMAGE" node tests/wasm-engine/run-engine-tests.mjs \
+            --engine "$extracted/atomic-stockfish-nnue-node.mjs" \
+            --net build/wasm-fixtures/atomic-zero.nnue \
+            --expected-net-sha256 9CF054CA00B82AB53A34473DE52D1104AEDDAA19B2E7B24091B5E613AF485985
+          docker run --rm --env "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" \
+            --volume "$GITHUB_WORKSPACE:/src:ro" --workdir /src \
+            "$EMSCRIPTEN_IMAGE" node tests/wasm-engine/run-dual-backend-tests.mjs \
+            --engine "$extracted/atomic-stockfish-nnue-node.mjs" \
+            --legacy-net build/wasm-fixtures/atomic-zero.nnue \
+            --legacy-sha256 9CF054CA00B82AB53A34473DE52D1104AEDDAA19B2E7B24091B5E613AF485985 \
+            --v2-net build/wasm-fixtures/atomic-v2.nnue \
+            --v2-sha256 4DEB05CFF79B5D5EBA51C560F64ED24224671C188B6C5DB27521033E587C87C6
+          smoke_output=$(
+            printf 'uci\nisready\nsetoption name Use NNUE value false\nposition startpos\ngo perft 1\nquit\n' |
+              docker run --rm -i \
+                --volume "$GITHUB_WORKSPACE:/src:ro" \
+                --workdir "/src/$extracted" \
+                "$EMSCRIPTEN_IMAGE" node ./atomic-stockfish-nnue-node.mjs
+          )
+          grep -F 'id name Atomic-Stockfish 1.0.0' <<<"$smoke_output"
+          grep -Fx 'uciok' <<<"$smoke_output"
+          grep -Fx 'readyok' <<<"$smoke_output"
+          grep -Fx 'Nodes searched: 20' <<<"$smoke_output"
+          toolchain="image=$EMSCRIPTEN_IMAGE; $(docker run --rm "$EMSCRIPTEN_IMAGE" sh -lc \
+            'em++ --version | head -n 1; node --version')"
+          python3 scripts/atomic_release_provenance.py \
+            --asset "build/release/$asset" \
+            --version "$RELEASE_VERSION" --commit "$COMMIT" \
+            --source-date-epoch "$SOURCE_DATE_EPOCH" \
+            --kind uci-wasm --platform node --architecture wasm32-pthreads \
+            --toolchain "$toolchain" -- \
+            docker run --rm \
+              --user "$(id -u):$(id -g)" --env HOME=/tmp \
+              --env "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" \
+              --volume "$GITHUB_WORKSPACE/build/uci-wasm-a:/work" \
+              --workdir /work "$EMSCRIPTEN_IMAGE" \
+              bash scripts/build_atomic_uci_wasm_release.sh \
+                "$RELEASE_VERSION" "$SOURCE_DATE_EPOCH"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-uci-wasm
+          path: build/release/*
+          if-no-files-found: error
+          retention-days: 14
+
+  assemble:
+    name: Authenticate and assemble release
+    needs:
+      - validate
+      - native-linux
+      - native-windows
+      - native-windows-smoke
+      - python-wheels
+      - python-wheel-smoke
+      - source
+      - board-wasm
+      - uci-wasm
+    runs-on: ubuntu-24.04
+    outputs:
+      artifact_id: ${{ steps.upload_release.outputs.artifact-id }}
+      artifact_digest: ${{ steps.upload_release.outputs.artifact-digest }}
+      artifact_name: Atomic-Stockfish-1.0.0-release
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ needs.validate.outputs.commit }}
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: release-*
+          path: build/release-input
+      - name: Assemble, re-read and verify every asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/atomic_release_manifest.py \
+            --input-root build/release-input \
+            --output-dir build/release-final \
+            --version "$RELEASE_VERSION" \
+            --commit '${{ needs.validate.outputs.commit }}' \
+            --source-date-epoch '${{ needs.validate.outputs.epoch }}' \
+            --inventory docs/atomic/release-1.0-inventory.json
+          (cd build/release-final && sha256sum --check SHA256SUMS)
+      - id: upload_release
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: Atomic-Stockfish-${{ env.RELEASE_VERSION }}-release
+          path: build/release-final/*
+          if-no-files-found: error
+          retention-days: 30
+
+  exact-tag-external:
+    name: Exact-tag native, bindings, Syzygy and NNUE pipeline gates
+    if: github.event_name == 'push' && github.ref == 'refs/tags/v1.0.0'
+    needs:
+      - validate
+      - main-trust
+      - assemble
+    runs-on: [self-hosted, Windows, X64, atomic-release-gates]
+    environment: atomic-release-gates
+    # The six sequential tracked budgets total 1,110 minutes. Keep 150 minutes
+    # for authenticated setup, packaging, attestations and fail-closed cleanup.
+    # The resulting 21-hour job retains three hours below GitHub's token ceiling.
+    timeout-minutes: 1260
+    permissions:
+      actions: read
+      attestations: write
+      contents: read
+      id-token: write
+      pull-requests: read
+    outputs:
+      evidence_artifact_id: ${{ steps.upload_evidence.outputs.artifact-id }}
+      evidence_artifact_digest: ${{ steps.upload_evidence.outputs.artifact-digest }}
+      evidence_artifact_name: Atomic-Stockfish-1.0.0-exact-tag-evidence
+      manifest_sha256: ${{ steps.exact_gates.outputs.manifest_sha256 }}
+      evidence_checksums_sha256: ${{ steps.package_evidence.outputs.checksums_sha256 }}
+      release_attestation_id: ${{ steps.attest_release.outputs.attestation-id }}
+      evidence_attestation_id: ${{ steps.attest_evidence.outputs.attestation-id }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ needs.validate.outputs.commit }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Prepare this run's exclusive exact-tag scratch root
+        id: exact_scratch
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $exactName = "atomic-release-exact-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+          $runnerTemp = [IO.Path]::GetFullPath($env:RUNNER_TEMP)
+          $exactRoot = [IO.Path]::GetFullPath((Join-Path $runnerTemp $exactName))
+          if ([IO.Path]::GetDirectoryName($exactRoot).TrimEnd('\') -cne `
+                $runnerTemp.TrimEnd('\') -or `
+              [IO.Path]::GetFileName($exactRoot) -cne $exactName) {
+            throw "refusing unsafe exact-tag scratch root: $exactRoot"
+          }
+          if (Test-Path -LiteralPath $exactRoot) {
+            throw "exact-tag scratch root already exists: $exactRoot"
+          }
+          New-Item -ItemType Directory -Path $exactRoot | Out-Null
+          $item = Get-Item -LiteralPath $exactRoot -Force
+          if (-not $item.PSIsContainer -or `
+              ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+            throw "exact-tag scratch root is not one real directory: $exactRoot"
+          }
+          "root=$exactRoot" >> $env:GITHUB_OUTPUT
+      - id: setup_controller_python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.12.10'
+      - name: Create an isolated hash-closed Python 3.12 controller
+        id: controller_runtime
+        shell: pwsh
+        env:
+          EXACT_ROOT: ${{ steps.exact_scratch.outputs.root }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Get-ChildItem Env: | Where-Object { $_.Name -like 'PYTHON*' } |
+            ForEach-Object {
+              Remove-Item -LiteralPath "Env:$($_.Name)" -ErrorAction SilentlyContinue
+            }
+          $exactRoot = [IO.Path]::GetFullPath($env:EXACT_ROOT)
+          $runtimeName = 'controller-python'
+          $runtimeRoot = [IO.Path]::GetFullPath((Join-Path $exactRoot $runtimeName))
+          if ([IO.Path]::GetDirectoryName($runtimeRoot).TrimEnd('\') -cne `
+                $exactRoot.TrimEnd('\') -or `
+              [IO.Path]::GetFileName($runtimeRoot) -cne $runtimeName) {
+            throw "refusing unsafe controller runtime root: $runtimeRoot"
+          }
+          if (Test-Path -LiteralPath $runtimeRoot) {
+            throw "controller runtime root already exists: $runtimeRoot"
+          }
+          $bootstrap = (Get-Command python -ErrorAction Stop).Source
+          & $bootstrap -I -c `
+            "import sys; assert sys.version_info[:3] == (3, 12, 10), sys.version"
+          if ($LASTEXITCODE -ne 0) { throw 'setup-python did not provide CPython 3.12.10' }
+          & $bootstrap -I -m venv --copies $runtimeRoot
+          if ($LASTEXITCODE -ne 0) { throw 'controller virtual environment creation failed' }
+          $controllerPython = Join-Path $runtimeRoot 'Scripts/python.exe'
+          $controllerItem = Get-Item -LiteralPath $controllerPython -Force
+          if ($controllerItem.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+            throw 'controller Python executable is a reparse point'
+          }
+          & $controllerPython -I -m pip --isolated install --disable-pip-version-check `
+            --only-binary=:all: --require-hashes `
+            -r tests/pip-bootstrap-requirements.txt
+          if ($LASTEXITCODE -ne 0) { throw 'pinned pip bootstrap failed' }
+          & $controllerPython -I -m pip --isolated install --disable-pip-version-check `
+            --dry-run --ignore-installed --quiet `
+            --only-binary=:all: --require-hashes `
+            -r tests/release-ci-requirements.txt
+          if ($LASTEXITCODE -ne 0) { throw 'controller lock dry-run failed' }
+          & $controllerPython -I -m pip --isolated install --disable-pip-version-check `
+            --only-binary=:all: --require-hashes `
+            -r tests/release-ci-requirements.txt
+          if ($LASTEXITCODE -ne 0) { throw 'controller tooling installation failed' }
+          & $controllerPython -I -m pip --isolated check
+          if ($LASTEXITCODE -ne 0) { throw 'controller dependency closure is inconsistent' }
+          & $controllerPython -I -P -c @'
+          import importlib.metadata as metadata
+          import jsonschema
+          import psutil
+          import pytest
+          import sys
+          assert sys.version_info[:3] == (3, 12, 10), sys.version
+          assert metadata.version("jsonschema") == "4.25.1"
+          assert psutil.__version__ == "7.2.2"
+          assert pytest.__version__ == "8.3.5"
+          print("controller runtime preflight passed")
+          '@
+          if ($LASTEXITCODE -ne 0) { throw 'controller import/version preflight failed' }
+          "python=$controllerPython" >> $env:GITHUB_OUTPUT
+          "runtime_root=$runtimeRoot" >> $env:GITHUB_OUTPUT
+      - id: setup_pipeline_python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.10.18'
+      - name: Create an isolated hash-closed Python 3.10 legacy pipeline
+        id: pipeline_runtime
+        shell: pwsh
+        env:
+          CONTROLLER_PYTHON: ${{ steps.controller_runtime.outputs.python }}
+          EXACT_ROOT: ${{ steps.exact_scratch.outputs.root }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Get-ChildItem Env: | Where-Object { $_.Name -like 'PYTHON*' } |
+            ForEach-Object {
+              Remove-Item -LiteralPath "Env:$($_.Name)" -ErrorAction SilentlyContinue
+            }
+          $exactRoot = [IO.Path]::GetFullPath($env:EXACT_ROOT)
+          $runtimeName = 'pipeline-python'
+          $runtimeRoot = [IO.Path]::GetFullPath((Join-Path $exactRoot $runtimeName))
+          if ([IO.Path]::GetDirectoryName($runtimeRoot).TrimEnd('\') -cne `
+                $exactRoot.TrimEnd('\') -or `
+              [IO.Path]::GetFileName($runtimeRoot) -cne $runtimeName) {
+            throw "refusing unsafe pipeline runtime root: $runtimeRoot"
+          }
+          if (Test-Path -LiteralPath $runtimeRoot) {
+            throw "pipeline runtime root already exists: $runtimeRoot"
+          }
+          $bootstrap = (Get-Command python -ErrorAction Stop).Source
+          & $bootstrap -I -c `
+            "import sys; assert sys.version_info[:3] == (3, 10, 18), sys.version"
+          if ($LASTEXITCODE -ne 0) { throw 'setup-python did not provide CPython 3.10.18' }
+          & $bootstrap -I -m venv --copies $runtimeRoot
+          if ($LASTEXITCODE -ne 0) { throw 'pipeline virtual environment creation failed' }
+          $pipelinePython = Join-Path $runtimeRoot 'Scripts/python.exe'
+          $pipelineItem = Get-Item -LiteralPath $pipelinePython -Force
+          if ($pipelineItem.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+            throw 'pipeline Python executable is a reparse point'
+          }
+          & $pipelinePython -I -m pip --isolated install --disable-pip-version-check `
+            --only-binary=:all: --require-hashes `
+            -r tests/pip-bootstrap-requirements.txt
+          if ($LASTEXITCODE -ne 0) { throw 'pipeline pinned pip bootstrap failed' }
+          & $pipelinePython -I -m pip --isolated install --disable-pip-version-check `
+            --dry-run --ignore-installed --quiet `
+            --only-binary=:all: --require-hashes `
+            -r tests/legacy_pipeline-ci-requirements.txt
+          if ($LASTEXITCODE -ne 0) { throw 'pipeline lock dry-run failed' }
+          & $pipelinePython -I -m pip --isolated install --disable-pip-version-check `
+            --only-binary=:all: --require-hashes `
+            -r tests/legacy_pipeline-ci-requirements.txt
+          if ($LASTEXITCODE -ne 0) { throw 'pipeline tooling installation failed' }
+          & $pipelinePython -I -m pip --isolated check
+          if ($LASTEXITCODE -ne 0) { throw 'pipeline dependency closure is inconsistent' }
+          # CPython 3.10 predates -P; -I supplies its isolated import path.
+          & $pipelinePython -I -c @'
+          import chess
+          import importlib.metadata as metadata
+          import numpy
+          import pytest
+          import pytorch_lightning
+          import sys
+          import torch
+          import yaml
+          assert sys.version_info[:3] == (3, 10, 18), sys.version
+          assert chess.__version__ == "1.11.2"
+          assert numpy.__version__ == "1.26.4"
+          assert pytest.__version__ == "8.3.5"
+          assert pytorch_lightning.__version__ == "1.9.5"
+          assert torch.__version__ == "2.1.2+cpu"
+          assert metadata.version("PyYAML") == "6.0.3"
+          print("legacy pipeline runtime preflight passed")
+          '@
+          if ($LASTEXITCODE -ne 0) { throw 'pipeline import/version preflight failed' }
+          $controllerScripts = Split-Path -Parent $env:CONTROLLER_PYTHON
+          $controllerScripts >> $env:GITHUB_PATH
+          "python=$pipelinePython" >> $env:GITHUB_OUTPUT
+          "runtime_root=$runtimeRoot" >> $env:GITHUB_OUTPUT
+      - name: Authenticate the same-run assembled artifact before download
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ needs.assemble.outputs.artifact_id }}
+          ARTIFACT_DIGEST: ${{ needs.assemble.outputs.artifact_digest }}
+          ARTIFACT_NAME: ${{ needs.assemble.outputs.artifact_name }}
+          COMMIT: ${{ needs.validate.outputs.commit }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:ARTIFACT_ID -notmatch '^[1-9][0-9]*$') {
+            throw 'assembled artifact id is not canonical'
+          }
+          if ($env:ARTIFACT_DIGEST -notmatch '^sha256:[0-9a-f]{64}$') {
+            throw 'assembled artifact digest is not canonical'
+          }
+          $artifact = gh api `
+            -H "X-GitHub-Api-Version: $env:GITHUB_API_VERSION" `
+            "repos/$env:GITHUB_REPOSITORY/actions/artifacts/$env:ARTIFACT_ID" |
+            ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { throw 'artifact API authentication failed' }
+          if (
+            [string]$artifact.id -ne $env:ARTIFACT_ID -or
+            [string]$artifact.name -cne $env:ARTIFACT_NAME -or
+            [string]$artifact.digest -cne $env:ARTIFACT_DIGEST -or
+            [bool]$artifact.expired -or
+            [string]$artifact.workflow_run.id -ne $env:GITHUB_RUN_ID -or
+            [string]$artifact.workflow_run.head_sha -cne $env:COMMIT
+          ) {
+            throw 'assembled artifact does not belong to this exact run and commit'
+          }
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.assemble.outputs.artifact_id }}
+          path: build/release-final
+      - name: Verify and extract the authenticated same-run release surfaces
+        id: release_surfaces
+        shell: pwsh
+        env:
+          CONTROLLER_PYTHON: ${{ steps.controller_runtime.outputs.python }}
+          EXACT_ROOT: ${{ steps.exact_scratch.outputs.root }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $exactRoot = [IO.Path]::GetFullPath($env:EXACT_ROOT)
+          $exactItem = Get-Item -LiteralPath $exactRoot -Force
+          if (-not $exactItem.PSIsContainer -or `
+              ($exactItem.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+            throw "exact-tag scratch root is not one real directory: $exactRoot"
+          }
+
+          $releaseRoot = (Resolve-Path -LiteralPath 'build/release-final').Path
+          foreach ($entry in Get-ChildItem -LiteralPath $releaseRoot -Force) {
+            if ($entry.PSIsContainer -or `
+                ($entry.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+              throw "release artifact contains a directory or reparse entry: $($entry.Name)"
+            }
+          }
+          $sumsPath = Join-Path $releaseRoot 'SHA256SUMS'
+          if (-not (Test-Path -LiteralPath $sumsPath -PathType Leaf)) {
+            throw 'assembled release has no SHA256SUMS'
+          }
+          $declared = [Collections.Generic.HashSet[string]]::new(
+            [StringComparer]::Ordinal
+          )
+          foreach ($line in [IO.File]::ReadAllLines($sumsPath)) {
+            if ($line -notmatch '^([0-9a-f]{64})  ([A-Za-z0-9][A-Za-z0-9._+-]*)$') {
+              throw "invalid SHA256SUMS line: $line"
+            }
+            $name = $Matches[2]
+            if (-not $declared.Add($name)) { throw "duplicate release checksum: $name" }
+            $path = Join-Path $releaseRoot $name
+            $item = Get-Item -LiteralPath $path -Force
+            if (-not $item.PSIsContainer -and `
+                -not ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+              $actual = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+              if ($actual -cne $Matches[1]) {
+                throw "release checksum mismatch: $name"
+              }
+            } else {
+              throw "release checksum subject is not one regular file: $name"
+            }
+          }
+          $actualFiles = @(
+            Get-ChildItem -LiteralPath $releaseRoot -File -Force |
+              Where-Object Name -CNE 'SHA256SUMS' |
+              ForEach-Object Name |
+              Sort-Object -CaseSensitive
+          )
+          $declaredFiles = @($declared | Sort-Object -CaseSensitive)
+          if (Compare-Object $actualFiles $declaredFiles -CaseSensitive) {
+            throw 'release artifact file set differs from SHA256SUMS'
+          }
+
+          function Require-One([string]$pattern, [string]$label) {
+            $matches = @(Get-ChildItem -LiteralPath $releaseRoot -Filter $pattern -File)
+            if ($matches.Count -ne 1) {
+              throw "expected one $label, found $($matches.Count)"
+            }
+            return $matches[0].FullName
+          }
+          function Extract-Tar([string]$archive, [string]$destination) {
+            New-Item -ItemType Directory -Path $destination | Out-Null
+            & tar.exe -xf $archive -C $destination
+            if ($LASTEXITCODE -ne 0) { throw "could not extract $archive" }
+          }
+          function Require-Extracted([string]$root, [string]$filter, [string]$label) {
+            $matches = @(
+              Get-ChildItem -LiteralPath $root -Recurse -File -Filter $filter |
+                Where-Object { -not ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) }
+            )
+            if ($matches.Count -ne 1) {
+              throw "expected one extracted $label, found $($matches.Count)"
+            }
+            return $matches[0].FullName
+          }
+
+          $windowsArchive = Require-One `
+            'Atomic-Stockfish-1.0.0-windows-x86-64-bmi2.zip' 'Windows BMI2 archive'
+          $pythonWheel = Require-One `
+            'atomic_pyffish-1.0.0-cp39-abi3-win_amd64.whl' 'Windows ABI3 wheel'
+          $boardArchive = Require-One `
+            'atomic-stockfish-ffish-1.0.0.tgz' 'Board WASM archive'
+          $uciArchive = Require-One `
+            'Atomic-Stockfish-1.0.0-node-uci-nnue-wasm.tar.xz' 'UCI WASM archive'
+          $sourceArchive = Require-One `
+            'Atomic-Stockfish-1.0.0-source.tar.xz' 'source archive'
+
+          $nativeRoot = Join-Path $exactRoot 'release-native'
+          $wheelRoot = Join-Path $exactRoot 'release-wheel'
+          $boardRoot = Join-Path $exactRoot 'release-board-wasm'
+          $uciRoot = Join-Path $exactRoot 'release-uci-wasm'
+          Expand-Archive -LiteralPath $windowsArchive -DestinationPath $nativeRoot
+          & $env:CONTROLLER_PYTHON -m zipfile -e $pythonWheel $wheelRoot
+          if ($LASTEXITCODE -ne 0) { throw 'could not extract Python wheel' }
+          Extract-Tar $boardArchive $boardRoot
+          Extract-Tar $uciArchive $uciRoot
+
+          $paths = [ordered]@{
+            candidate_bmi2 = Require-Extracted $nativeRoot 'atomic-stockfish.exe' 'BMI2 engine'
+            native_archive = $windowsArchive
+            pyffish = Require-Extracted $wheelRoot 'pyffish*.pyd' 'pyffish extension'
+            python_wheel = $pythonWheel
+            cjs = Require-Extracted $boardRoot 'ffish.js' 'CommonJS wrapper'
+            esm = Require-Extracted $boardRoot 'ffish.mjs' 'ES module wrapper'
+            board_wasm_archive = $boardArchive
+            wasm_wrapper = Require-Extracted $uciRoot 'atomic-stockfish-nnue-node.mjs' 'UCI WASM wrapper'
+            uci_wasm_archive = $uciArchive
+            source_archive = $sourceArchive
+            release_manifest = (Require-One 'atomic-stockfish-release-manifest.json' 'release manifest')
+            release_checksums = $sumsPath
+          }
+          $bindingPath = Join-Path $exactRoot 'release-bindings.json'
+          $paths | ConvertTo-Json | Set-Content -LiteralPath $bindingPath `
+            -Encoding utf8NoBOM -NoNewline
+          "exact_root=$exactRoot" >> $env:GITHUB_OUTPUT
+          "release_root=$releaseRoot" >> $env:GITHUB_OUTPUT
+          "release_bindings=$bindingPath" >> $env:GITHUB_OUTPUT
+      - name: Materialize clean exact-commit and frozen auxiliary checkouts
+        id: exact_sources
+        shell: pwsh
+        env:
+          COMMIT: ${{ needs.validate.outputs.commit }}
+          TOOLS_SOURCE: ${{ vars.ATOMIC_RELEASE_TOOLS_REPOSITORY }}
+          TRAINER_SOURCE: ${{ vars.ATOMIC_RELEASE_TRAINER_REPOSITORY }}
+          FAIRY_SOURCE: ${{ vars.ATOMIC_RELEASE_FAIRY_REPOSITORY }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          foreach ($name in 'TOOLS_SOURCE','TRAINER_SOURCE','FAIRY_SOURCE') {
+            $value = [Environment]::GetEnvironmentVariable($name)
+            if ([string]::IsNullOrWhiteSpace($value) -or `
+                -not (Test-Path -LiteralPath $value -PathType Container)) {
+              throw "protected repository variable $name is not a local directory"
+            }
+            $item = Get-Item -LiteralPath $value -Force
+            if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+              throw "protected repository source is a reparse point: $name"
+            }
+            [Environment]::SetEnvironmentVariable($name, $item.FullName)
+          }
+          $exactRoot = '${{ steps.release_surfaces.outputs.exact_root }}'
+          $releaseBindings = Get-Content -Raw -LiteralPath `
+            '${{ steps.release_surfaces.outputs.release_bindings }}' | ConvertFrom-Json
+          $buildRoot = Join-Path $exactRoot 'builds'
+          $authorityRoot = Join-Path $exactRoot 'authorities'
+          New-Item -ItemType Directory -Path $buildRoot | Out-Null
+          New-Item -ItemType Directory -Path $authorityRoot | Out-Null
+
+          $atomicRoot = Join-Path $buildRoot 'Atomic-Stockfish'
+          git clone --no-hardlinks --no-checkout . $atomicRoot
+          if ($LASTEXITCODE -ne 0) { throw 'could not clone exact Atomic source' }
+          git -C $atomicRoot checkout --detach $env:COMMIT
+          if ($LASTEXITCODE -ne 0) { throw 'could not check out exact Atomic commit' }
+          $sourceMaterial = Join-Path $buildRoot 'source-material'
+          New-Item -ItemType Directory -Path $sourceMaterial | Out-Null
+          & tar.exe -xf $releaseBindings.source_archive -C $sourceMaterial
+          if ($LASTEXITCODE -ne 0) { throw 'could not inspect exact source archive' }
+          $sourceRoots = @(Get-ChildItem -LiteralPath $sourceMaterial -Directory -Force)
+          if ($sourceRoots.Count -ne 1 -or `
+              $sourceRoots[0].Name -cne 'Atomic-Stockfish-1.0.0') {
+            throw 'source archive has an unexpected top-level root'
+          }
+          $sourceRoot = $sourceRoots[0].FullName
+          foreach ($item in Get-ChildItem -LiteralPath $sourceRoot -Recurse -Force) {
+            if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+              throw "source archive contains a reparse point: $($item.FullName)"
+            }
+          }
+          $archiveFiles = @(
+            Get-ChildItem -LiteralPath $sourceRoot -Recurse -File -Force |
+              ForEach-Object {
+                [IO.Path]::GetRelativePath($sourceRoot, $_.FullName).Replace('\','/')
+              } | Sort-Object -CaseSensitive
+          )
+          $trackedFiles = @(
+            git -C $atomicRoot ls-files | Sort-Object -CaseSensitive
+          )
+          if (Compare-Object $archiveFiles $trackedFiles -CaseSensitive) {
+            throw 'source archive file set differs from the exact Git tree'
+          }
+          & tar.exe -xf $releaseBindings.source_archive `
+            --strip-components=1 -C $atomicRoot
+          if ($LASTEXITCODE -ne 0) { throw 'could not overlay exact source archive' }
+          if ((git -C $atomicRoot rev-parse HEAD).Trim() -cne $env:COMMIT) {
+            throw 'isolated Atomic checkout has the wrong commit'
+          }
+          git -C $atomicRoot diff --exit-code -- .
+          if ($LASTEXITCODE -ne 0) { throw 'source archive differs from exact Git tree' }
+          if (-not [string]::IsNullOrEmpty((git -C $atomicRoot status --porcelain=v1 `
+              --untracked-files=all --ignore-submodules=none))) {
+            throw 'source archive materialization is not a clean checkout'
+          }
+          git -C $atomicRoot remote set-url origin `
+            'https://github.com/Belzedar94/Atomic-Stockfish.git'
+          if ($LASTEXITCODE -ne 0) { throw 'could not freeze Atomic origin identity' }
+
+          function Clone-Frozen(
+            [string]$source,
+            [string]$destination,
+            [string]$commit,
+            [string]$label
+          ) {
+            git -c protocol.file.allow=always clone --no-hardlinks `
+              --recurse-submodules -- $source $destination
+            if ($LASTEXITCODE -ne 0) { throw "could not clone $label" }
+            git -C $destination checkout --detach $commit
+            if ($LASTEXITCODE -ne 0) { throw "could not check out frozen $label commit" }
+            git -C $destination -c protocol.file.allow=always submodule update `
+              --init --recursive
+            if ($LASTEXITCODE -ne 0) { throw "could not materialize $label submodules" }
+            if ((git -C $destination rev-parse HEAD).Trim() -cne $commit) {
+              throw "$label checkout has the wrong commit"
+            }
+            if (-not [string]::IsNullOrEmpty((git -C $destination status `
+                --porcelain=v1 --untracked-files=all --ignore-submodules=none))) {
+              throw "$label checkout is not clean"
+            }
+          }
+
+          $toolsAuthority = Join-Path $authorityRoot 'variant-nnue-tools'
+          $trainerAuthority = Join-Path $authorityRoot 'variant-nnue-pytorch'
+          $fairyAuthority = Join-Path $authorityRoot 'Fairy-Stockfish'
+          Clone-Frozen $env:TOOLS_SOURCE $toolsAuthority `
+            '450049ee7a0ece32694b11f6c55deb7df1d42a84' 'tools authority'
+          Clone-Frozen $env:TRAINER_SOURCE $trainerAuthority `
+            '3a19c16fc3d477b1ee7602ccc6510736bc7604cc' 'trainer authority'
+          Clone-Frozen $env:FAIRY_SOURCE $fairyAuthority `
+            'fb78cb561aa01708338e35b3dc3b65a42149a3c4' 'Fairy authority'
+          foreach ($origin in @(
+            @{ Root = $toolsAuthority; Url = 'https://github.com/Belzedar94/variant-nnue-tools.git' },
+            @{ Root = $trainerAuthority; Url = 'https://github.com/Belzedar94/variant-nnue-pytorch.git' },
+            @{ Root = $fairyAuthority; Url = 'https://github.com/fairy-stockfish/Fairy-Stockfish.git' }
+          )) {
+            git -C $origin.Root remote set-url origin $origin.Url
+            if ($LASTEXITCODE -ne 0) { throw 'could not freeze auxiliary origin' }
+          }
+
+          $toolsRoot = Join-Path $buildRoot 'variant-nnue-tools'
+          $trainerRoot = Join-Path $buildRoot 'variant-nnue-pytorch'
+          Clone-Frozen $toolsAuthority $toolsRoot `
+            '450049ee7a0ece32694b11f6c55deb7df1d42a84' 'tools build root'
+          Clone-Frozen $trainerAuthority $trainerRoot `
+            '3a19c16fc3d477b1ee7602ccc6510736bc7604cc' 'trainer build root'
+          git -C $toolsRoot remote set-url origin `
+            'https://github.com/Belzedar94/variant-nnue-tools.git'
+          if ($LASTEXITCODE -ne 0) { throw 'could not freeze tools origin identity' }
+          git -C $trainerRoot remote set-url origin `
+            'https://github.com/Belzedar94/variant-nnue-pytorch.git'
+          if ($LASTEXITCODE -ne 0) { throw 'could not freeze trainer origin identity' }
+
+          foreach ($nested in @(
+            (Join-Path $toolsRoot 'engine/Atomic-Stockfish'),
+            (Join-Path $trainerRoot 'external/Atomic-Stockfish')
+          )) {
+            if (-not (Test-Path -LiteralPath $nested -PathType Container)) {
+              throw "required engine submodule is absent: $nested"
+            }
+            git -C $nested fetch --no-tags origin `
+              '+main:refs/remotes/origin/main'
+            if ($LASTEXITCODE -ne 0) { throw "could not authenticate $nested origin/main" }
+          }
+
+          $gateWorkspace = Join-Path $env:SystemDrive `
+            "AtomicReleaseGate-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+          if (Test-Path -LiteralPath $gateWorkspace) {
+            throw "exclusive gate workspace already exists: $gateWorkspace"
+          }
+          New-Item -ItemType Directory -Path $gateWorkspace | Out-Null
+          if ($gateWorkspace -match '\s') {
+            throw "gate workspace must contain no whitespace: $gateWorkspace"
+          }
+          $directoryBindings = [ordered]@{
+            atomic_build_root = $atomicRoot
+            tools_build_root = $toolsRoot
+            trainer_build_root = $trainerRoot
+            syzygy_combined = '${{ vars.ATOMIC_RELEASE_SYZYGY_COMBINED }}'
+            gate_workspace = $gateWorkspace
+          }
+          foreach ($name in @($directoryBindings.Keys)) {
+            $value = [string]$directoryBindings[$name]
+            if ([string]::IsNullOrWhiteSpace($value) -or `
+                -not (Test-Path -LiteralPath $value -PathType Container)) {
+              throw "directory binding is absent: $name"
+            }
+            $item = Get-Item -LiteralPath $value -Force
+            if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+              throw "directory binding is a reparse point: $name"
+            }
+            $directoryBindings[$name] = $item.FullName
+          }
+          $directoryPath = Join-Path $exactRoot 'directory-bindings.json'
+          $directoryBindings | ConvertTo-Json | Set-Content `
+            -LiteralPath $directoryPath -Encoding utf8NoBOM -NoNewline
+          "atomic_root=$atomicRoot" >> $env:GITHUB_OUTPUT
+          "tools_root=$toolsRoot" >> $env:GITHUB_OUTPUT
+          "trainer_root=$trainerRoot" >> $env:GITHUB_OUTPUT
+          "tools_authority=$toolsAuthority" >> $env:GITHUB_OUTPUT
+          "trainer_authority=$trainerAuthority" >> $env:GITHUB_OUTPUT
+          "fairy_authority=$fairyAuthority" >> $env:GITHUB_OUTPUT
+          "directory_bindings=$directoryPath" >> $env:GITHUB_OUTPUT
+      - name: Clean-build all test-only and cross-repository artifacts
+        id: exact_builds
+        shell: pwsh
+        env:
+          CONTROLLER_PYTHON: ${{ steps.controller_runtime.outputs.python }}
+          PIPELINE_PYTHON: ${{ steps.pipeline_runtime.outputs.python }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $exactRoot = '${{ steps.release_surfaces.outputs.exact_root }}'
+          $atomicRoot = '${{ steps.exact_sources.outputs.atomic_root }}'
+          $toolsRoot = '${{ steps.exact_sources.outputs.tools_root }}'
+          $trainerRoot = '${{ steps.exact_sources.outputs.trainer_root }}'
+          $manifestRoot = Join-Path $exactRoot 'build-manifests'
+          New-Item -ItemType Directory -Path $manifestRoot | Out-Null
+
+          $toolsManifest = Join-Path $manifestRoot 'tools-build.json'
+          $trainerManifest = Join-Path $manifestRoot 'trainer-build.json'
+          $atomicManifest = Join-Path $manifestRoot 'atomic-build.json'
+          $generatorManifest = Join-Path $manifestRoot 'atomic-data-generator-build.json'
+          & $env:CONTROLLER_PYTHON tests/legacy_pipeline_build_manifest.py `
+            --recipe strong-local-tools-windows-v2 `
+            --repository-root $toolsRoot --output $toolsManifest
+          if ($LASTEXITCODE -ne 0) { throw 'tools clean build failed' }
+          & $env:CONTROLLER_PYTHON tests/legacy_pipeline_build_manifest.py `
+            --recipe strong-local-trainer-windows-v1 `
+            --repository-root $trainerRoot --output $trainerManifest
+          if ($LASTEXITCODE -ne 0) { throw 'trainer clean build failed' }
+          & $env:CONTROLLER_PYTHON tests/legacy_pipeline_build_manifest.py `
+            --recipe strong-local-atomic-windows-v2 `
+            --repository-root $atomicRoot --output $atomicManifest
+          if ($LASTEXITCODE -ne 0) { throw 'Atomic playing clean build failed' }
+          & $env:CONTROLLER_PYTHON tests/legacy_pipeline_build_manifest.py `
+            --recipe strong-local-atomic-data-generator-windows-v2 `
+            --repository-root $atomicRoot --output $generatorManifest
+          if ($LASTEXITCODE -ne 0) { throw 'Atomic generator clean build failed' }
+
+          $bash = 'C:\msys64\usr\bin\bash.exe'
+          $cygpath = 'C:\msys64\usr\bin\cygpath.exe'
+          foreach ($tool in $bash,$cygpath) {
+            if (-not (Test-Path -LiteralPath $tool -PathType Leaf)) {
+              throw "required MSYS2 tool is absent: $tool"
+            }
+          }
+          function Msys-Path([string]$path) {
+            $value = (& $cygpath -u $path).Trim()
+            if ($LASTEXITCODE -ne 0 -or $value.Contains("'")) {
+              throw "could not quote MSYS path: $path"
+            }
+            return $value
+          }
+          function Invoke-Msys([string]$root, [string]$command) {
+            $msysRoot = Msys-Path $root
+            & $bash -lc "export PATH=/mingw64/bin:`$PATH; cd '$msysRoot' && $command"
+            if ($LASTEXITCODE -ne 0) { throw "MSYS build failed: $command" }
+          }
+          Invoke-Msys $atomicRoot `
+            'make -C src -j2 ARCH=x86-64-bmi2 COMP=mingw atomic-unit-tests.exe atomic-api-tests.exe atomic-syzygy-driver.exe atomic-nnue-incremental-tests.exe data-tools'
+          Invoke-Msys $toolsRoot `
+            'make -j2 ARCH=x86-64 COMP=mingw v2-data-tools'
+
+          $buildBindings = [ordered]@{
+            cpp_unit = (Join-Path $atomicRoot 'src/atomic-unit-tests.exe')
+            cpp_api = (Join-Path $atomicRoot 'src/atomic-api-tests.exe')
+            syzygy_driver = (Join-Path $atomicRoot 'src/atomic-syzygy-driver.exe')
+            incremental_binary = (Join-Path $atomicRoot 'src/atomic-nnue-incremental-tests.exe')
+            pipeline_python = $env:PIPELINE_PYTHON
+            tools_engine = (Join-Path $toolsRoot 'src/atomic-data-tools.exe')
+            atomic_pipeline_engine = (Join-Path $atomicRoot 'src/atomic-stockfish-pipeline.exe')
+            tools_build_manifest = $toolsManifest
+            trainer_build_manifest = $trainerManifest
+            atomic_build_manifest = $atomicManifest
+            atomic_data_generator = (Join-Path $atomicRoot 'src/atomic-stockfish-data-generator-pipeline.exe')
+            atomic_data_generator_build_manifest = $generatorManifest
+            data_tools = (Join-Path $atomicRoot 'src/atomic-stockfish-data-tools.exe')
+            wrapper_data_tools = (Join-Path $toolsRoot 'engine/Atomic-Stockfish/src/atomic-stockfish-data-tools.exe')
+            trainer_loader = (Join-Path $trainerRoot 'training_data_loader.dll')
+          }
+          foreach ($name in @($buildBindings.Keys)) {
+            $value = [string]$buildBindings[$name]
+            if (-not (Test-Path -LiteralPath $value -PathType Leaf)) {
+              throw "clean build omitted artifact: $name=$value"
+            }
+            $item = Get-Item -LiteralPath $value -Force
+            if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+              throw "clean-build artifact is a reparse point: $name"
+            }
+            $buildBindings[$name] = $item.FullName
+          }
+          foreach ($checkout in $atomicRoot,$toolsRoot,$trainerRoot) {
+            $dirty = git -C $checkout status --porcelain=v1 `
+              --untracked-files=all --ignore-submodules=none
+            if ($LASTEXITCODE -ne 0 -or -not [string]::IsNullOrEmpty($dirty)) {
+              throw "post-build checkout is not clean: $checkout`n$dirty"
+            }
+          }
+          $bindingPath = Join-Path $exactRoot 'build-bindings.json'
+          $buildBindings | ConvertTo-Json | Set-Content -LiteralPath $bindingPath `
+            -Encoding utf8NoBOM -NoNewline
+          "build_bindings=$bindingPath" >> $env:GITHUB_OUTPUT
+      - name: Re-authenticate online main trust without exposing the token to gates
+        id: exact_main_trust
+        shell: pwsh
+        env:
+          CONTROLLER_PYTHON: ${{ steps.controller_runtime.outputs.python }}
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_MAIN_TRUST_SHA256: ${{ needs['main-trust'].outputs.trust_sha256 }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Remove-Item Env:PYTHONPATH -ErrorAction SilentlyContinue
+          Remove-Item Env:PYTHONHOME -ErrorAction SilentlyContinue
+          $trustRoot = Join-Path '${{ steps.release_surfaces.outputs.exact_root }}' 'trust'
+          New-Item -ItemType Directory -Path $trustRoot | Out-Null
+          $mainTrust = Join-Path $trustRoot 'release-main-trust.json'
+          & $env:CONTROLLER_PYTHON -I scripts/atomic_release_main_trust.py `
+            --repository Belzedar94/Atomic-Stockfish `
+            --tag v1.0.0 `
+            --repository-root . `
+            --release-pr 44 `
+            --query-gh --require-online `
+            --json-output $mainTrust
+          if ($LASTEXITCODE -ne 0) { throw 'online main trust recheck failed' }
+          $mainTrustSha = (Get-FileHash -LiteralPath $mainTrust -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($mainTrustSha -cne $env:EXPECTED_MAIN_TRUST_SHA256) {
+            throw 'main trust changed between the prerequisite and exact-tag jobs'
+          }
+          "main_trust_path=$mainTrust" >> $env:GITHUB_OUTPUT
+      - name: Run and independently re-verify every exact-tag gate
+        id: exact_gates
+        shell: pwsh
+        env:
+          CONTROLLER_PYTHON: ${{ steps.controller_runtime.outputs.python }}
+          COMMIT: ${{ needs.validate.outputs.commit }}
+          TAG_OBJECT: ${{ needs.validate.outputs.tag_object }}
+          LEGACY_NET: ${{ vars.ATOMIC_RELEASE_LEGACY_NET }}
+          FAIRY_H5_ORACLE: ${{ vars.ATOMIC_RELEASE_FAIRY_H5_ORACLE }}
+          SYZYGY_INVENTORY: ${{ vars.ATOMIC_RELEASE_SYZYGY_INVENTORY }}
+          KPPPPVK_WDL: ${{ vars.ATOMIC_RELEASE_KPPPPVK_WDL }}
+          KPPPPVK_DTZ: ${{ vars.ATOMIC_RELEASE_KPPPPVK_DTZ }}
+          FAIRY_BMI2_BASELINE: ${{ vars.ATOMIC_RELEASE_FAIRY_BMI2_BASELINE }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Remove-Item Env:PYTHONPATH -ErrorAction SilentlyContinue
+          Remove-Item Env:PYTHONHOME -ErrorAction SilentlyContinue
+          $planPath = 'scripts/atomic-release-exact-tag-plan-v1.json'
+          if (-not (Test-Path -LiteralPath $planPath -PathType Leaf)) {
+            throw "tracked exact-tag command plan is absent: $planPath"
+          }
+          $exactRoot = '${{ steps.release_surfaces.outputs.exact_root }}'
+          $releaseBindings = Get-Content -Raw -LiteralPath `
+            '${{ steps.release_surfaces.outputs.release_bindings }}' | `
+            ConvertFrom-Json -AsHashtable
+          $buildBindings = Get-Content -Raw -LiteralPath `
+            '${{ steps.exact_builds.outputs.build_bindings }}' | `
+            ConvertFrom-Json -AsHashtable
+          $directoryBindings = Get-Content -Raw -LiteralPath `
+            '${{ steps.exact_sources.outputs.directory_bindings }}' | `
+            ConvertFrom-Json -AsHashtable
+          $artifactBindings = @{}
+          foreach ($entry in $releaseBindings.GetEnumerator()) {
+            if ($artifactBindings.ContainsKey($entry.Key)) {
+              throw "duplicate release binding: $($entry.Key)"
+            }
+            $artifactBindings[$entry.Key] = $entry.Value
+          }
+          foreach ($entry in $buildBindings.GetEnumerator()) {
+            if ($artifactBindings.ContainsKey($entry.Key)) {
+              throw "duplicate clean-build binding: $($entry.Key)"
+            }
+            $artifactBindings[$entry.Key] = $entry.Value
+          }
+          $expectedArtifactNames = @(
+            'candidate_bmi2','native_archive','source_archive','python_wheel',
+            'board_wasm_archive','uci_wasm_archive','pyffish','cjs','esm',
+            'wasm_wrapper','cpp_unit','cpp_api','syzygy_driver',
+            'incremental_binary','pipeline_python','atomic_pipeline_engine','tools_engine',
+            'atomic_data_generator','data_tools','wrapper_data_tools',
+            'trainer_loader','tools_build_manifest','trainer_build_manifest',
+            'atomic_build_manifest','atomic_data_generator_build_manifest',
+            'release_manifest','release_checksums'
+          )
+          $actualBindingNames = @($artifactBindings.Keys | Sort-Object -CaseSensitive)
+          $expectedBindingNames = @($expectedArtifactNames | Sort-Object -CaseSensitive)
+          if (Compare-Object $actualBindingNames $expectedBindingNames -CaseSensitive) {
+            throw 'workflow artifact binding allowlist differs from the frozen release contract'
+          }
+
+          $externalBindings = [ordered]@{
+            legacy_net = $env:LEGACY_NET
+            fairy_h5_oracle = $env:FAIRY_H5_ORACLE
+            syzygy_inventory = $env:SYZYGY_INVENTORY
+            kppppvk_wdl = $env:KPPPPVK_WDL
+            kppppvk_dtz = $env:KPPPPVK_DTZ
+            fairy_bmi2_baseline = $env:FAIRY_BMI2_BASELINE
+          }
+          foreach ($name in @($externalBindings.Keys)) {
+            $value = [string]$externalBindings[$name]
+            if ([string]::IsNullOrWhiteSpace($value) -or `
+                -not (Test-Path -LiteralPath $value -PathType Leaf)) {
+              throw "protected external input is absent: $name"
+            }
+            $item = Get-Item -LiteralPath $value -Force
+            if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+              throw "protected external input is a reparse point: $name"
+            }
+            $externalBindings[$name] = $item.FullName
+          }
+
+          $plan = Get-Content -Raw -LiteralPath $planPath | ConvertFrom-Json
+          $planArtifactNames = @($plan.artifacts | Sort-Object -CaseSensitive)
+          if (Compare-Object $planArtifactNames $expectedBindingNames -CaseSensitive) {
+            throw 'tracked command-plan artifacts differ from the frozen workflow allowlist'
+          }
+          $planDirectoryNames = @($plan.directories | Sort-Object -CaseSensitive)
+          if (Compare-Object $planDirectoryNames @(
+              'atomic_build_root','gate_workspace','syzygy_combined',
+              'tools_build_root','trainer_build_root'
+            ) `
+              -CaseSensitive) {
+            throw 'tracked command-plan directories differ from the frozen workflow allowlist'
+          }
+          $arguments = [Collections.Generic.List[string]]::new()
+          $arguments.AddRange([string[]]@(
+            '--repo-root', '.',
+            '--command-plan', $planPath,
+            '--repository', 'Belzedar94/Atomic-Stockfish',
+            '--version', '1.0.0',
+            '--event', 'push',
+            '--ref', 'refs/tags/v1.0.0',
+            '--commit', $env:COMMIT,
+            '--tag-object', $env:TAG_OBJECT,
+            '--run-id', $env:GITHUB_RUN_ID,
+            '--run-attempt', $env:GITHUB_RUN_ATTEMPT
+          ))
+          foreach ($entry in $externalBindings.GetEnumerator()) {
+            $arguments.Add('--external')
+            $arguments.Add("$($entry.Key)=$($entry.Value)")
+          }
+          foreach ($name in @($plan.artifacts)) {
+            if (-not $artifactBindings.ContainsKey([string]$name)) {
+              throw "workflow has no authenticated artifact binding for plan name: $name"
+            }
+            $arguments.Add('--artifact')
+            $arguments.Add("$name=$($artifactBindings[[string]$name])")
+          }
+          foreach ($name in @($plan.directories)) {
+            if (-not $directoryBindings.ContainsKey([string]$name)) {
+              throw "workflow has no authenticated directory binding for plan name: $name"
+            }
+            $arguments.Add('--directory')
+            $arguments.Add("$name=$($directoryBindings[[string]$name])")
+          }
+          $arguments.AddRange([string[]]@(
+            '--aux-repository', "tools=${{ steps.exact_sources.outputs.tools_authority }}",
+            '--aux-repository', "trainer=${{ steps.exact_sources.outputs.trainer_authority }}",
+            '--aux-repository', "fairy=${{ steps.exact_sources.outputs.fairy_authority }}"
+          ))
+
+          $outputRoot = Join-Path $exactRoot 'gate-output'
+          New-Item -ItemType Directory -Path $outputRoot | Out-Null
+          $evidenceRoot = Join-Path $outputRoot 'evidence'
+          $manifestPath = Join-Path $outputRoot 'exact-tag-manifest.json'
+          $arguments.AddRange([string[]]@(
+            '--evidence-root', $evidenceRoot,
+            '--manifest', $manifestPath
+          ))
+
+          $runLog = Join-Path $outputRoot 'exact-tag-run.log'
+          & $env:CONTROLLER_PYTHON -I scripts/atomic_release_exact_tag_gates.py run @arguments `
+            2>&1 | Tee-Object -LiteralPath $runLog
+          if ($LASTEXITCODE -ne 0) { throw 'exact-tag gate execution failed' }
+          $verifyLog = Join-Path $outputRoot 'exact-tag-verify.log'
+          & $env:CONTROLLER_PYTHON -I scripts/atomic_release_exact_tag_gates.py verify @arguments `
+            2>&1 | Tee-Object -LiteralPath $verifyLog
+          if ($LASTEXITCODE -ne 0) { throw 'exact-tag evidence re-verification failed' }
+          $manifestSha = (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($manifestSha -notmatch '^[0-9a-f]{64}$') {
+            throw 'exact-tag manifest digest is not canonical'
+          }
+          "manifest_sha256=$manifestSha" >> $env:GITHUB_OUTPUT
+          "evidence_root=$evidenceRoot" >> $env:GITHUB_OUTPUT
+          "manifest_path=$manifestPath" >> $env:GITHUB_OUTPUT
+          "main_trust_path=${{ steps.exact_main_trust.outputs.main_trust_path }}" >> $env:GITHUB_OUTPUT
+          "run_log=$runLog" >> $env:GITHUB_OUTPUT
+          "verify_log=$verifyLog" >> $env:GITHUB_OUTPUT
+      - name: Package only sanitized verifier evidence
+        id: package_evidence
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $uploadRoot = Join-Path $env:GITHUB_WORKSPACE 'build/exact-tag-evidence'
+          if (Test-Path -LiteralPath $uploadRoot) {
+            throw "evidence upload root already exists: $uploadRoot"
+          }
+          New-Item -ItemType Directory -Path $uploadRoot | Out-Null
+          Copy-Item -LiteralPath '${{ steps.exact_gates.outputs.evidence_root }}' `
+            -Destination (Join-Path $uploadRoot 'evidence') -Recurse
+          Copy-Item -LiteralPath '${{ steps.exact_gates.outputs.manifest_path }}' `
+            -Destination (Join-Path $uploadRoot 'exact-tag-manifest.json')
+          Copy-Item -LiteralPath '${{ steps.exact_gates.outputs.main_trust_path }}' `
+            -Destination (Join-Path $uploadRoot 'release-main-trust.json')
+          Copy-Item -LiteralPath '${{ steps.exact_gates.outputs.run_log }}' `
+            -Destination (Join-Path $uploadRoot 'exact-tag-run.log')
+          Copy-Item -LiteralPath '${{ steps.exact_gates.outputs.verify_log }}' `
+            -Destination (Join-Path $uploadRoot 'exact-tag-verify.log')
+
+          $entries = @(Get-ChildItem -LiteralPath $uploadRoot -Recurse -Force)
+          foreach ($entry in $entries) {
+            if ($entry.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+              throw "evidence contains a reparse point: $($entry.FullName)"
+            }
+          }
+          $files = @(
+            $entries | Where-Object { -not $_.PSIsContainer } |
+              Sort-Object FullName
+          )
+          if ($files.Count -eq 0) { throw 'sanitized evidence bundle is empty' }
+          $forbiddenNames = '(?i)(\.nnue|\.exe|\.dll|\.pyd|\.wasm|\.zip|\.tgz|\.tar|\.xz|\.bz2|\.atbw|\.atbz|\.pt|\.pth|checkpoint|dataset)($|\.)'
+          $checksumLines = [Collections.Generic.List[string]]::new()
+          foreach ($file in $files) {
+            if ($file.Extension -cnotin @('.json','.log','.txt')) {
+              throw "evidence extension is not allowlisted: $($file.FullName)"
+            }
+            if ($file.Name -match $forbiddenNames) {
+              throw "evidence filename denotes a forbidden payload: $($file.Name)"
+            }
+            $relative = [IO.Path]::GetRelativePath($uploadRoot, $file.FullName).Replace('\','/')
+            if ($relative.Contains('..')) { throw "evidence path escapes root: $relative" }
+            $digest = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            $checksumLines.Add("$digest  $relative")
+          }
+          $checksums = Join-Path $uploadRoot 'EXACT_TAG_SHA256SUMS.txt'
+          [IO.File]::WriteAllText(
+            $checksums,
+            (($checksumLines -join "`n") + "`n"),
+            [Text.UTF8Encoding]::new($false)
+          )
+          $checksumsSha = (Get-FileHash -LiteralPath $checksums -Algorithm SHA256).Hash.ToLowerInvariant()
+          "checksums_sha256=$checksumsSha" >> $env:GITHUB_OUTPUT
+      - name: Attest every assembled release file from the exact tag
+        id: attest_release
+        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4.1.1
+        with:
+          subject-path: build/release-final/*
+      - name: Attest every sanitized exact-tag evidence file
+        id: attest_evidence
+        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4.1.1
+        with:
+          subject-path: build/exact-tag-evidence/**/*
+      - id: upload_evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: Atomic-Stockfish-${{ env.RELEASE_VERSION }}-exact-tag-evidence
+          path: build/exact-tag-evidence/**/*
+          if-no-files-found: error
+          retention-days: 30
+      - name: Remove only this run's exact-tag scratch roots
+        if: always()
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $targets = @(
+            @{
+              Label = 'exact-tag scratch root'
+              Parent = [IO.Path]::GetFullPath($env:RUNNER_TEMP)
+              Name = "atomic-release-exact-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+            },
+            @{
+              Label = 'H7 gate workspace'
+              Parent = [IO.Path]::GetFullPath("$env:SystemDrive\")
+              Name = "AtomicReleaseGate-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+            }
+          )
+          $failures = [Collections.Generic.List[string]]::new()
+          foreach ($entry in $targets) {
+            try {
+              $target = [IO.Path]::GetFullPath((Join-Path $entry.Parent $entry.Name))
+              $targetParent = [IO.Path]::GetDirectoryName($target).TrimEnd('\')
+              if ($targetParent -cne $entry.Parent.TrimEnd('\') -or `
+                  [IO.Path]::GetFileName($target) -cne $entry.Name) {
+                throw "refusing unsafe $($entry.Label) cleanup target: $target"
+              }
+              if (Test-Path -LiteralPath $target) {
+                $item = Get-Item -LiteralPath $target -Force
+                if (-not $item.PSIsContainer -or `
+                    ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+                  throw "refusing non-directory or reparse $($entry.Label): $target"
+                }
+                $nestedReparse = Get-ChildItem -LiteralPath $target -Force -Recurse |
+                  Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint } |
+                  Select-Object -First 1
+                if ($nestedReparse) {
+                  throw "refusing $($entry.Label) containing a reparse point: $($nestedReparse.FullName)"
+                }
+                Remove-Item -LiteralPath $target -Recurse -Force
+              }
+            } catch {
+              $failures.Add("$($entry.Label): $($_.Exception.Message)")
+            }
+          }
+          if ($failures.Count -ne 0) {
+            throw "exact-tag cleanup failed:`n$($failures -join "`n")"
+          }
+
+  publication-gate:
+    name: Re-authenticate exact evidence, release policy and same-tag CI
+    if: github.event_name == 'push' && github.ref_type == 'tag' && github.ref_name == 'v1.0.0'
+    needs:
+      - validate
+      - main-trust
+      - assemble
+      - exact-tag-external
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      attestations: read
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: v1.0.0
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.12.10'
+      - name: Re-authenticate both same-run artifact identities
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMIT: ${{ needs.validate.outputs.commit }}
+          RELEASE_ARTIFACT_ID: ${{ needs.assemble.outputs.artifact_id }}
+          RELEASE_ARTIFACT_DIGEST: ${{ needs.assemble.outputs.artifact_digest }}
+          RELEASE_ARTIFACT_NAME: ${{ needs.assemble.outputs.artifact_name }}
+          EVIDENCE_ARTIFACT_ID: ${{ needs['exact-tag-external'].outputs.evidence_artifact_id }}
+          EVIDENCE_ARTIFACT_DIGEST: ${{ needs['exact-tag-external'].outputs.evidence_artifact_digest }}
+          EVIDENCE_ARTIFACT_NAME: ${{ needs['exact-tag-external'].outputs.evidence_artifact_name }}
+        run: |
+          set -euo pipefail
+          verify_artifact() {
+            local id=$1 digest=$2 name=$3 document
+            [[ "$id" =~ ^[1-9][0-9]*$ ]]
+            [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+            document=$(gh api \
+              -H "X-GitHub-Api-Version: $GITHUB_API_VERSION" \
+              "repos/$GITHUB_REPOSITORY/actions/artifacts/$id")
+            jq -e \
+              --argjson id "$id" --arg digest "$digest" --arg name "$name" \
+              --argjson run "$GITHUB_RUN_ID" --arg commit "$COMMIT" '
+                .id == $id and .name == $name and .digest == $digest and
+                .expired == false and .workflow_run.id == $run and
+                .workflow_run.head_sha == $commit
+              ' <<<"$document"
+          }
+          verify_artifact "$RELEASE_ARTIFACT_ID" \
+            "$RELEASE_ARTIFACT_DIGEST" "$RELEASE_ARTIFACT_NAME"
+          verify_artifact "$EVIDENCE_ARTIFACT_ID" \
+            "$EVIDENCE_ARTIFACT_DIGEST" "$EVIDENCE_ARTIFACT_NAME"
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.assemble.outputs.artifact_id }}
+          path: build/release-final
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs['exact-tag-external'].outputs.evidence_artifact_id }}
+          path: build/exact-tag-evidence
+      - name: Verify exact evidence, digests, attestations and online main trust
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMIT: ${{ needs.validate.outputs.commit }}
+          TAG_OBJECT: ${{ needs.validate.outputs.tag_object }}
+          MANIFEST_SHA256: ${{ needs['exact-tag-external'].outputs.manifest_sha256 }}
+          EVIDENCE_CHECKSUMS_SHA256: ${{ needs['exact-tag-external'].outputs.evidence_checksums_sha256 }}
+          MAIN_TRUST_SHA256: ${{ needs['main-trust'].outputs.trust_sha256 }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = 'Belzedar94/Atomic-Stockfish'
+          test "$GITHUB_REF" = 'refs/tags/v1.0.0'
+          test "$(git rev-parse HEAD)" = "$COMMIT"
+          [[ "$MANIFEST_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$EVIDENCE_CHECKSUMS_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$MAIN_TRUST_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          test "$(sha256sum build/exact-tag-evidence/exact-tag-manifest.json | awk '{print $1}')" = \
+            "$MANIFEST_SHA256"
+          test "$(sha256sum build/exact-tag-evidence/EXACT_TAG_SHA256SUMS.txt | awk '{print $1}')" = \
+            "$EVIDENCE_CHECKSUMS_SHA256"
+          test "$(sha256sum build/exact-tag-evidence/release-main-trust.json | awk '{print $1}')" = \
+            "$MAIN_TRUST_SHA256"
+
+          (cd build/release-final && sha256sum --check --strict SHA256SUMS)
+          (cd build/exact-tag-evidence && \
+            sha256sum --check --strict EXACT_TAG_SHA256SUMS.txt)
+          find build/release-final -maxdepth 1 -type f ! -name SHA256SUMS \
+            -printf '%f\n' | LC_ALL=C sort > "$RUNNER_TEMP/release-actual.txt"
+          awk '{print substr($0,67)}' build/release-final/SHA256SUMS | \
+            LC_ALL=C sort > "$RUNNER_TEMP/release-declared.txt"
+          cmp "$RUNNER_TEMP/release-actual.txt" "$RUNNER_TEMP/release-declared.txt"
+          (cd build/exact-tag-evidence && \
+            find . -type f ! -name EXACT_TAG_SHA256SUMS.txt -printf '%P\n' | \
+              LC_ALL=C sort) > "$RUNNER_TEMP/evidence-actual.txt"
+          awk '{print substr($0,67)}' \
+            build/exact-tag-evidence/EXACT_TAG_SHA256SUMS.txt | \
+            LC_ALL=C sort > "$RUNNER_TEMP/evidence-declared.txt"
+          cmp "$RUNNER_TEMP/evidence-actual.txt" "$RUNNER_TEMP/evidence-declared.txt"
+
+          jq -e \
+            --arg commit "$COMMIT" --arg tag_object "$TAG_OBJECT" \
+            --arg run "$GITHUB_RUN_ID" --argjson attempt "$GITHUB_RUN_ATTEMPT" '
+              .identity.repository == "Belzedar94/Atomic-Stockfish" and
+              .identity.version == "1.0.0" and
+              .identity.event == "push" and
+              .identity.ref == "refs/tags/v1.0.0" and
+              .identity.commit == $commit and
+              .identity.tagObject == $tag_object and
+              .identity.runId == $run and
+              .identity.runAttempt == $attempt and
+              ([.gates[].id] == [
+                "hito4-release", "legacy-v1-strong-local", "hito5-release",
+                "syzygy-real-3-to-6", "atomic-bin-v2-strong-local",
+                "bmi2-vs-fairy"
+              ])
+            ' build/exact-tag-evidence/exact-tag-manifest.json
+
+          python scripts/atomic_release_main_trust.py \
+            --repository Belzedar94/Atomic-Stockfish \
+            --tag v1.0.0 --repository-root . --release-pr 44 \
+            --query-gh --require-online \
+            --json-output "$RUNNER_TEMP/publication-main-trust.json"
+          test "$(sha256sum "$RUNNER_TEMP/publication-main-trust.json" | awk '{print $1}')" = \
+            "$MAIN_TRUST_SHA256"
+
+          verify_attestation() {
+            local subject=$1 output
+            output=$(mktemp "$RUNNER_TEMP/attestation.XXXXXX.json")
+            gh attestation verify "$subject" \
+              --repo Belzedar94/Atomic-Stockfish \
+              --signer-workflow Belzedar94/Atomic-Stockfish/.github/workflows/atomic-release.yml \
+              --signer-digest "$COMMIT" \
+              --source-ref refs/tags/v1.0.0 \
+              --source-digest "$COMMIT" \
+              --format json > "$output"
+            jq -e 'type == "array" and length > 0' "$output"
+          }
+          while IFS= read -r -d '' subject; do
+            verify_attestation "$subject"
+          done < <(find build/release-final -maxdepth 1 -type f -print0)
+          while IFS= read -r -d '' subject; do
+            verify_attestation "$subject"
+          done < <(find build/exact-tag-evidence -type f -print0)
+      - name: Fail closed unless release policy, tag identity and Atomic CI match
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IMMUTABLE_RELEASES_TOKEN: ${{ secrets.ATOMIC_RELEASE_POLICY_TOKEN }}
+          COMMIT: ${{ needs.validate.outputs.commit }}
+          TAG_OBJECT: ${{ needs.validate.outputs.tag_object }}
+        run: |
+          set -euo pipefail
+          tag="v$RELEASE_VERSION"
+
+          test -n "$IMMUTABLE_RELEASES_TOKEN"
+          immutable=$(GH_TOKEN="$IMMUTABLE_RELEASES_TOKEN" gh api \
+            -H "X-GitHub-Api-Version: $GITHUB_API_VERSION" \
+            "repos/$GITHUB_REPOSITORY/immutable-releases")
+          jq -e '.enabled == true and (.enabled | type == "boolean")' \
+            <<<"$immutable"
+
+          ref_json=$(gh api \
+            -H "X-GitHub-Api-Version: $GITHUB_API_VERSION" \
+            "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag")
+          test "$(jq -r '.object.type' <<<"$ref_json")" = tag
+          test "$(jq -r '.object.sha' <<<"$ref_json")" = "$TAG_OBJECT"
+          tag_json=$(gh api \
+            -H "X-GitHub-Api-Version: $GITHUB_API_VERSION" \
+            "repos/$GITHUB_REPOSITORY/git/tags/$TAG_OBJECT")
+          test "$(jq -r '.object.type' <<<"$tag_json")" = commit
+          test "$(jq -r '.object.sha' <<<"$tag_json")" = "$COMMIT"
+          test "$(git rev-parse "refs/tags/$tag^{tag}")" = "$TAG_OBJECT"
+          test "$(git rev-parse "refs/tags/$tag^{}")" = "$COMMIT"
+
+          existing=$(gh api --paginate \
+            -H "X-GitHub-Api-Version: $GITHUB_API_VERSION" \
+            "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            --jq ".[] | select(.tag_name == \"$tag\") | .id")
+          test -z "$existing"
+
+          deadline=$((SECONDS + 3600))
+          while (( SECONDS < deadline )); do
+            runs=$(gh api -X GET \
+              -H "X-GitHub-Api-Version: $GITHUB_API_VERSION" \
+              "repos/$GITHUB_REPOSITORY/actions/workflows/atomic.yml/runs" \
+              -f branch="$tag" -f event=push -f per_page=100)
+            exact=$(jq \
+              --arg tag "$tag" --arg commit "$COMMIT" \
+              --arg repo "$GITHUB_REPOSITORY" '
+                # In the live GitHub API, path is the workflow file without a
+                # ref suffix; head_branch carries the pushed tag name.
+                [.workflow_runs[] | select(
+                  .name == "Atomic CI" and
+                  .event == "push" and
+                  .head_branch == $tag and
+                  .head_sha == $commit and
+                  .repository.full_name == $repo and
+                  .path == ".github/workflows/atomic.yml"
+                )]
+              ' <<<"$runs")
+            success=$(jq '[.[] | select(
+              .status == "completed" and .conclusion == "success")]
+              | length' <<<"$exact")
+            if (( success > 0 )); then
+              jq -r '.[] | select(
+                .status == "completed" and .conclusion == "success") |
+                "accepted same-tag Atomic CI: " + .html_url' <<<"$exact"
+              break
+            fi
+            active=$(jq '[.[] | select(.status != "completed")] | length' <<<"$exact")
+            terminal=$(jq '[.[] | select(.status == "completed")] | length' <<<"$exact")
+            if (( terminal > 0 && active == 0 )); then
+              jq -r '.[] | "rejected Atomic CI run: " + .html_url +
+                " conclusion=" + (.conclusion // "null")' <<<"$exact" >&2
+              exit 1
+            fi
+            sleep 15
+          done
+          if (( success == 0 )); then
+            echo "No successful Atomic CI push run for exact tag/SHA" >&2
+            exit 1
+          fi
+
+  publish:
+    name: Create and authenticate draft release only
+    if: github.event_name == 'push' && github.ref_type == 'tag' && github.ref_name == 'v1.0.0'
+    needs:
+      - validate
+      - main-trust
+      - assemble
+      - exact-tag-external
+      - publication-gate
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      attestations: read
+      contents: write
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: v1.0.0
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.12.10'
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.assemble.outputs.artifact_id }}
+          path: build/release-final
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs['exact-tag-external'].outputs.evidence_artifact_id }}
+          path: build/exact-tag-evidence
+      - name: Re-verify exact artifacts, attestations and main trust before draft creation
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMIT: ${{ needs.validate.outputs.commit }}
+          TAG_OBJECT: ${{ needs.validate.outputs.tag_object }}
+          RELEASE_ARTIFACT_ID: ${{ needs.assemble.outputs.artifact_id }}
+          RELEASE_ARTIFACT_DIGEST: ${{ needs.assemble.outputs.artifact_digest }}
+          RELEASE_ARTIFACT_NAME: ${{ needs.assemble.outputs.artifact_name }}
+          EVIDENCE_ARTIFACT_ID: ${{ needs['exact-tag-external'].outputs.evidence_artifact_id }}
+          EVIDENCE_ARTIFACT_DIGEST: ${{ needs['exact-tag-external'].outputs.evidence_artifact_digest }}
+          EVIDENCE_ARTIFACT_NAME: ${{ needs['exact-tag-external'].outputs.evidence_artifact_name }}
+          MANIFEST_SHA256: ${{ needs['exact-tag-external'].outputs.manifest_sha256 }}
+          EVIDENCE_CHECKSUMS_SHA256: ${{ needs['exact-tag-external'].outputs.evidence_checksums_sha256 }}
+          MAIN_TRUST_SHA256: ${{ needs['main-trust'].outputs.trust_sha256 }}
+        run: |
+          set -euo pipefail
+          verify_artifact() {
+            local id=$1 digest=$2 name=$3 document
+            [[ "$id" =~ ^[1-9][0-9]*$ ]]
+            [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+            document=$(gh api \
+              -H "X-GitHub-Api-Version: $GITHUB_API_VERSION" \
+              "repos/$GITHUB_REPOSITORY/actions/artifacts/$id")
+            jq -e \
+              --argjson id "$id" --arg digest "$digest" --arg name "$name" \
+              --argjson run "$GITHUB_RUN_ID" --arg commit "$COMMIT" '
+                .id == $id and .name == $name and .digest == $digest and
+                .expired == false and .workflow_run.id == $run and
+                .workflow_run.head_sha == $commit
+              ' <<<"$document"
+          }
+          verify_artifact "$RELEASE_ARTIFACT_ID" \
+            "$RELEASE_ARTIFACT_DIGEST" "$RELEASE_ARTIFACT_NAME"
+          verify_artifact "$EVIDENCE_ARTIFACT_ID" \
+            "$EVIDENCE_ARTIFACT_DIGEST" "$EVIDENCE_ARTIFACT_NAME"
+
+          [[ "$MANIFEST_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$EVIDENCE_CHECKSUMS_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$MAIN_TRUST_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          test "$(sha256sum build/exact-tag-evidence/exact-tag-manifest.json | awk '{print $1}')" = \
+            "$MANIFEST_SHA256"
+          test "$(sha256sum build/exact-tag-evidence/EXACT_TAG_SHA256SUMS.txt | awk '{print $1}')" = \
+            "$EVIDENCE_CHECKSUMS_SHA256"
+          test "$(sha256sum build/exact-tag-evidence/release-main-trust.json | awk '{print $1}')" = \
+            "$MAIN_TRUST_SHA256"
+          (cd build/release-final && sha256sum --check --strict SHA256SUMS)
+          (cd build/exact-tag-evidence && \
+            sha256sum --check --strict EXACT_TAG_SHA256SUMS.txt)
+          find build/release-final -maxdepth 1 -type f ! -name SHA256SUMS \
+            -printf '%f\n' | LC_ALL=C sort > "$RUNNER_TEMP/publish-release-actual.txt"
+          awk '{print substr($0,67)}' build/release-final/SHA256SUMS | \
+            LC_ALL=C sort > "$RUNNER_TEMP/publish-release-declared.txt"
+          cmp "$RUNNER_TEMP/publish-release-actual.txt" \
+            "$RUNNER_TEMP/publish-release-declared.txt"
+          (cd build/exact-tag-evidence && \
+            find . -type f ! -name EXACT_TAG_SHA256SUMS.txt -printf '%P\n' | \
+              LC_ALL=C sort) > "$RUNNER_TEMP/publish-evidence-actual.txt"
+          awk '{print substr($0,67)}' \
+            build/exact-tag-evidence/EXACT_TAG_SHA256SUMS.txt | \
+            LC_ALL=C sort > "$RUNNER_TEMP/publish-evidence-declared.txt"
+          cmp "$RUNNER_TEMP/publish-evidence-actual.txt" \
+            "$RUNNER_TEMP/publish-evidence-declared.txt"
+
+          jq -e \
+            --arg commit "$COMMIT" --arg tag_object "$TAG_OBJECT" \
+            --arg run "$GITHUB_RUN_ID" --argjson attempt "$GITHUB_RUN_ATTEMPT" '
+              .identity.repository == "Belzedar94/Atomic-Stockfish" and
+              .identity.ref == "refs/tags/v1.0.0" and
+              .identity.commit == $commit and
+              .identity.tagObject == $tag_object and
+              .identity.runId == $run and
+              .identity.runAttempt == $attempt and
+              ([.gates[].id] == [
+                "hito4-release", "legacy-v1-strong-local", "hito5-release",
+                "syzygy-real-3-to-6", "atomic-bin-v2-strong-local",
+                "bmi2-vs-fairy"
+              ])
+            ' build/exact-tag-evidence/exact-tag-manifest.json
+
+          python scripts/atomic_release_main_trust.py \
+            --repository Belzedar94/Atomic-Stockfish \
+            --tag v1.0.0 --repository-root . --release-pr 44 \
+            --query-gh --require-online \
+            --json-output "$RUNNER_TEMP/publish-main-trust.json"
+          test "$(sha256sum "$RUNNER_TEMP/publish-main-trust.json" | awk '{print $1}')" = \
+            "$MAIN_TRUST_SHA256"
+
+          verify_attestation() {
+            local subject=$1 output
+            output=$(mktemp "$RUNNER_TEMP/attestation.XXXXXX.json")
+            gh attestation verify "$subject" \
+              --repo Belzedar94/Atomic-Stockfish \
+              --signer-workflow Belzedar94/Atomic-Stockfish/.github/workflows/atomic-release.yml \
+              --signer-digest "$COMMIT" \
+              --source-ref refs/tags/v1.0.0 \
+              --source-digest "$COMMIT" \
+              --format json > "$output"
+            jq -e 'type == "array" and length > 0' "$output"
+          }
+          while IFS= read -r -d '' subject; do
+            verify_attestation "$subject"
+          done < <(find build/release-final -maxdepth 1 -type f -print0)
+          while IFS= read -r -d '' subject; do
+            verify_attestation "$subject"
+          done < <(find build/exact-tag-evidence -type f -print0)
+      - name: Re-authenticate policy, annotated tag and workflow artifact
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IMMUTABLE_RELEASES_TOKEN: ${{ secrets.ATOMIC_RELEASE_POLICY_TOKEN }}
+          COMMIT: ${{ needs.validate.outputs.commit }}
+          TAG_OBJECT: ${{ needs.validate.outputs.tag_object }}
+        run: |
+          set -euo pipefail
+          tag="v$RELEASE_VERSION"
+          test -n "$IMMUTABLE_RELEASES_TOKEN"
+          immutable=$(GH_TOKEN="$IMMUTABLE_RELEASES_TOKEN" gh api \
+            -H "X-GitHub-Api-Version: $GITHUB_API_VERSION" \
+            "repos/$GITHUB_REPOSITORY/immutable-releases")
+          jq -e '.enabled == true and (.enabled | type == "boolean")' \
+            <<<"$immutable"
+          ref_json=$(gh api \
+            -H "X-GitHub-Api-Version: $GITHUB_API_VERSION" \
+            "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag")
+          test "$(jq -r '.object.type' <<<"$ref_json")" = tag
+          test "$(jq -r '.object.sha' <<<"$ref_json")" = "$TAG_OBJECT"
+          tag_json=$(gh api \
+            -H "X-GitHub-Api-Version: $GITHUB_API_VERSION" \
+            "repos/$GITHUB_REPOSITORY/git/tags/$TAG_OBJECT")
+          test "$(jq -r '.object.type' <<<"$tag_json")" = commit
+          test "$(jq -r '.object.sha' <<<"$tag_json")" = "$COMMIT"
+          test "$(git rev-parse "refs/tags/$tag^{tag}")" = "$TAG_OBJECT"
+          test "$(git rev-parse "refs/tags/$tag^{}")" = "$COMMIT"
+          test "$COMMIT" = "$(git rev-parse HEAD)"
+          existing=$(gh api --paginate \
+            -H "X-GitHub-Api-Version: $GITHUB_API_VERSION" \
+            "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            --jq ".[] | select(.tag_name == \"$tag\") | .id")
+          test -z "$existing"
+          (cd build/release-final && sha256sum --check SHA256SUMS)
+      - name: Reserve one uniquely identified draft release
+        id: reserve_draft
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="v$RELEASE_VERSION"
+          release_id=
+          reservation_complete=0
+          cleanup_failed_reservation() {
+            if (( reservation_complete == 0 )) && [[ -n "$release_id" ]]; then
+              echo "Draft reservation failed; deleting only release $release_id" >&2
+              gh api -X DELETE \
+                -H "X-GitHub-Api-Version: $GITHUB_API_VERSION" \
+                "repos/$GITHUB_REPOSITORY/releases/$release_id" || true
+            fi
+          }
+          trap cleanup_failed_reservation EXIT
+
+          payload=$(jq -n \
+            --arg tag "$tag" \
+            --arg name "Atomic-Stockfish $RELEASE_VERSION" \
+            --rawfile body docs/atomic/release-1.0-notes.md '
+              {
+                tag_name: $tag,
+                name: $name,
+                body: $body,
+                draft: true,
+                prerelease: false,
+                generate_release_notes: false
+              }
+            ')
+          release=$(gh api -X POST \
+            -H "X-GitHub-Api-Version: $GITHUB_API_VERSION" \
+            "repos/$GITHUB_REPOSITORY/releases" --input - <<<"$payload")
+          release_id=$(jq -r '.id' <<<"$release")
+          [[ "$release_id" =~ ^[0-9]+$ ]]
+          upload_url=$(jq -r '.upload_url' <<<"$release")
+          expected_upload_url="https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$release_id/assets{?name,label}"
+          test "$upload_url" = "$expected_upload_url"
+          upload_base=${upload_url%\{*}
+          test "$upload_base" = "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$release_id/assets"
+          jq -e --argjson id "$release_id" --arg tag "$tag" '
+            .id == $id and
+            .tag_name == $tag and
+            .draft == true and
+            .prerelease == false and
+            .published_at == null and
+            (.assets | type == "array" and length == 0)
+          ' <<<"$release"
+
+          pages=$(gh api --paginate --slurp \
+            -H "X-GitHub-Api-Version: $GITHUB_API_VERSION" \
+            "repos/$GITHUB_REPOSITORY/releases?per_page=100")
+          matches=$(jq --arg tag "$tag" \
+            '[.[][] | select(.tag_name == $tag)]' <<<"$pages")
+          test "$(jq 'length' <<<"$matches")" -eq 1
+          test "$(jq -r '.[0].id' <<<"$matches")" = "$release_id"
+
+          echo "release_id=$release_id" >> "$GITHUB_OUTPUT"
+          echo "upload_url=$upload_base" >> "$GITHUB_OUTPUT"
+          reservation_complete=1
+          trap - EXIT
+      - name: Upload candidate as a draft, never as a published release
+        id: upload_draft
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ steps.reserve_draft.outputs.release_id }}
+          UPLOAD_URL: ${{ steps.reserve_draft.outputs.upload_url }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_ID" =~ ^[0-9]+$ ]]
+          expected_upload_url="https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets"
+          test "$UPLOAD_URL" = "$expected_upload_url"
+          tag="v$RELEASE_VERSION"
+          mapfile -d '' assets < <(
+            find build/release-final -maxdepth 1 -type f -print0 | LC_ALL=C sort -z
+          )
+          test "${#assets[@]}" -gt 0
+          for asset in "${assets[@]}"; do
+            test -f "$asset"
+            test ! -L "$asset"
+            name=$(basename "$asset")
+            size=$(stat -c '%s' "$asset")
+            current=$(gh api -X GET \
+              -H "X-GitHub-Api-Version: $GITHUB_API_VERSION" \
+              "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID")
+            jq -e --argjson id "$RELEASE_ID" --arg tag "$tag" --arg name "$name" '
+              .id == $id and
+              .tag_name == $tag and
+              .draft == true and
+              .prerelease == false and
+              .published_at == null and
+              ([.assets[].name] | index($name) == null)
+            ' <<<"$current"
+            encoded=$(python -c \
+              'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' \
+              "$name")
+            response=$(curl --fail-with-body --silent --show-error \
+              --request POST \
+              --header "Accept: application/vnd.github+json" \
+              --header "Authorization: Bearer $GH_TOKEN" \
+              --header "X-GitHub-Api-Version: $GITHUB_API_VERSION" \
+              --header "Content-Type: application/octet-stream" \
+              --data-binary "@$asset" \
+              "$UPLOAD_URL?name=$encoded")
+            jq -e --arg name "$name" --argjson size "$size" '
+              .name == $name and
+              .size == $size and
+              .state == "uploaded" and
+              (.id | type == "number")
+            ' <<<"$response"
+          done
+          current=$(gh api -X GET \
+            -H "X-GitHub-Api-Version: $GITHUB_API_VERSION" \
+            "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID")
+          expected_assets=$(printf '%s\0' "${assets[@]}" | \
+            xargs -0 -n1 basename | LC_ALL=C sort | jq -Rsc 'split("\n")[:-1]')
+          actual_assets=$(jq -c '[.assets[].name] | sort' <<<"$current")
+          test "$actual_assets" = "$expected_assets"
+          echo "release_id=$RELEASE_ID" >> "$GITHUB_OUTPUT"
+      - name: Download from GitHub and authenticate the complete draft
+        id: verify_draft
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMIT: ${{ needs.validate.outputs.commit }}
+          TAG_OBJECT: ${{ needs.validate.outputs.tag_object }}
+          RELEASE_ID: ${{ steps.reserve_draft.outputs.release_id }}
+          UPLOAD_RELEASE_ID: ${{ steps.upload_draft.outputs.release_id }}
+        run: |
+          set -euo pipefail
+          tag="v$RELEASE_VERSION"
+          [[ "$RELEASE_ID" =~ ^[0-9]+$ ]]
+          test "$UPLOAD_RELEASE_ID" = "$RELEASE_ID"
+          release=$(gh api -X GET \
+            -H "X-GitHub-Api-Version: $GITHUB_API_VERSION" \
+            "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID")
+          jq -e --argjson id "$RELEASE_ID" --arg tag "$tag" '
+            .id == $id and
+            .tag_name == $tag and
+            .draft == true and
+            .prerelease == false and
+            .published_at == null
+          ' <<<"$release"
+
+          pages=$(gh api --paginate --slurp \
+            -H "X-GitHub-Api-Version: $GITHUB_API_VERSION" \
+            "repos/$GITHUB_REPOSITORY/releases?per_page=100")
+          matches=$(jq --arg tag "$tag" \
+            '[.[][] | select(.tag_name == $tag)]' <<<"$pages")
+          test "$(jq 'length' <<<"$matches")" -eq 1
+          test "$(jq -r '.[0].id' <<<"$matches")" = "$RELEASE_ID"
+
+          rm -rf build/github-release-download
+          mkdir -p build/github-release-download
+          gh release download "$tag" --dir build/github-release-download
+          python scripts/atomic_verify_release_download.py \
+            --local build/release-final \
+            --downloaded build/github-release-download
+          (cd build/github-release-download && sha256sum --check SHA256SUMS)
+
+          ref_json=$(gh api \
+            -H "X-GitHub-Api-Version: $GITHUB_API_VERSION" \
+            "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag")
+          test "$(jq -r '.object.type' <<<"$ref_json")" = tag
+          test "$(jq -r '.object.sha' <<<"$ref_json")" = "$TAG_OBJECT"
+          tag_json=$(gh api \
+            -H "X-GitHub-Api-Version: $GITHUB_API_VERSION" \
+            "repos/$GITHUB_REPOSITORY/git/tags/$TAG_OBJECT")
+          test "$(jq -r '.object.type' <<<"$tag_json")" = commit
+          test "$(jq -r '.object.sha' <<<"$tag_json")" = "$COMMIT"
+          echo "verified=true" >> "$GITHUB_OUTPUT"
+          echo "Draft release $RELEASE_ID is byte-exact and ready for manual review"
+      - name: Delete only this workflow's invalid draft
+        if: always() && steps.reserve_draft.outputs.release_id != '' && steps.verify_draft.outputs.verified != 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ steps.reserve_draft.outputs.release_id }}
+        run: |
+          set -euo pipefail
+          tag="v$RELEASE_VERSION"
+          [[ "$RELEASE_ID" =~ ^[0-9]+$ ]]
+          if ! release=$(gh api -X GET \
+            -H "X-GitHub-Api-Version: $GITHUB_API_VERSION" \
+            "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" 2>/dev/null); then
+            echo "Reserved draft $RELEASE_ID is already absent"
+            exit 0
+          fi
+          jq -e --argjson id "$RELEASE_ID" --arg tag "$tag" '
+            .id == $id and .tag_name == $tag and .draft == true
+          ' <<<"$release"
+          gh api -X DELETE \
+            -H "X-GitHub-Api-Version: $GITHUB_API_VERSION" \
+            "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID"

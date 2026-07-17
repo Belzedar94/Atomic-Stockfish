@@ -1,0 +1,254 @@
+name: Atomic release PR reproducibility
+
+on:
+  pull_request:
+    paths:
+      - .gitattributes
+      - .github/workflows/atomic-release.yml
+      - .github/workflows/atomic-release-pr.yml
+      - AUTHORS
+      - CITATION.cff
+      - Copying.txt
+      - MANIFEST.in
+      - README.md
+      - pyproject.toml
+      - pyffish.pyi
+      - schemas/atomic-release-*
+      - setup.py
+      - docs/atomic/release-1.0-*
+      - docs/atomic/windows-wheel-fingerprint-v2.json
+      - scripts/atomic_reproducible_sdist.py
+      - scripts/atomic-release-*
+      - scripts/atomic_process_containment.py
+      - scripts/atomic_release_*.py
+      - scripts/atomic_verify_release_asset.py
+      - scripts/atomic_windows_wheel_fingerprint.py
+      - scripts/build_atomic_python_wheel_release.sh
+      - scripts/build_atomic_source_release.sh
+      - src/**
+      - tests/release-*.txt
+      - tests/atomic_process_containment_posix.py
+      - tests/run_atomic_release_exact_tag_gate.py
+      - tests/python/test_atomic_python_wheel_release_recipe.py
+      - tests/python/test_atomic_release_*.py
+      - tests/python/test_atomic_reproducible_sdist.py
+      - tests/python/test_atomic_windows_wheel_fingerprint.py
+      - tests/python/test_release_*.py
+      - tests/python/test_wheel_layout.py
+
+concurrency:
+  group: atomic-release-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  RELEASE_VERSION: 1.0.0
+  EMSCRIPTEN_IMAGE: emscripten/emsdk:4.0.10@sha256:90b757eb11fa9a0e3ce4d2d9f76d932a56018e4accc37b5a28b2783751e60eb7
+  WINDOWS_WHEEL_FINGERPRINT_SHA256: 9af3078f7f7d2635e5fe20c913c6948e53dbdc5f1ec81ba22f081d21e6a3f23d
+  WINDOWS_WHEEL_IMAGE_OS: win22
+  WINDOWS_WHEEL_IMAGE_VERSION: 20260714.244.1
+
+jobs:
+  source_sdist:
+    name: Authoritative release sdist reproducibility
+    runs-on: ubuntu-24.04
+    outputs:
+      commit: ${{ steps.source.outputs.commit }}
+      epoch: ${{ steps.source.outputs.epoch }}
+      sdist_name: ${{ steps.source.outputs.sdist_name }}
+      sdist_sha256: ${{ steps.source.outputs.sdist_sha256 }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.12.10'
+      - name: Install pinned release-contract tools
+        run: >-
+          python -m pip install --disable-pip-version-check
+          --only-binary=:all: --require-hashes
+          -r tests/release-ci-requirements.txt
+      - name: Build the normalized release sdist twice
+        id: source
+        shell: bash
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          commit=$(git rev-parse HEAD)
+          epoch=$(git show -s --format=%ct "$commit")
+          [[ "$commit" =~ ^[0-9a-f]{40}$ ]]
+          test "$commit" = "$EXPECTED_HEAD"
+          [[ "$epoch" =~ ^(0|[1-9][0-9]*)$ ]]
+          test "$(python setup.py --version)" = "$RELEASE_VERSION"
+
+          docker pull "$EMSCRIPTEN_IMAGE"
+          docker image inspect \
+            --format '{{range .RepoDigests}}{{println .}}{{end}}' \
+            "$EMSCRIPTEN_IMAGE" |
+            grep -Fqx 'emscripten/emsdk@sha256:90b757eb11fa9a0e3ce4d2d9f76d932a56018e4accc37b5a28b2783751e60eb7'
+          docker run --rm --network none --platform linux/amd64 \
+            --env ATOMIC_EXPECT_NO_INIT_PID1=1 \
+            --volume "$GITHUB_WORKSPACE:/src:ro" --workdir /tmp \
+            "$EMSCRIPTEN_IMAGE" \
+            python3 -I /src/tests/atomic_process_containment_posix.py /src
+          toolchain="image=$EMSCRIPTEN_IMAGE; $(docker run --rm \
+            "$EMSCRIPTEN_IMAGE" sh -ceu '
+              xz --version | head -n 1
+              tar --version | head -n 1
+              python3 --version
+              python3 -m pip --version
+            ')"
+
+          for root in build/sdist-a build/sdist-b; do
+            mkdir -p "$root"
+            git archive "$commit" | tar -x -C "$root"
+          done
+
+          docker_prefix=(
+            docker run --rm
+            --user "$(id -u):$(id -g)"
+            --env HOME=/tmp
+            --env "SOURCE_DATE_EPOCH=$epoch"
+          )
+          sdist_recipe_a=(
+            "${docker_prefix[@]}"
+            --volume "$GITHUB_WORKSPACE/build/sdist-a:/work" --workdir /work
+            "$EMSCRIPTEN_IMAGE" sh scripts/build_atomic_source_release.sh
+            sdist "$RELEASE_VERSION" "$epoch"
+          )
+          sdist_recipe_b=(
+            "${docker_prefix[@]}"
+            --volume "$GITHUB_WORKSPACE/build/sdist-b:/work" --workdir /work
+            "$EMSCRIPTEN_IMAGE" sh scripts/build_atomic_source_release.sh
+            sdist "$RELEASE_VERSION" "$epoch"
+          )
+          "${sdist_recipe_a[@]}"
+          "${sdist_recipe_b[@]}"
+
+          sdist_name="atomic_pyffish-$RELEASE_VERSION.tar.gz"
+          first="build/sdist-a/build/release/$sdist_name"
+          second="build/sdist-b/build/release/$sdist_name"
+          cmp "$first" "$second"
+          python scripts/atomic_release_provenance.py \
+            --asset "$first" --version "$RELEASE_VERSION" --commit "$commit" \
+            --source-date-epoch "$epoch" \
+            --kind python --platform source --architecture source \
+            --toolchain "$toolchain / buildLockSha256=a2d6f8f099bbaf88509c38910f6d2aed1d0913ddf162813906ca7a667b260289" -- \
+            "${sdist_recipe_a[@]}"
+          mkdir -p build/release-pr-source
+          cp "$first" "build/release-pr-source/$sdist_name"
+          cp "$first.provenance.json" \
+            "build/release-pr-source/$sdist_name.provenance.json"
+          sdist_sha256=$(sha256sum "$first" | cut -d ' ' -f 1)
+          [[ "$sdist_sha256" =~ ^[0-9a-f]{64}$ ]]
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          echo "epoch=$epoch" >> "$GITHUB_OUTPUT"
+          echo "sdist_name=$sdist_name" >> "$GITHUB_OUTPUT"
+          echo "sdist_sha256=$sdist_sha256" >> "$GITHUB_OUTPUT"
+          echo "sdist_sha256=$sdist_sha256" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-pr-source
+          path: build/release-pr-source/*
+          if-no-files-found: error
+          retention-days: 14
+
+  windows_wheel:
+    name: Exact Windows release wheel reproducibility
+    needs: source_sdist
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ needs.source_sdist.outputs.commit }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.12.10'
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-pr-source
+          path: build/source-authority
+      - name: Build and test the exact Windows release wheel twice
+        shell: bash
+        env:
+          COMMIT: ${{ needs.source_sdist.outputs.commit }}
+          SOURCE_DATE_EPOCH: ${{ needs.source_sdist.outputs.epoch }}
+          EXPECTED_SDIST_NAME: ${{ needs.source_sdist.outputs.sdist_name }}
+          EXPECTED_SDIST_SHA256: ${{ needs.source_sdist.outputs.sdist_sha256 }}
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check \
+            --only-binary=:all: --require-hashes \
+            -r tests/release-ci-requirements.txt
+
+          mapfile -t sdists < <(
+            find build/source-authority -maxdepth 1 -type f \
+              -name 'atomic_pyffish-*.tar.gz' | LC_ALL=C sort
+          )
+          test "${#sdists[@]}" -eq 1
+          test "$(basename "${sdists[0]}")" = "$EXPECTED_SDIST_NAME"
+          python scripts/atomic_verify_release_asset.py \
+            --asset "${sdists[0]}" --sha256 "$EXPECTED_SDIST_SHA256" \
+            --version "$RELEASE_VERSION" --commit "$COMMIT" \
+            --source-date-epoch "$SOURCE_DATE_EPOCH" \
+            --kind python --platform source --architecture source
+
+          mkdir -p build
+          for build_id in a b; do
+            fingerprint="$PWD/build/windows-wheel-fingerprint-$build_id.json"
+            bash scripts/build_atomic_python_wheel_release.sh \
+              windows "${sdists[0]}" \
+              "build/wheelhouse-$build_id" "build/cibw-cache-$build_id" \
+              "$RELEASE_VERSION" "$SOURCE_DATE_EPOCH" \
+              "$fingerprint" "$WINDOWS_WHEEL_FINGERPRINT_SHA256"
+          done
+
+          mapfile -t first < <(find build/wheelhouse-a -maxdepth 1 -type f -name '*.whl')
+          mapfile -t second < <(find build/wheelhouse-b -maxdepth 1 -type f -name '*.whl')
+          test "${#first[@]}" -eq 1
+          test "${#second[@]}" -eq 1
+          test "$(basename "${first[0]}")" = "$(basename "${second[0]}")"
+          cmp "${first[0]}" "${second[0]}"
+          cmp build/windows-wheel-fingerprint-a.json build/windows-wheel-fingerprint-b.json
+          cmp build/windows-wheel-fingerprint-a.json docs/atomic/windows-wheel-fingerprint-v2.json
+
+          fingerprint_sha256=$(python -c \
+            'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' \
+            build/windows-wheel-fingerprint-a.json)
+          test "$fingerprint_sha256" = "$WINDOWS_WHEEL_FINGERPRINT_SHA256"
+          test "$(python -c \
+            'import json,sys; print(json.load(open(sys.argv[1], encoding="ascii"))["runner"]["imageOS"])' \
+            build/windows-wheel-fingerprint-a.json)" = "$WINDOWS_WHEEL_IMAGE_OS"
+          test "$(python -c \
+            'import json,sys; print(json.load(open(sys.argv[1], encoding="ascii"))["runner"]["imageVersion"])' \
+            build/windows-wheel-fingerprint-a.json)" = "$WINDOWS_WHEEL_IMAGE_VERSION"
+          python -m abi3audit --strict "${first[0]}"
+          python tests/python/test_wheel_layout.py "${first[0]}"
+
+          mkdir -p build/release-pr-evidence
+          cp "${first[0]}" build/release-pr-evidence/
+          cp build/windows-wheel-fingerprint-a.json build/release-pr-evidence/
+          echo "fingerprint_sha256=$fingerprint_sha256" >> "$GITHUB_STEP_SUMMARY"
+          echo "wheel_sha256=$(sha256sum "${first[0]}" | cut -d ' ' -f 1)" >> "$GITHUB_STEP_SUMMARY"
+      - name: Preserve the actual hosted-runner fingerprint on failure
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-pr-windows-fingerprint-${{ github.run_attempt }}
+          path: build/windows-wheel-fingerprint-*.json
+          if-no-files-found: warn
+          retention-days: 14
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-pr-windows-wheel
+          path: build/release-pr-evidence/*
+          if-no-files-found: error
+          retention-days: 14

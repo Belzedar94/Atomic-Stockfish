@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import io
+import json
 from pathlib import Path
 import subprocess
 import sys
@@ -770,6 +771,134 @@ def test_bench_rejects_non_normative_workload_before_preflight(
             ]
         )
     assert exit_info.value.code == 2
+    assert not called
+
+
+def test_benchmark_json_is_exact_recomputable_and_canonical(tmp_path):
+    candidate = tmp_path / "Atomic-Stockfish-bmi2.exe"
+    baseline = tmp_path / "FSF-bmi2.exe"
+    net = tmp_path / "atomic.nnue"
+    candidate.write_bytes(b"candidate")
+    baseline.write_bytes(b"baseline")
+    net.write_bytes(b"net")
+    candidate_fingerprint = compiler_preflight.fingerprint_file(
+        candidate, label="candidate"
+    )
+    baseline_fingerprint = compiler_preflight.fingerprint_file(
+        baseline, label="baseline"
+    )
+    net_fingerprint = compiler_preflight.fingerprint_file(net, label="eval_file")
+    candidate_samples = [
+        bench_compare.Measurement(1_300_000, value)
+        for value in (1000, 1100, 900, 1050, 950)
+    ]
+    baseline_samples = [
+        bench_compare.Measurement(1_300_000, value)
+        for value in (1300, 1200, 1400, 1250, 1350)
+    ]
+
+    document = bench_compare.benchmark_document(
+        candidate_fingerprint=candidate_fingerprint,
+        baseline_fingerprint=baseline_fingerprint,
+        eval_fingerprint=net_fingerprint,
+        candidate_samples=candidate_samples,
+        baseline_samples=baseline_samples,
+        affinity=7,
+    )
+
+    assert set(document) == {
+        "baseline",
+        "baselineMedianNps",
+        "baselineSamples",
+        "candidate",
+        "candidateMedianNps",
+        "candidateSamples",
+        "corpusSha256",
+        "cpuAffinity",
+        "evalFileSha256",
+        "gate",
+        "hashMb",
+        "metric",
+        "nodesPerFen",
+        "pass",
+        "positions",
+        "ratio",
+        "repetitions",
+        "schemaVersion",
+        "searchTimeoutSeconds",
+        "threads",
+        "warmups",
+    }
+    assert document["candidateMedianNps"] == "1300000.000000"
+    assert document["baselineMedianNps"] == "1000000.000000"
+    assert document["ratio"] == "1.300000"
+    assert document["pass"] is True
+    assert document["searchTimeoutSeconds"] == 60
+    assert document["candidate"] == {
+        "bytes": len(b"candidate"),
+        "fileName": candidate.name,
+        "sha256": candidate_fingerprint.sha256.lower(),
+    }
+    assert document["corpusSha256"] == (
+        "2738065a8a70d61da46fa3c75f95d645e50e601b43792df0e7b3cc97b1d891a1"
+    )
+
+    output = tmp_path / "benchmark.json"
+    bench_compare.write_benchmark_json(output, document)
+    expected = (
+        json.dumps(document, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+        + "\n"
+    ).encode("ascii")
+    assert output.read_bytes() == expected
+    with pytest.raises(FileExistsError):
+        bench_compare.write_benchmark_json(output, document)
+    assert output.read_bytes() == expected
+
+
+def test_benchmark_json_rejects_wrong_sample_count():
+    with pytest.raises(ValueError, match="exactly 5"):
+        bench_compare.median_nps(
+            [bench_compare.Measurement(1000, 1)] * 4
+        )
+
+
+def test_benchmark_refuses_to_overwrite_json_before_engine_preflight(
+    tmp_path, monkeypatch
+):
+    candidate = tmp_path / "candidate.exe"
+    baseline = tmp_path / "baseline.exe"
+    net = tmp_path / "network.nnue"
+    output = tmp_path / "benchmark.json"
+    for path in (candidate, baseline, net):
+        path.write_bytes(path.name.encode("ascii"))
+    original = b"operator-owned\n"
+    output.write_bytes(original)
+    called = False
+
+    def compiler_probe(*args, **kwargs):
+        nonlocal called
+        called = True
+
+    monkeypatch.setattr(
+        bench_compare, "require_matching_compilation_settings", compiler_probe
+    )
+    with pytest.raises(SystemExit) as exit_info:
+        bench_compare.main(
+            [
+                "--candidate",
+                str(candidate),
+                "--baseline",
+                str(baseline),
+                "--eval-file",
+                str(net),
+                "--affinity",
+                "0",
+                "--json-output",
+                str(output),
+            ]
+        )
+    assert exit_info.value.code == 2
+    assert output.read_bytes() == original
     assert not called
 
 

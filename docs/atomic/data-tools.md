@@ -129,7 +129,7 @@ retains and tests rewind for future in-process consumers.
 
 ## Pinned wrapper delegation
 
-The future `variant-nnue-tools` Atomic wrapper must treat its authenticated
+The `variant-nnue-tools` Atomic wrapper treats its authenticated
 Atomic-Stockfish gitlink as the implementation boundary:
 
 1. verify the pinned engine commit and schema files;
@@ -143,8 +143,8 @@ Atomic-Stockfish gitlink as the implementation boundary:
 Legacy Atomic V1 commands remain in the wrapper until their own ownership
 boundary changes. A caller chooses Legacy V1 or Atomic BIN V2 explicitly; the
 new engine endpoint does not weaken, replace or auto-detect the historical
-72-byte format. Trainer loading remains a separate Hito 7 integration and must
-use the same manifest-only rule.
+72-byte format. Trainer loading is implemented as a separate Hito 7 integration
+and uses the same manifest-only rule.
 
 ## Gates
 

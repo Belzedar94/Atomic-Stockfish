@@ -799,11 +799,16 @@ def test_playing_smoke_requires_two_real_nnue_atomic_bestmoves(
             if index == 0
             else "enabled"
         )
+        prefix = (
+            "info string NNUE evaluation using Legacy Atomic V1 "
+            if index == 0
+            else "info string NNUE evaluation using "
+        )
         return SimpleNamespace(
             returncode=0,
             stdout=(
                 "uciok\n"
-                f"info string NNUE evaluation using {nets[index]} {marker}\n"
+                f"{prefix}{nets[index]} {marker}\n"
                 "readyok\ninfo depth 1 nodes 1\nbestmove a2a3\n"
             ),
         )

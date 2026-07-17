@@ -496,9 +496,50 @@ cannot affect moves.
 
 Because V3 is still excluded from every production and binding graph, no
 engine-NPS, Elo, LOS, OpenBench or training claim applies. The exact contract is
-[ADR 0005](adr/0005-atomic-nnue-v3-incremental-simd.md); the acceptance status
-and remaining reviewed-head CI/PR artifacts are indexed under
+[ADR 0005](adr/0005-atomic-nnue-v3-incremental-simd.md); the reviewed head and
+merged acceptance artifacts are indexed under
 [`hito9-3j-b-v3-incremental-simd`](evidence/hito9-3j-b-v3-incremental-simd/README.md).
+
+## H9.3l-a distributed publication contract
+
+PR #42 merged the frozen acyclic evidence contract as
+`dde43fc08fb2bd45eec09d3dbe9f6d06845eeb24`. It binds distributed Atomic BIN
+V2 chunks into one campaign without erasing per-chunk seeds or provenance,
+authenticates the producer build set, and separates semantic replay,
+reachability evidence and controlled training outputs. Publication remains
+fail-closed: structural V1 validation alone cannot claim V3 dataset or training
+readiness.
+
+The contract deliberately leaves Legacy Atomic V1, AtomicNNUEV2, Atomic BIN V2
+and the existing V3 schemas byte-identical. The owner-capped, tablebase-free
+375M Atomic BIN V2 bootstrap remains a transport and throughput pilot and can
+never be relabelled as a V3 release dataset. Its first training split and
+schedule require a separate parameter decision.
+
+## H9.3l-b audited trajectory producer
+
+PR #43 merged the production trajectory writer as
+`420c9f35266fbdc2167dc5b9d8d20d90281c60c9` after 34/34 checks and a clean
+exact-head review. Each game owns a private transposition table and cleared
+history state, public sidecars are staged transactionally, and deterministic
+external sorting uses bounded 64 MiB runs and at most 64 readers. Threads 1, 2
+and 4 reproduce the same authenticated V3 trajectory result; Atomic960,
+rollback and the unchanged seven Legacy/V2 fixtures are covered.
+
+`variant-nnue-pytorch` PR #14 merged the reviewed AtomicNNUEV3 provider,
+serializer, checkpoint/resume and four-run production launcher into `atomic`
+as `3a19c16fc3d477b1ee7602ccc6510736bc7604cc`. Its reviewed head
+`0448de38c28bff276875f0bbf6a675da995d1bc0` has the identical tree. The active
+sequential four-run bootstrap campaign is controlled, but its authenticated
+receipts retain
+`non-publication-bootstrap`, `dataset_publication_ready=false` and
+`release_candidate_eligible=false`; they cannot claim V3 publication.
+`variant-nnue-tools` PR #33 merged the final pin to engine
+merge `420c9f35266fbdc2167dc5b9d8d20d90281c60c9` into `atomic` as
+`450049ee7a0ece32694b11f6c55deb7df1d42a84`. The release pipeline lock freezes
+that reviewed tools merge together with trainer merge
+`3a19c16fc3d477b1ee7602ccc6510736bc7604cc`; both auxiliary repositories now
+authenticate engine merge `420c9f35266fbdc2167dc5b9d8d20d90281c60c9`.
 
 ## H9.3n public runtime gates
 

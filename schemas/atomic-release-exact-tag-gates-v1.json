@@ -1,0 +1,500 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Belzedar94/Atomic-Stockfish/blob/v1.0.0/schemas/atomic-release-exact-tag-gates-v1.json",
+  "title": "Atomic-Stockfish 1.0.0 exact-tag external-gate evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "project",
+    "schema",
+    "commandPlan",
+    "identity",
+    "externalInputs",
+    "releaseArtifacts",
+    "directoryBindings",
+    "auxiliaryRepositories",
+    "gates"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "project": { "const": "Atomic-Stockfish" },
+    "schema": { "$ref": "#/$defs/trackedFile" },
+    "commandPlan": { "$ref": "#/$defs/trackedFile" },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository",
+        "version",
+        "tag",
+        "event",
+        "ref",
+        "commit",
+        "tree",
+        "submodules",
+        "tagObject",
+        "runId",
+        "runAttempt"
+      ],
+      "properties": {
+        "repository": { "const": "Belzedar94/Atomic-Stockfish" },
+        "version": { "const": "1.0.0" },
+        "tag": { "const": "v1.0.0" },
+        "event": { "const": "push" },
+        "ref": { "const": "refs/tags/v1.0.0" },
+        "commit": { "$ref": "#/$defs/sha1" },
+        "tree": { "$ref": "#/$defs/sha1" },
+        "submodules": {
+          "type": "array",
+          "maxItems": 64,
+          "items": { "$ref": "#/$defs/submodule" }
+        },
+        "tagObject": { "$ref": "#/$defs/sha1" },
+        "runId": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+        "runAttempt": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "externalInputs": {
+      "type": "array",
+      "minItems": 6,
+      "maxItems": 6,
+      "prefixItems": [
+        { "$ref": "#/$defs/legacyNet" },
+        { "$ref": "#/$defs/fairyH5Oracle" },
+        { "$ref": "#/$defs/syzygyInventory" },
+        { "$ref": "#/$defs/kppppvkWdl" },
+        { "$ref": "#/$defs/kppppvkDtz" },
+        { "$ref": "#/$defs/fairyBmi2Baseline" }
+      ],
+      "items": false
+    },
+    "releaseArtifacts": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": { "$ref": "#/$defs/namedFile" },
+      "contains": {
+        "allOf": [
+          { "$ref": "#/$defs/namedFile" },
+          { "properties": { "name": { "const": "pipeline_python" } } }
+        ]
+      },
+      "minContains": 1,
+      "maxContains": 1
+    },
+    "directoryBindings": {
+      "type": "array",
+      "maxItems": 64,
+      "items": { "$ref": "#/$defs/directoryBinding" }
+    },
+    "auxiliaryRepositories": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "prefixItems": [
+        {
+          "allOf": [
+            { "$ref": "#/$defs/auxRepository" },
+            {
+              "properties": {
+                "name": { "const": "tools" },
+                "commit": { "const": "450049ee7a0ece32694b11f6c55deb7df1d42a84" }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/auxRepository" },
+            {
+              "properties": {
+                "name": { "const": "trainer" },
+                "commit": { "const": "3a19c16fc3d477b1ee7602ccc6510736bc7604cc" }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/auxRepository" },
+            {
+              "properties": {
+                "name": { "const": "fairy" },
+                "commit": { "const": "fb78cb561aa01708338e35b3dc3b65a42149a3c4" }
+              }
+            }
+          ]
+        }
+      ],
+      "items": false
+    },
+    "gates": {
+      "type": "array",
+      "minItems": 6,
+      "maxItems": 6,
+      "prefixItems": [
+        { "$ref": "#/$defs/hito4Gate" },
+        { "$ref": "#/$defs/legacyGate" },
+        { "$ref": "#/$defs/hito5Gate" },
+        { "$ref": "#/$defs/syzygyGate" },
+        { "$ref": "#/$defs/binV2Gate" },
+        { "$ref": "#/$defs/benchmarkGate" }
+      ],
+      "items": false
+    }
+  },
+  "$defs": {
+    "sha1": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "name": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$" },
+    "safePath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).+$"
+    },
+    "trackedFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "bytes", "sha256", "gitBlob"],
+      "properties": {
+        "path": { "$ref": "#/$defs/safePath" },
+        "bytes": { "type": "integer", "minimum": 1, "maximum": 524288 },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "gitBlob": { "$ref": "#/$defs/sha1" }
+      }
+    },
+    "submodule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "commit", "tree"],
+      "properties": {
+        "path": { "$ref": "#/$defs/safePath" },
+        "commit": { "$ref": "#/$defs/sha1" },
+        "tree": { "$ref": "#/$defs/sha1" }
+      }
+    },
+    "namedFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "fileName", "bytes", "sha256"],
+      "properties": {
+        "name": { "$ref": "#/$defs/name" },
+        "fileName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "pattern": "^[^/\\\\]+$"
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 17179869184
+        },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "legacyNet": {
+      "allOf": [
+        { "$ref": "#/$defs/namedFile" },
+        {
+          "properties": {
+            "name": { "const": "legacy_net" },
+            "sha256": { "const": "99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f92a04a6" }
+          }
+        }
+      ]
+    },
+    "fairyH5Oracle": {
+      "allOf": [
+        { "$ref": "#/$defs/namedFile" },
+        {
+          "properties": {
+            "name": { "const": "fairy_h5_oracle" },
+            "sha256": { "const": "1ae6d680f03128c8404f31a3f264f28b132b557ed3a91a6445ec563a7a33f623" }
+          }
+        }
+      ]
+    },
+    "syzygyInventory": {
+      "allOf": [
+        { "$ref": "#/$defs/namedFile" },
+        {
+          "properties": {
+            "name": { "const": "syzygy_inventory" },
+            "sha256": { "const": "3d4b7fd0ab387f4f60da2078f612c9e8890e6026f551aebe8631efc157788f23" }
+          }
+        }
+      ]
+    },
+    "kppppvkWdl": {
+      "allOf": [
+        { "$ref": "#/$defs/namedFile" },
+        {
+          "properties": {
+            "name": { "const": "kppppvk_wdl" },
+            "sha256": { "const": "897a15846a4b027cbd0a31e425fdf0690f68c0bd4e62105cca2055678e2910f9" }
+          }
+        }
+      ]
+    },
+    "kppppvkDtz": {
+      "allOf": [
+        { "$ref": "#/$defs/namedFile" },
+        {
+          "properties": {
+            "name": { "const": "kppppvk_dtz" },
+            "sha256": { "const": "e740168d8cbb0bf662863f278ef470c5d7eb395ece0c8bf80fed004a47991bc6" }
+          }
+        }
+      ]
+    },
+    "fairyBmi2Baseline": {
+      "allOf": [
+        { "$ref": "#/$defs/namedFile" },
+        {
+          "properties": {
+            "name": { "const": "fairy_bmi2_baseline" },
+            "sha256": { "const": "4eacaab40dca84f5a255ea57231f2795d43b5dda85ce50ebba1a1b2937b46331" }
+          }
+        }
+      ]
+    },
+    "directoryBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "baseName", "pathSha256"],
+      "properties": {
+        "name": { "$ref": "#/$defs/name" },
+        "baseName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "pattern": "^[^/\\\\]+$"
+        },
+        "pathSha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "auxRepository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "commit", "tree", "submodules"],
+      "properties": {
+        "name": { "enum": ["tools", "trainer", "fairy"] },
+        "commit": { "$ref": "#/$defs/sha1" },
+        "tree": { "$ref": "#/$defs/sha1" },
+        "submodules": {
+          "type": "array",
+          "maxItems": 64,
+          "items": { "$ref": "#/$defs/submodule" }
+        }
+      }
+    },
+    "command": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "script",
+        "argumentCount",
+        "timeoutSeconds",
+        "planArgvSha256",
+        "resolvedArgvSha256"
+      ],
+      "properties": {
+        "script": { "$ref": "#/$defs/safePath" },
+        "argumentCount": { "type": "integer", "minimum": 1, "maximum": 127 },
+        "timeoutSeconds": { "type": "integer", "minimum": 1, "maximum": 32400 },
+        "planArgvSha256": { "$ref": "#/$defs/sha256" },
+        "resolvedArgvSha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "bytes", "sha256"],
+      "properties": {
+        "path": { "$ref": "#/$defs/safePath" },
+        "bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 536870912
+        },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "gate", "status", "passed", "failed", "skipped"],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "gate": {
+          "enum": [
+            "hito4-release",
+            "legacy-v1-strong-local",
+            "hito5-release",
+            "syzygy-real-3-to-6",
+            "atomic-bin-v2-strong-local"
+          ]
+        },
+        "status": { "const": "pass" },
+        "passed": { "type": "integer", "minimum": 1 },
+        "failed": { "const": 0 },
+        "skipped": { "const": 0 }
+      }
+    },
+    "benchmarkArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fileName", "bytes", "sha256"],
+      "properties": {
+        "fileName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "pattern": "^[^/\\\\]+$"
+        },
+        "bytes": { "type": "integer", "minimum": 1, "maximum": 4294967296 },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "benchmarkSample": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nodes", "timeMillis"],
+      "properties": {
+        "nodes": { "type": "integer", "minimum": 1300000 },
+        "timeMillis": { "type": "integer", "minimum": 1, "maximum": 86400000 }
+      }
+    },
+    "benchmark": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "gate",
+        "metric",
+        "candidate",
+        "baseline",
+        "evalFileSha256",
+        "corpusSha256",
+        "positions",
+        "nodesPerFen",
+        "threads",
+        "hashMb",
+        "cpuAffinity",
+        "searchTimeoutSeconds",
+        "warmups",
+        "repetitions",
+        "candidateSamples",
+        "baselineSamples",
+        "candidateMedianNps",
+        "baselineMedianNps",
+        "ratio",
+        "pass"
+      ],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "gate": { "const": "bmi2-vs-fairy" },
+        "metric": { "const": "median-nps" },
+        "candidate": { "$ref": "#/$defs/benchmarkArtifact" },
+        "baseline": { "$ref": "#/$defs/benchmarkArtifact" },
+        "evalFileSha256": { "const": "99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f92a04a6" },
+        "corpusSha256": { "const": "2738065a8a70d61da46fa3c75f95d645e50e601b43792df0e7b3cc97b1d891a1" },
+        "positions": { "const": 13 },
+        "nodesPerFen": { "const": 100000 },
+        "threads": { "const": 1 },
+        "hashMb": { "const": 64 },
+        "cpuAffinity": { "type": "integer", "minimum": 0 },
+        "searchTimeoutSeconds": { "const": 60 },
+        "warmups": { "const": 1 },
+        "repetitions": { "const": 5 },
+        "candidateSamples": {
+          "type": "array",
+          "minItems": 5,
+          "maxItems": 5,
+          "items": { "$ref": "#/$defs/benchmarkSample" }
+        },
+        "baselineSamples": {
+          "type": "array",
+          "minItems": 5,
+          "maxItems": 5,
+          "items": { "$ref": "#/$defs/benchmarkSample" }
+        },
+        "candidateMedianNps": { "type": "string", "pattern": "^[1-9][0-9]*\\.[0-9]{6}$" },
+        "baselineMedianNps": { "type": "string", "pattern": "^[1-9][0-9]*\\.[0-9]{6}$" },
+        "ratio": { "type": "string", "pattern": "^[1-9][0-9]*\\.[0-9]{6}$" },
+        "pass": { "const": true }
+      }
+    },
+    "gateBase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "status", "command", "exitCode", "durationMillis", "evidence"],
+      "properties": {
+        "id": { "enum": [
+          "hito4-release",
+          "legacy-v1-strong-local",
+          "hito5-release",
+          "syzygy-real-3-to-6",
+          "atomic-bin-v2-strong-local",
+          "bmi2-vs-fairy"
+        ] },
+        "status": { "const": "pass" },
+        "command": { "$ref": "#/$defs/command" },
+        "exitCode": { "const": 0 },
+        "durationMillis": { "type": "integer", "minimum": 0 },
+        "evidence": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 34,
+          "items": { "$ref": "#/$defs/evidence" }
+        },
+        "receipt": { "$ref": "#/$defs/receipt" },
+        "benchmark": { "$ref": "#/$defs/benchmark" }
+      }
+    },
+    "hito4Gate": { "$ref": "#/$defs/nonBenchmarkGateHito4" },
+    "legacyGate": { "$ref": "#/$defs/nonBenchmarkGateLegacy" },
+    "hito5Gate": { "$ref": "#/$defs/nonBenchmarkGateHito5" },
+    "syzygyGate": { "$ref": "#/$defs/nonBenchmarkGateSyzygy" },
+    "binV2Gate": { "$ref": "#/$defs/nonBenchmarkGateBinV2" },
+    "nonBenchmarkGateHito4": {
+      "allOf": [
+        { "$ref": "#/$defs/gateBase" },
+        { "required": ["receipt"], "properties": { "id": { "const": "hito4-release" } }, "not": { "required": ["benchmark"] } }
+      ]
+    },
+    "nonBenchmarkGateLegacy": {
+      "allOf": [
+        { "$ref": "#/$defs/gateBase" },
+        { "required": ["receipt"], "properties": { "id": { "const": "legacy-v1-strong-local" } }, "not": { "required": ["benchmark"] } }
+      ]
+    },
+    "nonBenchmarkGateHito5": {
+      "allOf": [
+        { "$ref": "#/$defs/gateBase" },
+        { "required": ["receipt"], "properties": { "id": { "const": "hito5-release" } }, "not": { "required": ["benchmark"] } }
+      ]
+    },
+    "nonBenchmarkGateSyzygy": {
+      "allOf": [
+        { "$ref": "#/$defs/gateBase" },
+        { "required": ["receipt"], "properties": { "id": { "const": "syzygy-real-3-to-6" } }, "not": { "required": ["benchmark"] } }
+      ]
+    },
+    "nonBenchmarkGateBinV2": {
+      "allOf": [
+        { "$ref": "#/$defs/gateBase" },
+        { "required": ["receipt"], "properties": { "id": { "const": "atomic-bin-v2-strong-local" } }, "not": { "required": ["benchmark"] } }
+      ]
+    },
+    "benchmarkGate": {
+      "allOf": [
+        { "$ref": "#/$defs/gateBase" },
+        { "required": ["benchmark"], "properties": { "id": { "const": "bmi2-vs-fairy" } }, "not": { "required": ["receipt"] } }
+      ]
+    }
+  }
+}

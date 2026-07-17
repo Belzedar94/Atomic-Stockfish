@@ -407,28 +407,41 @@ def test_fixture_measurement_is_restricted_to_synthetic_profile() -> None:
 
 
 @pytest.mark.parametrize("mode", ("release", "smoke"))
-@pytest.mark.parametrize("missing_index", range(7))
+@pytest.mark.parametrize("missing_index", range(10))
 def test_hito5_rejects_each_incomplete_pipeline_set(
     missing_index: int, mode: str
 ) -> None:
-    complete = tuple(Path(f"input-{index}") for index in range(7))
+    complete = tuple(
+        "a" * 40 if index == 9 else Path(f"input-{index}")
+        for index in range(10)
+    )
     incomplete = list(complete)
     incomplete[missing_index] = None
     with pytest.raises(run_hito5.GateFailure, match="all four clean-build"):
         run_hito5.validate_pipeline_configuration(tuple(incomplete), mode)
 
 
-def test_hito5_release_requires_all_seven_pipeline_inputs() -> None:
-    complete = tuple(Path(f"input-{index}") for index in range(7))
+def test_hito5_release_requires_all_ten_pipeline_inputs() -> None:
+    complete = tuple(
+        "a" * 40 if index == 9 else Path(f"input-{index}")
+        for index in range(10)
+    )
     run_hito5.validate_pipeline_configuration(complete, "release")
     with pytest.raises(run_hito5.GateFailure, match="release mode requires"):
-        run_hito5.validate_pipeline_configuration((None,) * 7, "release")
+        run_hito5.validate_pipeline_configuration((None,) * 10, "release")
 
 
 def test_hito5_smoke_may_omit_the_complete_pipeline_set() -> None:
-    run_hito5.validate_pipeline_configuration((None,) * 7, "smoke")
-    with pytest.raises(run_hito5.GateFailure, match="expected seven"):
-        run_hito5.validate_pipeline_configuration((None,) * 6, "smoke")
+    run_hito5.validate_pipeline_configuration((None,) * 10, "smoke")
+    with pytest.raises(run_hito5.GateFailure, match="expected ten"):
+        run_hito5.validate_pipeline_configuration((None,) * 9, "smoke")
+
+
+def test_hito5_rejects_non_exact_pipeline_atomic_commit() -> None:
+    complete = [Path(f"input-{index}") for index in range(10)]
+    complete[-1] = "abc"
+    with pytest.raises(run_hito5.GateFailure, match="40 hexadecimal"):
+        run_hito5.validate_pipeline_configuration(tuple(complete), "release")
 
 
 def test_hito5_forwards_the_exact_cross_repository_command() -> None:
@@ -444,6 +457,7 @@ def test_hito5_forwards_the_exact_cross_repository_command() -> None:
             "atomic.json",
             "generator.json",
             "source.nnue",
+            "atomic-root",
         )
     }
     command = run_hito5.build_pipeline_e2e_command(
@@ -456,6 +470,8 @@ def test_hito5_forwards_the_exact_cross_repository_command() -> None:
         trainer_build_manifest=paths["trainer.json"],
         atomic_build_manifest=paths["atomic.json"],
         atomic_data_generator_build_manifest=paths["generator.json"],
+        atomic_root=paths["atomic-root"],
+        atomic_commit="a" * 40,
         source_net=paths["source.nnue"],
     )
     assert command == [
@@ -479,6 +495,41 @@ def test_hito5_forwards_the_exact_cross_repository_command() -> None:
         "atomic.json",
         "--atomic-data-generator-build-manifest",
         "generator.json",
+        "--atomic-root",
+        "atomic-root",
+        "--atomic-commit",
+        "a" * 40,
         "--source-net",
         "source.nnue",
     ]
+
+
+def test_hito5_accepts_a_distinct_manifest_authenticated_pipeline_engine() -> None:
+    args = run_hito5.parse_args(
+        [
+            "--native",
+            "release-candidate.exe",
+            "--net",
+            "legacy.nnue",
+            "--pyffish",
+            "pyffish.pyd",
+            "--cjs",
+            "ffish.js",
+            "--esm",
+            "ffish.mjs",
+            "--tables",
+            "tables",
+            "--wasm-wrapper",
+            "atomic-stockfish-nnue-node.mjs",
+            "--pipeline-atomic-engine",
+            "atomic-stockfish-pipeline.exe",
+            "--pipeline-atomic-root",
+            "atomic-build-root",
+            "--pipeline-atomic-commit",
+            "a" * 40,
+        ]
+    )
+    assert args.native == Path("release-candidate.exe")
+    assert args.pipeline_atomic_engine == Path("atomic-stockfish-pipeline.exe")
+    assert args.pipeline_atomic_root == Path("atomic-build-root")
+    assert args.pipeline_atomic_commit == "a" * 40

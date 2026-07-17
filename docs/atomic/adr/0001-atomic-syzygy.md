@@ -1,6 +1,6 @@
 # ADR 0001: Atomic Syzygy is a required native subsystem
 
-- Status: accepted; implementation pending
+- Status: accepted; implemented; strength waiver recorded; exact-tag functional validation pending
 - Date: 2026-07-10
 
 ## Context
@@ -104,3 +104,19 @@ The Stockfish Syzygy subsystem stays in the source tree and will be specialized
 rather than generalized. This adds an implementation gate before the first
 strength release, but it removes a known weakness of Fairy-Stockfish and gives
 future solving work a local exact-endgame foundation.
+
+## Release 1.0 validation disposition
+
+OpenBench tests 37–42 produced positive point estimates in all six requested
+measurements: same-binary tablebase-on versus tablebase-off at STC/LTC with
+classical and NNUE evaluation, plus Atomic-with-tables versus the frozen Fairy
+NNUE baseline at STC/LTC. The owner manually stopped and accepted the tests
+after a healthcheck. Their frozen database rows, inputs, STOP events and
+homogeneous subgroup arithmetic are recorded in
+[`release-1.0-syzygy-openbench`](../evidence/release-1.0-syzygy-openbench/README.md).
+
+This is an explicit waiver of the originally requested 2,000-game completion,
+not evidence that OpenBench passed the tests: every row has `passed=false` and
+fewer than 2,000 accepted games. No aggregate six-test Elo or `6/6 LOS` is
+claimed. The exact release tag must still pass the driver, production UCI and
+real-table enabled/disabled conformance gate.

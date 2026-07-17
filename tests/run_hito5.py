@@ -174,7 +174,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--pipeline-tools-engine",
         type=Path,
         help=(
-            "optional variant-nnue-tools executable; all seven --pipeline-* "
+            "optional variant-nnue-tools executable; all ten --pipeline-* "
             "inputs must be supplied together to run the cross-repository E2E gate"
         ),
     )
@@ -182,7 +182,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--pipeline-trainer-root",
         type=Path,
         help=(
-            "optional built variant-nnue-pytorch checkout; all seven "
+            "optional built variant-nnue-pytorch checkout; all ten "
             "--pipeline-* inputs must be supplied together"
         ),
     )
@@ -190,7 +190,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--pipeline-tools-build-manifest",
         type=Path,
         help=(
-            "clean-build manifest for --pipeline-tools-engine; all seven "
+            "clean-build manifest for --pipeline-tools-engine; all ten "
             "--pipeline-* inputs are required together"
         ),
     )
@@ -198,7 +198,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--pipeline-trainer-build-manifest",
         type=Path,
         help=(
-            "clean-build manifest for the trainer native loader; all seven "
+            "clean-build manifest for the trainer native loader; all ten "
             "--pipeline-* inputs are required together"
         ),
     )
@@ -206,15 +206,39 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--pipeline-atomic-build-manifest",
         type=Path,
         help=(
-            "clean-build manifest for --native; all seven --pipeline-* inputs "
-            "are required together"
+            "clean-build manifest for --pipeline-atomic-engine (or --native "
+            "when omitted); all ten --pipeline-* inputs are required together"
+        ),
+    )
+    parser.add_argument(
+        "--pipeline-atomic-engine",
+        type=Path,
+        help=(
+            "separate clean-built playing engine authenticated by the pipeline "
+            "manifest; defaults to --native for compatibility with existing "
+            "single-build gates"
+        ),
+    )
+    parser.add_argument(
+        "--pipeline-atomic-root",
+        type=Path,
+        help=(
+            "exact Atomic-Stockfish checkout containing the pipeline engine and "
+            "data-generator; required with the complete pipeline configuration"
+        ),
+    )
+    parser.add_argument(
+        "--pipeline-atomic-commit",
+        help=(
+            "exact 40-hex Atomic-Stockfish HEAD expected for "
+            "--pipeline-atomic-root; required with the complete pipeline configuration"
         ),
     )
     parser.add_argument(
         "--pipeline-atomic-data-generator",
         type=Path,
         help=(
-            "Atomic-Stockfish data-generator executable; all seven "
+            "Atomic-Stockfish data-generator executable; all ten "
             "--pipeline-* inputs are required together"
         ),
     )
@@ -222,7 +246,15 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--pipeline-atomic-data-generator-build-manifest",
         type=Path,
         help=(
-            "independent clean-build manifest for the data-generator; all seven "
+            "independent clean-build manifest for the data-generator; all ten "
+            "--pipeline-* inputs are required together"
+        ),
+    )
+    parser.add_argument(
+        "--pipeline-python",
+        type=Path,
+        help=(
+            "CPython 3.10 runtime for the native trainer/loader pipeline; all ten "
             "--pipeline-* inputs are required together"
         ),
     )
@@ -266,24 +298,30 @@ def validate_positive(value: float | int, option: str) -> None:
 
 
 def validate_pipeline_configuration(
-    pipeline_options: Sequence[Path | None], mode: str
+    pipeline_options: Sequence[object | None], mode: str
 ) -> None:
-    if len(pipeline_options) != 7:
-        raise GateFailure("internal error: expected seven pipeline inputs")
+    if len(pipeline_options) != 10:
+        raise GateFailure("internal error: expected ten pipeline inputs")
     if any(value is not None for value in pipeline_options) and not all(
         value is not None for value in pipeline_options
     ):
         raise GateFailure(
-            "pipeline tools/trainer/generator paths and all four clean-build "
-            "manifests must be supplied together"
+            "pipeline runtime, tools/trainer/generator paths, Atomic root/commit, "
+            "and all four clean-build manifests must be supplied together"
         )
     if mode == "release" and not all(
         value is not None for value in pipeline_options
     ):
         raise GateFailure(
-            "release mode requires pipeline tools/trainer/generator paths and "
-            "all four clean-build manifests"
+            "release mode requires the pipeline runtime, tools/trainer/generator "
+            "paths, exact Atomic root/commit, and all four clean-build manifests"
         )
+    atomic_commit = pipeline_options[-1]
+    if atomic_commit is not None and (
+        not isinstance(atomic_commit, str)
+        or re.fullmatch(r"[0-9a-fA-F]{40}", atomic_commit) is None
+    ):
+        raise GateFailure("pipeline Atomic commit must be exactly 40 hexadecimal characters")
 
 
 def build_pipeline_e2e_command(
@@ -297,6 +335,8 @@ def build_pipeline_e2e_command(
     trainer_build_manifest: Path,
     atomic_build_manifest: Path,
     atomic_data_generator_build_manifest: Path,
+    atomic_root: Path,
+    atomic_commit: str,
     source_net: Path,
 ) -> list[str]:
     return [
@@ -320,6 +360,10 @@ def build_pipeline_e2e_command(
         str(atomic_build_manifest),
         "--atomic-data-generator-build-manifest",
         str(atomic_data_generator_build_manifest),
+        "--atomic-root",
+        str(atomic_root),
+        "--atomic-commit",
+        atomic_commit,
         "--source-net",
         str(source_net),
     ]
@@ -343,6 +387,7 @@ def main() -> int:
         if args.differential_timeout is not None:
             validate_positive(args.differential_timeout, "--differential-timeout")
         pipeline_options = (
+            args.pipeline_python,
             args.pipeline_tools_engine,
             args.pipeline_trainer_root,
             args.pipeline_tools_build_manifest,
@@ -350,10 +395,24 @@ def main() -> int:
             args.pipeline_atomic_build_manifest,
             args.pipeline_atomic_data_generator,
             args.pipeline_atomic_data_generator_build_manifest,
+            args.pipeline_atomic_root,
+            args.pipeline_atomic_commit,
         )
         validate_pipeline_configuration(pipeline_options, args.mode)
+        if (
+            args.pipeline_atomic_engine is not None
+            and args.pipeline_tools_engine is None
+        ):
+            raise GateFailure(
+                "--pipeline-atomic-engine requires the complete pipeline configuration"
+            )
 
         python = command_path(args.python, "Python")
+        pipeline_python = (
+            command_path(str(args.pipeline_python), "pipeline Python")
+            if args.pipeline_python is not None
+            else None
+        )
         native = require_file(args.native, "native engine")
         net = require_file(args.net, "Legacy Atomic V1 network")
         net_sha = sha256(net)
@@ -421,6 +480,8 @@ def main() -> int:
         )
 
         if args.pipeline_tools_engine is not None:
+            if pipeline_python is None:
+                raise GateFailure("complete pipeline configuration has no Python runtime")
             pipeline_tools_engine = require_file(
                 args.pipeline_tools_engine, "variant-nnue-tools engine"
             )
@@ -431,13 +492,21 @@ def main() -> int:
                 args.pipeline_atomic_data_generator,
                 "Atomic-Stockfish data-generator",
             )
+            pipeline_atomic_root = require_directory(
+                args.pipeline_atomic_root,
+                "exact Atomic-Stockfish pipeline checkout",
+            )
+            pipeline_atomic_engine = require_file(
+                args.pipeline_atomic_engine or native,
+                "clean-built Atomic pipeline engine",
+            )
             run_step(
                 "Legacy Atomic V1 cross-repository data-to-engine pipeline",
                 build_pipeline_e2e_command(
-                    python=python,
+                    python=pipeline_python,
                     tools_engine=pipeline_tools_engine,
                     trainer_root=pipeline_trainer_root,
-                    native=native,
+                    native=pipeline_atomic_engine,
                     atomic_data_generator=pipeline_atomic_data_generator,
                     tools_build_manifest=args.pipeline_tools_build_manifest,
                     trainer_build_manifest=args.pipeline_trainer_build_manifest,
@@ -445,6 +514,8 @@ def main() -> int:
                     atomic_data_generator_build_manifest=(
                         args.pipeline_atomic_data_generator_build_manifest
                     ),
+                    atomic_root=pipeline_atomic_root,
+                    atomic_commit=args.pipeline_atomic_commit,
                     source_net=net,
                 ),
                 timeout=args.pipeline_timeout,
@@ -462,7 +533,8 @@ def main() -> int:
             print(
                 "\n=== Legacy Atomic V1 cross-repository data-to-engine pipeline ===\n"
                 "LEGACY PIPELINE E2E NOT REQUESTED (NON-RELEASE): supply the "
-                "tools/trainer/generator paths and all four clean-build manifests",
+                "tools/trainer/generator paths, exact Atomic root/commit, and all "
+                "four clean-build manifests",
                 flush=True,
             )
 

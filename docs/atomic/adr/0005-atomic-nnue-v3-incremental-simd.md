@@ -1,6 +1,6 @@
 # ADR 0005: Vectorize only AtomicNNUEV3 incremental HM row application
 
-- Status: accepted for H9.3j-b; promoted to production by H9.3n
+- Status: accepted and implemented for H9.3j-b; reviewed-head PR #40 merged as `933f331e8a8b9ab9c89f5e107d341240e4a3bdad` from head `9387ea45fb020e62682328ace169de1aaad3e835`; promoted to production by H9.3n
 - Date: 2026-07-15
 
 ## Context
@@ -78,5 +78,7 @@ not authorize them implicitly.
 H9.3j-b itself makes no engine-NPS, Elo, LOS, OpenBench, data-generation or
 training claim. H9.3n later connects V3 to the production dispatcher without
 retroactively turning these kernel measurements into a strength claim. The
-validation index and completed local evidence are recorded in
+merged reviewed-head H9.3j-b implementation is PR #40, merge
+`933f331e8a8b9ab9c89f5e107d341240e4a3bdad`. Its validation index and
+completed evidence are recorded in
 [`hito9-3j-b-v3-incremental-simd`](../evidence/hito9-3j-b-v3-incremental-simd/README.md).

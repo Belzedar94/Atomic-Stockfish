@@ -1,6 +1,6 @@
 # ADR 0004: Design AtomicNNUEV3 as a blast-aware SFNNv15 backend
 
-- Status: accepted; wire v1 frozen, runtime backend promoted in H9.3n
+- Status: accepted; wire v1 frozen; private scalar, incremental, SIMD and trajectory backends implemented; runtime dispatch and serialization promoted in H9.3n; production scanning and controlled training remain pending
 - Date: 2026-07-14
 
 ## Context

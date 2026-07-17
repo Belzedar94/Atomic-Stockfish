@@ -1,0 +1,16 @@
+# Atomic-Stockfish 1.0 cibuildwheel test lock.
+# CPython 3.9, Linux x86-64 and Windows AMD64; binary distributions only.
+librt==0.13.0 \
+    --hash=sha256:3657346f867469e962549435aa05fd15330b1d6a92829f8e27988e194382d005 \
+    --hash=sha256:b15e26cc0fe622d0c67e98bee6ef6bc8f792e20ee3006aa12627a00463d9399f
+mypy==1.19.1 \
+    --hash=sha256:409088884802d511ee52ca067707b90c883426bd95514e8cfda8281dc2effe24 \
+    --hash=sha256:4f28f99c824ecebcdaa2e55d82953e38ff60ee5ec938476796636b86afa3956e
+mypy-extensions==1.1.0 \
+    --hash=sha256:1be4cccdb0f2482337c4743e60421de3a356cd97508abadd57d47403e94f5505
+pathspec==1.1.1 \
+    --hash=sha256:a00ce642f577bf7f473932318056212bc4f8bfdf53128c78bbd5af0b9b20b189
+tomli==2.4.1 \
+    --hash=sha256:0d85819802132122da43cb86656f8d1f8c6587d54ae7dcaf30e90533028b49fe
+typing-extensions==4.16.0 \
+    --hash=sha256:481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8

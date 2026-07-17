@@ -95,7 +95,7 @@ ATOMIC_V3_RUNTIME_SRCS = nnue/atomic_v3/hm_oracle.cpp nnue/atomic_v3/capture_pai
 
 OTHER_SRCS = universal/entry_x86.cpp universal/entry_arm64.cpp universal/entry_riscv64.cpp universal/nnue_embed.cpp
 
-HEADERS = atomic_init.h attacks.h benchmark.h bitboard.h evaluate.h misc.h movegen.h movepick.h history.h \
+HEADERS = atomic_init.h atomic_version.h attacks.h benchmark.h bitboard.h evaluate.h misc.h movegen.h movepick.h history.h \
 		api/atomic_fen.h api/atomic_notation.h api/atomic_outcome.h \
 		nnue/nnue_misc.h nnue/features/half_ka_v2_atomic.h \
 		nnue/atomic_v2/accumulator.h nnue/atomic_v2/architecture.h nnue/atomic_v2/backend.h \
@@ -2023,7 +2023,7 @@ atomic_data_generator_%.o: data/%.cpp $(HEADERS) $(ATOMIC_DATA_GENERATOR_HEADERS
 %.o: %.cpp
 	$(strip $(CXX) $(CPPFLAGS) $(CXXFLAGS)) -c -o $@ $<
 
-misc.o: misc.cpp $(BUILD_SHA_FILE) $(BUILD_DATE_FILE)
+misc.o: misc.cpp atomic_version.h $(BUILD_SHA_FILE) $(BUILD_DATE_FILE)
 	$(strip $(CXX) $(CPPFLAGS) $(CXXFLAGS) $(if $(GIT_SHA),-DGIT_SHA=$(GIT_SHA)) $(if $(GIT_DATE),-DGIT_DATE=$(GIT_DATE))) -c -o $@ $<
 
 clang-profile-make:

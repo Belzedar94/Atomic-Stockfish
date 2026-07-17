@@ -47,8 +47,8 @@ protocol_output="$({
 
 grep -Eq '^id name Atomic-Stockfish( |$)' <<<"$protocol_output" \
     || fail "missing Atomic-Stockfish UCI identity"
-grep -Fxq 'id author the Stockfish developers (see AUTHORS file)' <<<"$protocol_output" \
-    || fail "upstream Stockfish attribution changed"
+grep -Fxq 'id author the Atomic-Stockfish developers (see AUTHORS file)' <<<"$protocol_output" \
+    || fail "Atomic-Stockfish attribution changed"
 grep -Fxq 'option name UCI_Variant type combo default atomic var atomic' <<<"$protocol_output" \
     || fail "UCI_Variant must be a single-value atomic combo"
 [[ "$(grep -Ec '^option name UCI_Variant ' <<<"$protocol_output")" -eq 1 ]] \

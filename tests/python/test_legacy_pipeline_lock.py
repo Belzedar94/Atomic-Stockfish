@@ -97,7 +97,11 @@ def test_checked_in_lock_is_structurally_valid() -> None:
     assert lock.training_data_schema.record_size == 72
     assert (
         lock.repositories["tools"].commit
-        == "521f841098eeee19c4234417181b0b441feb3499"
+        == "450049ee7a0ece32694b11f6c55deb7df1d42a84"
+    )
+    assert (
+        lock.repositories["trainer"].commit
+        == "3a19c16fc3d477b1ee7602ccc6510736bc7604cc"
     )
     assert (
         lock.profiles["strong-local"].data_sha256
@@ -270,6 +274,37 @@ def test_github_outputs_emit_only_resolved_repository_pins(tmp_path: Path) -> No
         f"trainer_commit={'b' * 40}",
         "synthetic_hashes_resolved=true",
     ]
+
+
+def test_ci_checks_out_both_locked_sibling_repositories_recursively() -> None:
+    workflow = (TESTS_DIR.parent / ".github" / "workflows" / "atomic.yml").read_text(
+        encoding="utf-8"
+    )
+
+    def checkout_step(name: str) -> str:
+        marker = f"      - name: {name}\n"
+        assert marker in workflow
+        return workflow.split(marker, 1)[1].split("\n      - name:", 1)[0]
+
+    tools = checkout_step("Check out variant-nnue-tools at the locked commit")
+    trainer = checkout_step("Check out variant-nnue-pytorch at the locked commit")
+    assert "submodules: recursive" in tools
+    assert "submodules: recursive" in trainer
+
+    for name, directory in (
+        (
+            "Fetch the tools engine authentication ref",
+            ".pipeline/tools/engine/Atomic-Stockfish",
+        ),
+        (
+            "Fetch the trainer engine authentication ref",
+            ".pipeline/trainer/external/Atomic-Stockfish",
+        ),
+    ):
+        step = checkout_step(name)
+        assert f"working-directory: {directory}" in step
+        assert "git fetch --no-tags --unshallow origin" in step
+        assert "git fetch --no-tags origin +main:refs/remotes/origin/main" in step
 
 
 def test_github_outputs_can_bootstrap_only_unresolved_synthetic_hashes(

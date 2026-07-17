@@ -10,6 +10,21 @@ from setuptools.command.build_ext import build_ext
 ROOT = Path(__file__).parent
 
 
+def release_version() -> str:
+    header = (ROOT / "src" / "atomic_version.h").read_text(encoding="utf-8")
+    components = []
+    for name in ("Major", "Minor", "Patch"):
+        marker = f"AtomicVersion{name} = "
+        line = next((line for line in header.splitlines() if marker in line), None)
+        if line is None:
+            raise RuntimeError(f"missing {marker.strip()} in atomic_version.h")
+        value = line.split(marker, 1)[1].split(";", 1)[0].strip()
+        if not value.isascii() or not value.isdecimal():
+            raise RuntimeError(f"invalid AtomicVersion{name} in atomic_version.h")
+        components.append(value)
+    return ".".join(components)
+
+
 class BuildExtWithStub(build_ext):
     """Install both the adjacent stub and its PEP 561 stub-only package."""
 
@@ -56,7 +71,12 @@ if platform.python_compiler().startswith("MSC"):
         "/permissive-",
         "/utf-8",
         "/Zc:__cplusplus",
+        # MSVC otherwise hashes the absolute translation-unit path into
+        # anonymous-namespace symbols, making equivalent isolated wheel
+        # builds differ solely because cibuildwheel uses fresh temp roots.
+        f"/d1trimfile:{ROOT.resolve()}\\",
     ]
+    link_args = ["/Brepro"]
 else:
     compile_args = [
         "-std=c++17",
@@ -64,6 +84,7 @@ else:
         "-fvisibility=hidden",
         "-Wno-date-time",
     ]
+    link_args = []
 
 define_macros = [
     ("Py_LIMITED_API", "0x03090000"),
@@ -85,24 +106,32 @@ pyffish = Extension(
     ],
     define_macros=define_macros,
     extra_compile_args=compile_args,
+    extra_link_args=link_args,
     libraries=["shell32"] if platform.system() == "Windows" else [],
     py_limited_api=True,
 )
 
 setup(
     name="atomic-pyffish",
-    version="0.1.0",
+    version=release_version(),
     description="Stable-ABI Python rules binding for Atomic-Stockfish",
     long_description=(ROOT / "README.md").read_text(encoding="utf-8"),
     long_description_content_type="text/markdown",
+    author="The Atomic-Stockfish developers",
+    url="https://github.com/Belzedar94/Atomic-Stockfish",
+    project_urls={
+        "Source": "https://github.com/Belzedar94/Atomic-Stockfish",
+        "Issues": "https://github.com/Belzedar94/Atomic-Stockfish/issues",
+        "Releases": "https://github.com/Belzedar94/Atomic-Stockfish/releases",
+    },
     license="GPL-3.0-or-later",
+    license_files=["Copying.txt"],
     python_requires=">=3.9",
     ext_modules=[pyffish],
     cmdclass={"build_ext": BuildExtWithStub},
     options={"bdist_wheel": {"py_limited_api": "cp39"}},
     classifiers=[
-        "Development Status :: 3 - Alpha",
-        "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+        "Development Status :: 5 - Production/Stable",
         "Programming Language :: C++",
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3 :: Only",
