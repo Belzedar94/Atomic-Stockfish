@@ -24,6 +24,7 @@ ROOT = Path(__file__).resolve().parents[2]
 SCHEMA_SOURCE = ROOT / "schemas" / "atomic-release-exact-tag-gates-v1.json"
 PRODUCTIVE_PLAN = ROOT / "scripts" / "atomic-release-exact-tag-plan-v1.json"
 RELEASE_INVENTORY = ROOT / "docs" / "atomic" / "release-1.0-inventory.json"
+WINDOWS_CONTAINMENT_REASON = "exact-tag containment requires a Windows Job Object"
 
 
 def digest(payload: bytes) -> str:
@@ -303,6 +304,8 @@ def make_bundle(
     mode: str = "normal",
     run: bool = True,
 ) -> dict[str, Any]:
+    if run and os.name != "nt":
+        pytest.skip(WINDOWS_CONTAINMENT_REASON)
     external = make_external_inputs(tmp_path / "external", monkeypatch)
     repositories = make_aux_repositories(tmp_path / "aux-repositories", monkeypatch)
     candidate = tmp_path / "Atomic-Stockfish-bmi2.exe"
@@ -354,6 +357,8 @@ def make_bundle(
 
 
 def run_bundle(bundle: dict[str, Any]) -> dict[str, Any]:
+    if os.name != "nt":
+        pytest.skip(WINDOWS_CONTAINMENT_REASON)
     return EXACT.run_gates(
         repo_root=bundle["repo"],
         plan_path=bundle["plan"],
@@ -502,44 +507,43 @@ def test_nested_exact_gate_controller_is_forced_into_isolated_mode(
     )
 
 
-def test_non_linux_posix_containment_fails_closed(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.skipif(os.name == "nt", reason="POSIX fail-before-target contract")
+def test_posix_rejects_supervisor_kill_attack_before_target_creation(
+    tmp_path: Path,
 ) -> None:
-    monkeypatch.setattr(CONTAINMENT, "_IS_LINUX", False)
+    marker = tmp_path / "target-started.txt"
+    attack = tmp_path / "kill-supervisor.py"
+    attack.write_text(
+        "import os, pathlib, signal, subprocess, sys, time\n"
+        "pathlib.Path(sys.argv[1]).write_text('target ran', encoding='ascii')\n"
+        "subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(120)'])\n"
+        "os.kill(os.getppid(), signal.SIGKILL)\n"
+        "time.sleep(120)\n",
+        encoding="ascii",
+    )
     with pytest.raises(
         CONTAINMENT.ProcessContainmentError,
-        match="available only on Windows and Linux",
+        match="unsupported on POSIX; the target was not started",
     ):
-        CONTAINMENT._launch_posix_contained(
-            [sys.executable, "-c", "raise SystemExit(0)"],
+        CONTAINMENT.launch_contained(
+            [sys.executable, str(attack), str(marker)],
             cwd=tmp_path,
-            environment={},
+            environment=EXACT._safe_process_environment(),
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
-
-
-@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="real Linux subreaper")
-def test_linux_subreaper_handles_setsid_double_fork_and_zombies() -> None:
-    result = subprocess.run(
-        [
-            sys.executable,
-            "-I",
-            str(ROOT / "tests" / "atomic_process_containment_linux.py"),
-            str(ROOT),
-        ],
-        cwd=ROOT,
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        timeout=30,
+    assert not marker.exists()
+    source = (ROOT / "scripts" / "atomic_process_containment.py").read_text(
+        encoding="utf-8"
     )
-    assert result.returncode == 0, result.stderr.decode("utf-8", "replace")
-    assert (
-        b"setsid, timeout, double-fork and zombie containment passed"
-        in result.stdout
-    )
+    for forbidden in (
+        "PR_SET_CHILD_SUBREAPER",
+        "--linux-supervisor",
+        "start_new_session=True",
+        "os.killpg",
+    ):
+        assert forbidden not in source
 
 
 def test_outer_and_inner_output_limits_match_the_release_inventory() -> None:
@@ -930,6 +934,7 @@ def test_pre_manifest_independent_verification_is_mandatory(
     unseal(bundle["evidence"])
 
 
+@pytest.mark.skipif(os.name != "nt", reason=WINDOWS_CONTAINMENT_REASON)
 def test_gate_timeout_and_output_limit_are_enforced(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -970,6 +975,7 @@ def test_gate_timeout_and_output_limit_are_enforced(
     )
 
 
+@pytest.mark.skipif(os.name != "nt", reason=WINDOWS_CONTAINMENT_REASON)
 def test_gate_timeout_terminates_a_real_grandchild_process(tmp_path: Path) -> None:
     pid_file = tmp_path / "grandchild.pid"
     parent = tmp_path / "parent.py"
@@ -1007,6 +1013,7 @@ def test_gate_timeout_terminates_a_real_grandchild_process(tmp_path: Path) -> No
             cleanup_process_tree(int(pid_file.read_text(encoding="ascii")))
 
 
+@pytest.mark.skipif(os.name != "nt", reason=WINDOWS_CONTAINMENT_REASON)
 def test_gate_root_exit_still_terminates_inherited_pipe_grandchild(
     tmp_path: Path,
 ) -> None:
@@ -1053,6 +1060,7 @@ def test_gate_root_exit_still_terminates_inherited_pipe_grandchild(
             cleanup_process_tree(int(pid_file.read_text(encoding="ascii")))
 
 
+@pytest.mark.skipif(os.name != "nt", reason=WINDOWS_CONTAINMENT_REASON)
 def test_gate_infinite_writer_is_bounded_and_terminated(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

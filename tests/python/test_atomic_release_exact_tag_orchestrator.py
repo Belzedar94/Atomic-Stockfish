@@ -899,6 +899,9 @@ def test_syzygy_inventory_rejects_duplicate_consumed_record(
         )
 
 
+@pytest.mark.skipif(
+    os.name != "nt", reason="exact-tag containment requires a Windows Job Object"
+)
 def test_real_subprocess_success_failure_and_timeout(tmp_path: Path) -> None:
     success = touch(tmp_path / "success.py", b"print('REQUIRED PASS')\n")
     output = GATE._execute_command(
@@ -925,6 +928,9 @@ def test_real_subprocess_success_failure_and_timeout(tmp_path: Path) -> None:
         )
 
 
+@pytest.mark.skipif(
+    os.name != "nt", reason="exact-tag containment requires a Windows Job Object"
+)
 def test_execute_command_timeout_terminates_a_real_grandchild(tmp_path: Path) -> None:
     pid_file = tmp_path / "grandchild.pid"
     parent = touch(
@@ -954,6 +960,9 @@ def test_execute_command_timeout_terminates_a_real_grandchild(tmp_path: Path) ->
             cleanup_process_tree(int(pid_file.read_text(encoding="ascii")))
 
 
+@pytest.mark.skipif(
+    os.name != "nt", reason="exact-tag containment requires a Windows Job Object"
+)
 def test_execute_command_root_exit_terminates_inherited_pipe_grandchild(
     tmp_path: Path,
 ) -> None:
@@ -986,6 +995,9 @@ def test_execute_command_root_exit_terminates_inherited_pipe_grandchild(
             cleanup_process_tree(int(pid_file.read_text(encoding="ascii")))
 
 
+@pytest.mark.skipif(
+    os.name != "nt", reason="exact-tag containment requires a Windows Job Object"
+)
 def test_execute_command_enforces_output_limit_during_execution(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

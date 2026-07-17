@@ -217,7 +217,6 @@ def test_release_pr_reproduces_real_windows_wheel_and_frozen_fingerprint() -> No
         "setup.py",
         "src/**",
         "tests/release-*.txt",
-        "tests/atomic_process_containment_linux.py",
         "tests/run_atomic_release_exact_tag_gate.py",
         "tests/python/test_wheel_layout.py",
     ):
@@ -260,11 +259,10 @@ def test_release_pr_reproduces_real_windows_wheel_and_frozen_fingerprint() -> No
         assert forbidden not in text
 
 
-def test_exact_tag_controllers_are_isolated_and_linux_containment_is_real() -> None:
-    text = workflow()
-    exact = job(text, "exact-tag-external", "publication-gate")
-    source = job(release_pr_workflow(), "source_sdist", "windows_wheel")
+def test_exact_tag_controllers_are_isolated_on_the_windows_containment_runner() -> None:
+    exact = job(workflow(), "exact-tag-external", "publication-gate")
 
+    assert "runs-on: [self-hosted, Windows, X64, atomic-release-gates]" in exact
     for invocation in (
         "& $env:CONTROLLER_PYTHON -I scripts/atomic_release_main_trust.py",
         "& $env:CONTROLLER_PYTHON -I scripts/atomic_release_exact_tag_gates.py run",
@@ -274,13 +272,15 @@ def test_exact_tag_controllers_are_isolated_and_linux_containment_is_real() -> N
     assert exact.count("Remove-Item Env:PYTHONPATH -ErrorAction SilentlyContinue") == 2
     assert exact.count("Remove-Item Env:PYTHONHOME -ErrorAction SilentlyContinue") == 2
 
-    assert "--env ATOMIC_EXPECT_NO_INIT_PID1=1" in source
-    assert "docker run --rm --network none --platform linux/amd64" in source
-    assert "python3 -I /src/tests/atomic_process_containment_linux.py /src" in source
-    containment_recipe = source.split(
-        "--env ATOMIC_EXPECT_NO_INIT_PID1=1", 1
-    )[1].split("toolchain=", 1)[0]
-    assert "--init" not in containment_recipe
+    release_pr = release_pr_workflow()
+    assert "atomic_process_containment_linux.py" not in release_pr
+    assert "tests/atomic_process_containment_posix.py" in release_pr
+    assert "docker run --rm --network none --platform linux/amd64" in release_pr
+    assert (
+        "python3 -I /src/tests/atomic_process_containment_posix.py /src"
+        in release_pr
+    )
+    assert "PR_SET_CHILD_SUBREAPER" not in recipe("atomic_process_containment.py")
 
 
 def test_native_toolchains_are_digest_pinned_and_reproduced_in_isolated_roots() -> None:

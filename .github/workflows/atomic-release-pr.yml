@@ -27,7 +27,7 @@ on:
       - scripts/build_atomic_source_release.sh
       - src/**
       - tests/release-*.txt
-      - tests/atomic_process_containment_linux.py
+      - tests/atomic_process_containment_posix.py
       - tests/run_atomic_release_exact_tag_gate.py
       - tests/python/test_atomic_python_wheel_release_recipe.py
       - tests/python/test_atomic_release_*.py
@@ -96,7 +96,7 @@ jobs:
             --env ATOMIC_EXPECT_NO_INIT_PID1=1 \
             --volume "$GITHUB_WORKSPACE:/src:ro" --workdir /tmp \
             "$EMSCRIPTEN_IMAGE" \
-            python3 -I /src/tests/atomic_process_containment_linux.py /src
+            python3 -I /src/tests/atomic_process_containment_posix.py /src
           toolchain="image=$EMSCRIPTEN_IMAGE; $(docker run --rm \
             "$EMSCRIPTEN_IMAGE" sh -ceu '
               xz --version | head -n 1
