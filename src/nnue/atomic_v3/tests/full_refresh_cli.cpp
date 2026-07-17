@@ -10,12 +10,16 @@
 
 #include <array>
 #include <atomic>
+#include <cerrno>
+#include <chrono>
 #include <cstdlib>
+#include <iomanip>
 #include <initializer_list>
 #include <iostream>
 #include <string>
 #include <string_view>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include "../../../attacks.h"
@@ -179,9 +183,50 @@ bool empty(const FullRefreshEmission& emission) {
         && emission.kingBlastEp.size == 0 && emission.blastRing.size == 0;
 }
 
+// Preserved d5d55040 composition route. It shares HM/CP exactly like the
+// production composer did, but keeps the original full-domain relation
+// projectors as an in-binary parity oracle and reproducible before baseline.
+FullRefreshError emit_full_refresh_scan_oracle(const CapturePairSnapshot& snapshot,
+                                               Color                      perspective,
+                                               FullRefreshEmission&       result) {
+    result = {};
+    FullRefreshEmission candidate{};
+    const HmOracleError hmError = emit_hm_features(snapshot.board, perspective, candidate.hm);
+    if (hmError != HmOracleError::None)
+        return Detail::capture_pair_error_from_hm(hmError);
+    const CapturePairError captureError = Detail::emit_capture_pairs_from_hm(
+      snapshot, perspective, candidate.hm, candidate.capturePairs);
+    if (captureError != CapturePairError::None)
+        return captureError;
+    const KingBlastEpError kingError = Detail::project_king_blast_ep_trusted(
+      snapshot, perspective, candidate.capturePairs, candidate.kingBlastEp);
+    if (kingError != CapturePairError::None)
+        return kingError;
+    const BlastRingError ringError = Detail::project_blast_ring_trusted(
+      snapshot, perspective, candidate.capturePairs, candidate.blastRing);
+    if (ringError != CapturePairError::None)
+        return ringError;
+    const JointOrientation& orientation = candidate.hm.orientation;
+    if (!same_orientation(orientation, candidate.capturePairs.orientation)
+        || !same_orientation(orientation, candidate.kingBlastEp.orientation)
+        || !same_orientation(orientation, candidate.blastRing.orientation))
+        return CapturePairError::NonCanonicalOrder;
+    if (candidate.active_feature_count() > FullRefreshMaximumActiveFeatures)
+        return CapturePairError::TooManyFeatures;
+    result = std::move(candidate);
+    return CapturePairError::None;
+}
+
 bool standalone_parity(const CapturePairSnapshot& snapshot, Color perspective) {
     FullRefreshEmission    combined{};
     const FullRefreshError combinedError = emit_full_refresh(snapshot, perspective, combined);
+
+    FullRefreshEmission    scanOracle{};
+    const FullRefreshError scanError =
+      emit_full_refresh_scan_oracle(snapshot, perspective, scanOracle);
+    if (combinedError != scanError
+        || (combinedError == CapturePairError::None && !same_full_refresh(combined, scanOracle)))
+        return false;
 
     HmEmission          hm{};
     CapturePairEmission capturePairs{};
@@ -362,6 +407,208 @@ void test_position_adapter_and_threads() {
         allThreads = allThreads && matches.load();
     }
     expect(allThreads, "full refresh is bit-exact with 1/2/4/8 concurrent readers");
+}
+
+std::uint64_t next_random(std::uint64_t& state) {
+    state ^= state << 13;
+    state ^= state >> 7;
+    state ^= state << 17;
+    return state;
+}
+
+CapturePairSnapshot random_snapshot(std::uint64_t& state) {
+    CapturePairSnapshot           snapshot{};
+    std::array<Square, SQUARE_NB> squares{};
+    for (int index = 0; index < SQUARE_NB; ++index)
+        squares[index] = Square(index);
+    for (int index = SQUARE_NB - 1; index > 0; --index)
+    {
+        const int other = int(next_random(state) % std::uint64_t(index + 1));
+        std::swap(squares[index], squares[other]);
+    }
+
+    int cursor                        = 0;
+    snapshot.board[squares[cursor++]] = W_KING;
+    snapshot.board[squares[cursor++]] = B_KING;
+    constexpr std::array<PieceType, 5> ExtraTypes{PAWN, KNIGHT, BISHOP, ROOK, QUEEN};
+    const int                          whiteExtra = int(next_random(state) % 15);
+    const int                          blackExtra = int(next_random(state) % 15);
+    for (int index = 0; index < whiteExtra; ++index)
+        snapshot.board[squares[cursor++]] =
+          make_piece(WHITE, ExtraTypes[next_random(state) % ExtraTypes.size()]);
+    for (int index = 0; index < blackExtra; ++index)
+        snapshot.board[squares[cursor++]] =
+          make_piece(BLACK, ExtraTypes[next_random(state) % ExtraTypes.size()]);
+    snapshot.sideToMove = next_random(state) & 1 ? WHITE : BLACK;
+    snapshot.epSquare =
+      (next_random(state) & 3) == 0 ? Square(next_random(state) % SQUARE_NB) : SQ_NONE;
+    return snapshot;
+}
+
+int run_parity_corpus() {
+    std::uint64_t cases = 0;
+
+    // Exhaust every ordered placement of the two kings. This covers every
+    // joint orientation/bucket seam for both accumulator perspectives.
+    for (int whiteKing = 0; whiteKing < SQUARE_NB; ++whiteKing)
+        for (int blackKing = 0; blackKing < SQUARE_NB; ++blackKing)
+        {
+            if (whiteKing == blackKing)
+                continue;
+            CapturePairSnapshot snapshot{};
+            snapshot.board[whiteKing] = W_KING;
+            snapshot.board[blackKing] = B_KING;
+            for (Color perspective : {WHITE, BLACK})
+            {
+                if (!standalone_parity(snapshot, perspective))
+                {
+                    std::cerr << "full-refresh exhaustive parity failed: white_king=" << whiteKing
+                              << " black_king=" << blackKing
+                              << " perspective=" << color_name(perspective) << '\n';
+                    return EXIT_FAILURE;
+                }
+                ++cases;
+            }
+        }
+
+    // Dense deterministic material, malformed/valid-looking EP metadata and
+    // both sides to move exercise the touched-index union against the public
+    // defensive projectors retained as the scalar oracle.
+    std::uint64_t state           = 0xA703F001D15EA5E5ULL;
+    constexpr int RandomPositions = 8192;
+    for (int sample = 0; sample < RandomPositions; ++sample)
+    {
+        const CapturePairSnapshot snapshot = random_snapshot(state);
+        for (Color perspective : {WHITE, BLACK})
+        {
+            if (!standalone_parity(snapshot, perspective))
+            {
+                std::cerr << "full-refresh random parity failed: sample=" << sample
+                          << " perspective=" << color_name(perspective) << '\n';
+                return EXIT_FAILURE;
+            }
+            ++cases;
+        }
+    }
+
+    std::cout << "AtomicNNUEV3 full-refresh oracle parity passed: exhaustive_king_pairs="
+              << (SQUARE_NB * (SQUARE_NB - 1)) << " random_positions=" << RandomPositions
+              << " perspective_cases=" << cases << " seed=0x" << std::hex << 0xA703F001D15EA5E5ULL
+              << std::dec << '\n';
+    return EXIT_SUCCESS;
+}
+
+const std::array<CapturePairSnapshot, 8>& benchmark_snapshots() {
+    static const std::array<CapturePairSnapshot, 8> snapshots{
+      make_snapshot({{SQ_E1, W_KING},   {SQ_D1, W_QUEEN},  {SQ_A1, W_ROOK},   {SQ_H1, W_ROOK},
+                     {SQ_C1, W_BISHOP}, {SQ_F1, W_BISHOP}, {SQ_B1, W_KNIGHT}, {SQ_G1, W_KNIGHT},
+                     {SQ_A2, W_PAWN},   {SQ_B2, W_PAWN},   {SQ_C2, W_PAWN},   {SQ_D2, W_PAWN},
+                     {SQ_E4, W_PAWN},   {SQ_F2, W_PAWN},   {SQ_G2, W_PAWN},   {SQ_H2, W_PAWN},
+                     {SQ_E8, B_KING},   {SQ_D8, B_QUEEN},  {SQ_A8, B_ROOK},   {SQ_H8, B_ROOK},
+                     {SQ_C8, B_BISHOP}, {SQ_F8, B_BISHOP}, {SQ_B8, B_KNIGHT}, {SQ_G8, B_KNIGHT},
+                     {SQ_A7, B_PAWN},   {SQ_B7, B_PAWN},   {SQ_C7, B_PAWN},   {SQ_D7, B_PAWN},
+                     {SQ_E5, B_PAWN},   {SQ_F7, B_PAWN},   {SQ_G7, B_PAWN},   {SQ_H7, B_PAWN}}),
+      make_snapshot({{SQ_C1, W_KING},
+                     {SQ_C8, B_KING},
+                     {SQ_D4, W_QUEEN},
+                     {SQ_D5, B_ROOK},
+                     {SQ_E5, B_KNIGHT},
+                     {SQ_E4, W_PAWN},
+                     {SQ_C5, W_BISHOP},
+                     {SQ_C4, B_PAWN}}),
+      make_snapshot({{SQ_A1, W_KING},
+                     {SQ_H8, B_KING},
+                     {SQ_E5, W_PAWN},
+                     {SQ_D5, B_PAWN},
+                     {SQ_C5, W_ROOK},
+                     {SQ_D7, B_BISHOP}},
+                    WHITE, SQ_D6),
+      make_snapshot(
+        {{SQ_D4, W_KING}, {SQ_E4, B_KING}, {SQ_D2, W_ROOK}, {SQ_E2, B_QUEEN}, {SQ_C3, W_KNIGHT}}),
+      make_snapshot({{SQ_A1, W_KING},
+                     {SQ_H7, B_KING},
+                     {SQ_G7, W_PAWN},
+                     {SQ_H8, B_ROOK},
+                     {SQ_F8, B_BISHOP},
+                     {SQ_G6, W_KNIGHT}}),
+      make_snapshot({{SQ_G1, W_KING},
+                     {SQ_G8, B_KING},
+                     {SQ_A1, W_ROOK},
+                     {SQ_F3, W_KNIGHT},
+                     {SQ_G2, W_PAWN},
+                     {SQ_H2, W_PAWN},
+                     {SQ_C4, W_BISHOP},
+                     {SQ_D5, B_PAWN},
+                     {SQ_E6, B_BISHOP},
+                     {SQ_F7, B_PAWN},
+                     {SQ_H7, B_PAWN},
+                     {SQ_A8, B_ROOK}}),
+      make_snapshot({{SQ_B1, W_KING},
+                     {SQ_F8, B_KING},
+                     {SQ_C3, W_QUEEN},
+                     {SQ_C6, B_QUEEN},
+                     {SQ_A3, W_ROOK},
+                     {SQ_H6, B_ROOK},
+                     {SQ_D4, W_PAWN},
+                     {SQ_E5, B_PAWN},
+                     {SQ_D5, W_KNIGHT},
+                     {SQ_E4, B_BISHOP}}),
+      make_snapshot({{SQ_E2, W_KING},
+                     {SQ_D7, B_KING},
+                     {SQ_A2, W_ROOK},
+                     {SQ_H7, B_ROOK},
+                     {SQ_B3, W_BISHOP},
+                     {SQ_G6, B_BISHOP},
+                     {SQ_C4, W_KNIGHT},
+                     {SQ_F5, B_KNIGHT},
+                     {SQ_D5, W_QUEEN},
+                     {SQ_E4, B_QUEEN}})};
+    return snapshots;
+}
+
+int run_benchmark(std::uint64_t iterations, bool scanOracle) {
+    if (iterations == 0)
+    {
+        std::cerr << "benchmark iterations must be positive\n";
+        return EXIT_FAILURE;
+    }
+    const auto&   snapshots = benchmark_snapshots();
+    std::uint64_t checksum  = 0;
+    auto          refresh   = [&](std::uint64_t iteration) {
+        const CapturePairSnapshot& snapshot = snapshots[iteration % snapshots.size()];
+        const Color         perspective = ((iteration / snapshots.size()) & 1) == 0 ? WHITE : BLACK;
+        FullRefreshEmission emission{};
+        const FullRefreshError error =
+          scanOracle ? emit_full_refresh_scan_oracle(snapshot, perspective, emission)
+                                : emit_full_refresh(snapshot, perspective, emission);
+        checksum =
+          checksum * 0x9E3779B185EBCA87ULL + std::uint64_t(error) + emission.active_feature_count();
+        for (IndexType index = 0; index < emission.hm.size; ++index)
+            checksum = checksum * 257ULL + emission.hm.features[index].physicalIndex;
+        for (IndexType index = 0; index < emission.capturePairs.size; ++index)
+            checksum = checksum * 257ULL + emission.capturePairs.features[index].physicalIndex;
+        for (IndexType index = 0; index < emission.kingBlastEp.size; ++index)
+            checksum = checksum * 257ULL + emission.kingBlastEp.features[index].physicalIndex;
+        for (IndexType index = 0; index < emission.blastRing.size; ++index)
+            checksum = checksum * 257ULL + emission.blastRing.features[index].physicalIndex;
+    };
+
+    constexpr std::uint64_t Warmup = 4096;
+    for (std::uint64_t iteration = 0; iteration < Warmup; ++iteration)
+        refresh(iteration);
+    checksum         = 0;
+    const auto start = std::chrono::steady_clock::now();
+    for (std::uint64_t iteration = 0; iteration < iterations; ++iteration)
+        refresh(iteration);
+    const auto   end     = std::chrono::steady_clock::now();
+    const double seconds = std::chrono::duration<double>(end - start).count();
+    const double rate    = double(iterations) / seconds;
+    std::cout << std::fixed << std::setprecision(3)
+              << "AtomicNNUEV3 full-refresh microbenchmark: route="
+              << (scanOracle ? "scan_oracle" : "touched") << " iterations=" << iterations
+              << " corpus=" << snapshots.size() << " elapsed_ms=" << seconds * 1000.0
+              << " refreshes_per_second=" << rate << " checksum=" << checksum << '\n';
+    return EXIT_SUCCESS;
 }
 
 void run_tests() {
@@ -567,7 +814,29 @@ int main(int argc, char* argv[]) {
     if (argc == 6 && std::string(argv[1]) == "--snapshot")
         return dump_snapshot(argv[2], argv[3], argv[4], argv[5]);
 
+    if (argc == 2 && std::string(argv[1]) == "--parity-corpus")
+        return run_parity_corpus();
+
+    if ((argc == 2 || argc == 3)
+        && (std::string(argv[1]) == "--benchmark" || std::string(argv[1]) == "--benchmark-oracle"))
+    {
+        std::uint64_t iterations = 100000;
+        if (argc == 3)
+        {
+            errno      = 0;
+            char* end  = nullptr;
+            iterations = std::strtoull(argv[2], &end, 10);
+            if (errno != 0 || end == argv[2] || *end != '\0')
+            {
+                std::cerr << "benchmark iterations must be an unsigned integer\n";
+                return EXIT_FAILURE;
+            }
+        }
+        return run_benchmark(iterations, std::string(argv[1]) == "--benchmark-oracle");
+    }
+
     std::cerr << "usage: atomic-v3-full-refresh-tests [--fen FEN | --chess960-fen FEN | "
-                 "--snapshot PERSPECTIVE STM EP PLACEMENT]\n";
+                 "--snapshot PERSPECTIVE STM EP PLACEMENT | --parity-corpus | "
+                 "--benchmark [ITERATIONS] | --benchmark-oracle [ITERATIONS]]\n";
     return EXIT_FAILURE;
 }

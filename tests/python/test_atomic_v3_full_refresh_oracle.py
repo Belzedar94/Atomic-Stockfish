@@ -245,6 +245,12 @@ def test_cpp_source_contract_proves_single_enumeration_and_shared_cp() -> None:
     scalar_source = (ROOT / "src/nnue/atomic_v3/scalar_backend.cpp").read_text(
         encoding="utf-8"
     )
+    king_source = (ROOT / "src/nnue/atomic_v3/king_blast_ep.cpp").read_text(
+        encoding="utf-8"
+    )
+    ring_source = (ROOT / "src/nnue/atomic_v3/blast_ring.cpp").read_text(
+        encoding="utf-8"
+    )
     assert len(re.findall(r"\bemit_hm_features\s*\(", source)) == 1
     assert len(re.findall(r"\bemit_capture_pairs_from_hm\s*\(", source)) == 1
     assert not re.search(r"(?<!from_hm)\bemit_capture_pairs\s*\(", source)
@@ -252,16 +258,30 @@ def test_cpp_source_contract_proves_single_enumeration_and_shared_cp() -> None:
     assert not re.search(r"\bemit_blast_ring\s*\(", source)
 
     king_call = re.search(
-        r"project_king_blast_ep_trusted\s*\([^;]*candidate\.capturePairs[^;]*\)",
+        r"project_king_blast_ep_full_refresh_trusted\s*\("
+        r"[^;]*candidate\.capturePairs[^;]*\)",
         source,
         re.DOTALL,
     )
     ring_call = re.search(
-        r"project_blast_ring_trusted\s*\([^;]*candidate\.capturePairs[^;]*\)",
+        r"project_blast_ring_full_refresh_trusted\s*\("
+        r"[^;]*candidate\.capturePairs[^;]*\)",
         source,
         re.DOTALL,
     )
     assert king_call is not None and ring_call is not None
+    assert "well_formed_capture_pair_emission" not in source
+    assert "well_formed_capture_pair_emission" in king_source
+    assert "well_formed_capture_pair_emission" in ring_source
+    assert source.count("std::sort(touched.begin(), touchedEnd)") == 2
+    assert "std::array<bool, KingBlastEpPhysicalDimensions>" not in source
+    assert "std::array<bool, BlastRingPhysicalDimensions>" not in source
+    assert not re.search(
+        r"for\s*\([^)]*localIndex[^)]*<\s*KingBlastEpPhysicalDimensions", source
+    )
+    assert not re.search(
+        r"for\s*\([^)]*localIndex[^)]*<\s*BlastRingPhysicalDimensions", source
+    )
     assert source.count("make_capture_pair_snapshot(position)") == 1
     assert scalar_source.count("make_capture_pair_snapshot(position)") == 1
     assert capture_source.count("position.piece_on(Square(squareIndex))") == 1
