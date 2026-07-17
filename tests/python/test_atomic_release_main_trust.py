@@ -137,9 +137,7 @@ def write_saved_api(directory: Path, documents: dict[str, object], with_pr: bool
             {"release_pr": "release-pr.json", "merge_commit": "merge-commit.json"}
         )
     for key, name in names.items():
-        (directory / name).write_text(
-            json.dumps(documents[key]), encoding="utf-8", newline="\n"
-        )
+        (directory / name).write_bytes(json.dumps(documents[key]).encode("utf-8"))
 
 
 def repository_checkout() -> str:
