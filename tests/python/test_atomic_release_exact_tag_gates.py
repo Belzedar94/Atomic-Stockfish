@@ -441,6 +441,107 @@ def test_contract_freezes_six_gates_external_hashes_and_aux_commits() -> None:
     )
 
 
+def test_exact_controllers_cannot_import_a_shadow_scripts_package(
+    tmp_path: Path,
+) -> None:
+    shadow = tmp_path / "shadow"
+    package = shadow / "scripts"
+    package.mkdir(parents=True)
+    (package / "__init__.py").write_text("", encoding="ascii")
+    marker = tmp_path / "shadow-imported.txt"
+    (package / "atomic_process_containment.py").write_text(
+        "import os, pathlib\n"
+        "pathlib.Path(os.environ['ATOMIC_SHADOW_MARKER']).write_text('bad')\n"
+        "raise RuntimeError('shadow containment helper imported')\n",
+        encoding="ascii",
+    )
+    environment = dict(os.environ)
+    environment["PYTHONPATH"] = str(shadow)
+    environment["ATOMIC_SHADOW_MARKER"] = str(marker)
+    for controller in (
+        ROOT / "scripts" / "atomic_release_exact_tag_gates.py",
+        ROOT / "tests" / "run_atomic_release_exact_tag_gate.py",
+    ):
+        result = subprocess.run(
+            [sys.executable, str(controller), "--help"],
+            cwd=shadow,
+            env=environment,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=30,
+        )
+        assert result.returncode == 0, result.stderr.decode("utf-8", "replace")
+    assert not marker.exists()
+    helper = (ROOT / "scripts" / "atomic_process_containment.py").resolve(
+        strict=True
+    )
+    assert Path(EXACT._CONTAINMENT.__file__).resolve(strict=True) == helper
+    assert Path(ORCHESTRATOR._CONTAINMENT.__file__).resolve(strict=True) == helper
+
+
+def test_nested_exact_gate_controller_is_forced_into_isolated_mode(
+    tmp_path: Path,
+) -> None:
+    evidence = tmp_path / "evidence"
+    evidence.mkdir()
+    resolved = EXACT._expand_command(
+        ("@python@", "tests/run_atomic_release_exact_tag_gate.py", "--help"),
+        repo_root=ROOT,
+        evidence_root=evidence,
+        benchmark_evidence="bench/benchmark.json",
+        external_paths={},
+        artifact_paths={},
+        directory_paths={},
+        repository_paths={},
+    )
+    assert resolved[:3] == (
+        str(Path(sys.executable).resolve(strict=True)),
+        "-I",
+        "tests/run_atomic_release_exact_tag_gate.py",
+    )
+
+
+def test_non_linux_posix_containment_fails_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(CONTAINMENT, "_IS_LINUX", False)
+    with pytest.raises(
+        CONTAINMENT.ProcessContainmentError,
+        match="available only on Windows and Linux",
+    ):
+        CONTAINMENT._launch_posix_contained(
+            [sys.executable, "-c", "raise SystemExit(0)"],
+            cwd=tmp_path,
+            environment={},
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+
+
+@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="real Linux subreaper")
+def test_linux_subreaper_handles_setsid_double_fork_and_zombies() -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-I",
+            str(ROOT / "tests" / "atomic_process_containment_linux.py"),
+            str(ROOT),
+        ],
+        cwd=ROOT,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stderr.decode("utf-8", "replace")
+    assert (
+        b"setsid, timeout, double-fork and zombie containment passed"
+        in result.stdout
+    )
+
+
 def test_outer_and_inner_output_limits_match_the_release_inventory() -> None:
     policy = json.loads(RELEASE_INVENTORY.read_text(encoding="utf-8"))["releasePolicy"]
     expected = policy["exactTagExternalGates"]["outputLimitBytes"]

@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -33,14 +34,37 @@ import time
 from typing import Any, BinaryIO, Callable, Mapping, Sequence
 
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
+REPO_ROOT = Path(__file__).resolve(strict=True).parents[1]
 
-from scripts.atomic_process_containment import (  # noqa: E402
-    ProcessContainmentError,
-    launch_contained,
-)
+
+def _load_containment_helper() -> Any:
+    """Load the exact checkout helper without consulting ``sys.path``."""
+
+    expected = REPO_ROOT / "scripts" / "atomic_process_containment.py"
+    try:
+        helper = expected.resolve(strict=True)
+    except OSError as error:
+        raise RuntimeError("exact gate containment helper is absent") from error
+    if helper != expected or not helper.is_file():
+        raise RuntimeError("exact gate containment helper is not a real checkout file")
+    spec = importlib.util.spec_from_file_location(
+        "_atomic_exact_gate_process_containment", helper
+    )
+    if spec is None or spec.loader is None or spec.origin is None:
+        raise RuntimeError("could not create the exact gate containment helper loader")
+    if Path(spec.origin).resolve(strict=True) != helper:
+        raise RuntimeError("exact gate containment helper loader origin mismatch")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    origin = Path(str(getattr(module, "__file__", ""))).resolve(strict=True)
+    if origin != helper:
+        raise RuntimeError("loaded exact gate containment helper origin mismatch")
+    return module
+
+
+_CONTAINMENT = _load_containment_helper()
+ProcessContainmentError = _CONTAINMENT.ProcessContainmentError
+launch_contained = _CONTAINMENT.launch_contained
 
 REPOSITORY = "Belzedar94/Atomic-Stockfish"
 RELEASE_REF = "refs/tags/v1.0.0"

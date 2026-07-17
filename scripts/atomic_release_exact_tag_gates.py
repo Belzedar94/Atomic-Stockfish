@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -34,16 +35,36 @@ try:
 except ImportError as error:  # pragma: no cover - exact-tag environment is locked
     raise RuntimeError("jsonschema is required by the exact-tag verifier") from error
 
-try:
-    from scripts.atomic_process_containment import (
-        ProcessContainmentError,
-        launch_contained,
+
+def _load_containment_helper() -> Any:
+    """Load only the sibling helper, independent of import search paths."""
+
+    controller = Path(__file__).resolve(strict=True)
+    expected = controller.with_name("atomic_process_containment.py")
+    try:
+        helper = expected.resolve(strict=True)
+    except OSError as error:
+        raise RuntimeError("exact-tag containment helper is absent") from error
+    if helper != expected or not helper.is_file():
+        raise RuntimeError("exact-tag containment helper is not a real sibling file")
+    spec = importlib.util.spec_from_file_location(
+        "_atomic_exact_tag_process_containment", helper
     )
-except ModuleNotFoundError:  # pragma: no cover - direct ``python scripts/...``
-    from atomic_process_containment import (  # type: ignore[no-redef]
-        ProcessContainmentError,
-        launch_contained,
-    )
+    if spec is None or spec.loader is None or spec.origin is None:
+        raise RuntimeError("could not create the exact-tag containment helper loader")
+    if Path(spec.origin).resolve(strict=True) != helper:
+        raise RuntimeError("exact-tag containment helper loader origin mismatch")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    origin = Path(str(getattr(module, "__file__", ""))).resolve(strict=True)
+    if origin != helper:
+        raise RuntimeError("loaded exact-tag containment helper origin mismatch")
+    return module
+
+
+_CONTAINMENT = _load_containment_helper()
+ProcessContainmentError = _CONTAINMENT.ProcessContainmentError
+launch_contained = _CONTAINMENT.launch_contained
 
 
 SCHEMA_VERSION = 1
@@ -959,7 +980,11 @@ def _expand_command(
     bindings.update(
         {"@repository:" + name + "@": str(path.resolve(strict=True)) for name, path in repository_paths.items()}
     )
-    return tuple(bindings.get(argument, argument) for argument in template)
+    resolved = tuple(bindings.get(argument, argument) for argument in template)
+    # The authenticated controller runtime is always isolated from cwd, user
+    # site packages and every PYTHON* override, including for nested gate
+    # controllers declared by the exact-tag plan.
+    return (resolved[0], "-I", *resolved[1:])
 
 
 def _command_record(template: Sequence[str], resolved: Sequence[str], timeout: int) -> Dict[str, Any]:

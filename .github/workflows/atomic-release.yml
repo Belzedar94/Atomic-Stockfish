@@ -1706,10 +1706,12 @@ jobs:
           EXPECTED_MAIN_TRUST_SHA256: ${{ needs['main-trust'].outputs.trust_sha256 }}
         run: |
           $ErrorActionPreference = 'Stop'
+          Remove-Item Env:PYTHONPATH -ErrorAction SilentlyContinue
+          Remove-Item Env:PYTHONHOME -ErrorAction SilentlyContinue
           $trustRoot = Join-Path '${{ steps.release_surfaces.outputs.exact_root }}' 'trust'
           New-Item -ItemType Directory -Path $trustRoot | Out-Null
           $mainTrust = Join-Path $trustRoot 'release-main-trust.json'
-          & $env:CONTROLLER_PYTHON scripts/atomic_release_main_trust.py `
+          & $env:CONTROLLER_PYTHON -I scripts/atomic_release_main_trust.py `
             --repository Belzedar94/Atomic-Stockfish `
             --tag v1.0.0 `
             --repository-root . `
@@ -1737,6 +1739,8 @@ jobs:
           FAIRY_BMI2_BASELINE: ${{ vars.ATOMIC_RELEASE_FAIRY_BMI2_BASELINE }}
         run: |
           $ErrorActionPreference = 'Stop'
+          Remove-Item Env:PYTHONPATH -ErrorAction SilentlyContinue
+          Remove-Item Env:PYTHONHOME -ErrorAction SilentlyContinue
           $planPath = 'scripts/atomic-release-exact-tag-plan-v1.json'
           if (-not (Test-Path -LiteralPath $planPath -PathType Leaf)) {
             throw "tracked exact-tag command plan is absent: $planPath"
@@ -1861,11 +1865,11 @@ jobs:
           ))
 
           $runLog = Join-Path $outputRoot 'exact-tag-run.log'
-          & $env:CONTROLLER_PYTHON scripts/atomic_release_exact_tag_gates.py run @arguments `
+          & $env:CONTROLLER_PYTHON -I scripts/atomic_release_exact_tag_gates.py run @arguments `
             2>&1 | Tee-Object -LiteralPath $runLog
           if ($LASTEXITCODE -ne 0) { throw 'exact-tag gate execution failed' }
           $verifyLog = Join-Path $outputRoot 'exact-tag-verify.log'
-          & $env:CONTROLLER_PYTHON scripts/atomic_release_exact_tag_gates.py verify @arguments `
+          & $env:CONTROLLER_PYTHON -I scripts/atomic_release_exact_tag_gates.py verify @arguments `
             2>&1 | Tee-Object -LiteralPath $verifyLog
           if ($LASTEXITCODE -ne 0) { throw 'exact-tag evidence re-verification failed' }
           $manifestSha = (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash.ToLowerInvariant()

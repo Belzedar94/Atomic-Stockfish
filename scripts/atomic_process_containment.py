@@ -3,23 +3,406 @@
 
 Windows children start suspended, are assigned to a nested Job Object carrying
 ``JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE``, and are resumed only after assignment
-succeeds.  POSIX children start in a new session and retain their process-group
-ID even after the group leader exits.  The Job handle or process-group ID is
-retained until :class:`ContainedProcess` explicitly terminates and verifies the
-complete tree.
+succeeds.  Linux commands run below a dedicated ``PR_SET_CHILD_SUBREAPER``
+supervisor.  That supervisor adopts, kills and reaps descendants even when they
+double-fork or create a new session.  Other POSIX systems fail closed because a
+process group alone cannot provide the same containment guarantee.
 """
 
 from __future__ import annotations
 
 import os
+from pathlib import Path
+import select
 import signal
 import subprocess
+import sys
 import time
 from typing import Any, Mapping, Sequence
 
 
 class ProcessContainmentError(RuntimeError):
     """A child could not be contained or its complete tree did not terminate."""
+
+
+_IS_LINUX = sys.platform.startswith("linux")
+_LINUX_SUPERVISOR_READY_TIMEOUT_SECONDS = 15.0
+_LINUX_MAX_DESCENDANTS = 65_536
+_LINUX_WNOHANG = int(getattr(os, "WNOHANG", 1))
+_LINUX_SIGSTOP = int(getattr(signal, "SIGSTOP", 19))
+_LINUX_SIGKILL = int(getattr(signal, "SIGKILL", 9))
+_LINUX_SIGHUP = int(getattr(signal, "SIGHUP", 1))
+
+
+if _IS_LINUX:  # pragma: no branch - definitions are platform-specific
+    import ctypes as _linux_ctypes
+
+    _linux_libc = _linux_ctypes.CDLL(None, use_errno=True)
+    _linux_libc.prctl.argtypes = [
+        _linux_ctypes.c_int,
+        _linux_ctypes.c_ulong,
+        _linux_ctypes.c_ulong,
+        _linux_ctypes.c_ulong,
+        _linux_ctypes.c_ulong,
+    ]
+    _linux_libc.prctl.restype = _linux_ctypes.c_int
+
+    _PR_SET_PDEATHSIG = 1
+    _PR_SET_CHILD_SUBREAPER = 36
+
+
+def _linux_prctl(option: int, argument: int, context: str) -> None:
+    if not _IS_LINUX:  # pragma: no cover - guarded by the Linux launcher
+        raise ProcessContainmentError(f"{context}: Linux is required")
+    if _linux_libc.prctl(option, argument, 0, 0, 0) != 0:
+        error_number = _linux_ctypes.get_errno()
+        error = OSError(error_number, os.strerror(error_number))
+        raise ProcessContainmentError(f"{context}: {error}")
+
+
+def _linux_direct_children(pid: int) -> tuple[int, ...]:
+    """Return kernel-recorded children, including adopted zombies."""
+
+    path = Path(f"/proc/{pid}/task/{pid}/children")
+    try:
+        payload = path.read_text(encoding="ascii")
+    except FileNotFoundError:
+        return ()
+    except OSError as error:
+        raise ProcessContainmentError(
+            f"could not inspect Linux child list for PID {pid}: {error}"
+        ) from error
+    children: list[int] = []
+    for field in payload.split():
+        if not field.isascii() or not field.isdecimal():
+            raise ProcessContainmentError("Linux child list contains invalid data")
+        child = int(field)
+        if child <= 0:
+            raise ProcessContainmentError("Linux child list contains an invalid PID")
+        children.append(child)
+    if len(children) != len(set(children)):
+        raise ProcessContainmentError("Linux child list contains duplicate PIDs")
+    return tuple(children)
+
+
+def _linux_descendants(root_pid: int) -> tuple[int, ...]:
+    pending = list(_linux_direct_children(root_pid))
+    descendants: list[int] = []
+    seen: set[int] = set()
+    while pending:
+        pid = pending.pop()
+        if pid in seen:
+            continue
+        seen.add(pid)
+        descendants.append(pid)
+        if len(descendants) > _LINUX_MAX_DESCENDANTS:
+            raise ProcessContainmentError("Linux containment descendant bound exceeded")
+        pending.extend(_linux_direct_children(pid))
+    return tuple(descendants)
+
+
+def _linux_signal_descendants(root_pid: int, signum: int) -> None:
+    # Re-enumerate immediately before signalling so a recycled PID that is no
+    # longer below the supervisor can never be targeted.
+    for pid in _linux_descendants(root_pid):
+        try:
+            os.kill(pid, signum)
+        except ProcessLookupError:
+            pass
+        except OSError as error:
+            raise ProcessContainmentError(
+                f"could not signal contained Linux PID {pid}: {error}"
+            ) from error
+
+
+def _linux_reap_available(
+    target_pid: int | None, target_status: int | None
+) -> int | None:
+    while True:
+        try:
+            pid, status = os.waitpid(-1, _LINUX_WNOHANG)
+        except ChildProcessError:
+            return target_status
+        except InterruptedError:
+            continue
+        except OSError as error:
+            raise ProcessContainmentError(
+                f"could not reap a contained Linux child: {error}"
+            ) from error
+        if pid == 0:
+            return target_status
+        if target_pid is not None and pid == target_pid:
+            target_status = status
+
+
+def _linux_drain_descendants(
+    supervisor_pid: int, target_pid: int | None, target_status: int | None
+) -> int | None:
+    """Freeze, kill and reap until the subreaper has no descendants."""
+
+    empty_observations = 0
+    while True:
+        target_status = _linux_reap_available(target_pid, target_status)
+        descendants = _linux_descendants(supervisor_pid)
+        if not descendants:
+            empty_observations += 1
+            if empty_observations >= 2:
+                return target_status
+            time.sleep(0.01)
+            continue
+        empty_observations = 0
+
+        # Stopping every currently reachable descendant closes the fork race.
+        # A second kernel walk catches children created just before their
+        # parent observed SIGSTOP; SIGKILL then collapses every branch back to
+        # this subreaper, where waitpid() can collect zombie-only trees.
+        _linux_signal_descendants(supervisor_pid, _LINUX_SIGSTOP)
+        time.sleep(0.005)
+        _linux_signal_descendants(supervisor_pid, _LINUX_SIGKILL)
+        target_status = _linux_reap_available(target_pid, target_status)
+        time.sleep(0.005)
+
+
+def _linux_status_exit_code(status: int) -> int:
+    code = os.waitstatus_to_exitcode(status)
+    if code < 0:
+        return min(255, 128 + abs(code))
+    return min(255, code)
+
+
+def _write_linux_readiness(fd: int, payload: bytes) -> None:
+    try:
+        view = memoryview(payload)
+        while view:
+            written = os.write(fd, view)
+            if written <= 0:
+                raise OSError("readiness pipe accepted no bytes")
+            view = view[written:]
+    finally:
+        os.close(fd)
+
+
+def _linux_supervisor_main(readiness_fd: int, command: Sequence[str]) -> int:
+    """Run inside the dedicated Linux subreaper process."""
+
+    terminate_requested = False
+    target: subprocess.Popen[bytes] | None = None
+    target_status: int | None = None
+    ready = False
+
+    def request_termination(signum: int, frame: Any) -> None:
+        del signum, frame
+        nonlocal terminate_requested
+        terminate_requested = True
+
+    for signum in (signal.SIGTERM, signal.SIGINT, _LINUX_SIGHUP):
+        signal.signal(signum, request_termination)
+
+    try:
+        parent_pid = os.getppid()
+        _linux_prctl(
+            _PR_SET_PDEATHSIG,
+            signal.SIGTERM,
+            "could not arm Linux supervisor parent-death signal",
+        )
+        _linux_prctl(
+            _PR_SET_CHILD_SUBREAPER,
+            1,
+            "could not make Linux containment supervisor a subreaper",
+        )
+        if os.getppid() != parent_pid:
+            raise ProcessContainmentError(
+                "Linux containment parent exited during supervisor setup"
+            )
+        # Prove procfs child accounting is available before untrusted code runs.
+        _linux_direct_children(os.getpid())
+        if terminate_requested:
+            raise ProcessContainmentError(
+                "Linux containment terminated before target launch"
+            )
+        target = subprocess.Popen(
+            list(command),
+            env=dict(os.environ),
+            shell=False,
+            close_fds=True,
+        )
+        _write_linux_readiness(readiness_fd, f"READY {target.pid}\n".encode("ascii"))
+        ready = True
+
+        while target_status is None and not terminate_requested:
+            target_status = _linux_reap_available(target.pid, target_status)
+            if target_status is None:
+                time.sleep(0.01)
+
+        target_status = _linux_drain_descendants(
+            os.getpid(), target.pid, target_status
+        )
+        if target_status is None:
+            raise ProcessContainmentError("Linux target exited without wait status")
+        target.returncode = os.waitstatus_to_exitcode(target_status)
+        if terminate_requested:
+            return 128 + signal.SIGTERM
+        return _linux_status_exit_code(target_status)
+    except BaseException as error:
+        if not ready:
+            try:
+                _write_linux_readiness(
+                    readiness_fd,
+                    ("ERROR " + str(error).replace("\r", " ").replace("\n", " "))[
+                        :2048
+                    ].encode("utf-8", "replace")
+                    + b"\n",
+                )
+            except OSError:
+                pass
+        if target is not None:
+            try:
+                target_status = _linux_drain_descendants(
+                    os.getpid(), target.pid, target_status
+                )
+                if target_status is not None:
+                    target.returncode = os.waitstatus_to_exitcode(target_status)
+            except BaseException as cleanup_error:
+                print(
+                    f"Linux containment cleanup failure: {cleanup_error}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+        print(f"Linux containment failure: {error}", file=sys.stderr, flush=True)
+        return 125
+
+
+def _read_linux_supervisor_readiness(
+    fd: int, process: subprocess.Popen[bytes]
+) -> int:
+    deadline = time.monotonic() + _LINUX_SUPERVISOR_READY_TIMEOUT_SECONDS
+    payload = bytearray()
+    try:
+        while b"\n" not in payload and len(payload) <= 4096:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise ProcessContainmentError(
+                    "Linux containment supervisor readiness timed out"
+                )
+            try:
+                readable, _, _ = select.select([fd], [], [], remaining)
+            except InterruptedError:
+                continue
+            if not readable:
+                raise ProcessContainmentError(
+                    "Linux containment supervisor readiness timed out"
+                )
+            chunk = os.read(fd, 4096 - len(payload) + 1)
+            if not chunk:
+                break
+            payload.extend(chunk)
+    finally:
+        os.close(fd)
+    if len(payload) > 4096 or payload.count(b"\n") != 1 or not payload.endswith(b"\n"):
+        raise ProcessContainmentError(
+            "Linux containment supervisor emitted invalid readiness data"
+        )
+    line = bytes(payload[:-1])
+    prefix = b"READY "
+    if line.startswith(prefix) and line[len(prefix) :].isdigit():
+        pid = int(line[len(prefix) :])
+        if pid > 0:
+            return pid
+    detail = line.decode("utf-8", "replace")
+    if process.poll() is not None:
+        detail += f" (supervisor exited {process.returncode})"
+    raise ProcessContainmentError(
+        f"Linux containment supervisor did not become ready: {detail}"
+    )
+
+
+def _launch_linux_supervisor(
+    command: Sequence[str],
+    *,
+    cwd: os.PathLike[str] | str,
+    environment: Mapping[str, str],
+    stdin: Any,
+    stdout: Any,
+    stderr: Any,
+) -> "ContainedProcess":
+    read_fd, write_fd = os.pipe()
+    process: subprocess.Popen[bytes] | None = None
+    try:
+        helper = Path(__file__).resolve(strict=True)
+        process = subprocess.Popen(
+            [
+                sys.executable,
+                "-I",
+                "-S",
+                str(helper),
+                "--linux-supervisor",
+                str(write_fd),
+                "--",
+                *command,
+            ],
+            cwd=cwd,
+            env=dict(environment),
+            stdin=stdin,
+            stdout=stdout,
+            stderr=stderr,
+            shell=False,
+            start_new_session=True,
+            pass_fds=(write_fd,),
+        )
+        os.close(write_fd)
+        write_fd = -1
+        try:
+            target_pid = _read_linux_supervisor_readiness(read_fd, process)
+        finally:
+            read_fd = -1
+        return ContainedProcess(process, ("linux-subreaper", target_pid))
+    except BaseException as error:
+        if read_fd >= 0:
+            os.close(read_fd)
+        if write_fd >= 0:
+            os.close(write_fd)
+        cleanup_error: BaseException | None = None
+        if process is not None:
+            try:
+                if process.poll() is None:
+                    process.terminate()
+                process.wait(timeout=15)
+            except BaseException as candidate:
+                cleanup_error = candidate
+        if cleanup_error is not None:
+            raise ProcessContainmentError(
+                f"failed Linux supervisor launch was not contained: {cleanup_error}"
+            ) from error
+        if isinstance(error, ProcessContainmentError):
+            raise
+        if isinstance(error, (KeyboardInterrupt, SystemExit)):
+            raise
+        raise ProcessContainmentError(
+            f"could not create Linux containment supervisor: {error}"
+        ) from error
+
+
+def _launch_posix_contained(
+    command: Sequence[str],
+    *,
+    cwd: os.PathLike[str] | str,
+    environment: Mapping[str, str],
+    stdin: Any,
+    stdout: Any,
+    stderr: Any,
+) -> "ContainedProcess":
+    if not _IS_LINUX:
+        raise ProcessContainmentError(
+            "fail-closed process-tree containment is available only on Windows and Linux"
+        )
+    return _launch_linux_supervisor(
+        command,
+        cwd=cwd,
+        environment=environment,
+        stdin=stdin,
+        stdout=stdout,
+        stderr=stderr,
+    )
 
 
 if os.name == "nt":  # pragma: no branch - definitions are platform-specific
@@ -289,7 +672,6 @@ class ContainedProcess:
             return
         deadline = time.monotonic() + timeout
         errors: list[str] = []
-        posix_group: int | None = None
         if os.name == "nt":
             job = self._token
             try:
@@ -299,53 +681,52 @@ class ContainedProcess:
                     _close_windows_handle(job, "Job Object")
                 except ProcessContainmentError as error:
                     errors.append(str(error))
-        else:
-            posix_group = int(self._token)
+        elif _IS_LINUX:
             try:
-                os.killpg(posix_group, signal.SIGKILL)
+                if self.process.poll() is None:
+                    os.kill(self.process.pid, signal.SIGTERM)
             except ProcessLookupError:
                 pass
             except OSError as error:
-                errors.append(f"could not terminate POSIX process group: {error}")
+                errors.append(f"could not request Linux supervisor cleanup: {error}")
+        else:  # pragma: no cover - launch_contained rejects this platform
+            errors.append("unsupported POSIX containment platform")
 
         self._closed = True
         remaining = max(0.0, deadline - time.monotonic())
         try:
             self.process.wait(timeout=remaining)
         except subprocess.TimeoutExpired:
-            errors.append("contained root process did not terminate")
-            try:
-                self.process.kill()
-                self.process.wait(timeout=1)
-            except (OSError, subprocess.TimeoutExpired):
-                pass
+            if _IS_LINUX:
+                # Do not kill the subreaper and thereby release adopted
+                # descendants.  It remains alive, continuously draining its
+                # tree, while the release gate fails closed.
+                errors.append("Linux containment supervisor did not finish cleanup")
+            else:
+                errors.append("contained root process did not terminate")
+                try:
+                    self.process.kill()
+                    self.process.wait(timeout=1)
+                except (OSError, subprocess.TimeoutExpired):
+                    pass
         except OSError as error:
             errors.append(f"could not reap contained root process: {error}")
-        if posix_group is not None:
-            while True:
-                try:
-                    os.killpg(posix_group, 0)
-                except ProcessLookupError:
-                    break
-                except OSError as error:
-                    errors.append(
-                        f"could not verify POSIX process-group termination: {error}"
-                    )
-                    break
-                if time.monotonic() >= deadline:
-                    errors.append("POSIX process group still contains active processes")
-                    break
-                time.sleep(0.01)
         if errors:
             raise ProcessContainmentError("; ".join(errors))
 
     def __del__(self) -> None:  # pragma: no cover - emergency interpreter cleanup
-        if self._closed or os.name != "nt":
+        if self._closed:
             return
-        try:
-            _kernel32.CloseHandle(self._token)
-        except BaseException:
-            pass
+        if os.name == "nt":
+            try:
+                _kernel32.CloseHandle(self._token)
+            except BaseException:
+                pass
+        elif _IS_LINUX:
+            try:
+                os.kill(self.process.pid, signal.SIGTERM)
+            except BaseException:
+                pass
         self._closed = True
 
 
@@ -422,14 +803,35 @@ def launch_contained(
                 f"could not create contained Windows child: {error}"
             ) from error
 
-    process = subprocess.Popen(
-        list(command),
+    return _launch_posix_contained(
+        command,
         cwd=cwd,
-        env=dict(environment),
+        environment=environment,
         stdin=stdin,
         stdout=stdout,
         stderr=stderr,
-        shell=False,
-        start_new_session=True,
     )
-    return ContainedProcess(process, process.pid)
+
+
+def _main(arguments: Sequence[str]) -> int:
+    if (
+        len(arguments) < 4
+        or arguments[0] != "--linux-supervisor"
+        or arguments[2] != "--"
+        or not arguments[1].isascii()
+        or not arguments[1].isdecimal()
+    ):
+        print("atomic_process_containment.py is an internal helper", file=sys.stderr)
+        return 2
+    readiness_fd = int(arguments[1])
+    if readiness_fd < 3 or not arguments[3:]:
+        print("invalid Linux containment supervisor invocation", file=sys.stderr)
+        return 2
+    if not _IS_LINUX:
+        print("Linux containment supervisor invoked on another platform", file=sys.stderr)
+        return 125
+    return _linux_supervisor_main(readiness_fd, arguments[3:])
+
+
+if __name__ == "__main__":  # pragma: no cover - exercised in a real subprocess
+    raise SystemExit(_main(sys.argv[1:]))
