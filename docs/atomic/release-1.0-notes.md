@@ -77,9 +77,14 @@ contains the raw five-run BMI2 samples so the medians and speed ratio can be
 recomputed independently. The assembled bundle and the bounded text/JSON gate
 evidence are both covered by GitHub artifact attestations produced with a
 commit-pinned action.
-The sequential gates have 1,470 minutes of tracked execution budget inside a
-1,620-minute self-hosted job, leaving 150 minutes for setup and release-evidence
-work. Child output is streamed under one 32 MiB bound per gate, and timeout or
+The sequential gates have 1,110 minutes of tracked execution budget inside a
+1,260-minute (21-hour) self-hosted job, leaving 150 minutes for setup and
+release-evidence work plus three hours below GitHub's 24-hour token ceiling.
+The complete Hito 5 release runner is recorded as passing, while the pinned
+pipeline job cited by the validation record completed in 157 seconds. The
+recorded 13-position BMI2 run consumed about 10.9 seconds of aggregate engine
+time for its twelve samples, so its one-hour budget remains conservative.
+Child output is streamed under one 32 MiB bound per gate, and timeout or
 overflow terminates the complete child process tree before cleanup continues.
 
 Automation may create only a draft after GitHub release immutability is already

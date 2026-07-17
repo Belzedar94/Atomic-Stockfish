@@ -16,7 +16,7 @@
       "commandPlan": "scripts/atomic-release-exact-tag-plan-v1.json",
       "environment": "atomic-release-gates",
       "evidenceExtensions": [".json", ".log", ".txt"],
-      "jobTimeoutMinutes": 1620,
+      "jobTimeoutMinutes": 1260,
       "outputLimitBytes": 33554432,
       "requiredGates": ["hito4-release", "legacy-v1-strong-local", "hito5-release", "syzygy-real-3-to-6", "atomic-bin-v2-strong-local", "bmi2-vs-fairy"],
       "runnerLabels": ["self-hosted", "Windows", "X64", "atomic-release-gates"],
@@ -28,7 +28,7 @@
         "KPPPPvK.atbw": "897a15846a4b027cbd0a31e425fdf0690f68c0bd4e62105cca2055678e2910f9",
         "KPPPPvK.atbz": "e740168d8cbb0bf662863f278ef470c5d7eb395ece0c8bf80fed004a47991bc6"
       },
-      "timeoutBudgetSeconds": 88200
+      "timeoutBudgetSeconds": 66600
     },
     "immutableReleasesReadSecret": "ATOMIC_RELEASE_POLICY_TOKEN",
     "immutableReleasesRequired": true,

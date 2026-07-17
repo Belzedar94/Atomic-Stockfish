@@ -92,6 +92,20 @@ REQUIRED_GATES = (
     "atomic-bin-v2-strong-local",
     BENCH_GATE,
 )
+GATE_TIMEOUT_SECONDS = {
+    "hito4-release": 10_800,
+    "legacy-v1-strong-local": 7_200,
+    "hito5-release": 32_400,
+    "syzygy-real-3-to-6": 1_800,
+    "atomic-bin-v2-strong-local": 10_800,
+    BENCH_GATE: 3_600,
+}
+GATE_TIMEOUT_BUDGET_SECONDS = 66_600
+if (
+    tuple(GATE_TIMEOUT_SECONDS) != REQUIRED_GATES
+    or sum(GATE_TIMEOUT_SECONDS.values()) != GATE_TIMEOUT_BUDGET_SECONDS
+):  # pragma: no cover - import-time release-contract invariant
+    raise RuntimeError("exact-tag gate timeout budget is internally inconsistent")
 FROZEN_EXTERNAL_SHA256 = {
     "legacy_net": "99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f92a04a6",
     "fairy_h5_oracle": "1ae6d680f03128c8404f31a3f264f28b132b557ed3a91a6445ec563a7a33f623",
@@ -130,8 +144,6 @@ MAX_SCHEMA_BYTES = 512 * 1024
 MAX_PLAN_BYTES = 512 * 1024
 MAX_COMMAND_ARGUMENTS = 128
 MAX_COMMAND_CHARACTERS = 32 * 1024
-MIN_GATE_TIMEOUT_SECONDS = 1
-MAX_GATE_TIMEOUT_SECONDS = 12 * 60 * 60
 MAX_GATE_OUTPUT_BYTES = 32 * 1024 * 1024
 OUTPUT_READ_BYTES = 64 * 1024
 PROCESS_POLL_SECONDS = 0.05
@@ -904,9 +916,12 @@ def load_command_plan(
             raise ExactTagGateError(f"command plan gate order/ID mismatch: {expected_id}")
         if (
             not _is_int(gate["timeoutSeconds"])
-            or not MIN_GATE_TIMEOUT_SECONDS <= gate["timeoutSeconds"] <= MAX_GATE_TIMEOUT_SECONDS
+            or gate["timeoutSeconds"] != GATE_TIMEOUT_SECONDS[expected_id]
         ):
-            raise ExactTagGateError(f"{expected_id} timeout is out of bounds")
+            raise ExactTagGateError(
+                f"{expected_id} timeout must be exactly "
+                f"{GATE_TIMEOUT_SECONDS[expected_id]} seconds"
+            )
         _validate_command_template(
             repo_root,
             expected_id,

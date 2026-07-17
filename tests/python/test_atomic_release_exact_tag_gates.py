@@ -129,7 +129,7 @@ def command_plan(mode: str = "normal") -> dict[str, Any]:
         gates.append(
             {
                 "id": gate_id,
-                "timeoutSeconds": 30,
+                "timeoutSeconds": EXACT.GATE_TIMEOUT_SECONDS[gate_id],
                 "argv": argv,
                 "evidence": [receipt],
                 "receiptEvidence": receipt,
@@ -659,11 +659,18 @@ def test_command_plan_is_tracked_canonical_and_has_no_runtime_command_surface(
     bundle = make_bundle(tmp_path, monkeypatch, run=False)
     plan, record = EXACT.load_command_plan(bundle["repo"], bundle["plan"])
     assert [gate["id"] for gate in plan["gates"]] == list(EXACT.REQUIRED_GATES)
+    assert {
+        gate["id"]: gate["timeoutSeconds"] for gate in plan["gates"]
+    } == EXACT.GATE_TIMEOUT_SECONDS
+    assert sum(EXACT.GATE_TIMEOUT_SECONDS.values()) == EXACT.GATE_TIMEOUT_BUDGET_SECONDS
     assert plan["directories"] == ["syzygy_combined"]
     assert "@repository:fairy@" in plan["gates"][0]["argv"]
     assert record["gitBlob"] == git(
         bundle["repo"], "rev-parse", "HEAD:release-plan.json"
     )
+    assert record["sha256"] == hashlib.sha256(
+        (bundle["repo"] / "release-plan.json").read_bytes()
+    ).hexdigest()
     run_help = subprocess.run(
         [sys.executable, str(ROOT / "scripts/atomic_release_exact_tag_gates.py"), "run", "--help"],
         check=True,
@@ -715,6 +722,9 @@ def test_productive_plan_is_canonical_and_matches_every_closed_gate_cli() -> Non
         "gate_workspace",
     ]
     assert [gate["id"] for gate in plan["gates"]] == list(EXACT.REQUIRED_GATES)
+    assert {
+        gate["id"]: gate["timeoutSeconds"] for gate in plan["gates"]
+    } == EXACT.GATE_TIMEOUT_SECONDS
     for gate in plan["gates"][:-1]:
         arguments = ORCHESTRATOR.parse_args(gate["argv"][2:])
         assert arguments.gate == gate["id"]

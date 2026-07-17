@@ -1078,9 +1078,10 @@ jobs:
       - assemble
     runs-on: [self-hosted, Windows, X64, atomic-release-gates]
     environment: atomic-release-gates
-    # The six sequential tracked budgets total 1,470 minutes. Keep 150 minutes
+    # The six sequential tracked budgets total 1,110 minutes. Keep 150 minutes
     # for authenticated setup, packaging, attestations and fail-closed cleanup.
-    timeout-minutes: 1620
+    # The resulting 21-hour job retains three hours below GitHub's token ceiling.
+    timeout-minutes: 1260
     permissions:
       actions: read
       attestations: write
@@ -1135,6 +1136,10 @@ jobs:
           EXACT_ROOT: ${{ steps.exact_scratch.outputs.root }}
         run: |
           $ErrorActionPreference = 'Stop'
+          Get-ChildItem Env: | Where-Object { $_.Name -like 'PYTHON*' } |
+            ForEach-Object {
+              Remove-Item -LiteralPath "Env:$($_.Name)" -ErrorAction SilentlyContinue
+            }
           $exactRoot = [IO.Path]::GetFullPath($env:EXACT_ROOT)
           $runtimeName = 'controller-python'
           $runtimeRoot = [IO.Path]::GetFullPath((Join-Path $exactRoot $runtimeName))
@@ -1147,32 +1152,32 @@ jobs:
             throw "controller runtime root already exists: $runtimeRoot"
           }
           $bootstrap = (Get-Command python -ErrorAction Stop).Source
-          & $bootstrap -c `
+          & $bootstrap -I -c `
             "import sys; assert sys.version_info[:3] == (3, 12, 10), sys.version"
           if ($LASTEXITCODE -ne 0) { throw 'setup-python did not provide CPython 3.12.10' }
-          & $bootstrap -m venv --copies $runtimeRoot
+          & $bootstrap -I -m venv --copies $runtimeRoot
           if ($LASTEXITCODE -ne 0) { throw 'controller virtual environment creation failed' }
           $controllerPython = Join-Path $runtimeRoot 'Scripts/python.exe'
           $controllerItem = Get-Item -LiteralPath $controllerPython -Force
           if ($controllerItem.Attributes -band [IO.FileAttributes]::ReparsePoint) {
             throw 'controller Python executable is a reparse point'
           }
-          & $controllerPython -m pip install --disable-pip-version-check `
+          & $controllerPython -I -m pip --isolated install --disable-pip-version-check `
             --only-binary=:all: --require-hashes `
             -r tests/pip-bootstrap-requirements.txt
           if ($LASTEXITCODE -ne 0) { throw 'pinned pip bootstrap failed' }
-          & $controllerPython -m pip install --disable-pip-version-check `
+          & $controllerPython -I -m pip --isolated install --disable-pip-version-check `
             --dry-run --ignore-installed --quiet `
             --only-binary=:all: --require-hashes `
             -r tests/release-ci-requirements.txt
           if ($LASTEXITCODE -ne 0) { throw 'controller lock dry-run failed' }
-          & $controllerPython -m pip install --disable-pip-version-check `
+          & $controllerPython -I -m pip --isolated install --disable-pip-version-check `
             --only-binary=:all: --require-hashes `
             -r tests/release-ci-requirements.txt
           if ($LASTEXITCODE -ne 0) { throw 'controller tooling installation failed' }
-          & $controllerPython -m pip check
+          & $controllerPython -I -m pip --isolated check
           if ($LASTEXITCODE -ne 0) { throw 'controller dependency closure is inconsistent' }
-          & $controllerPython -P -c @'
+          & $controllerPython -I -P -c @'
           import importlib.metadata as metadata
           import jsonschema
           import psutil
@@ -1199,6 +1204,10 @@ jobs:
           EXACT_ROOT: ${{ steps.exact_scratch.outputs.root }}
         run: |
           $ErrorActionPreference = 'Stop'
+          Get-ChildItem Env: | Where-Object { $_.Name -like 'PYTHON*' } |
+            ForEach-Object {
+              Remove-Item -LiteralPath "Env:$($_.Name)" -ErrorAction SilentlyContinue
+            }
           $exactRoot = [IO.Path]::GetFullPath($env:EXACT_ROOT)
           $runtimeName = 'pipeline-python'
           $runtimeRoot = [IO.Path]::GetFullPath((Join-Path $exactRoot $runtimeName))
@@ -1211,32 +1220,33 @@ jobs:
             throw "pipeline runtime root already exists: $runtimeRoot"
           }
           $bootstrap = (Get-Command python -ErrorAction Stop).Source
-          & $bootstrap -c `
+          & $bootstrap -I -c `
             "import sys; assert sys.version_info[:3] == (3, 10, 18), sys.version"
           if ($LASTEXITCODE -ne 0) { throw 'setup-python did not provide CPython 3.10.18' }
-          & $bootstrap -m venv --copies $runtimeRoot
+          & $bootstrap -I -m venv --copies $runtimeRoot
           if ($LASTEXITCODE -ne 0) { throw 'pipeline virtual environment creation failed' }
           $pipelinePython = Join-Path $runtimeRoot 'Scripts/python.exe'
           $pipelineItem = Get-Item -LiteralPath $pipelinePython -Force
           if ($pipelineItem.Attributes -band [IO.FileAttributes]::ReparsePoint) {
             throw 'pipeline Python executable is a reparse point'
           }
-          & $pipelinePython -m pip install --disable-pip-version-check `
+          & $pipelinePython -I -m pip --isolated install --disable-pip-version-check `
             --only-binary=:all: --require-hashes `
             -r tests/pip-bootstrap-requirements.txt
           if ($LASTEXITCODE -ne 0) { throw 'pipeline pinned pip bootstrap failed' }
-          & $pipelinePython -m pip install --disable-pip-version-check `
+          & $pipelinePython -I -m pip --isolated install --disable-pip-version-check `
             --dry-run --ignore-installed --quiet `
             --only-binary=:all: --require-hashes `
             -r tests/legacy_pipeline-ci-requirements.txt
           if ($LASTEXITCODE -ne 0) { throw 'pipeline lock dry-run failed' }
-          & $pipelinePython -m pip install --disable-pip-version-check `
+          & $pipelinePython -I -m pip --isolated install --disable-pip-version-check `
             --only-binary=:all: --require-hashes `
             -r tests/legacy_pipeline-ci-requirements.txt
           if ($LASTEXITCODE -ne 0) { throw 'pipeline tooling installation failed' }
-          & $pipelinePython -m pip check
+          & $pipelinePython -I -m pip --isolated check
           if ($LASTEXITCODE -ne 0) { throw 'pipeline dependency closure is inconsistent' }
-          & $pipelinePython -c @'
+          # CPython 3.10 predates -P; -I supplies its isolated import path.
+          & $pipelinePython -I -c @'
           import chess
           import importlib.metadata as metadata
           import numpy

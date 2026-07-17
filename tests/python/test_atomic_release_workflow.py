@@ -1,5 +1,8 @@
 import json
+import os
 from pathlib import Path
+import subprocess
+import sys
 
 from scripts.run_atomic_release_contract_tests import (
     discover_release_contract_tests,
@@ -94,10 +97,11 @@ def test_release_python_installs_are_closed_or_pre_authenticated() -> None:
     assert exact.count("-r tests/pip-bootstrap-requirements.txt") == 2
     assert exact.count("-r tests/release-ci-requirements.txt") == 2
     assert exact.count("-r tests/legacy_pipeline-ci-requirements.txt") == 2
-    assert exact.count("-m pip check") == 2
+    assert exact.count("-I -m pip --isolated") == 8
+    assert exact.count("-I -m pip --isolated check") == 2
     assert "python-version: '3.12.10'" in exact
     assert "python-version: '3.10.18'" in exact
-    assert exact.count("-m venv --copies") == 2
+    assert exact.count("-I -m venv --copies") == 2
     assert 'assert psutil.__version__ == "7.2.2"' in exact
     assert 'assert torch.__version__ == "2.1.2+cpu"' in exact
     assert "pipeline_python = $env:PIPELINE_PYTHON" in exact
@@ -118,11 +122,34 @@ def test_exact_tag_job_can_honor_every_sequential_gate_timeout() -> None:
             encoding="utf-8"
         )
     )
-    gate_budget_seconds = sum(gate["timeoutSeconds"] for gate in plan["gates"])
-    job_budget_minutes = 1620
+    expected_timeouts = {
+        "hito4-release": 10_800,
+        "legacy-v1-strong-local": 7_200,
+        "hito5-release": 32_400,
+        "syzygy-real-3-to-6": 1_800,
+        "atomic-bin-v2-strong-local": 10_800,
+        "bmi2-vs-fairy": 3_600,
+    }
+    actual_timeouts = {
+        gate["id"]: gate["timeoutSeconds"] for gate in plan["gates"]
+    }
+    assert actual_timeouts == expected_timeouts
+    gate_budget_seconds = sum(actual_timeouts.values())
+    job_budget_minutes = 1260
     setup_and_cleanup_seconds = 150 * 60
+    github_token_ceiling_minutes = 24 * 60
+    inventory = json.loads(
+        (ROOT / "docs" / "atomic" / "release-1.0-inventory.json").read_text(
+            encoding="utf-8"
+        )
+    )["releasePolicy"]["exactTagExternalGates"]
+    assert gate_budget_seconds == 66_600
+    assert inventory["timeoutBudgetSeconds"] == gate_budget_seconds
+    assert inventory["jobTimeoutMinutes"] == job_budget_minutes
     assert f"timeout-minutes: {job_budget_minutes}" in exact
     assert job_budget_minutes * 60 == gate_budget_seconds + setup_and_cleanup_seconds
+    assert job_budget_minutes < github_token_ceiling_minutes
+    assert github_token_ceiling_minutes - job_budget_minutes == 180
 
 
 def test_python_wheel_builder_is_digest_pinned_and_in_provenance() -> None:
@@ -272,6 +299,27 @@ def test_exact_tag_controllers_are_isolated_on_the_windows_containment_runner() 
     assert exact.count("Remove-Item Env:PYTHONPATH -ErrorAction SilentlyContinue") == 2
     assert exact.count("Remove-Item Env:PYTHONHOME -ErrorAction SilentlyContinue") == 2
 
+    controller = exact.split(
+        "      - name: Create an isolated hash-closed Python 3.12 controller", 1
+    )[1].split("      - id: setup_pipeline_python", 1)[0]
+    pipeline = exact.split(
+        "      - name: Create an isolated hash-closed Python 3.10 legacy pipeline", 1
+    )[1].split(
+        "      - name: Authenticate the same-run assembled artifact before download", 1
+    )[0]
+    for runtime, executable in (
+        (controller, "$controllerPython"),
+        (pipeline, "$pipelinePython"),
+    ):
+        scrub = "Where-Object { $_.Name -like 'PYTHON*' }"
+        assert runtime.count(scrub) == 1
+        assert runtime.index(scrub) < runtime.index("$bootstrap =")
+        assert runtime.count("& $bootstrap -I -c") == 1
+        assert runtime.count("& $bootstrap -I -m venv --copies $runtimeRoot") == 1
+        assert runtime.count(f"& {executable} -I -m pip --isolated") == 4
+    assert "& $controllerPython -I -P -c @'" in controller
+    assert "& $pipelinePython -I -c @'" in pipeline
+
     release_pr = release_pr_workflow()
     assert "atomic_process_containment_linux.py" not in release_pr
     assert "tests/atomic_process_containment_posix.py" in release_pr
@@ -281,6 +329,67 @@ def test_exact_tag_controllers_are_isolated_on_the_windows_containment_runner() 
         in release_pr
     )
     assert "PR_SET_CHILD_SUBREAPER" not in recipe("atomic_process_containment.py")
+
+
+def test_isolated_bootstrap_and_preflight_ignore_pythonpath_sitecustomize_and_shadows(
+    tmp_path: Path,
+) -> None:
+    shadow = tmp_path / "shadow"
+    shadow.mkdir()
+    marker = tmp_path / "attacker-ran.txt"
+    payload = (
+        "from pathlib import Path\n"
+        f"Path({str(marker)!r}).write_text('attacker ran', encoding='ascii')\n"
+        "raise RuntimeError('attacker module executed')\n"
+    )
+    for name in ("sitecustomize.py", "venv.py", "json.py", "pip.py"):
+        (shadow / name).write_text(payload, encoding="ascii")
+
+    environment = dict(os.environ)
+    environment["PYTHONPATH"] = str(shadow)
+    environment["PYTHONHOME"] = str(tmp_path / "invalid-python-home")
+    environment["PYTHONSTARTUP"] = str(shadow / "sitecustomize.py")
+
+    def isolated(*arguments: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [sys.executable, "-I", *arguments],
+            cwd=shadow,
+            env=environment,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+
+    version = isolated("-c", "import sys; assert sys.version_info >= (3, 9)")
+    assert version.returncode == 0, version.stderr
+    runtime = tmp_path / "isolated-runtime"
+    created = isolated("-m", "venv", "--without-pip", str(runtime))
+    assert created.returncode == 0, created.stderr
+    pip = isolated("-m", "pip", "--isolated", "--version")
+    assert pip.returncode == 0, pip.stderr
+
+    runtime_python = runtime / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+    preflight = subprocess.run(
+        [
+            str(runtime_python),
+            "-I",
+            "-c",
+            "import json, pathlib; assert pathlib.Path(json.__file__).name != 'shadow'",
+        ],
+        cwd=shadow,
+        env=environment,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    assert preflight.returncode == 0, preflight.stderr
+    assert not marker.exists()
 
 
 def test_native_toolchains_are_digest_pinned_and_reproduced_in_isolated_roots() -> None:

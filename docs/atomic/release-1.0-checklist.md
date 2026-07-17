@@ -105,9 +105,16 @@ platform-only skips. A missing runner, tool, network, table, repository or
 artifact fails the release and must be repaired before the tag can proceed.
 Development suites may retain their already documented platform conditions,
 but they cannot substitute for or weaken these six release receipts.
-Their tracked sequential timeout budgets total 1,470 minutes. The self-hosted
-job is therefore bounded at 1,620 minutes: the remaining 150 minutes cover
-authenticated setup, evidence packaging, attestations and fail-closed cleanup.
+Their tracked sequential timeout budgets total 1,110 minutes. The self-hosted
+job is bounded at 1,260 minutes (21 hours): 150 minutes cover authenticated
+setup, evidence packaging, attestations and fail-closed cleanup, while the job
+retains three hours below GitHub's 24-hour token ceiling. The individual limits
+are 3 hours for Hito 4, 2 hours for Legacy V1, 9 hours for Hito 5, 30 minutes
+for Syzygy, 3 hours for atomic-bin-v2 and 1 hour for the BMI2 benchmark. Hito
+5's complete release runner is already recorded as passing, and the pinned
+pipeline job cited in the validation record completed in 157 seconds. The
+recorded 13-position BMI2 run used about 10.9 seconds of aggregate engine time
+for all twelve samples, far below its one-hour outer limit.
 Both the outer controller and each fixed wrapper cap combined child output at
 32 MiB while it is produced and terminate the complete process tree on timeout
 or overflow.

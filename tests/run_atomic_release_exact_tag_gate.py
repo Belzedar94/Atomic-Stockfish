@@ -124,9 +124,9 @@ PIPELINE_PYTHON_VERSION = (3, 10, 18)
 TIMEOUTS = {
     "hito4-release": 10_800,
     "legacy-v1-strong-local": 7_200,
-    "hito5-release": 43_200,
+    "hito5-release": 32_400,
     "syzygy-real-3-to-6": 1_800,
-    "atomic-bin-v2-strong-local": 14_400,
+    "atomic-bin-v2-strong-local": 10_800,
 }
 
 SAFE_ENVIRONMENT = frozenset(
@@ -1605,7 +1605,7 @@ def _execute_command(
     )
     if not _same_path(actual_launcher, authenticated_launcher):
         raise GateError("exact gate must use its authenticated Python launcher")
-    if not 1 <= timeout_seconds <= 43_200:
+    if not 1 <= timeout_seconds <= 32_400:
         raise GateError("exact gate timeout is outside the fixed release bound")
     started = time.monotonic()
     output_buffer = bytearray()

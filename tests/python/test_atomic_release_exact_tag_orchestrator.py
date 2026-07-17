@@ -404,6 +404,16 @@ def test_syzygy_command_always_requires_six_man_and_nnue(
     assert command[command.index("--timeout") + 1] == "60"
 
 
+def test_fixed_wrapper_timeouts_match_the_release_budget() -> None:
+    assert GATE.TIMEOUTS == {
+        "hito4-release": 10_800,
+        "legacy-v1-strong-local": 7_200,
+        "hito5-release": 32_400,
+        "syzygy-real-3-to-6": 1_800,
+        "atomic-bin-v2-strong-local": 10_800,
+    }
+
+
 def test_h7_command_has_fixed_profile_refs_seeds_and_hashes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
