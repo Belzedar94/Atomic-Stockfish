@@ -20,7 +20,7 @@ large variant matrix:
 - the `pyffish` Python API;
 - CommonJS and ES-module JavaScript APIs;
 - lightweight Board WebAssembly and a Node UCI/NNUE WebAssembly engine;
-- Legacy Atomic NNUE V1 and AtomicNNUEV2 networks;
+- Legacy Atomic NNUE V1, AtomicNNUEV2 and AtomicNNUEV3 networks;
 - Atomic Syzygy WDL/DTZ tables (`.atbw` and `.atbz`).
 
 UCCI, USI and non-Atomic variants are outside the release contract.
@@ -28,8 +28,8 @@ UCCI, USI and non-Atomic variants are outside the release contract.
 ## Neural network
 
 NNUE files are external artifacts and are never downloaded or embedded by the
-native build. Set `EvalFile` to a compatible Legacy Atomic V1 or AtomicNNUEV2
-network and select one of:
+native build. Set `EvalFile` to a compatible Legacy Atomic V1, AtomicNNUEV2 or
+AtomicNNUEV3 network and select one of:
 
 ```text
 setoption name Use NNUE value false
@@ -46,6 +46,10 @@ An incompatible or missing network blocks `go` when NNUE is enabled. The frozen
 development reference is `atomic_run3b_e202_l05.nnue`, identified by SHA-256
 `99DC67EABF26A64FAEECA3A88B4C38597A840B8D4A874B9F2CF658C6F92A04A6`.
 The file is not distributed here.
+
+AtomicNNUEV3 is a supported runtime format, but version 1.0 does not bundle or
+endorse a V3 release-candidate network. The owner-capped sequential four-run V3
+bootstrap campaign remains explicitly non-publication evidence.
 
 ## Native build
 

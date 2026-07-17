@@ -116,7 +116,7 @@ FROZEN_EXTERNAL_SHA256 = {
 }
 FROZEN_AUX_REPOSITORY_COMMITS = {
     "tools": "450049ee7a0ece32694b11f6c55deb7df1d42a84",
-    "trainer": "44663e28c3e5464ff3be2cdaa26c8518b3951c5f",
+    "trainer": "3a19c16fc3d477b1ee7602ccc6510736bc7604cc",
     "fairy": "fb78cb561aa01708338e35b3dc3b65a42149a3c4",
 }
 

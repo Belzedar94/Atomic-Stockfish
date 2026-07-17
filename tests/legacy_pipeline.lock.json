@@ -14,7 +14,7 @@
     },
     "trainer": {
       "repository": "Belzedar94/variant-nnue-pytorch",
-      "commit": "44663e28c3e5464ff3be2cdaa26c8518b3951c5f",
+      "commit": "3a19c16fc3d477b1ee7602ccc6510736bc7604cc",
       "resolved": true
     }
   },

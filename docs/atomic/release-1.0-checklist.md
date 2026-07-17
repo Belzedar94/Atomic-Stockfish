@@ -11,22 +11,27 @@ described below.
 ## Frozen inputs
 
 - Atomic-Stockfish `main` contains engine PR #42 merge
-  `dde43fc08fb2bd45eec09d3dbe9f6d06845eeb24` and PR #43 merge
-  `420c9f35266fbdc2167dc5b9d8d20d90281c60c9`.
-- `variant-nnue-pytorch/atomic` contains trainer PR #13 merge
-  `44663e28c3e5464ff3be2cdaa26c8518b3951c5f` and intentionally authenticates
-  the H9.3l-a contract commit where required.
+  `dde43fc08fb2bd45eec09d3dbe9f6d06845eeb24`, PR #43 merge
+  `420c9f35266fbdc2167dc5b9d8d20d90281c60c9` and the public V3 runtime in
+  PR #45 merge `00ac6131829ebc5676ddede5868acdbcf83cbeef`.
+- `variant-nnue-pytorch/atomic` contains trainer PR #14 merge
+  `3a19c16fc3d477b1ee7602ccc6510736bc7604cc`. Its reviewed head
+  `0448de38c28bff276875f0bbf6a675da995d1bc0` has the identical tree, and the
+  trainer authenticates engine merge `420c9f35266fbdc2167dc5b9d8d20d90281c60c9`.
 - `variant-nnue-tools/atomic` pins final engine merge
   `420c9f35266fbdc2167dc5b9d8d20d90281c60c9` in reviewed PR #33 merge
   `450049ee7a0ece32694b11f6c55deb7df1d42a84`.
 - `tests/legacy_pipeline.lock.json` records tools merge
   `450049ee7a0ece32694b11f6c55deb7df1d42a84` and trainer merge
-  `44663e28c3e5464ff3be2cdaa26c8518b3951c5f`, never branch-head commits.
+  `3a19c16fc3d477b1ee7602ccc6510736bc7604cc`, never branch-head commits.
 - The owner-capped 375M bootstrap campaign remains an independent, tablebase-free
   Atomic BIN V2 pilot, not a V3 publication-ready release dataset. Its exact
   engine, network, book, command and 30 accepted chunks are recorded, but
   completion does not alter the versioned playing binary or its release
-  artifacts. No training begins before a separate parameter decision.
+  artifacts. The authorized sequential four-run bootstrap campaign is active
+  from the reviewed PR #14 head, but its receipts remain
+  `non-publication-bootstrap` with both publication and release-candidate flags
+  false.
 - OpenBench v39 is deployed only after the live v38 campaign has drained and
   its database/media backup has been verified; the engine release never forces
   a controller upgrade underneath an active campaign.
@@ -83,9 +88,10 @@ described below.
    Emscripten image, require byte-identical JavaScript/WASM, and run lifecycle,
    exception and cross-surface parity tests.
 7. Build the complete Node UCI WASM twice, require byte-identical artifacts,
-   and run classical plus Legacy V1/AtomicNNUEV2 load, search, switch and export
-   tests with authenticated external networks. `Use NNUE=pure` is exercised by
-   the data-generation surface, not advertised as a playing mode.
+   and run classical plus Legacy V1/AtomicNNUEV2/AtomicNNUEV3 load, search,
+   switch and export tests with authenticated external networks. `Use
+   NNUE=pure` is exercised by the data-generation surface, not advertised as a
+   playing mode. No V3 network is bundled or strength-endorsed by 1.0.
 8. Run Atomic Syzygy driver, production UCI and real-table fixtures against the
    exact tag, including touching kings and six-man positions, with tablebases
    enabled and disabled. Preserve this functional result independently of the

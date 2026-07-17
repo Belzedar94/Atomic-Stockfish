@@ -20,8 +20,8 @@ evidence alone must still never be reported as a real gate pass.
 | --- | --- |
 | `variant-nnue-tools` `atomic` merge | `450049ee7a0ece32694b11f6c55deb7df1d42a84` |
 | Engine gitlink and lock inside tools | `420c9f35266fbdc2167dc5b9d8d20d90281c60c9` |
-| `variant-nnue-pytorch` `atomic` merge | `44663e28c3e5464ff3be2cdaa26c8518b3951c5f` |
-| Engine gitlink inside trainer | `76764c3c01ce5965a793a65e4580dd5c95cd2916` |
+| `variant-nnue-pytorch` `atomic` merge | `3a19c16fc3d477b1ee7602ccc6510736bc7604cc` |
+| Engine gitlink inside trainer | `420c9f35266fbdc2167dc5b9d8d20d90281c60c9` |
 | Atomic gate code | current authenticated Atomic release head |
 
 ## Frozen workload
@@ -30,8 +30,8 @@ The run has no tuning switches. It performs all of the following:
 
 1. Authenticates clean Atomic-Stockfish, tools and trainer checkouts at exact
    commits and exact refs. The tools and trainer gitlinks are authenticated
-   independently because their frozen integrations intentionally pin different
-   engine commits. The tools lock must repeat the tools engine pin exactly.
+   independently even though their reviewed integrations now pin the same
+   engine commit. The tools lock must repeat the tools engine pin exactly.
 2. Authenticates all three schema hashes, the tools lock, every executed binary,
    the Python executable, the sole root-level trainer loader and the source
    network. CPython plus the imported NumPy, PyTorch, PyTorch Lightning and
@@ -125,10 +125,10 @@ C:\AtomicH7\venv\Scripts\python.exe -B tests/atomic_bin_v2_pipeline_e2e.py `
   --tools-commit 450049ee7a0ece32694b11f6c55deb7df1d42a84 `
   --tools-ref refs/remotes/origin/atomic `
   --trainer-root C:\AtomicH7\variant-nnue-pytorch `
-  --trainer-commit 44663e28c3e5464ff3be2cdaa26c8518b3951c5f `
+  --trainer-commit 3a19c16fc3d477b1ee7602ccc6510736bc7604cc `
   --trainer-ref refs/remotes/origin/atomic `
   --tools-engine-commit 420c9f35266fbdc2167dc5b9d8d20d90281c60c9 `
-  --trainer-engine-commit 76764c3c01ce5965a793a65e4580dd5c95cd2916 `
+  --trainer-engine-commit 420c9f35266fbdc2167dc5b9d8d20d90281c60c9 `
   --engine C:\AtomicH7\Atomic-Stockfish\src\atomic-stockfish.exe `
   --engine-sha256 <sha256> `
   --data-generator C:\AtomicH7\Atomic-Stockfish\src\atomic-stockfish-data-generator.exe `

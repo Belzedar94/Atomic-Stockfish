@@ -1533,7 +1533,7 @@ jobs:
           Clone-Frozen $env:TOOLS_SOURCE $toolsAuthority `
             '450049ee7a0ece32694b11f6c55deb7df1d42a84' 'tools authority'
           Clone-Frozen $env:TRAINER_SOURCE $trainerAuthority `
-            '44663e28c3e5464ff3be2cdaa26c8518b3951c5f' 'trainer authority'
+            '3a19c16fc3d477b1ee7602ccc6510736bc7604cc' 'trainer authority'
           Clone-Frozen $env:FAIRY_SOURCE $fairyAuthority `
             'fb78cb561aa01708338e35b3dc3b65a42149a3c4' 'Fairy authority'
           foreach ($origin in @(
@@ -1550,7 +1550,7 @@ jobs:
           Clone-Frozen $toolsAuthority $toolsRoot `
             '450049ee7a0ece32694b11f6c55deb7df1d42a84' 'tools build root'
           Clone-Frozen $trainerAuthority $trainerRoot `
-            '44663e28c3e5464ff3be2cdaa26c8518b3951c5f' 'trainer build root'
+            '3a19c16fc3d477b1ee7602ccc6510736bc7604cc' 'trainer build root'
           git -C $toolsRoot remote set-url origin `
             'https://github.com/Belzedar94/variant-nnue-tools.git'
           if ($LASTEXITCODE -ne 0) { throw 'could not freeze tools origin identity' }

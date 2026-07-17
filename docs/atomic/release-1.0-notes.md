@@ -13,7 +13,8 @@ Fairy-Stockfish Atomic reference.
 - The `@atomic-stockfish/ffish` CommonJS and ES-module Board API.
 - A complete pthread Node UCI WebAssembly engine with external NNUE loading.
 - Atomic Syzygy probing, including the Atomic six-man domain.
-- Legacy Atomic V1 and AtomicNNUEV2 network loading, switching and export.
+- Legacy Atomic V1, AtomicNNUEV2 and AtomicNNUEV3 network loading, switching
+  and export.
 - Legacy V1 and Atomic BIN V2 data-generation and training pipeline contracts.
 
 All protocol and binding variant enumerations intentionally expose only
@@ -23,9 +24,10 @@ board-construction flag.
 ## External files
 
 No NNUE network or third-party tablebase is embedded in or redistributed with
-the release. `EvalFile` accepts authenticated compatible Legacy Atomic V1 or
-AtomicNNUEV2 files. `SyzygyPath` points at Atomic tablebases; orthodox Syzygy
-files are rejected by the Atomic domain checks.
+the release. `EvalFile` accepts authenticated compatible Legacy Atomic V1,
+AtomicNNUEV2 or AtomicNNUEV3 files. `SyzygyPath` points at Atomic tablebases;
+orthodox Syzygy files are rejected by the Atomic domain checks. No V3 network
+is bundled or endorsed as a release candidate.
 
 The strongest frozen validation network was
 `atomic_run3b_e202_l05.nnue`, SHA-256
@@ -37,13 +39,15 @@ architecture and bytes rather than trusting a filename.
 
 - `Use NNUE=true` is the supported NNUE playing mode. `Use NNUE=pure` is a
   data-generation mode and is not presented as a playing-strength setting.
-- The AtomicNNUEV3 feature, trajectory, reachability and trainer execution
-  blocks are research infrastructure. Version 1.0 does not dispatch V3 networks
-  in the playing engine.
+- AtomicNNUEV3 is the third accepted runtime backend in native, data-generator
+  and pthread Node UCI/WASM builds. Version 1.0 validates and dispatches
+  structurally compatible external V3 networks, but does not bundle or endorse
+  a V3 release-candidate network.
 - UCCI, USI and non-Atomic variants are deliberately out of scope.
 - The completed, owner-capped 375-million-position Atomic BIN V2 bootstrap is a
-  distributed-generation pilot, not a V3 publication dataset, and its
-  completion is not a 1.0 release dependency.
+  distributed-generation pilot, not a V3 publication dataset. Its authorized
+  sequential four-run campaign is active under the fail-closed non-publication
+  contract; neither its progress nor its outputs are a 1.0 release dependency.
 
 Verify every downloaded asset with `SHA256SUMS` and
 `atomic-stockfish-release-manifest.json` before use.

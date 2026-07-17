@@ -1501,10 +1501,10 @@ jobs:
             --tools-commit 450049ee7a0ece32694b11f6c55deb7df1d42a84 \
             --tools-ref 450049ee7a0ece32694b11f6c55deb7df1d42a84 \
             --trainer-root .pipeline/trainer \
-            --trainer-commit 44663e28c3e5464ff3be2cdaa26c8518b3951c5f \
-            --trainer-ref 44663e28c3e5464ff3be2cdaa26c8518b3951c5f \
+            --trainer-commit 3a19c16fc3d477b1ee7602ccc6510736bc7604cc \
+            --trainer-ref 3a19c16fc3d477b1ee7602ccc6510736bc7604cc \
             --tools-engine-commit 420c9f35266fbdc2167dc5b9d8d20d90281c60c9 \
-            --trainer-engine-commit 76764c3c01ce5965a793a65e4580dd5c95cd2916 \
+            --trainer-engine-commit 420c9f35266fbdc2167dc5b9d8d20d90281c60c9 \
             --engine src/atomic-stockfish-pipeline \
             --engine-sha256 "$(sha256_file src/atomic-stockfish-pipeline)" \
             --data-generator src/atomic-stockfish-data-generator-pipeline \

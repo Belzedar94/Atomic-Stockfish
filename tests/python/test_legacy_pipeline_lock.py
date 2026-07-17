@@ -101,7 +101,7 @@ def test_checked_in_lock_is_structurally_valid() -> None:
     )
     assert (
         lock.repositories["trainer"].commit
-        == "44663e28c3e5464ff3be2cdaa26c8518b3951c5f"
+        == "3a19c16fc3d477b1ee7602ccc6510736bc7604cc"
     )
     assert (
         lock.profiles["strong-local"].data_sha256

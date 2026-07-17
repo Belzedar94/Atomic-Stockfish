@@ -1,6 +1,6 @@
 # ADR 0006: Publish distributed AtomicNNUEV3 datasets through an acyclic evidence chain
 
-- Status: accepted; H9.3l-a contract, H9.3l-b audited producer, isolated trainer core and final tools pin are merged; semantic scanning and controlled training execution remain pending
+- Status: accepted; H9.3l-a contract, H9.3l-b audited producer, controlled non-publication bootstrap training and final tools pin are merged; publication campaign evidence remains pending
 - Date: 2026-07-16
 
 ## Implementation status
@@ -9,10 +9,11 @@
   `dde43fc08fb2bd45eec09d3dbe9f6d06845eeb24`.
 - Atomic-Stockfish PR #43 merged the audited trajectory producer as
   `420c9f35266fbdc2167dc5b9d8d20d90281c60c9`.
-- `variant-nnue-pytorch` PR #13 merged the isolated trainer core into `atomic`
-  as `44663e28c3e5464ff3be2cdaa26c8518b3951c5f`. This core intentionally
-  authenticates the H9.3l-a contract commit; it does not claim controlled
-  training or publication readiness.
+- `variant-nnue-pytorch` PR #14 merged the authenticated provider, strict
+  serializer, checkpoint/resume and four-run production launcher into `atomic`
+  as `3a19c16fc3d477b1ee7602ccc6510736bc7604cc`. It accepts the owner-capped
+  bootstrap only as `non-publication-bootstrap`; its outputs cannot claim
+  dataset publication or release-candidate readiness.
 - `variant-nnue-tools` PR #33 merged the final engine pin to
   `420c9f35266fbdc2167dc5b9d8d20d90281c60c9` into `atomic` as
   `450049ee7a0ece32694b11f6c55deb7df1d42a84` after exact-head review and all

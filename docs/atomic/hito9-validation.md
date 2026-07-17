@@ -526,14 +526,20 @@ external sorting uses bounded 64 MiB runs and at most 64 readers. Threads 1, 2
 and 4 reproduce the same authenticated V3 trajectory result; Atomic960,
 rollback and the unchanged seven Legacy/V2 fixtures are covered.
 
-`variant-nnue-pytorch` PR #13 merged the isolated trainer core into `atomic` as
-`44663e28c3e5464ff3be2cdaa26c8518b3951c5f`. It authenticates the earlier
-H9.3l-a contract boundary and does not yet claim controlled training or V3
-publication. `variant-nnue-tools` PR #33 then merged the final pin to engine
+`variant-nnue-pytorch` PR #14 merged the reviewed AtomicNNUEV3 provider,
+serializer, checkpoint/resume and four-run production launcher into `atomic`
+as `3a19c16fc3d477b1ee7602ccc6510736bc7604cc`. Its reviewed head
+`0448de38c28bff276875f0bbf6a675da995d1bc0` has the identical tree. The active
+sequential four-run bootstrap campaign is controlled, but its authenticated
+receipts retain
+`non-publication-bootstrap`, `dataset_publication_ready=false` and
+`release_candidate_eligible=false`; they cannot claim V3 publication.
+`variant-nnue-tools` PR #33 merged the final pin to engine
 merge `420c9f35266fbdc2167dc5b9d8d20d90281c60c9` into `atomic` as
 `450049ee7a0ece32694b11f6c55deb7df1d42a84`. The release pipeline lock freezes
 that reviewed tools merge together with trainer merge
-`44663e28c3e5464ff3be2cdaa26c8518b3951c5f`.
+`3a19c16fc3d477b1ee7602ccc6510736bc7604cc`; both auxiliary repositories now
+authenticate engine merge `420c9f35266fbdc2167dc5b9d8d20d90281c60c9`.
 
 ## H9.3n public runtime gates
 
