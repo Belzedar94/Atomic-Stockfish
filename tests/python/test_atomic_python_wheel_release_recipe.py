@@ -208,6 +208,7 @@ def test_recipe_clears_overrides_and_sets_exact_cibuildwheel_contract() -> None:
     assert "export CIBW_ARCHS=AMD64" in text
     assert 'export CIBW_ENVIRONMENT="SOURCE_DATE_EPOCH=$epoch PYTHONHASHSEED=0"' in text
     assert "export CIBW_BUILD_FRONTEND='pip; args: --no-build-isolation'" in text
+    assert "export CIBW_BUILD_VERBOSITY=3" in text
     assert "export CIBW_CACHE_PATH=$cache_for_cibuildwheel" in text
     assert "export SOURCE_DATE_EPOCH=$epoch" in text
     assert "export PYTHONHASHSEED=0" in text

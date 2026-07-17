@@ -14,7 +14,7 @@ from scripts.atomic_release_manifest import (
 from scripts.atomic_release_provenance import write_provenance
 
 
-VERSION = "1.0.2"
+VERSION = "1.0.3"
 COMMIT = "0123456789abcdef0123456789abcdef01234567"
 EPOCH = 1_700_000_000
 

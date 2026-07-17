@@ -202,4 +202,4 @@ def test_checked_in_inventory_matches_the_assembler_policy() -> None:
             encoding="utf-8"
         )
     )
-    assert inventory["releasePolicy"] == expected_inventory_policy("1.0.2")
+    assert inventory["releasePolicy"] == expected_inventory_policy("1.0.3")

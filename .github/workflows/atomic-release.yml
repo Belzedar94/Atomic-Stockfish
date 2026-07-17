@@ -4,9 +4,8 @@ on:
   workflow_dispatch:
     inputs:
       ref:
-        description: Exact reviewed ref to build without publishing
+        description: Exact reviewed 40-hex commit SHA to build without publishing
         required: true
-        default: main
         type: string
       capture_windows_fingerprint:
         description: Capture the real cibuildwheel identity twice for reviewed runner rotation
@@ -15,7 +14,7 @@ on:
         type: boolean
   push:
     tags:
-      - v1.0.2
+      - v1.0.3
 
 concurrency:
   group: atomic-release-${{ github.ref }}
@@ -25,7 +24,7 @@ permissions:
   contents: read
 
 env:
-  RELEASE_VERSION: 1.0.2
+  RELEASE_VERSION: 1.0.3
   GITHUB_API_VERSION: 2026-03-10
   EMSCRIPTEN_IMAGE: emscripten/emsdk:4.0.10@sha256:90b757eb11fa9a0e3ce4d2d9f76d932a56018e4accc37b5a28b2783751e60eb7
   LINUX_NATIVE_IMAGE: gcc:14.2.0-bookworm@sha256:b99b86a28812b1e6453a231a947dc43d76fe192788a12f344a9b568bf9f5d24c
@@ -64,6 +63,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          REQUESTED_REF: ${{ inputs.ref }}
         run: |
           set -euo pipefail
           unset PYTHONHOME PYTHONPATH
@@ -72,6 +72,10 @@ jobs:
           python -I scripts/run_atomic_release_contract_tests.py
 
           commit=$(git rev-parse HEAD)
+          if [[ "$GITHUB_EVENT_NAME" == workflow_dispatch ]]; then
+            [[ "$REQUESTED_REF" =~ ^[0-9a-f]{40}$ ]]
+            test "$commit" = "$REQUESTED_REF"
+          fi
           tag_object=not-a-tag
           tag_commit="$commit"
           if [[ "${GITHUB_REF_TYPE:-}" == tag ]]; then
@@ -110,7 +114,7 @@ jobs:
 
   main-trust:
     name: Authenticate main and release PR ancestry online
-    if: github.event_name == 'push' && github.ref == 'refs/tags/v1.0.2'
+    if: github.event_name == 'push' && github.ref == 'refs/tags/v1.0.3'
     needs: validate
     runs-on: ubuntu-24.04
     permissions:
@@ -139,14 +143,14 @@ jobs:
         run: |
           set -euo pipefail
           test "$GITHUB_REPOSITORY" = 'Belzedar94/Atomic-Stockfish'
-          test "$GITHUB_REF" = 'refs/tags/v1.0.2'
+          test "$GITHUB_REF" = 'refs/tags/v1.0.3'
           test "$(git rev-parse HEAD)" = '${{ needs.validate.outputs.commit }}'
           python scripts/atomic_release_main_trust.py \
             --repository Belzedar94/Atomic-Stockfish \
-            --tag v1.0.2 \
+            --tag v1.0.3 \
             --repository-root . \
-            --release-pr 47 \
-            --required-release-pr-base-sha 8fa6a46c92a7471743051f7c6d1ce9b093590043 \
+            --release-pr 48 \
+            --required-release-pr-base-sha 66b030907c35b3a4a91a35653162b7882fc6fd49 \
             --query-gh \
             --require-online \
             --json-output "$RUNNER_TEMP/release-main-trust.json" \
@@ -536,10 +540,7 @@ jobs:
           python -m pip install --disable-pip-version-check \
             --only-binary=:all: --require-hashes \
             -r tests/release-ci-requirements.txt
-          build_ids=(a b)
-          if [[ "$WHEEL_PLATFORM" == windows ]]; then
-            build_ids+=(c d)
-          fi
+          build_ids=(a b c d)
           for build_id in "${build_ids[@]}"; do
             fingerprint=none
             expected_fingerprint=none
@@ -593,7 +594,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: release-python-repro-${{ matrix.platform }}-${{ github.run_attempt }}
+          name: diagnostic-python-repro-${{ matrix.platform }}-${{ github.run_attempt }}
           path: |
             build/wheelhouse-*/*.whl
             build/windows-wheel-fingerprint-*.json
@@ -837,10 +838,10 @@ jobs:
           module = Path(pyffish.__file__).resolve()
           workspace = Path(os.environ["GITHUB_WORKSPACE"]).resolve()
           assert not module.is_relative_to(workspace), module
-          assert pyffish.version() == (1, 0, 2)
+          assert pyffish.version() == (1, 0, 3)
           assert pyffish.variants() == ["atomic"]
           assert pyffish.perft("atomic", pyffish.start_fen("atomic"), 1) == 20
-          assert pyffish.info().startswith("Atomic-Stockfish 1.0.2 ")
+          assert pyffish.info().startswith("Atomic-Stockfish 1.0.3 ")
           PY
 
   board-wasm:
@@ -1024,7 +1025,7 @@ jobs:
                 --workdir "/src/$extracted" \
                 "$EMSCRIPTEN_IMAGE" node ./atomic-stockfish-nnue-node.mjs
           )
-          grep -F 'id name Atomic-Stockfish 1.0.2' <<<"$smoke_output"
+          grep -F 'id name Atomic-Stockfish 1.0.3' <<<"$smoke_output"
           grep -Fx 'uciok' <<<"$smoke_output"
           grep -Fx 'readyok' <<<"$smoke_output"
           grep -Fx 'Nodes searched: 20' <<<"$smoke_output"
@@ -1066,7 +1067,7 @@ jobs:
     outputs:
       artifact_id: ${{ steps.upload_release.outputs.artifact-id }}
       artifact_digest: ${{ steps.upload_release.outputs.artifact-digest }}
-      artifact_name: Atomic-Stockfish-1.0.2-release
+      artifact_name: Atomic-Stockfish-1.0.3-release
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -1098,7 +1099,7 @@ jobs:
 
   exact-tag-external:
     name: Exact-tag native, bindings, Syzygy and NNUE pipeline gates
-    if: github.event_name == 'push' && github.ref == 'refs/tags/v1.0.2'
+    if: github.event_name == 'push' && github.ref == 'refs/tags/v1.0.3'
     needs:
       - validate
       - main-trust
@@ -1118,7 +1119,7 @@ jobs:
     outputs:
       evidence_artifact_id: ${{ steps.upload_evidence.outputs.artifact-id }}
       evidence_artifact_digest: ${{ steps.upload_evidence.outputs.artifact-digest }}
-      evidence_artifact_name: Atomic-Stockfish-1.0.2-exact-tag-evidence
+      evidence_artifact_name: Atomic-Stockfish-1.0.3-exact-tag-evidence
       manifest_sha256: ${{ steps.exact_gates.outputs.manifest_sha256 }}
       evidence_checksums_sha256: ${{ steps.package_evidence.outputs.checksums_sha256 }}
       release_attestation_id: ${{ steps.attest_release.outputs.attestation-id }}
@@ -1413,15 +1414,15 @@ jobs:
           }
 
           $windowsArchive = Require-One `
-            'Atomic-Stockfish-1.0.2-windows-x86-64-bmi2.zip' 'Windows BMI2 archive'
+            'Atomic-Stockfish-1.0.3-windows-x86-64-bmi2.zip' 'Windows BMI2 archive'
           $pythonWheel = Require-One `
-            'atomic_pyffish-1.0.2-cp39-abi3-win_amd64.whl' 'Windows ABI3 wheel'
+            'atomic_pyffish-1.0.3-cp39-abi3-win_amd64.whl' 'Windows ABI3 wheel'
           $boardArchive = Require-One `
-            'atomic-stockfish-ffish-1.0.2.tgz' 'Board WASM archive'
+            'atomic-stockfish-ffish-1.0.3.tgz' 'Board WASM archive'
           $uciArchive = Require-One `
-            'Atomic-Stockfish-1.0.2-node-uci-nnue-wasm.tar.xz' 'UCI WASM archive'
+            'Atomic-Stockfish-1.0.3-node-uci-nnue-wasm.tar.xz' 'UCI WASM archive'
           $sourceArchive = Require-One `
-            'Atomic-Stockfish-1.0.2-source.tar.xz' 'source archive'
+            'Atomic-Stockfish-1.0.3-source.tar.xz' 'source archive'
 
           $nativeRoot = Join-Path $exactRoot 'release-native'
           $wheelRoot = Join-Path $exactRoot 'release-wheel'
@@ -1494,7 +1495,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'could not inspect exact source archive' }
           $sourceRoots = @(Get-ChildItem -LiteralPath $sourceMaterial -Directory -Force)
           if ($sourceRoots.Count -ne 1 -or `
-              $sourceRoots[0].Name -cne 'Atomic-Stockfish-1.0.2') {
+              $sourceRoots[0].Name -cne 'Atomic-Stockfish-1.0.3') {
             throw 'source archive has an unexpected top-level root'
           }
           $sourceRoot = $sourceRoots[0].FullName
@@ -1750,10 +1751,10 @@ jobs:
           $mainTrust = Join-Path $trustRoot 'release-main-trust.json'
           & $env:CONTROLLER_PYTHON -I scripts/atomic_release_main_trust.py `
             --repository Belzedar94/Atomic-Stockfish `
-            --tag v1.0.2 `
+            --tag v1.0.3 `
             --repository-root . `
-            --release-pr 47 `
-            --required-release-pr-base-sha 8fa6a46c92a7471743051f7c6d1ce9b093590043 `
+            --release-pr 48 `
+            --required-release-pr-base-sha 66b030907c35b3a4a91a35653162b7882fc6fd49 `
             --query-gh --require-online `
             --json-output $mainTrust
           if ($LASTEXITCODE -ne 0) { throw 'online main trust recheck failed' }
@@ -1861,9 +1862,9 @@ jobs:
             '--repo-root', '.',
             '--command-plan', $planPath,
             '--repository', 'Belzedar94/Atomic-Stockfish',
-            '--version', '1.0.2',
+            '--version', '1.0.3',
             '--event', 'push',
-            '--ref', 'refs/tags/v1.0.2',
+            '--ref', 'refs/tags/v1.0.3',
             '--commit', $env:COMMIT,
             '--tag-object', $env:TAG_OBJECT,
             '--run-id', $env:GITHUB_RUN_ID,
@@ -2041,7 +2042,7 @@ jobs:
 
   publication-gate:
     name: Re-authenticate exact evidence, release policy and same-tag CI
-    if: github.event_name == 'push' && github.ref_type == 'tag' && github.ref_name == 'v1.0.2'
+    if: github.event_name == 'push' && github.ref_type == 'tag' && github.ref_name == 'v1.0.3'
     needs:
       - validate
       - main-trust
@@ -2056,7 +2057,7 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: v1.0.2
+          ref: v1.0.3
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
@@ -2114,7 +2115,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$GITHUB_REPOSITORY" = 'Belzedar94/Atomic-Stockfish'
-          test "$GITHUB_REF" = 'refs/tags/v1.0.2'
+          test "$GITHUB_REF" = 'refs/tags/v1.0.3'
           test "$(git rev-parse HEAD)" = "$COMMIT"
           [[ "$MANIFEST_SHA256" =~ ^[0-9a-f]{64}$ ]]
           [[ "$EVIDENCE_CHECKSUMS_SHA256" =~ ^[0-9a-f]{64}$ ]]
@@ -2146,9 +2147,9 @@ jobs:
             --arg commit "$COMMIT" --arg tag_object "$TAG_OBJECT" \
             --arg run "$GITHUB_RUN_ID" --argjson attempt "$GITHUB_RUN_ATTEMPT" '
               .identity.repository == "Belzedar94/Atomic-Stockfish" and
-              .identity.version == "1.0.2" and
+              .identity.version == "1.0.3" and
               .identity.event == "push" and
-              .identity.ref == "refs/tags/v1.0.2" and
+              .identity.ref == "refs/tags/v1.0.3" and
               .identity.commit == $commit and
               .identity.tagObject == $tag_object and
               .identity.runId == $run and
@@ -2162,8 +2163,8 @@ jobs:
 
           python scripts/atomic_release_main_trust.py \
             --repository Belzedar94/Atomic-Stockfish \
-            --tag v1.0.2 --repository-root . --release-pr 47 \
-            --required-release-pr-base-sha 8fa6a46c92a7471743051f7c6d1ce9b093590043 \
+            --tag v1.0.3 --repository-root . --release-pr 48 \
+            --required-release-pr-base-sha 66b030907c35b3a4a91a35653162b7882fc6fd49 \
             --query-gh --require-online \
             --json-output "$RUNNER_TEMP/publication-main-trust.json"
           test "$(sha256sum "$RUNNER_TEMP/publication-main-trust.json" | awk '{print $1}')" = \
@@ -2176,7 +2177,7 @@ jobs:
               --repo Belzedar94/Atomic-Stockfish \
               --signer-workflow Belzedar94/Atomic-Stockfish/.github/workflows/atomic-release.yml \
               --signer-digest "$COMMIT" \
-              --source-ref refs/tags/v1.0.2 \
+              --source-ref refs/tags/v1.0.3 \
               --source-digest "$COMMIT" \
               --format json > "$output"
             jq -e 'type == "array" and length > 0' "$output"
@@ -2269,7 +2270,7 @@ jobs:
 
   publish:
     name: Create and authenticate draft release only
-    if: github.event_name == 'push' && github.ref_type == 'tag' && github.ref_name == 'v1.0.2'
+    if: github.event_name == 'push' && github.ref_type == 'tag' && github.ref_name == 'v1.0.3'
     needs:
       - validate
       - main-trust
@@ -2285,7 +2286,7 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: v1.0.2
+          ref: v1.0.3
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
@@ -2367,7 +2368,7 @@ jobs:
             --arg commit "$COMMIT" --arg tag_object "$TAG_OBJECT" \
             --arg run "$GITHUB_RUN_ID" --argjson attempt "$GITHUB_RUN_ATTEMPT" '
               .identity.repository == "Belzedar94/Atomic-Stockfish" and
-              .identity.ref == "refs/tags/v1.0.2" and
+              .identity.ref == "refs/tags/v1.0.3" and
               .identity.commit == $commit and
               .identity.tagObject == $tag_object and
               .identity.runId == $run and
@@ -2381,8 +2382,8 @@ jobs:
 
           python scripts/atomic_release_main_trust.py \
             --repository Belzedar94/Atomic-Stockfish \
-            --tag v1.0.2 --repository-root . --release-pr 47 \
-            --required-release-pr-base-sha 8fa6a46c92a7471743051f7c6d1ce9b093590043 \
+            --tag v1.0.3 --repository-root . --release-pr 48 \
+            --required-release-pr-base-sha 66b030907c35b3a4a91a35653162b7882fc6fd49 \
             --query-gh --require-online \
             --json-output "$RUNNER_TEMP/publish-main-trust.json"
           test "$(sha256sum "$RUNNER_TEMP/publish-main-trust.json" | awk '{print $1}')" = \
@@ -2395,7 +2396,7 @@ jobs:
               --repo Belzedar94/Atomic-Stockfish \
               --signer-workflow Belzedar94/Atomic-Stockfish/.github/workflows/atomic-release.yml \
               --signer-digest "$COMMIT" \
-              --source-ref refs/tags/v1.0.2 \
+              --source-ref refs/tags/v1.0.3 \
               --source-digest "$COMMIT" \
               --format json > "$output"
             jq -e 'type == "array" and length > 0' "$output"

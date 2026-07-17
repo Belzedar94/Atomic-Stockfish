@@ -75,11 +75,47 @@ def test_release_identity_builds_pyffish_before_collecting_contracts() -> None:
     assert validate.index(build) < validate.index(contracts)
 
 
+def test_workflow_dispatch_builds_exact_sha_without_publication() -> None:
+    text = workflow()
+    trigger = text.split("\nconcurrency:", 1)[0]
+    assert "  workflow_dispatch:\n" in trigger
+    assert "Exact reviewed 40-hex commit SHA" in trigger
+    assert "        required: true\n" in trigger
+    assert "        default: main\n" not in trigger
+
+    validate = job(text, "validate", "main-trust")
+    assert "github.event_name == 'workflow_dispatch' && inputs.ref" in validate
+    assert "REQUESTED_REF: ${{ inputs.ref }}" in validate
+    assert '[[ "$REQUESTED_REF" =~ ^[0-9a-f]{40}$ ]]' in validate
+    assert 'test "$commit" = "$REQUESTED_REF"' in validate
+
+    assemble = job(text, "assemble", "exact-tag-external")
+    assert "    if:" not in assemble.split("    steps:\n", 1)[0]
+    assert "pattern: release-*" in assemble
+    assert "contents: write" not in assemble
+
+    tag_condition = (
+        "if: github.event_name == 'push' && github.ref_type == 'tag' "
+        "&& github.ref_name == 'v1.0.3'"
+    )
+    main_trust = job(text, "main-trust", "windows-fingerprint-capture")
+    exact = job(text, "exact-tag-external", "publication-gate")
+    publication = job(text, "publication-gate", "publish")
+    publish = text.split("  publish:\n", 1)[1]
+    assert "if: github.event_name == 'push'" in main_trust.split("    steps:\n", 1)[0]
+    assert "refs/tags/v1.0.3" in main_trust.split("    steps:\n", 1)[0]
+    assert "if: github.event_name == 'push'" in exact.split("    steps:\n", 1)[0]
+    assert "refs/tags/v1.0.3" in exact.split("    steps:\n", 1)[0]
+    assert tag_condition in publication.split("    steps:\n", 1)[0]
+    assert tag_condition in publish.split("    steps:\n", 1)[0]
+
+
 def test_release_recovery_is_chained_to_the_original_1_0_merge() -> None:
     text = workflow()
-    required_base = "8fa6a46c92a7471743051f7c6d1ce9b093590043"
+    required_base = "66b030907c35b3a4a91a35653162b7882fc6fd49"
 
-    assert text.count("--release-pr 47") == 4
+    assert text.count("--release-pr 48") == 4
+    assert "--release-pr 47" not in text
     assert "--release-pr 46" not in text
     assert "--release-pr 44" not in text
     assert text.count("--required-release-pr-base-sha " + required_base) == 4
@@ -106,8 +142,7 @@ def test_python_wheels_consume_only_the_authenticated_source_job_sdist() -> None
     assert "EXPECTED_SDIST_SHA256: ${{ needs.source.outputs.sdist_sha256 }}" in wheels
     assert "setup.py sdist" not in wheels
     assert wheels.count("scripts/build_atomic_python_wheel_release.sh") == 2
-    assert "build_ids=(a b)" in wheels
-    assert "build_ids+=(c d)" in wheels
+    assert "build_ids=(a b c d)" in wheels
     assert 'for build_id in "${build_ids[@]}"; do' in wheels
     assert '"build/wheelhouse-$build_id" "build/cibw-cache-$build_id"' in wheels
     assert "SOURCE_DATE_EPOCH: ${{ needs.validate.outputs.epoch }}" in wheels
@@ -118,9 +153,10 @@ def test_python_wheels_consume_only_the_authenticated_source_job_sdist() -> None
     assert "windows-wheel-fingerprint-$build_id.json" in wheels
     assert "Preserve wheel reproducibility evidence" in wheels
     assert (
-        "release-python-repro-${{ matrix.platform }}-${{ github.run_attempt }}"
+        "diagnostic-python-repro-${{ matrix.platform }}-${{ github.run_attempt }}"
         in wheels
     )
+    assert "name: release-python-repro-" not in wheels
     assert 'python -m abi3audit --strict "${first[0]}"' in wheels
 
 
@@ -339,7 +375,7 @@ def test_release_pr_reproduces_real_windows_wheel_and_frozen_fingerprint() -> No
     assert "test_wheel_layout.py" in gate
     assert "Preserve all Windows reproducibility evidence" in gate
     assert "if: always()" in gate
-    assert "release-pr-windows-repro-${{ github.run_attempt }}" in gate
+    assert "diagnostic-pr-windows-repro-${{ github.run_attempt }}" in gate
     assert "build/wheelhouse-*/*.whl" in gate
     assert "name: release-pr-windows-wheel" in gate
     for forbidden in ("contents: write", "gh release", "releases/", "draft=false"):
@@ -526,7 +562,7 @@ def test_publication_requires_annotated_tag_immutable_policy_and_same_tag_ci() -
     assert text.count("$GITHUB_REPOSITORY/immutable-releases") == 2
     assert text.count(
         "if: github.event_name == 'push' && github.ref_type == 'tag' "
-        "&& github.ref_name == 'v1.0.2'"
+        "&& github.ref_name == 'v1.0.3'"
     ) == 2
     assert "pull_request" not in text.split("permissions:", 1)[0]
     assert '.name == "Atomic CI"' in gate

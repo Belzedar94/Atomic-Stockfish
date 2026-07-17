@@ -163,6 +163,7 @@ unset PYTHONHOME PYTHONPATH
 
 export CIBW_ENVIRONMENT="SOURCE_DATE_EPOCH=$epoch PYTHONHASHSEED=0"
 export CIBW_BUILD_FRONTEND='pip; args: --no-build-isolation'
+export CIBW_BUILD_VERBOSITY=3
 export CIBW_CACHE_PATH=$cache_for_cibuildwheel
 export CIBW_BEFORE_BUILD='python -m pip install --disable-pip-version-check --force-reinstall --no-deps --only-binary=:all: --require-hashes -r "{project}/tests/release-build-requirements.txt"'
 export CIBW_BEFORE_TEST='python -m pip install --disable-pip-version-check --force-reinstall --no-deps --only-binary=:all: --require-hashes -r "{project}/tests/release-wheel-test-requirements.txt"'

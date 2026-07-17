@@ -145,9 +145,9 @@ def expected_inventory_policy(version: str) -> Dict[str, Any]:
             "mergeCommitParents": 2,
             "mergeMethod": "merge",
             "onlineRequired": True,
-            "releasePullRequest": 47,
+            "releasePullRequest": 48,
             "requiredBaseCommitSha": (
-                "8fa6a46c92a7471743051f7c6d1ce9b093590043"
+                "66b030907c35b3a4a91a35653162b7882fc6fd49"
             ),
             "revalidatedBy": [
                 "main-trust",
@@ -158,15 +158,15 @@ def expected_inventory_policy(version: str) -> Dict[str, Any]:
         },
         "nativeBuildRepetitions": 2,
         "prePublicationRecovery": {
-            "failedTag": "v1.0.1",
-            "failedTagObjectSha": "62084b84e1bbf9c432a8b898abe4e4f9b2f17983",
-            "failedTagCommitSha": "8fa6a46c92a7471743051f7c6d1ce9b093590043",
-            "failedWorkflowRunId": 29555199867,
-            "failedWorkflowJobId": 87806684417,
+            "failedTag": "v1.0.2",
+            "failedTagObjectSha": "6b58b018776163eb223c41612a397eea8a2e011f",
+            "failedTagCommitSha": "66b030907c35b3a4a91a35653162b7882fc6fd49",
+            "failedWorkflowRunId": 29557301333,
+            "failedWorkflowJobId": 87813381533,
             "githubReleaseCreated": False,
             "releaseAssetsCreated": False,
-            "recoveryTag": "v1.0.2",
-            "reason": "linux-wheel-recipe-included-unintended-musllinux",
+            "recoveryTag": "v1.0.3",
+            "reason": "windows-python-wheel-intermittent-nondeterminism",
         },
         "pythonManylinuxX86_64Image": PYTHON_MANYLINUX_X86_64_IMAGE,
         "releaseBuildRequirementsSha256": RELEASE_BUILD_REQUIREMENTS_SHA256,
@@ -174,7 +174,7 @@ def expected_inventory_policy(version: str) -> Dict[str, Any]:
         "releaseWheelTestRequirementsSha256": (
             RELEASE_WHEEL_TEST_REQUIREMENTS_SHA256
         ),
-        "pythonWheelBuildRepetitions": 2,
+        "pythonWheelBuildRepetitions": 4,
         "pythonWheelRuntimeSmoke": {
             "operatingSystems": ["ubuntu-24.04", "windows-2022"],
             "pythonVersions": ["3.9", "3.12", "3.14"],

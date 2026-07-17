@@ -1,6 +1,6 @@
-# Atomic-Stockfish 1.0.2 release checklist
+# Atomic-Stockfish 1.0.3 release checklist
 
-This checklist is the release controller for `v1.0.2`. A green development CI
+This checklist is the release controller for `v1.0.3`. A green development CI
 run is necessary but is not, by itself, permission to publish. Every item is
 executed against the exact tagged commit. The release manifest authenticates
 the published assets and their producer provenance. The protected exact-tag
@@ -12,10 +12,13 @@ described below.
 protected external gates because the clean Python binding bootstrap was
 missing. `v1.0.1` was a second prepublication candidate; its Linux wheel job
 exposed that the recipe selected an unintended musllinux build in addition to
-the single contracted manylinux artifact. Neither attempt created a GitHub
-release, draft or release asset. The repaired `v1.0.2` tag is the first
-publication candidate. This patch bump records both recoveries without changing
-the engine feature scope or weakening any gate.
+the single contracted manylinux artifact. `v1.0.2` was a third prepublication
+candidate; its Windows wheel job exposed intermittent MSVC LTCG output inside
+`pyffish.pyd` even though the same two-build check had passed on the reviewed
+PR. All three workflows failed before the protected external gates and created
+no GitHub release, draft or release asset. The repaired `v1.0.3` tag is the
+first publication candidate. This patch bump records all three recoveries
+without changing the engine feature scope or weakening any gate.
 
 ## Frozen inputs
 
@@ -77,7 +80,7 @@ the engine feature scope or weakening any gate.
 5. Run the Python stable-ABI matrix on Python 3.9 and the newest supported
    Python on Windows and Linux. The `source` job is the only sdist authority;
    wheel jobs download its normalized sdist, authenticate its SHA-256 and
-   provenance, and never invoke `sdist` themselves. Build each wheel twice
+   provenance, and never invoke `sdist` themselves. Build each release wheel four times
    under the commit-derived `SOURCE_DATE_EPOCH`, require byte-identical wheels,
    test the installed wheel outside the source tree with pinned `mypy 1.19.1`,
    and require strict `abi3audit 0.0.26` success. Then download the exact wheel
@@ -87,12 +90,14 @@ the engine feature scope or weakening any gate.
    ABI and use pip 26.0.1, setuptools 80.9.0 and wheel 0.45.1 from the
    hash-closed build lock. The pinned manylinux image supplies the exact Linux
    CPython micro-version; cibuildwheel supplies CPython 3.9.13 on Windows. Each
-   producer's two builds use separate caches. On Windows, both build interpreters must
+   producer's four builds use separate caches. On Windows, all four build interpreters must
    emit the same canonical runner/Visual Studio/SDK/CPython fingerprint and its
    bytes and SHA-256 must equal the reviewed document named in the release inventory.
    The release PR workflow first reproduces the normalized sdist twice and then
-   runs this exact Windows wheel recipe twice against that authenticated sdist;
-   the tag workflow repeats the same authority chain for publication.
+   runs this exact Windows wheel recipe four times against that authenticated
+   sdist; the tag workflow repeats four isolated builds on both platforms for
+   publication. Every tag attempt preserves all raw wheels and Windows
+   fingerprints even when byte comparison fails.
 6. Build the CommonJS and ES-module Board package twice with the same pinned
    Emscripten image, require byte-identical JavaScript/WASM, and run lifecycle,
    exception and cross-surface parity tests.
@@ -100,7 +105,7 @@ the engine feature scope or weakening any gate.
    and run classical plus Legacy V1/AtomicNNUEV2/AtomicNNUEV3 load, search,
    switch and export tests with authenticated external networks. `Use
    NNUE=pure` is exercised by the data-generation surface, not advertised as a
-   playing mode. No V3 network is bundled or strength-endorsed by 1.0.2.
+   playing mode. No V3 network is bundled or strength-endorsed by 1.0.3.
 8. Run Atomic Syzygy driver, production UCI and real-table fixtures against the
    exact tag, including touching kings and six-man positions, with tablebases
    enabled and disabled. Preserve this functional result independently of the
@@ -151,7 +156,7 @@ is no separate protocol binary.
 ## Publication transaction
 
 1. Verify `AtomicVersionMajor/Minor/Patch`, Python metadata, JavaScript metadata
-   and the proposed tag all equal `1.0.2`.
+   and the proposed tag all equal `1.0.3`.
 2. Enable GitHub immutable releases with the repository administration API
    before creating the tag. The release workflow only performs the read check
    and fails closed when `GET /immutable-releases` is absent or not `enabled`;
@@ -161,7 +166,7 @@ is no separate protocol binary.
    permission. Create or rotate it before expiry using the same minimal scope,
    replace the secret without logging its value, and remove it after the release
    if it is not part of the standing rotation policy. It is consumed only by
-   the trusted `v1.0.2` tag-push publication jobs, never by pull-request jobs,
+   the trusted `v1.0.3` tag-push publication jobs, never by pull-request jobs,
    and only for the two `GET /immutable-releases` calls.
 3. Create every asset in an isolated clean checkout with a fixed toolchain.
    Linux, MinGW and Emscripten producers are selected by immutable container
@@ -174,16 +179,19 @@ is no separate protocol binary.
 4. Re-read and hash all assets, then write the manifest and `SHA256SUMS` last.
    Every producer-side provenance descriptor freezes its asset SHA-256; the
    assembler verifies that digest again before and after its authenticated copy.
-5. Merge recovery PR #47 with a traditional two-parent merge commit, never a
+5. Merge recovery PR #48 with a traditional two-parent merge commit, never a
    squash or rebase, and require its first parent to be the exact reviewed PR
-   #46 recovery merge `8fa6a46c92a7471743051f7c6d1ce9b093590043`.
+   #47 recovery merge `66b030907c35b3a4a91a35653162b7882fc6fd49`.
+   Before tagging, dispatch `Atomic 1.0 Release Assets` against that exact merge
+   SHA and require every non-publication build to pass, including four isolated
+   wheels per platform. A dispatch run cannot create or publish a release.
    Immediately before tagging, authenticate online
    that `main`, the merge commit, its ordered parents, required base and the
    recovery PR's reviewed head all agree. Replace the protected environment's
    deployment-branch policy so `atomic-release-gates` permits exactly the tag
-   `v1.0.2`, then query the policy back and require that neither `v1.0.0` nor
-   `v1.0.1` is permitted. Create an annotated `v1.0.2` tag only for that exact
-   merge commit.
+   `v1.0.3`, then query the policy back and require that none of `v1.0.0`,
+   `v1.0.1` or `v1.0.2` is permitted. Create an annotated `v1.0.3` tag only for
+   that exact merge commit.
    Record and re-check both the tag-object SHA and its direct peeled commit SHA
    through local Git and the GitHub Git Database API; a lightweight or nested
    tag fails.
@@ -213,13 +221,13 @@ is no separate protocol binary.
    API and require all three recorded SHAs to remain byte-for-byte identical.
    Re-read the immutable-releases policy and require it to remain enabled. Fetch
    the reserved release by its exact ID and require it to remain the unique draft
-   for `v1.0.2`; download that draft again into a new empty directory, compare its
+   for `v1.0.3`; download that draft again into a new empty directory, compare its
    exact names and bytes with the frozen candidate, and re-run `SHA256SUMS`.
 10. Manually publish release notes that state the external NNUE/Syzygy requirements,
    supported protocols/bindings and exact known limitations.
 11. Immediately after publication, re-read the immutable-releases policy and
     require it still enabled. Fetch the release by the same exact ID and require
-    `draft=false`, a non-null publication timestamp and the unchanged `v1.0.2`
+    `draft=false`, a non-null publication timestamp and the unchanged `v1.0.3`
     tag. Re-read the tag ref, annotated tag object and direct peeled commit and
     require the recorded SHAs unchanged. Download the now-published assets into
     another new empty directory, require byte equality with the frozen candidate,
