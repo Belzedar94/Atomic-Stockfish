@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = ROOT / ".github" / "workflows" / "atomic-release.yml"
 ATOMIC_WORKFLOW = ROOT / ".github" / "workflows" / "atomic.yml"
 RELEASE_PR_WORKFLOW = ROOT / ".github" / "workflows" / "atomic-release-pr.yml"
+UPSTREAM_STOCKFISH_WORKFLOW = ROOT / ".github" / "workflows" / "stockfish.yml"
 CHECKLIST = ROOT / "docs" / "atomic" / "release-1.0-checklist.md"
 
 
@@ -56,9 +57,30 @@ def test_one_authoritative_runner_discovers_every_release_contract_module() -> N
     atomic_workflow = (ROOT / ".github" / "workflows" / "atomic.yml").read_text(
         encoding="utf-8"
     )
-    invocation = "python scripts/run_atomic_release_contract_tests.py"
-    assert release_workflow.count(invocation) == 1
-    assert atomic_workflow.count(invocation) == 1
+    release_invocation = "python -I scripts/run_atomic_release_contract_tests.py"
+    ci_invocation = "python scripts/run_atomic_release_contract_tests.py"
+    assert release_workflow.count(release_invocation) == 1
+    assert atomic_workflow.count(ci_invocation) == 1
+
+
+def test_release_identity_builds_pyffish_before_collecting_contracts() -> None:
+    validate = job(workflow(), "validate", "main-trust")
+    scrub = "unset PYTHONHOME PYTHONPATH"
+    build = "python -I setup.py build_ext --inplace"
+    contracts = "python -I scripts/run_atomic_release_contract_tests.py"
+    assert validate.count(scrub) == 1
+    assert validate.count(build) == 1
+    assert validate.count(contracts) == 1
+    assert validate.index(scrub) < validate.index(build)
+    assert validate.index(build) < validate.index(contracts)
+
+
+def test_orthodox_upstream_workflow_cannot_gate_atomic_release_tags() -> None:
+    text = UPSTREAM_STOCKFISH_WORKFLOW.read_text(encoding="utf-8")
+    trigger = text.split("\nconcurrency:", 1)[0]
+    assert '      - "sf_*"\n' in trigger
+    assert '      - "*"\n' not in trigger
+    assert "      - v*\n" not in trigger
 
 
 def job(text: str, name: str, next_name: str) -> str:

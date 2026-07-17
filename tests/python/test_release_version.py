@@ -207,6 +207,8 @@ def test_release_version_is_consistent_across_packaging_surfaces() -> None:
 
 
 def test_compiled_python_surface_reports_release_version() -> None:
+    module_path = Path(pyffish.__file__).resolve()
+    assert module_path.parent == ROOT
     assert pyffish.version() == (1, 0, 0)
     assert pyffish.info().startswith("Atomic-Stockfish 1.0.0 ")
 

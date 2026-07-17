@@ -66,8 +66,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          test "$(python setup.py --version)" = "$RELEASE_VERSION"
-          python scripts/run_atomic_release_contract_tests.py
+          unset PYTHONHOME PYTHONPATH
+          test "$(python -I setup.py --version)" = "$RELEASE_VERSION"
+          python -I setup.py build_ext --inplace
+          python -I scripts/run_atomic_release_contract_tests.py
 
           commit=$(git rev-parse HEAD)
           tag_object=not-a-tag

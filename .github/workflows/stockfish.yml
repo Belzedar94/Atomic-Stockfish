@@ -2,7 +2,9 @@ name: Stockfish
 on:
   push:
     tags:
-      - "*"
+      # Preserve the inherited upstream release lane without letting its
+      # orthodox embedded-net/binary assumptions gate Atomic release tags.
+      - "sf_*"
     branches:
       - master
       - tools
