@@ -344,6 +344,13 @@ void test_constants_geometry_and_indexing() {
 }
 
 void test_normal_captures_targets_and_blockers() {
+    constexpr Bitboard PawnCaptureTargetViaOperator = []() constexpr {
+        Bitboard target = 0;
+        target |= SQ_D5;
+        return target;
+    }();
+    static_assert(PawnCaptureTargetViaOperator == square_bb(SQ_D5));
+
     struct ActorCase {
         Piece  actor;
         Square from;
@@ -371,6 +378,24 @@ void test_normal_captures_targets_and_blockers() {
                  && feature->targetClass == CapturePairTargetClass::Pawn;
     }
     expect(allActors, "pawn, knight, bishop, rook and queen occupied-target captures all emit");
+
+    const CapturePairSnapshot pawnCapture =
+      make_snapshot({{SQ_H1, W_KING}, {SQ_A8, B_KING}, {SQ_E4, W_PAWN}, {SQ_D5, B_PAWN}});
+    CapturePairEmission    pawnCaptureEmission{};
+    const CapturePairError pawnCaptureError =
+      emit_capture_pairs(pawnCapture, WHITE, pawnCaptureEmission);
+    const CapturePairFeature* pawnCaptureFeature = find_feature(pawnCaptureEmission, SQ_E4, SQ_D5);
+    expect(pawnCaptureError == CapturePairError::None && pawnCaptureFeature
+             && pawnCaptureFeature->rawCaptured == SQ_D5
+             && pawnCaptureFeature->orientedFrom == SQ_E4
+             && pawnCaptureFeature->orientedCenter == SQ_D5 && pawnCaptureFeature->actor == W_PAWN
+             && pawnCaptureFeature->captured == B_PAWN
+             && pawnCaptureFeature->actorRelation == CapturePairActorRelation::Own
+             && pawnCaptureFeature->targetClass == CapturePairTargetClass::Pawn
+             && pawnCaptureFeature->edgeOrdinal == 35 && pawnCaptureFeature->localIndex == 210
+             && pawnCaptureFeature->physicalIndex == CapturePairPhysicalOffset + 210
+             && !pawnCaptureFeature->enPassant,
+           "e4xd5 pawn CapturePair is the exact one-bit target and canonical compact row");
 
     const CapturePairSnapshot opponentPawn =
       make_snapshot({{SQ_H1, W_KING}, {SQ_H8, B_KING}, {SQ_E5, B_PAWN}, {SQ_D4, W_PAWN}});

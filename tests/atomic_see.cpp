@@ -8,6 +8,7 @@
 #include <array>
 #include <cstddef>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -15,9 +16,11 @@
 
 #include "attacks.h"
 #include "bitboard.h"
+#include "evaluate.h"
 #include "movegen.h"
 #include "position.h"
 #include "search.h"
+#include "uci.h"
 #include "types.h"
 #include "uci_move.h"
 
@@ -888,6 +891,97 @@ bool expect_atomic_capture_futility_eligibility() {
     return ok;
 }
 
+bool expect_atomic_nnue_wide_sum() {
+    constexpr Value Minimum = Value(VALUE_TB_LOSS_IN_MAX_PLY + 1);
+    constexpr Value Maximum = Value(VALUE_TB_WIN_IN_MAX_PLY - 1);
+
+    struct WideSumCase {
+        std::string_view name;
+        i32              rawPsqt;
+        i32              rawPositional;
+        Value            expected;
+    };
+
+    constexpr std::array<WideSumCase, 8> tests = {{
+      {"positive boundary", i32(Maximum) * 16, 0, Maximum},
+      {"positive clamp", i32(Maximum) * 16 + 16, 0, Maximum},
+      {"negative boundary", i32(Minimum) * 16, 0, Minimum},
+      {"negative clamp", i32(Minimum) * 16 - 16, 0, Minimum},
+      {"full positive i32 components", std::numeric_limits<i32>::max(),
+       std::numeric_limits<i32>::max(), Maximum},
+      {"full negative i32 components", std::numeric_limits<i32>::min(),
+       std::numeric_limits<i32>::min(), Minimum},
+      {"opposite i32 limits", std::numeric_limits<i32>::max(), std::numeric_limits<i32>::min(),
+       VALUE_ZERO},
+      {"wide non-clamped sum", 1'000'000'000, -999'840'000, Value(10'000)},
+    }};
+
+    bool ok = true;
+    for (const auto& test : tests)
+    {
+        const Value actual =
+          Eval::Detail::atomic_nnue_value_from_raw(test.rawPsqt, test.rawPositional);
+        if (actual != test.expected)
+        {
+            std::cerr << "FAIL Atomic NNUE wide sum " << test.name << ": expected=" << test.expected
+                      << " actual=" << actual << '\n';
+            ok = false;
+        }
+        else
+            std::cout << "PASS Atomic NNUE wide sum " << test.name << " value=" << actual << '\n';
+    }
+
+    return ok;
+}
+
+bool expect_atomic_wide_cp_conversion() {
+    struct WideCpCase {
+        std::string_view name;
+        Value            value;
+    };
+
+    constexpr std::array<WideCpCase, 7> tests = {{
+      {"zero", VALUE_ZERO},
+      {"positive pawn", Value(PawnValue)},
+      {"negative pawn", Value(-PawnValue)},
+      {"positive V3 component", Value(std::numeric_limits<i32>::max() / 16)},
+      {"negative V3 component", Value(std::numeric_limits<i32>::min() / 16)},
+      {"full positive Value", Value(std::numeric_limits<int>::max())},
+      {"full negative Value", Value(std::numeric_limits<int>::min())},
+    }};
+
+    Position position;
+    bool     ok = true;
+    for (const auto& test : tests)
+    {
+        const int expected = int(i64(100) * int(test.value) / PawnValue);
+        const int actual   = UCIEngine::to_cp(test.value, position);
+        if (actual != expected)
+        {
+            std::cerr << "FAIL Atomic wide cp conversion " << test.name << ": expected=" << expected
+                      << " actual=" << actual << '\n';
+            ok = false;
+        }
+        else
+            std::cout << "PASS Atomic wide cp conversion " << test.name << " cp=" << actual << '\n';
+    }
+
+    bool ordinaryDomainExact = true;
+    for (int value = VALUE_TB_LOSS_IN_MAX_PLY + 1; value < VALUE_TB_WIN_IN_MAX_PLY; ++value)
+        ordinaryDomainExact = ordinaryDomainExact
+                           && UCIEngine::to_cp(Value(value), position) == 100 * value / PawnValue;
+    if (!ordinaryDomainExact)
+    {
+        std::cerr << "FAIL Atomic cp conversion changed the ordinary evaluation domain\n";
+        ok = false;
+    }
+    else
+        std::cout << "PASS Atomic cp conversion is byte-for-byte integer-exact across the ordinary "
+                     "evaluation domain\n";
+
+    return ok;
+}
+
 bool expect_shared_search_history_baseline() {
     auto histories = std::make_unique<SharedHistories>(1);
     histories->clear_for_search(0, 1);
@@ -947,13 +1041,15 @@ int main() {
     ok &= expect_atomic_move_count_thresholds();
     ok &= expect_atomic_null_move_reductions();
     ok &= expect_atomic_capture_futility_eligibility();
+    ok &= expect_atomic_nnue_wide_sum();
+    ok &= expect_atomic_wide_cp_conversion();
     ok &= expect_shared_search_history_baseline();
 
     if (!ok)
         return 1;
 
     constexpr usize TestCount =
-      SeeCases.size() + 3 + 7 + 8 + 14 + 2 + 13 + 3 + 6 + 7 + 7 + 6 + 2 + 1;
+      SeeCases.size() + 3 + 7 + 8 + 14 + 2 + 13 + 3 + 6 + 7 + 7 + 6 + 2 + 8 + 8 + 1;
     std::cout << "Atomic C++ unit tests passed: " << TestCount << "/" << TestCount << '\n';
     return 0;
 }

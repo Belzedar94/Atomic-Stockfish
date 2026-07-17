@@ -206,6 +206,9 @@ bool same_scalar_status(const ScalarStatus& lhs, const ScalarStatus& rhs) {
 bool counters_equal(const IncrementalCounters& lhs, const IncrementalCounters& rhs) {
     return lhs.hmRefreshes == rhs.hmRefreshes && lhs.hmDeltas == rhs.hmDeltas
         && lhs.hmReuses == rhs.hmReuses && lhs.relationRefreshes == rhs.relationRefreshes
+        && lhs.relationAccumulatorRefreshes == rhs.relationAccumulatorRefreshes
+        && lhs.relationAccumulatorDeltas == rhs.relationAccumulatorDeltas
+        && lhs.relationAccumulatorReuses == rhs.relationAccumulatorReuses
         && lhs.snapshotMismatches == rhs.snapshotMismatches
         && lhs.epSquareMismatches == rhs.epSquareMismatches;
 }
@@ -250,6 +253,10 @@ bool diagnostic_is_clear(const IncrementalDiagnostic& value) {
         const auto& update = value.hmUpdates[index];
         if (update.source != HmSourceKind::None || update.sourcePly != 0
             || update.sourceDistance != 0 || update.removedRows != 0 || update.addedRows != 0)
+            return false;
+        const auto& relation = value.relationUpdates[index];
+        if (relation.source != RelationSourceKind::None || relation.sourcePly != 0
+            || relation.sourceDistance != 0 || relation.removedRows != 0 || relation.addedRows != 0)
             return false;
     }
 
@@ -583,6 +590,11 @@ void validate_success_event(const IncrementalStack&      stack,
     require(incremental.ply == stack.ply(), event.label, event.fen, "diagnostic ply mismatch");
     require(counters.relationRefreshes == COLOR_NB, event.label, event.fen,
             "relations were not refreshed once per perspective");
+    require(counters.relationAccumulatorRefreshes + counters.relationAccumulatorDeltas
+                + counters.relationAccumulatorReuses
+              == COLOR_NB,
+            event.label, event.fen,
+            "relation accumulator source counters do not cover both perspectives");
     require(counters.hmRefreshes + counters.hmDeltas + counters.hmReuses == COLOR_NB, event.label,
             event.fen, "HM source counters do not cover both perspectives");
     require(stack.ep_square_when_computed() == snapshot.epSquare, event.label, event.fen,
@@ -599,6 +611,9 @@ void validate_success_event(const IncrementalStack&      stack,
     usize           deltaPerspectives = 0;
     for (const Color perspective : {WHITE, BLACK})
     {
+        require(incremental.relationUpdates[static_cast<std::size_t>(perspective)].source
+                  != RelationSourceKind::None,
+                event.label, event.fen, "relation accumulator omitted its source");
         const auto& update = incremental.hmUpdates[static_cast<std::size_t>(perspective)];
         if (update.source != HmSourceKind::StackDelta)
             continue;
@@ -1183,6 +1198,160 @@ void run_reset_mode_contract(const Network& network) {
     pass("AtomicNNUEV3 reset execution-mode contract");
 }
 
+void run_runtime_identity(const Network& network) {
+    constexpr std::array<std::string_view, 7> Fens{StartFEN,
+                                                   "r6k/8/8/8/8/8/N7/R6K w - - 0 1",
+                                                   "7k/8/8/8/8/8/8/3K4 w - - 0 1",
+                                                   "7k/p7/8/8/8/8/R7/K6N w - - 0 1",
+                                                   "7k/8/2N1b3/2ppP3/8/8/8/K7 w - d6 0 2",
+                                                   "7k/P7/8/8/8/8/8/K7 w - - 0 1",
+                                                   "7k/8/8/2pBn3/3r4/2PQN3/8/K7 w - - 0 1"};
+
+    auto diagnosticStack = make_incremental_stack(network);
+    auto runtimeStack    = make_incremental_stack(network);
+    for (std::size_t index = 0; index < Fens.size(); ++index)
+    {
+        Position          position;
+        StateInfo         state{};
+        const std::string label = "runtime-identity-" + std::to_string(index);
+        set_position(position, state, Fens[index], false, label);
+
+        auto                    diagnostic = std::make_unique<IncrementalDiagnostic>();
+        RuntimeOutput           runtime{};
+        const IncrementalStatus diagnosticStatus =
+          diagnosticStack->evaluate(network, position, *diagnostic);
+        const IncrementalStatus runtimeStatus =
+          runtimeStack->evaluate_runtime(network, position, runtime);
+        require(bool(diagnosticStatus) && bool(runtimeStatus), label, position.fen(),
+                "diagnostic or production evaluation failed");
+        require(runtime.psqtDifference == diagnostic->scalar.psqtDifference, label, position.fen(),
+                "production PSQT differs from the exact diagnostic path");
+        require(runtime.rawOutput == diagnostic->scalar.rawOutput, label, position.fen(),
+                "production raw dense output differs from the exact diagnostic path");
+        require(runtime.scaledOutput == diagnostic->scalar.scaledOutput, label, position.fen(),
+                "production scaled dense output differs from the exact diagnostic path");
+    }
+
+    pass("AtomicNNUEV3 production/diagnostic identity corpus");
+}
+
+u64 relation_accumulator_events(const IncrementalCounters& counters) {
+    return counters.relationAccumulatorRefreshes + counters.relationAccumulatorDeltas
+         + counters.relationAccumulatorReuses;
+}
+
+void require_runtime_full_refresh_identity(IncrementalStack& stack,
+                                           const Network&    network,
+                                           const Position&   position,
+                                           std::string_view  label) {
+    auto               fresh       = std::make_unique<ScalarDiagnostic>();
+    const ScalarStatus freshStatus = evaluate_scalar(network, position, *fresh);
+    require(bool(freshStatus), label, position.fen(),
+            "fresh scalar oracle failed before production comparison");
+
+    RuntimeOutput           runtime{};
+    const IncrementalStatus status = stack.evaluate_runtime(network, position, runtime);
+    require(bool(status), label, position.fen(),
+            "production relation-cache evaluation failed: "
+              + std::string(incremental_error_message(status.error)));
+    require(runtime.psqtDifference == fresh->psqtDifference, label, position.fen(),
+            "cached production PSQT differs from full refresh");
+    require(runtime.rawOutput == fresh->rawOutput, label, position.fen(),
+            "cached production raw output differs from full refresh");
+    require(runtime.scaledOutput == fresh->scaledOutput, label, position.fen(),
+            "cached production scaled output differs from full refresh");
+}
+
+void run_runtime_relation_roundtrips(const Network& network) {
+    struct Fixture {
+        std::string_view label;
+        std::string_view fen;
+        std::string_view uci;
+        bool             chess960;
+    };
+    constexpr std::array<Fixture, 7> Fixtures{{
+      {"runtime-quiet", StartFEN, "e2e4", false},
+      {"runtime-relation-stable", "rnbq1bnr/pppp1kpp/4p3/5p2/3P4/6P1/PPPQPPBP/RNB1K1NR b KQ - 2 4",
+       "g8e7", false},
+      {"runtime-en-passant", "7k/8/2N1b3/2ppP3/8/8/8/K7 w - d6 0 2", "e5d6", false},
+      {"runtime-promotion", "7k/P7/8/8/8/8/8/K7 w - - 0 1", "a7a8q", false},
+      {"runtime-explosion", "7k/8/8/2pBn3/3r4/2PQN3/8/K7 w - - 0 1", "d3d4", false},
+      {"runtime-castling", "4k3/8/8/8/8/8/8/R3K2R w KQ - 0 1", "e1g1", false},
+      {"runtime-atomic960-castling", "7k/8/8/8/8/8/8/1RK5 w Q - 0 1", "c1b1", true},
+    }};
+
+    bool sawDelta = false;
+    for (std::size_t fixtureIndex = 0; fixtureIndex < Fixtures.size(); ++fixtureIndex)
+    {
+        const auto&              fixture = Fixtures[fixtureIndex];
+        Position                 position;
+        std::array<StateInfo, 2> states{};
+        set_position(position, states[0], fixture.fen, fixture.chess960, fixture.label);
+        const std::string rootFen = position.fen();
+        const Key         rootKey = position.key();
+        auto              stack   = make_incremental_stack(network);
+
+        const IncrementalCounters beforeRoot = stack->counters();
+        require_runtime_full_refresh_identity(*stack, network, position,
+                                              std::string(fixture.label) + "-root");
+        const IncrementalCounters afterRoot = stack->counters();
+        require(afterRoot.relationAccumulatorRefreshes
+                  == beforeRoot.relationAccumulatorRefreshes + COLOR_NB,
+                fixture.label, position.fen(),
+                "root did not full-refresh both relation accumulators");
+
+        const Move  move  = require_move(position, fixture.uci, fixture.label);
+        DirtyPiece& dirty = stack->push();
+        position.do_move(move, states[1], position.gives_check(move), dirty, nullptr, nullptr);
+
+        if (fixtureIndex == 0)
+            for (const auto fault : {IncrementalFaultPoint::AfterFirstPerspective,
+                                     IncrementalFaultPoint::BeforeComposition,
+                                     IncrementalFaultPoint::AfterCompositionBeforeCommit})
+            {
+                const IncrementalCounters beforeFault = stack->counters();
+                RuntimeOutput             failed{17, 19, 23};
+                stack->set_test_fault(fault);
+                const IncrementalStatus status = stack->evaluate_runtime(network, position, failed);
+                require(status.error == IncrementalError::InjectedFailure, fixture.label,
+                        position.fen(), "runtime relation fault returned the wrong error");
+                require(failed.psqtDifference == 0 && failed.rawOutput == 0
+                          && failed.scaledOutput == 0,
+                        fixture.label, position.fen(),
+                        "runtime relation fault published a partial output");
+                require(counters_equal(stack->counters(), beforeFault), fixture.label,
+                        position.fen(), "runtime relation fault committed counters/state");
+            }
+        stack->set_test_fault(IncrementalFaultPoint::None);
+
+        const IncrementalCounters beforeChild = stack->counters();
+        require_runtime_full_refresh_identity(*stack, network, position,
+                                              std::string(fixture.label) + "-child");
+        const IncrementalCounters afterChild = stack->counters();
+        require(relation_accumulator_events(afterChild)
+                  == relation_accumulator_events(beforeChild) + COLOR_NB,
+                fixture.label, position.fen(),
+                "child relation accumulator sources do not cover both perspectives");
+        sawDelta |= afterChild.relationAccumulatorDeltas > beforeChild.relationAccumulatorDeltas;
+
+        position.undo_move(move);
+        stack->pop();
+        const IncrementalCounters beforeUndo = stack->counters();
+        require_runtime_full_refresh_identity(*stack, network, position,
+                                              std::string(fixture.label) + "-undo");
+        const IncrementalCounters afterUndo = stack->counters();
+        require(position.fen() == rootFen && position.key() == rootKey, fixture.label,
+                position.fen(), "runtime relation roundtrip did not restore FEN/key");
+        require(afterUndo.relationAccumulatorReuses
+                  == beforeUndo.relationAccumulatorReuses + COLOR_NB,
+                fixture.label, position.fen(),
+                "undo did not reuse both committed parent relation accumulators");
+    }
+    require(sawDelta, "runtime-relation-delta", StartFEN,
+            "directed runtime corpus never exercised a relation-row delta");
+    pass("AtomicNNUEV3 runtime relation cache special-move/full-refresh/undo/fault identity");
+}
+
 }  // namespace
 }  // namespace Stockfish::Eval::NNUE::AtomicV3
 
@@ -1252,6 +1421,8 @@ int main(int argc, char* argv[]) {
     run_material_bucket(*loaded.network);
     run_special_moves(*loaded.network);
     run_null_ep(*loaded.network);
+    run_runtime_identity(*loaded.network);
+    run_runtime_relation_roundtrips(*loaded.network);
     run_failure_transactionality(*loaded.network, netPath);
     run_reset_mode_contract(*loaded.network);
     run_unsupported_isa_transactionality(*loaded.network);

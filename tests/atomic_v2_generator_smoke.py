@@ -147,18 +147,19 @@ def run_generator(
     return output
 
 
-def validate_markers(output: str) -> None:
+def validate_markers(output: str, backend: str = "AtomicNNUEV2") -> None:
+    network_marker = f"info string NNUE evaluation using {backend}"
     lines = [line.strip() for line in output.splitlines() if line.strip()]
     network_positions = [
-        index for index, line in enumerate(lines) if NETWORK_MARKER in line
+        index for index, line in enumerate(lines) if network_marker in line
     ]
     final_positions = [
         index for index, line in enumerate(lines) if line == FINAL_MARKER
     ]
     if not network_positions:
         raise SmokeError(
-            "data-generator did not report the AtomicNNUEV2 load marker: "
-            f"{NETWORK_MARKER!r}"
+            f"data-generator did not report the {backend} load marker: "
+            f"{network_marker!r}"
         )
     if len(final_positions) != 1:
         raise SmokeError(
@@ -166,7 +167,7 @@ def validate_markers(output: str) -> None:
             f"found {len(final_positions)}"
         )
     if final_positions[0] < network_positions[0]:
-        raise SmokeError("data-generator finalized before reporting the AtomicNNUEV2 load")
+        raise SmokeError(f"data-generator finalized before reporting the {backend} load")
     trailing = lines[final_positions[0] + 1 :]
     if len(trailing) != 1 or FINAL_SUMMARY_RE.fullmatch(trailing[0]) is None:
         raise SmokeError(
@@ -251,16 +252,17 @@ def run_smoke(
     *,
     timeout: float = TIMEOUT_SECONDS,
     runner: Callable[..., subprocess.CompletedProcess[str]] | None = None,
+    backend: str = "AtomicNNUEV2",
 ) -> str:
     if timeout <= 0:
         raise SmokeError("timeout must be greater than zero")
     generator = require_file(generator, "data-generator")
-    net = require_file(net, "AtomicNNUEV2 network")
+    net = require_file(net, f"{backend} network")
     expected_net_sha256 = normalize_sha256(expected_net_sha256)
     actual_net_sha256 = sha256(net)
     if actual_net_sha256 != expected_net_sha256:
         raise SmokeError(
-            "AtomicNNUEV2 network SHA-256 mismatch before launch: expected "
+            f"{backend} network SHA-256 mismatch before launch: expected "
             f"{expected_net_sha256}, got {actual_net_sha256}"
         )
 
@@ -276,7 +278,7 @@ def run_smoke(
             timeout=timeout,
             runner=runner,
         )
-        validate_markers(output)
+        validate_markers(output, backend)
         validate_artifacts(
             output_path,
             manifest_path,
@@ -284,7 +286,7 @@ def run_smoke(
         )
 
     return (
-        "AtomicNNUEV2 pure data-generator smoke passed: "
+        f"{backend} pure data-generator smoke passed: "
         f"records=1 bytes={EXPECTED_DATASET_SIZE} "
         f"network_sha256={expected_net_sha256}"
     )

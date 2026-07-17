@@ -326,6 +326,10 @@ bool diagnostic_is_clear(const IncrementalDiagnostic& value) {
             || !std::all_of(value.hmOnly[index].psqt.begin(), value.hmOnly[index].psqt.end(),
                             [](i64 cell) { return cell == 0; }))
             return false;
+        const auto& relation = value.relationUpdates[index];
+        if (relation.source != RelationSourceKind::None || relation.sourcePly
+            || relation.sourceDistance || relation.removedRows || relation.addedRows)
+            return false;
         const auto& update = value.hmUpdates[index];
         if (update.source != HmSourceKind::None || update.sourcePly || update.sourceDistance
             || update.removedRows || update.addedRows)
@@ -335,9 +339,10 @@ bool diagnostic_is_clear(const IncrementalDiagnostic& value) {
     const auto& delta    = value.hmDelta;
     return !counters.hmRefreshes && !counters.hmDeltas && !counters.hmReuses
         && !counters.relationRefreshes && !counters.snapshotMismatches
-        && !counters.epSquareMismatches && !delta.enabled && delta.requestedIsa == SimdIsa::Scalar
-        && delta.executedIsa == SimdIsa::Scalar && !delta.counters.removedRows
-        && !delta.counters.addedRows && !delta.counters.i16Lanes
+        && !counters.relationAccumulatorRefreshes && !counters.relationAccumulatorDeltas
+        && !counters.relationAccumulatorReuses && !counters.epSquareMismatches && !delta.enabled
+        && delta.requestedIsa == SimdIsa::Scalar && delta.executedIsa == SimdIsa::Scalar
+        && !delta.counters.removedRows && !delta.counters.addedRows && !delta.counters.i16Lanes
         && !delta.counters.sourcePermutationLanes && !delta.counters.publishPermutationLanes
         && !delta.counters.scalarKernelCalls && !delta.counters.sse41KernelCalls
         && !delta.counters.avx2KernelCalls && !value.ply && !value.sameFrameSnapshotMismatch
@@ -349,6 +354,9 @@ bool diagnostic_is_clear(const IncrementalDiagnostic& value) {
 bool counters_equal(const IncrementalCounters& lhs, const IncrementalCounters& rhs) {
     return lhs.hmRefreshes == rhs.hmRefreshes && lhs.hmDeltas == rhs.hmDeltas
         && lhs.hmReuses == rhs.hmReuses && lhs.relationRefreshes == rhs.relationRefreshes
+        && lhs.relationAccumulatorRefreshes == rhs.relationAccumulatorRefreshes
+        && lhs.relationAccumulatorDeltas == rhs.relationAccumulatorDeltas
+        && lhs.relationAccumulatorReuses == rhs.relationAccumulatorReuses
         && lhs.snapshotMismatches == rhs.snapshotMismatches
         && lhs.epSquareMismatches == rhs.epSquareMismatches;
 }
@@ -360,6 +368,12 @@ bool counters_advanced_by(const IncrementalCounters& after,
         && after.hmDeltas == before.hmDeltas + delta.hmDeltas
         && after.hmReuses == before.hmReuses + delta.hmReuses
         && after.relationRefreshes == before.relationRefreshes + delta.relationRefreshes
+        && after.relationAccumulatorRefreshes
+             == before.relationAccumulatorRefreshes + delta.relationAccumulatorRefreshes
+        && after.relationAccumulatorDeltas
+             == before.relationAccumulatorDeltas + delta.relationAccumulatorDeltas
+        && after.relationAccumulatorReuses
+             == before.relationAccumulatorReuses + delta.relationAccumulatorReuses
         && after.snapshotMismatches == before.snapshotMismatches + delta.snapshotMismatches
         && after.epSquareMismatches == before.epSquareMismatches + delta.epSquareMismatches;
 }
@@ -552,7 +566,10 @@ void evaluate_state(IncrementalStack&      stack,
         require_hm_delta_event(stack, hmDeltaBefore, *observed, context);
         const auto& event = observed->eventCounters;
         require(event.hmRefreshes + event.hmDeltas + event.hmReuses == COLOR_NB
-                  && event.relationRefreshes == COLOR_NB,
+                  && event.relationRefreshes == COLOR_NB
+                  && event.relationAccumulatorRefreshes + event.relationAccumulatorDeltas
+                         + event.relationAccumulatorReuses
+                       == COLOR_NB,
                 context, "successful evaluation published impossible HM/relation accounting");
         require(event.snapshotMismatches == observed->sameFrameSnapshotMismatch
                   && event.epSquareMismatches == observed->epSquareMismatch,
@@ -560,6 +577,9 @@ void evaluate_state(IncrementalStack&      stack,
         require(observed->hmUpdates[WHITE].source != HmSourceKind::None
                   && observed->hmUpdates[BLACK].source != HmSourceKind::None,
                 context, "successful evaluation omitted an HM source");
+        require(observed->relationUpdates[WHITE].source != RelationSourceKind::None
+                  && observed->relationUpdates[BLACK].source != RelationSourceKind::None,
+                context, "successful evaluation omitted a relation-accumulator source");
         if (compareFresh)
         {
             auto               fresh       = std::make_unique<ScalarDiagnostic>();

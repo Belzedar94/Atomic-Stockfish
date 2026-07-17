@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 import subprocess
 import sys
 
@@ -22,6 +23,27 @@ IDENTITY_ARGUMENTS = (
     "GIT_SHA_FULL=0123456789abcdef0123456789abcdef01234567",
     "GIT_DATE=20260714",
 )
+
+
+def _continued_make_assignment(makefile: str, variable: str) -> str:
+    lines = makefile.splitlines()
+    prefix = f"{variable} ="
+    for index, line in enumerate(lines):
+        if not line.startswith(prefix):
+            continue
+
+        parts: list[str] = []
+        current = line.split("=", 1)[1].strip()
+        while True:
+            continued = current.endswith("\\")
+            parts.append(current[:-1].strip() if continued else current)
+            if not continued:
+                return " ".join(parts)
+            index += 1
+            assert index < len(lines), f"unterminated {variable} assignment"
+            current = lines[index].strip()
+
+    raise AssertionError(f"missing {variable} assignment")
 
 
 def test_ci_pins_generator_identity_without_weakening_clean_tree_fallback() -> None:
@@ -85,12 +107,6 @@ def test_private_v3_histories_use_the_canonical_worker_baseline() -> None:
     assert "privateTt.clear(threads);" not in generator
     assert "generation8 = 0;" in tt
     assert "clusterCount * sizeof(Cluster)" in tt
-    assert "$(filter-out uci.o search.o tt.o,$(OBJS))" in makefile
-    assert (
-        "atomic_data_generator_uci.o atomic_data_generator_search.o "
-        "atomic_data_generator_tt.o"
-        in makefile
-    )
     tt_rule = makefile.index("atomic_data_generator_tt.o: tt.cpp")
     next_rule = makefile.index("atomic_data_generator_training_data_generator.o:", tt_rule)
     assert "-DATOMIC_DATA_GENERATOR" in makefile[tt_rule:next_rule]
@@ -110,6 +126,45 @@ def test_private_v3_histories_use_the_canonical_worker_baseline() -> None:
     for baseline in ("clear_range(-6", "clear_range(-1262", "fill(-552"):
         assert baseline not in search
         assert baseline not in generator
+
+
+def test_data_generator_object_manifest_is_target_isolated() -> None:
+    makefile = (TESTS_DIR.parent / "src" / "Makefile").read_text(encoding="utf-8")
+    objects = _continued_make_assignment(makefile, "ATOMIC_DATA_GENERATOR_OBJS")
+
+    filtered = re.search(r"\$\(filter-out\s+([^,]+),\s*\$\(OBJS\)\)", objects)
+    assert filtered is not None
+    assert set(filtered.group(1).split()) == {
+        "uci.o",
+        "search.o",
+        "tt.o",
+        "$(ATOMIC_V3_RUNTIME_OBJS)",
+    }
+
+    for target_specific in (
+        "atomic_data_generator_uci.o",
+        "atomic_data_generator_search.o",
+        "atomic_data_generator_tt.o",
+    ):
+        assert objects.split().count(target_specific) == 1
+
+    # The normal runtime objects are removed from OBJS before this explicit
+    # list is appended. This prevents duplicate linkage while keeping the
+    # generator on the same V3 implementation as the playing engine.
+    for runtime_object in (
+        "atomic_v3_hm_oracle.o",
+        "atomic_v3_capture_pair.o",
+        "atomic_v3_king_blast_ep.o",
+        "atomic_v3_blast_ring.o",
+        "atomic_v3_full_refresh.o",
+        "atomic_v3_numeric.o",
+        "atomic_v3_wire_network.o",
+        "atomic_v3_scalar_backend.o",
+        "atomic_v3_simd_isa.o",
+        "atomic_v3_incremental_simd_kernels.o",
+        "atomic_v3_incremental_backend.o",
+    ):
+        assert objects.split().count(runtime_object) == 1
 
 
 def test_v3_private_cleanup_is_checked_before_success_marker() -> None:

@@ -67,14 +67,11 @@ BlastRingCollateralRelation collateral_relation(Piece piece, Color perspective) 
 
 namespace Detail {
 
-BlastRingError project_blast_ring(const CapturePairSnapshot& snapshot,
-                                  Color                      perspective,
-                                  const CapturePairEmission& capturePairs,
-                                  BlastRingEmission&         result) {
-    result = {};
-    if (!well_formed_capture_pair_emission(snapshot, perspective, capturePairs))
-        return CapturePairError::NonCanonicalOrder;
-
+BlastRingError project_blast_ring_trusted(const CapturePairSnapshot& snapshot,
+                                          Color                      perspective,
+                                          const CapturePairEmission& capturePairs,
+                                          BlastRingEmission&         result) {
+    result             = {};
     result.orientation = capturePairs.orientation;
 
     std::array<CaptureCenterGroup, BlastRingCenterDimensions * BlastRingActorRelations> groups{};
@@ -105,6 +102,7 @@ BlastRingError project_blast_ring(const CapturePairSnapshot& snapshot,
     }
 
     std::array<bool, BlastRingPhysicalDimensions> active{};
+    bool                                          anyActive = false;
     for (IndexType groupIndex = 0; groupIndex < groups.size(); ++groupIndex)
     {
         const CaptureCenterGroup& group = groups[groupIndex];
@@ -171,8 +169,12 @@ BlastRingError project_blast_ring(const CapturePairSnapshot& snapshot,
                 return CapturePairError::NonCanonicalOrder;
             }
             active[localIndex] = true;
+            anyActive          = true;
         }
     }
+
+    if (!anyActive)
+        return CapturePairError::None;
 
     // Scan the complete compact rectangle so output remains a sorted boolean
     // union even if upstream CapturePair traversal changes.
@@ -239,6 +241,16 @@ BlastRingError project_blast_ring(const CapturePairSnapshot& snapshot,
     return CapturePairError::None;
 }
 
+BlastRingError project_blast_ring(const CapturePairSnapshot& snapshot,
+                                  Color                      perspective,
+                                  const CapturePairEmission& capturePairs,
+                                  BlastRingEmission&         result) {
+    result = {};
+    if (!well_formed_capture_pair_emission(snapshot, perspective, capturePairs))
+        return CapturePairError::NonCanonicalOrder;
+    return project_blast_ring_trusted(snapshot, perspective, capturePairs, result);
+}
+
 }  // namespace Detail
 
 BlastRingError
@@ -252,7 +264,7 @@ emit_blast_ring(const CapturePairSnapshot& snapshot, Color perspective, BlastRin
       emit_capture_pairs(snapshot, perspective, capturePairs);
     if (capturePairError != CapturePairError::None)
         return capturePairError;
-    return Detail::project_blast_ring(snapshot, perspective, capturePairs, result);
+    return Detail::project_blast_ring_trusted(snapshot, perspective, capturePairs, result);
 }
 
 BlastRingError

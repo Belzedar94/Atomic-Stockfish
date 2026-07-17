@@ -16,6 +16,7 @@ namespace Stockfish::Eval::NNUE::AtomicV3 {
 namespace {
 
 bool activate(std::array<bool, KingBlastEpPhysicalDimensions>& active,
+              bool&                                            anyActive,
               Square                                           orientedCenter,
               CapturePairActorRelation                         actorRelation,
               KingBlastEpRelationClass                         relationClass) {
@@ -23,6 +24,7 @@ bool activate(std::array<bool, KingBlastEpPhysicalDimensions>& active,
     if (!king_blast_ep_index(orientedCenter, actorRelation, relationClass, localIndex))
         return false;
     active[localIndex] = true;
+    anyActive          = true;
     return true;
 }
 
@@ -30,14 +32,11 @@ bool activate(std::array<bool, KingBlastEpPhysicalDimensions>& active,
 
 namespace Detail {
 
-KingBlastEpError project_king_blast_ep(const CapturePairSnapshot& snapshot,
-                                       Color                      perspective,
-                                       const CapturePairEmission& capturePairs,
-                                       KingBlastEpEmission&       result) {
-    result = {};
-    if (!well_formed_capture_pair_emission(snapshot, perspective, capturePairs))
-        return CapturePairError::NonCanonicalOrder;
-
+KingBlastEpError project_king_blast_ep_trusted(const CapturePairSnapshot& snapshot,
+                                               Color                      perspective,
+                                               const CapturePairEmission& capturePairs,
+                                               KingBlastEpEmission&       result) {
+    result             = {};
     result.orientation = capturePairs.orientation;
 
     std::array<Square, COLOR_NB> kingSquares{SQ_NONE, SQ_NONE};
@@ -49,6 +48,7 @@ KingBlastEpError project_king_blast_ep(const CapturePairSnapshot& snapshot,
     }
 
     std::array<bool, KingBlastEpPhysicalDimensions> active{};
+    bool                                            anyActive = false;
     for (IndexType featureIndex = 0; featureIndex < capturePairs.size; ++featureIndex)
     {
         const CapturePairFeature& capturePair = capturePairs.features[featureIndex];
@@ -70,7 +70,7 @@ KingBlastEpError project_king_blast_ep(const CapturePairSnapshot& snapshot,
         if (!capturePair.enPassant && capturePair.targetClass == CapturePairTargetClass::King
             && capturePair.orientedCenter == enemyKing)
         {
-            if (!activate(active, capturePair.orientedCenter, capturePair.actorRelation,
+            if (!activate(active, anyActive, capturePair.orientedCenter, capturePair.actorRelation,
                           KingBlastEpRelationClass::EnemyKingCenter))
             {
                 result = {};
@@ -83,8 +83,8 @@ KingBlastEpError project_king_blast_ep(const CapturePairSnapshot& snapshot,
             // The center case was handled only through a CP target KING, so
             // this branch can add directional enemy-king blast relations only.
             if (relationClass != KingBlastEpRelationClass::EnemyKingCenter
-                && !activate(active, capturePair.orientedCenter, capturePair.actorRelation,
-                             relationClass))
+                && !activate(active, anyActive, capturePair.orientedCenter,
+                             capturePair.actorRelation, relationClass))
             {
                 result = {};
                 return CapturePairError::NonCanonicalOrder;
@@ -92,7 +92,7 @@ KingBlastEpError project_king_blast_ep(const CapturePairSnapshot& snapshot,
         }
 
         if (king_blast_ep_relation_class(capturePair.orientedCenter, ownKing, false, relationClass)
-            && !activate(active, capturePair.orientedCenter, capturePair.actorRelation,
+            && !activate(active, anyActive, capturePair.orientedCenter, capturePair.actorRelation,
                          relationClass))
         {
             result = {};
@@ -100,13 +100,16 @@ KingBlastEpError project_king_blast_ep(const CapturePairSnapshot& snapshot,
         }
 
         if (capturePair.enPassant
-            && !activate(active, capturePair.orientedCenter, capturePair.actorRelation,
+            && !activate(active, anyActive, capturePair.orientedCenter, capturePair.actorRelation,
                          KingBlastEpRelationClass::EnPassantMarker))
         {
             result = {};
             return CapturePairError::NonCanonicalOrder;
         }
     }
+
+    if (!anyActive)
+        return CapturePairError::None;
 
     // The full 64x2x18 rectangle is scanned in local-index order, making the
     // output unique and canonical independently of CapturePair traversal.
@@ -158,6 +161,16 @@ KingBlastEpError project_king_blast_ep(const CapturePairSnapshot& snapshot,
     return CapturePairError::None;
 }
 
+KingBlastEpError project_king_blast_ep(const CapturePairSnapshot& snapshot,
+                                       Color                      perspective,
+                                       const CapturePairEmission& capturePairs,
+                                       KingBlastEpEmission&       result) {
+    result = {};
+    if (!well_formed_capture_pair_emission(snapshot, perspective, capturePairs))
+        return CapturePairError::NonCanonicalOrder;
+    return project_king_blast_ep_trusted(snapshot, perspective, capturePairs, result);
+}
+
 }  // namespace Detail
 
 KingBlastEpError emit_king_blast_ep(const CapturePairSnapshot& snapshot,
@@ -174,7 +187,7 @@ KingBlastEpError emit_king_blast_ep(const CapturePairSnapshot& snapshot,
       emit_capture_pairs(snapshot, perspective, capturePairs);
     if (capturePairError != CapturePairError::None)
         return capturePairError;
-    return Detail::project_king_blast_ep(snapshot, perspective, capturePairs, result);
+    return Detail::project_king_blast_ep_trusted(snapshot, perspective, capturePairs, result);
 }
 
 KingBlastEpError

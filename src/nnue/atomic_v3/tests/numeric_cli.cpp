@@ -224,6 +224,24 @@ void test_scale_and_checked_narrow() {
              && value == -OutputScaleNumerator,
            "negative integral scaling preserves sign and exact quotient");
 
+    i64 raw    = 1;
+    i32 scaled = 1;
+    expect(compose_dense_output(std::numeric_limits<i32>::max(), std::numeric_limits<i32>::max(),
+                                629928535, raw, scaled)
+               == NumericError::None
+             && raw == RawOutputMaximum && scaled == std::numeric_limits<i32>::max(),
+           "i64 dense composition accepts the positive V3 boundary above INT32_MAX");
+    expect(compose_dense_output(std::numeric_limits<i32>::min(), std::numeric_limits<i32>::min(),
+                                -629928536, raw, scaled)
+               == NumericError::None
+             && raw == RawOutputMinimum && scaled == std::numeric_limits<i32>::min(),
+           "i64 dense composition accepts the negative V3 boundary below INT32_MIN");
+    expect(compose_dense_output(std::numeric_limits<i32>::max(), std::numeric_limits<i32>::max(),
+                                629928534, raw, scaled)
+               == NumericError::RawOutputOverflow
+             && raw == 0 && scaled == 0,
+           "i64 dense composition rejects boundary plus one transactionally");
+
     value = 17;
     expect(scale_raw_output(RawOutputMinimum - 1, value) == NumericError::RawOutputOverflow
              && value == 0,

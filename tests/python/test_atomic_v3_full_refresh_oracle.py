@@ -252,12 +252,12 @@ def test_cpp_source_contract_proves_single_enumeration_and_shared_cp() -> None:
     assert not re.search(r"\bemit_blast_ring\s*\(", source)
 
     king_call = re.search(
-        r"project_king_blast_ep\s*\([^;]*candidate\.capturePairs[^;]*\)",
+        r"project_king_blast_ep_trusted\s*\([^;]*candidate\.capturePairs[^;]*\)",
         source,
         re.DOTALL,
     )
     ring_call = re.search(
-        r"project_blast_ring\s*\([^;]*candidate\.capturePairs[^;]*\)",
+        r"project_blast_ring_trusted\s*\([^;]*candidate\.capturePairs[^;]*\)",
         source,
         re.DOTALL,
     )
@@ -269,8 +269,13 @@ def test_cpp_source_contract_proves_single_enumeration_and_shared_cp() -> None:
     assert "load_candidate" not in source
 
 
-def test_runtime_dispatcher_remains_intentionally_untouched() -> None:
+def test_runtime_dispatcher_promotes_v3_without_coupling_the_oracle() -> None:
     dispatcher = (ROOT / "src/nnue/nnue_dispatcher.h").read_text(encoding="utf-8")
     dispatcher += (ROOT / "src/nnue/nnue_dispatcher.cpp").read_text(encoding="utf-8")
-    assert "AtomicNNUEV3" not in dispatcher
-    assert "0xA70C0003" not in dispatcher
+    assert "AtomicNNUEV3" in dispatcher
+    assert '"atomic_v3/incremental_backend.h"' in dispatcher
+    assert '"atomic_v3/wire_network.h"' in dispatcher
+    full_refresh = (ROOT / "src/nnue/atomic_v3/full_refresh.cpp").read_text(
+        encoding="utf-8"
+    )
+    assert "nnue_dispatcher" not in full_refresh

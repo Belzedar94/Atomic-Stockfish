@@ -16,6 +16,7 @@ permissions:
 env:
   ATOMIC_SYNTHETIC_NNUE_SHA256: 9CF054CA00B82AB53A34473DE52D1104AEDDAA19B2E7B24091B5E613AF485985
   ATOMIC_SYNTHETIC_V2_NNUE_SHA256: 4DEB05CFF79B5D5EBA51C560F64ED24224671C188B6C5DB27521033E587C87C6
+  ATOMIC_SYNTHETIC_V3_NNUE_SHA256: 00E46223822D06D7927E884EEC10739BA19EF8DD82A6E262F627D361658080C2
   # The checkout becomes dirty with untracked test/build products before some
   # generator targets run. Bind every CI producer to the exact checked-out
   # commit instead of weakening the Makefile's clean-tree fallback.
@@ -122,22 +123,31 @@ jobs:
             --generator src/atomic-stockfish-data-generator \
             --net "$RUNNER_TEMP/atomic-v2.nnue" \
             --expected-net-sha256 "$ATOMIC_SYNTHETIC_V2_NNUE_SHA256"
-      - name: Keep private AtomicNNUEV3 outside the production dispatcher
+      - name: AtomicNNUEV3 production dispatcher acceptance
         run: >-
-          python3 tests/nnue_v3_dispatch_reject.py
+          python3 tests/nnue_v3_modes.py
           --engine src/atomic-stockfish
           --v3-net "$RUNNER_TEMP/atomic-v3-wire-v1.nnue"
+          --v3-sha256 "$ATOMIC_SYNTHETIC_V3_NNUE_SHA256"
+          --v2-net "$RUNNER_TEMP/atomic-v2.nnue"
+      - name: AtomicNNUEV3 pure data-generator smoke
+        if: matrix.comp == 'gcc'
+        run: >-
+          python3 tests/atomic_v3_generator_smoke.py
+          --generator src/atomic-stockfish-data-generator
+          --net "$RUNNER_TEMP/atomic-v3-wire-v1.nnue"
+          --expected-net-sha256 "$ATOMIC_SYNTHETIC_V3_NNUE_SHA256"
       - name: Atomic Syzygy source/domain contract
         run: python3 tests/atomic_syzygy.py --contract-only
       - name: Atomic and Atomic960 perft
-        run: ATOMIC_PERFT_NET="$RUNNER_TEMP/atomic-v2.nnue" bash tests/perft.sh src/atomic-stockfish
+        run: ATOMIC_PERFT_NET="$RUNNER_TEMP/atomic-v3-wire-v1.nnue" bash tests/perft.sh src/atomic-stockfish
       - name: Atomic search regressions
         run: python3 tests/atomic_search.py --candidate src/atomic-stockfish --use-nnue false
       - name: XBoard protocol
         run: >-
           python3 tests/xboard_protocol.py
           --candidate src/atomic-stockfish
-          --eval-file "$RUNNER_TEMP/atomic-v2.nnue"
+          --eval-file "$RUNNER_TEMP/atomic-v3-wire-v1.nnue"
 
   nnue-v2-simd:
     name: AtomicNNUEV2 ${{ matrix.arch }}
@@ -158,10 +168,11 @@ jobs:
           make -C src -j2 ARCH=${{ matrix.arch }} build
           make -C src -j2 ARCH=${{ matrix.arch }} atomic-v2-backend-core-tests.bin
           make -C src -j2 ARCH=${{ matrix.arch }} atomic-v2-incremental-tests.bin
-      - name: Authenticated dual-backend SIMD gate
+      - name: Authenticated three-backend SIMD gate
         run: |
           python3 tests/create_synthetic_zero_nnue.py --output "$RUNNER_TEMP/atomic-zero.nnue"
           python3 tests/create_synthetic_atomic_v2_nnue.py --output "$RUNNER_TEMP/atomic-v2.nnue"
+          python3 tests/create_synthetic_atomic_v3_nnue.py --output "$RUNNER_TEMP/atomic-v3-wire-v1.nnue"
           src/atomic-v2-backend-core-tests.bin "$RUNNER_TEMP/atomic-v2.nnue"
           src/atomic-v2-incremental-tests.bin \
             --net "$RUNNER_TEMP/atomic-v2.nnue" \
@@ -171,6 +182,12 @@ jobs:
             --engine src/atomic-stockfish \
             --legacy-net "$RUNNER_TEMP/atomic-zero.nnue" \
             --legacy-sha256 "$ATOMIC_SYNTHETIC_NNUE_SHA256" \
+            --v2-net "$RUNNER_TEMP/atomic-v2.nnue" \
+            --timeout 180
+          python3 tests/nnue_v3_modes.py \
+            --engine src/atomic-stockfish \
+            --v3-net "$RUNNER_TEMP/atomic-v3-wire-v1.nnue" \
+            --v3-sha256 "$ATOMIC_SYNTHETIC_V3_NNUE_SHA256" \
             --v2-net "$RUNNER_TEMP/atomic-v2.nnue" \
             --timeout 180
       - name: AtomicNNUEV3 AVX2 wire permutation gate
@@ -225,7 +242,7 @@ jobs:
         run: >-
           python3 tests/create_synthetic_atomic_v3_nnue.py
           --output "$RUNNER_TEMP/atomic-v3-wire-v1.nnue"
-      - name: Build private full-refresh SIMD runner
+      - name: Build isolated full-refresh SIMD runner
         run: >-
           make -C src -j2 ARCH=${{ matrix.arch }}
           COMP=${{ matrix.comp }} COMPCXX=${{ matrix.cxx }}
@@ -312,7 +329,7 @@ jobs:
         run: >-
           python3 tests/create_synthetic_atomic_v3_nnue.py
           --output "$RUNNER_TEMP/atomic-v3-wire-v1.nnue"
-      - name: Build private incremental SIMD runners
+      - name: Build isolated incremental SIMD runners
         run: |
           make -C src -j2 ARCH=${{ matrix.arch }} \
             COMP=${{ matrix.comp }} COMPCXX=${{ matrix.cxx }} \
@@ -425,7 +442,7 @@ jobs:
         run: >-
           python3 tests/create_synthetic_atomic_v3_nnue.py
           --output "$RUNNER_TEMP/atomic-v3-wire-v1.nnue"
-      - name: Build private incremental stress runner
+      - name: Build isolated incremental stress runner
         working-directory: src
         run: >-
           make -j2 ARCH=x86-64 COMP=${{ matrix.comp }} COMPCXX=${{ matrix.cxx }}
@@ -650,9 +667,13 @@ jobs:
             ATOMIC_NNUE_V3_TEST_NET="$RUNNER_TEMP/atomic-v3-wire-v1.nnue" \
             ATOMIC_V3_SIMD_REQUIRED_ISA=scalar \
             atomic-v3-simd-tests
-          python tests/nnue_v3_dispatch_reject.py \
+          python tests/create_synthetic_atomic_v2_nnue.py --output "$RUNNER_TEMP/atomic-v2.nnue"
+          python tests/nnue_v3_modes.py \
             --engine src/atomic-stockfish.exe \
-            --v3-net "$RUNNER_TEMP/atomic-v3-wire-v1.nnue"
+            --v3-net "$RUNNER_TEMP/atomic-v3-wire-v1.nnue" \
+            --v3-sha256 "$ATOMIC_SYNTHETIC_V3_NNUE_SHA256" \
+            --v2-net "$RUNNER_TEMP/atomic-v2.nnue" \
+            --timeout 180
           make -C src -j2 ARCH=x86-64 COMP=mingw data-generator
           make -C src -j2 ARCH=x86-64 COMP=mingw legacy-atomic-v1-tests
           make -C src -j2 ARCH=x86-64 COMP=mingw atomic-bin-v2-tests
@@ -670,7 +691,6 @@ jobs:
       - name: Functional Windows data-generator smoke (Threads=2)
         run: |
           python tests/create_synthetic_zero_nnue.py --output "$RUNNER_TEMP/atomic-zero.nnue"
-          python tests/create_synthetic_atomic_v2_nnue.py --output "$RUNNER_TEMP/atomic-v2.nnue"
           src/atomic-v2-backend-core-tests.exe "$RUNNER_TEMP/atomic-v2.nnue"
           src/atomic-v2-incremental-tests.exe --net "$RUNNER_TEMP/atomic-v2.nnue" --operations 4096 --full-refresh-interval 1
           python tests/data_generator.py --smoke-only \
@@ -1231,6 +1251,7 @@ jobs:
           tests/python/test_atomic_v3_simd_wrapper.py
           tests/python/test_atomic_v3_simd_benchmark.py
           tests/python/test_create_synthetic_atomic_v3_nnue.py
+          tests/python/test_nnue_v3_modes.py
           tests/python/test_validate_atomic_v3_bundle.py
           tests/python/test_validate_atomic_v3_publication.py
           tests/python/test_create_synthetic_atomic_v2_nnue.py
@@ -1264,7 +1285,7 @@ jobs:
         run: npm test
 
   nnue-wasm:
-    name: Node UCI dual NNUE WASM
+    name: Node UCI three-backend NNUE WASM
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -1279,24 +1300,27 @@ jobs:
           emscripten/emsdk:4.0.10@sha256:90b757eb11fa9a0e3ce4d2d9f76d932a56018e4accc37b5a28b2783751e60eb7
           python3 tests/wasm-engine/build.py
           --out-dir build/wasm-engine-ci
-      - name: Create authenticated Legacy V1 and AtomicNNUEV2 fixtures
+      - name: Create authenticated V1, V2 and V3 fixtures
         run: |
           python3 tests/create_synthetic_zero_nnue.py --output "$RUNNER_TEMP/atomic-zero.nnue"
           python3 tests/create_synthetic_atomic_v2_nnue.py --output "$RUNNER_TEMP/atomic-v2.nnue"
+          python3 tests/create_synthetic_atomic_v3_nnue.py --output "$RUNNER_TEMP/atomic-v3.nnue"
       - name: Full Legacy V1 UCI, perft and interactive pthread gate
         run: |
           node tests/wasm-engine/run-engine-tests.mjs \
             --engine build/wasm-engine-ci/atomic-stockfish-nnue-node.mjs \
             --net "$RUNNER_TEMP/atomic-zero.nnue" \
             --expected-net-sha256 "$ATOMIC_SYNTHETIC_NNUE_SHA256"
-      - name: Dual backend reload, export, rollback and memory gate
+      - name: Three-backend reload, export, rollback and memory gate
         run: |
           node tests/wasm-engine/run-dual-backend-tests.mjs \
             --engine build/wasm-engine-ci/atomic-stockfish-nnue-node.mjs \
             --legacy-net "$RUNNER_TEMP/atomic-zero.nnue" \
             --legacy-sha256 "$ATOMIC_SYNTHETIC_NNUE_SHA256" \
             --v2-net "$RUNNER_TEMP/atomic-v2.nnue" \
-            --v2-sha256 "$ATOMIC_SYNTHETIC_V2_NNUE_SHA256"
+            --v2-sha256 "$ATOMIC_SYNTHETIC_V2_NNUE_SHA256" \
+            --v3-net "$RUNNER_TEMP/atomic-v3.nnue" \
+            --v3-sha256 "$ATOMIC_SYNTHETIC_V3_NNUE_SHA256"
 
   legacy-pipeline:
     name: Pinned Legacy Atomic V1 pipeline

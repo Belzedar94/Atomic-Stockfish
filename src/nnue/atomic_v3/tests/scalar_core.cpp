@@ -370,6 +370,46 @@ void test_adversarial_dense(u64& corpusFingerprint) {
            "adversarial dense composition overflow rejects transactionally with clear output");
 }
 
+void test_runtime_dense_identity(const Network& network) {
+    std::array<std::array<u8, Fc0Inputs>, 5> inputs{};
+    inputs[1][0]    = 1;
+    inputs[1][255]  = 127;
+    inputs[1][256]  = 2;
+    inputs[1][511]  = 126;
+    inputs[1][512]  = 3;
+    inputs[1][767]  = 125;
+    inputs[1][768]  = 4;
+    inputs[1][1023] = 124;
+    for (std::size_t index = 0; index < Fc0Inputs; ++index)
+    {
+        inputs[2][index] = static_cast<u8>((index * 17 + 3) % 128);
+        inputs[3][index] = index % 4 == 0 ? 127 : 0;
+        inputs[4][index] = index % 257 == 0 ? static_cast<u8>(index % 128) : 0;
+    }
+
+    bool exact = network.dense_runtime_ready();
+    for (IndexType bucket = 0; bucket < LayerStacks; ++bucket)
+        for (const auto& input : inputs)
+        {
+            ScalarDenseResult  scalar{};
+            const NumericError scalarStatus =
+              propagate_dense_scalar(network.dense_stacks()[bucket], input, scalar);
+            AtomicV2::NNZInfo<AtomicV2::L1> nnz{};
+            nnz.reset_from(input.data());
+            const auto runtime =
+              network.dense_runtime_stacks()[bucket].propagate_components(input.data(), nnz);
+            const i64 raw =
+              i64(runtime.fc2Output) + i64(runtime.fc0SkipAdd) - i64(runtime.fc0SkipSubtract);
+            exact = exact && scalarStatus == NumericError::None
+                 && runtime.fc2Output == scalar.layers.fc2[0]
+                 && runtime.fc0SkipAdd == scalar.layers.fc0[Fc0Outputs - 2]
+                 && runtime.fc0SkipSubtract == scalar.layers.fc0[Fc0Outputs - 1]
+                 && raw == scalar.rawOutput;
+        }
+    expect(exact,
+           "all runtime dense buckets and sparse NNZ boundary patterns equal the scalar oracle");
+}
+
 void test_snapshot_adapter() {
     Position   position;
     StateInfo  state{};
@@ -1084,6 +1124,7 @@ int main(int argc, char* argv[]) {
     test_parameter_mapping(*loaded.network);
     u64 corpusFingerprint = test_success_corpus(*loaded.network);
     test_adversarial_dense(corpusFingerprint);
+    test_runtime_dense_identity(*loaded.network);
     test_rejections(*loaded.network);
     test_composition_rejections(*loaded.network);
     test_concurrent_reads(*loaded.network);

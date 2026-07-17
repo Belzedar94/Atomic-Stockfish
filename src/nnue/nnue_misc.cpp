@@ -82,7 +82,7 @@ std::string trace(Position&                     pos,
         format_cp_aligned_dot(t.positional[bucket], ss, pos);
         ss << "  "  //
            << " |  ";
-        format_cp_aligned_dot(t.psqt[bucket] + t.positional[bucket], ss, pos);
+        format_cp_aligned_dot(t.total[bucket], ss, pos);
         ss << "  "  //
            << " |";
         if (bucket == t.correctBucket)

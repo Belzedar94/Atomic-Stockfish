@@ -87,6 +87,19 @@ struct NNZInfo {
     };
 
     Cursor make_cursor(bool perspective) { return {*this, perspective}; }
+
+    void reset_from(const u8* input) noexcept {
+        count = 0;
+        if (!input)
+            return;
+
+        for (usize group = 0; group < Dimensions / 4; ++group)
+        {
+            const usize offset = group * 4;
+            if (input[offset] || input[offset + 1] || input[offset + 2] || input[offset + 3])
+                nnz[count++] = static_cast<u16>(group);
+        }
+    }
 #else
     alignas(8) u8 bitset[(Dimensions + 31) / 32]{};
 
@@ -122,6 +135,20 @@ struct NNZInfo {
     };
 
     Cursor make_cursor(bool perspective) { return {*this, perspective}; }
+
+    void reset_from(const u8* input) noexcept {
+        std::memset(bitset, 0, sizeof(bitset));
+        if (!input)
+            return;
+
+        for (usize group = 0; group < Dimensions / 4; ++group)
+        {
+            const usize offset = group * 4;
+            const bool  nonzero =
+              input[offset] || input[offset + 1] || input[offset + 2] || input[offset + 3];
+            bitset[group / 8] |= static_cast<u8>(nonzero) << (group % 8);
+        }
+    }
 #endif
 };
 

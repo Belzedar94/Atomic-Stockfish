@@ -51,12 +51,12 @@ FullRefreshError emit_full_refresh(const CapturePairSnapshot& snapshot,
 
     // Both projectors receive the same immutable object. Neither reconstructs
     // attacks or EP metadata and neither owns or retains the input.
-    const KingBlastEpError kingBlastEpError = Detail::project_king_blast_ep(
+    const KingBlastEpError kingBlastEpError = Detail::project_king_blast_ep_trusted(
       snapshot, perspective, candidate.capturePairs, candidate.kingBlastEp);
     if (kingBlastEpError != CapturePairError::None)
         return kingBlastEpError;
 
-    const BlastRingError blastRingError = Detail::project_blast_ring(
+    const BlastRingError blastRingError = Detail::project_blast_ring_trusted(
       snapshot, perspective, candidate.capturePairs, candidate.blastRing);
     if (blastRingError != CapturePairError::None)
         return blastRingError;

@@ -151,6 +151,20 @@ NumericError checked_narrow_i32(i64 value, i32& result) {
     return NumericError::None;
 }
 
+NumericError compose_dense_output(
+  i32 fc2, i32 fc0SkipAdd, i32 fc0SkipSubtract, i64& rawOutput, i32& scaledOutput) {
+    rawOutput                    = 0;
+    scaledOutput                 = 0;
+    const i64          candidate = i64(fc2) + i64(fc0SkipAdd) - i64(fc0SkipSubtract);
+    i32                scaled    = 0;
+    const NumericError status    = scale_raw_output(candidate, scaled);
+    if (status != NumericError::None)
+        return status;
+    rawOutput    = candidate;
+    scaledOutput = scaled;
+    return NumericError::None;
+}
+
 NumericError scale_raw_output(i64 rawOutput, i32& result) {
     result = 0;
     if (rawOutput < RawOutputMinimum || rawOutput > RawOutputMaximum)

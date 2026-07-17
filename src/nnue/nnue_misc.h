@@ -52,6 +52,7 @@ struct NnueEvalTrace {
 
     Value psqt[LayerStacks];
     Value positional[LayerStacks];
+    Value total[LayerStacks];
     usize correctBucket;
 };
 
