@@ -73,6 +73,21 @@ def test_markers_require_v2_load_then_exact_single_finalization() -> None:
         )
 
 
+def test_marker_validator_can_gate_the_public_v3_generator_backend() -> None:
+    marker = "info string NNUE evaluation using AtomicNNUEV3"
+    SMOKE.validate_markers(
+        f"{marker} controlled.nnue (version 0xA70C0003)\n"
+        f"{SMOKE.FINAL_MARKER}\nINFO: records=1 draws=0\n",
+        backend="AtomicNNUEV3",
+    )
+    with pytest.raises(SMOKE.SmokeError, match="AtomicNNUEV3 load marker"):
+        SMOKE.validate_markers(
+            f"{SMOKE.NETWORK_MARKER}\n{SMOKE.FINAL_MARKER}\n"
+            "INFO: records=1 draws=0\n",
+            backend="AtomicNNUEV3",
+        )
+
+
 @pytest.mark.parametrize("value", (1, "1"))
 def test_manifest_record_count_accepts_wire_and_integer_types(value: object) -> None:
     assert SMOKE._manifest_record_count(value) == 1

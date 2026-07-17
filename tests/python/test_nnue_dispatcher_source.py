@@ -34,21 +34,22 @@ def workflow_job(workflow: str, job: str) -> str:
     return match.group(0)
 
 
-def test_dual_backend_facade_is_a_tagged_inline_union_without_indirection():
+def test_three_backend_facade_is_a_tagged_inline_union_without_indirection():
     dispatcher = compact(HEADER)
     assert (
-        "enum class NetworkBackend : u8 { LegacyAtomicV1, AtomicNNUEV2 };"
+        "enum class NetworkBackend : u8 { LegacyAtomicV1, AtomicNNUEV2, AtomicNNUEV3 };"
         in dispatcher
     )
-    assert "inline constexpr usize NetworkBackendCount = 2;" in dispatcher
-    assert "static_assert(NetworkBackendCount == 2);" in dispatcher
+    assert "inline constexpr usize NetworkBackendCount = 3;" in dispatcher
+    assert "static_assert(NetworkBackendCount == 3);" in dispatcher
     assert "LegacyAtomicV1::Network legacy;" in dispatcher
     assert "AtomicV2::Network atomicV2;" in dispatcher
+    assert "AtomicV3::Network atomicV3;" in dispatcher
     assert "NetworkBackend backend_" in HEADER
-    assert "AtomicNNUEV3" not in HEADER
-    assert "AtomicNNUEV3" not in SOURCE
-    assert "atomic_v3" not in HEADER
-    assert "atomic_v3" not in SOURCE
+    assert '#include "atomic_v3/incremental_backend.h"' in HEADER
+    assert '#include "atomic_v3/wire_network.h"' in HEADER
+    assert "activate_v3()" in HEADER
+    assert "AnyNetwork::activate_v3()" in SOURCE
 
     code = without_cpp_comments(HEADER)
     for forbidden in (
@@ -59,11 +60,15 @@ def test_dual_backend_facade_is_a_tagged_inline_union_without_indirection():
         "void (*",
         "unique_ptr<LegacyAtomicV1",
         "unique_ptr<AtomicV2",
+        "unique_ptr<AtomicV3",
     ):
         assert forbidden not in code
 
 
 def test_facade_preserves_the_shared_memory_copy_contract():
+    v3_wire = (ROOT / "src/nnue/atomic_v3/wire_network.h").read_text(
+        encoding="utf-8"
+    )
     for contract in (
         "std::is_trivially_copyable_v<AnyNetwork>",
         "std::is_trivially_copy_constructible_v<AnyNetwork>",
@@ -71,12 +76,19 @@ def test_facade_preserves_the_shared_memory_copy_contract():
         "std::is_trivially_destructible_v<AnyNetwork>",
         "sizeof(AnyNetwork) >= sizeof(LegacyAtomicV1::Network)",
         "sizeof(AnyNetwork) >= sizeof(AtomicV2::Network)",
+        "sizeof(AnyNetwork) >= sizeof(AtomicV3::Network)",
     ):
         assert contract in HEADER
 
     assert "struct std::hash<Stockfish::Eval::NNUE::AnyNetwork>" in HEADER
     assert "return network.get_content_hash();" in HEADER
     assert "hash_combine(hash, static_cast<usize>(backend_));" in SOURCE
+    for contract in (
+        "std::is_trivially_copy_constructible_v<Network>",
+        "std::is_trivially_move_constructible_v<Network>",
+        "std::is_trivially_destructible_v<Network>",
+    ):
+        assert contract in v3_wire
 
 
 def test_hot_dispatch_selects_matching_network_accumulator_pairs():
@@ -85,6 +97,7 @@ def test_hot_dispatch_selects_matching_network_accumulator_pairs():
     assert HEADER.count("assert(backend_ == accumulator.backend_);") == 3
     assert "storage_.legacy.evaluate_raw" in HEADER
     assert "storage_.atomicV2.evaluate_raw" in HEADER
+    assert "storage_.atomicV3" in HEADER
     assert "storage_.legacy.trace_evaluate" in HEADER
     assert "storage_.atomicV2.trace_evaluate" in HEADER
 
@@ -190,33 +203,96 @@ def test_wasm_fallback_adopts_the_validated_network_allocation():
     assert "fallback_object(std::move(value))" in shm
 
 
-def test_failed_load_keeps_live_metadata_and_reports_both_accepted_backends():
+def test_failed_load_keeps_live_metadata_and_reports_all_accepted_backends():
     dispatcher = compact(SOURCE)
     assert "EvalFile candidateFile{std::nullopt, \"\"};" in dispatcher
     assert "if (candidateFile.current != requested) return false;" in dispatcher
     assert "evalFile = std::move(candidateFile);" in dispatcher
-    assert "compatible Legacy Atomic V1 or AtomicNNUEV2" in SOURCE
+    assert "compatible Legacy Atomic V1, AtomicNNUEV2, or " in SOURCE
+    assert '"AtomicNNUEV3 "' in SOURCE
     assert "NNUE evaluation using AtomicNNUEV2" in SOURCE
+    assert "NNUE evaluation using AtomicNNUEV3" in SOURCE
     assert '"Legacy Atomic V1 "' in SOURCE
 
 
-def test_v2_evaluation_does_not_reuse_legacy_calibration():
+def test_relative_evalfile_probes_all_backends_before_the_next_path():
+    dispatcher = compact(SOURCE)
+    assert "requested_candidates(rootDirectory, evalfilePath)" in dispatcher
+    loop = function_body(
+        dispatcher,
+        "bool AnyNetwork::load(",
+        "bool AnyNetwork::load_authenticated(",
+    )
+    candidate_loop = loop[loop.index("for (const fs::path& candidate") :]
+    v3 = candidate_loop.index("AtomicV3::load_candidate(candidate)")
+    v2 = candidate_loop.index("AtomicV2::load_candidate(v2Stream")
+    legacy = candidate_loop.index("storage_.legacy.load_authenticated(")
+    assert v3 < v2 < legacy
+    workflow = (ROOT / ".github/workflows/atomic.yml").read_text(encoding="utf-8")
+    assert workflow.count('--v2-net "$RUNNER_TEMP/atomic-v2.nnue"') >= 3
+    windows = workflow_job(workflow, "data-generator-windows")
+    create_v2 = (
+        'python tests/create_synthetic_atomic_v2_nnue.py --output '
+        '"$RUNNER_TEMP/atomic-v2.nnue"'
+    )
+    assert windows.count(create_v2) == 1
+    assert windows.index(create_v2) < windows.index("python tests/nnue_v3_modes.py")
+
+
+def test_modern_v2_and_v3_evaluation_do_not_reuse_legacy_calibration():
     evaluation = compact(
         without_cpp_comments(
             (ROOT / "src" / "evaluate.cpp").read_text(encoding="utf-8")
         )
     )
     assert "network.backend() == NNUE::NetworkBackend::AtomicNNUEV2" in evaluation
+    assert "network.backend() == NNUE::NetworkBackend::AtomicNNUEV3" in evaluation
     v2 = function_body(
         evaluation,
-        "else if (network.backend() == NNUE::NetworkBackend::AtomicNNUEV2)",
+        "else if (network.backend() == NNUE::NetworkBackend::AtomicNNUEV2",
         "else { const int deltaNpm",
     )
-    assert "rawPsqt + rawPositional" in v2
+    assert "Detail::atomic_nnue_value_from_raw(rawPsqt, rawPositional)" in v2
     assert "fix_frc(pos)" in v2
     assert "damp_for_atomic_rule50(v, pos)" in v2
     for legacy_only in ("entertainment", "legacyNpm", "LegacyAtomicRoyalValue"):
         assert legacy_only not in v2
+
+
+def test_search_and_trace_share_wide_clamped_nnue_conversion():
+    evaluation = compact(
+        without_cpp_comments(
+            (ROOT / "src" / "evaluate.cpp").read_text(encoding="utf-8")
+        )
+    )
+    helpers = function_body(
+        evaluation,
+        "Value Eval::Detail::atomic_nnue_value_from_scaled",
+        "Value Eval::evaluate",
+    )
+    trace = evaluation[evaluation.index("std::string Eval::trace") :]
+
+    call = "Detail::atomic_nnue_value_from_raw(rawPsqt, rawPositional)"
+    assert evaluation.count(call) == 3
+    assert call in trace
+    assert "i64(rawPsqt) + i64(rawPositional)" in helpers
+    assert "std::clamp(scaled, Minimum, Maximum)" in helpers
+    assert "return atomic_nnue_value_from_scaled(scaled);" in helpers
+    assert "rawPsqt + rawPositional" not in trace
+
+    dispatcher = compact(
+        without_cpp_comments(
+            (ROOT / "src/nnue/nnue_dispatcher.h").read_text(encoding="utf-8")
+        )
+    )
+    assert (
+        "trace.total[bucket] = Eval::Detail::atomic_nnue_value_from_raw("
+        "psqtDifference, dense.scaledOutput);"
+    ) in dispatcher
+    misc = compact(
+        (ROOT / "src/nnue/nnue_misc.cpp").read_text(encoding="utf-8")
+    )
+    assert "format_cp_aligned_dot(t.total[bucket], ss, pos);" in misc
 
 
 def test_worker_rebind_does_not_keep_a_concrete_replica_pointer():
@@ -229,7 +305,7 @@ def test_worker_rebind_does_not_keep_a_concrete_replica_pointer():
     assert "&network[numaAccessToken]" not in search
 
 
-def test_dispatcher_and_both_backend_contracts_are_wired_into_ci():
+def test_dispatcher_and_all_backend_contracts_are_wired_into_ci():
     workflow = (ROOT / ".github" / "workflows" / "atomic.yml").read_text(
         encoding="utf-8"
     )
@@ -239,7 +315,9 @@ def test_dispatcher_and_both_backend_contracts_are_wired_into_ci():
         "tests/python/test_create_synthetic_atomic_v2_nnue.py",
         "tests/python/test_atomic_nnue_incremental_wrapper.py",
         "tests/nnue_v2_modes.py",
-        "tests/nnue_v3_dispatch_reject.py",
+        "tests/nnue_v3_modes.py",
+        "tests/python/test_nnue_v3_modes.py",
+        "tests/atomic_v3_generator_smoke.py",
         "tests/python/test_atomic_v3_wire_reference.py",
         "tests/python/test_create_synthetic_atomic_v3_nnue.py",
         "tests/python/test_atomic_v3_incremental_oracle.py",
@@ -253,21 +331,49 @@ def test_dispatcher_and_both_backend_contracts_are_wired_into_ci():
         assert relative in workflow
 
 
-def test_dual_backend_ci_covers_scalar_bmi2_avx2_and_authenticates_supported_networks():
+def test_three_backend_ci_covers_scalar_bmi2_avx2_and_authenticates_supported_networks():
     workflow = (ROOT / ".github" / "workflows" / "atomic.yml").read_text(
         encoding="utf-8"
     )
     atomic_gate = (ROOT / "tests" / "atomic.sh").read_text(encoding="utf-8")
     xboard_gate = (ROOT / "tests" / "xboard_protocol.py").read_text(encoding="utf-8")
+    bench_gate = (ROOT / "tests" / "atomic_bench.py").read_text(encoding="utf-8")
 
     assert "arch: [general-64, x86-64-bmi2, x86-64-avx2]" in workflow
-    assert "Legacy Atomic V1|AtomicNNUEV2" in atomic_gate
+    assert "Legacy Atomic V1|AtomicNNUEV2|AtomicNNUEV3" in atomic_gate
     assert "supported Atomic NNUE backend" in atomic_gate
-    for backend in ("Legacy Atomic V1", "AtomicNNUEV2"):
+    for backend in ("Legacy Atomic V1", "AtomicNNUEV2", "AtomicNNUEV3"):
         assert f'"NNUE evaluation using {backend}"' in xboard_gate
     assert "requested supported Atomic NNUE" in xboard_gate
+    assert '0xA70C0003: "AtomicNNUEV3"' in bench_gate
+    assert 'marker = f"NNUE evaluation using {backend}"' in bench_gate
     assert "go nodes 1" in atomic_gate
     assert atomic_gate.index("go nodes 1") < atomic_gate.index("for eval_mode in")
+
+
+def test_v3_public_gate_freezes_modes_threads_identity_and_round_trip():
+    gate = (ROOT / "tests/nnue_v3_modes.py").read_text(encoding="utf-8")
+    workflow = (ROOT / ".github/workflows/atomic.yml").read_text(
+        encoding="utf-8"
+    )
+
+    for contract in (
+        'V3_SHA256 = "00E46223822D06D7927E884EEC10739BA19EF8DD82A6E262F627D361658080C2"',
+        "V3_SIZE = 77_349_879",
+        "V3_VERSION = 0xA70C0003",
+        "V3_NETWORK_HASH = 0x0CF9A484",
+        "THREAD_COUNTS = (1, 2, 4, 8)",
+        'for mode in ("true", "pure")',
+        'engine.setoption("Use NNUE", "false")',
+        "NNUE evaluation using AtomicNNUEV3",
+        "require_export(engine, first_export, expected_sha256)",
+        'engine.setoption("EvalFile", str(first_export))',
+        "require_export(engine, second_export, expected_sha256)",
+    ):
+        assert contract in gate
+    assert "read_bytes()" not in gate
+    assert workflow.count("tests/nnue_v3_modes.py") >= 3
+    assert "ATOMIC_SYNTHETIC_V3_NNUE_SHA256" in workflow
 
 
 def test_v3_wire_permutation_policies_are_isolated_and_ci_forces_each_path():
@@ -365,7 +471,7 @@ def test_v3_wire_permutation_policies_are_isolated_and_ci_forces_each_path():
     assert "atomic-v3-incremental-simd-stress-tests" in policies
 
 
-def test_v3_incremental_ci_covers_every_required_toolchain_and_stays_private():
+def test_v3_incremental_ci_covers_every_required_toolchain_and_public_gate():
     workflow = (ROOT / ".github" / "workflows" / "atomic.yml").read_text(
         encoding="utf-8"
     )
@@ -439,9 +545,9 @@ def test_v3_incremental_ci_covers_every_required_toolchain_and_stays_private():
     assert "tests/python/test_atomic_v3_incremental_oracle.py" in jobs["python"]
 
     for name in ("native", "data-generator-windows"):
-        rejection = "tests/nnue_v3_dispatch_reject.py"
-        assert rejection in jobs[name]
-        assert jobs[name].index(target) < jobs[name].index(rejection)
+        acceptance = "tests/nnue_v3_modes.py"
+        assert acceptance in jobs[name]
+        assert jobs[name].index(target) < jobs[name].index(acceptance)
 
     assert "EXPECTED_SIZE: Optional[int] = 77_349_879" in generator
     assert (
@@ -451,7 +557,7 @@ def test_v3_incremental_ci_covers_every_required_toolchain_and_stays_private():
     )
 
 
-def test_v3_incremental_sources_remain_outside_every_production_build_graph():
+def test_v3_runtime_is_in_native_generator_and_full_nnue_wasm_build_graphs():
     makefile = (ROOT / "src" / "Makefile").read_text(encoding="utf-8")
     setup = (ROOT / "setup.py").read_text(encoding="utf-8")
     makefile_js = (ROOT / "src" / "Makefile_js").read_text(encoding="utf-8")
@@ -462,29 +568,54 @@ def test_v3_incremental_sources_remain_outside_every_production_build_graph():
         ROOT / "tests" / "wasm-engine" / "build.py"
     ).read_text(encoding="utf-8")
 
-    source = "nnue/atomic_v3/incremental_backend.cpp"
-    header = "nnue/atomic_v3/incremental_backend.h"
+    runtime_sources = (
+        "nnue/atomic_v3/hm_oracle.cpp",
+        "nnue/atomic_v3/capture_pair.cpp",
+        "nnue/atomic_v3/king_blast_ep.cpp",
+        "nnue/atomic_v3/blast_ring.cpp",
+        "nnue/atomic_v3/full_refresh.cpp",
+        "nnue/atomic_v3/numeric.cpp",
+        "nnue/atomic_v3/wire_network.cpp",
+        "nnue/atomic_v3/scalar_backend.cpp",
+        "nnue/atomic_v3/simd_isa.cpp",
+        "nnue/atomic_v3/incremental_simd_kernels.cpp",
+        "nnue/atomic_v3/incremental_backend.cpp",
+    )
+    runtime_headers = (
+        "nnue/atomic_v3/wire_network.h",
+        "nnue/atomic_v3/incremental_backend.h",
+    )
     stress_source = "nnue/atomic_v3/tests/incremental_stress.cpp"
-    kernel_source = "nnue/atomic_v3/incremental_simd_kernels.cpp"
-    kernel_header = "nnue/atomic_v3/incremental_simd_kernels.h"
     kernel_runner = "nnue/atomic_v3/tests/incremental_simd_kernel_core.cpp"
     benchmark_runner = "nnue/atomic_v3/tests/incremental_simd_benchmark.cpp"
     production_sources = makefile.split("SRCS =", 1)[1].split("OTHER_SRCS =", 1)[0]
     production_headers = makefile.split("HEADERS =", 1)[1].split("OBJS =", 1)[0]
-    assert source not in production_sources
-    assert header not in production_headers
+    generator_objects = makefile.split("ATOMIC_DATA_GENERATOR_OBJS =", 1)[1].split(
+        "ifeq ($(target_windows),yes)", 1
+    )[0]
+    for source in runtime_sources:
+        assert source in production_sources
+        object_name = "atomic_v3_" + Path(source).stem + ".o"
+        assert object_name in generator_objects
+        assert f"'{source}'" in wasm_build
+    for header in runtime_headers:
+        assert header in production_headers
+
+    # Python and the CommonJS/ES-module build expose the shared rules Board
+    # API, not UCI search or any evaluator. They remain source-minimal while
+    # their behavior gates continue to run alongside the full NNUE WASM gate.
+    for rules_only_graph in (setup, makefile_js):
+        assert "nnue/nnue_dispatcher.cpp" not in rules_only_graph
+        for source in runtime_sources:
+            assert source not in rules_only_graph
+
+    # Test and benchmark drivers remain isolated even though their reviewed
+    # runtime implementations are now linked into production.
     assert stress_source not in production_sources
-    assert kernel_source not in production_sources
-    assert kernel_header not in production_headers
     assert kernel_runner not in production_sources
     assert benchmark_runner not in production_sources
-
-    for production_graph in (setup, makefile_js, wasm_build, wasm_builder):
-        assert source not in production_graph
-        assert header not in production_graph
+    for production_graph in (wasm_build, wasm_builder):
         assert stress_source not in production_graph
-        assert kernel_source not in production_graph
-        assert kernel_header not in production_graph
         assert kernel_runner not in production_graph
         assert benchmark_runner not in production_graph
 
@@ -494,8 +625,8 @@ def test_v3_incremental_sources_remain_outside_every_production_build_graph():
     incremental_headers = makefile.split("ATOMIC_V3_INCREMENTAL_HEADERS =", 1)[1].split(
         "ATOMIC_V3_INCREMENTAL_DEPS =", 1
     )[0]
-    assert source in incremental_sources
-    assert header in incremental_headers
+    assert "nnue/atomic_v3/incremental_backend.cpp" in incremental_sources
+    assert "nnue/atomic_v3/incremental_backend.h" in incremental_headers
     assert f"ATOMIC_V3_INCREMENTAL_STRESS_SRCS = {stress_source}" in makefile
     assert f"ATOMIC_V3_INCREMENTAL_SIMD_KERNEL_SRCS = {kernel_runner}" in makefile
     assert f"ATOMIC_V3_INCREMENTAL_SIMD_BENCHMARK_SRCS = {benchmark_runner}" in makefile
@@ -505,16 +636,9 @@ def test_v3_incremental_sources_remain_outside_every_production_build_graph():
     assert "atomic-v3-incremental-simd-tests:" in makefile
     assert "atomic-v3-incremental-simd-stress-tests:" in makefile
     assert "atomic-v3-incremental-simd-benchmark:" in makefile
-    assert makefile.count(source) == 2
-    assert makefile.count(header) == 1
-    assert makefile.count(stress_source) == 2
-    assert makefile.count(kernel_source) == 2
-    assert makefile.count(kernel_header) == 1
-    assert makefile.count(kernel_runner) == 2
-    assert makefile.count(benchmark_runner) == 2
 
 
-def test_v3_incremental_stress_is_cross_platform_instrumented_and_private():
+def test_v3_incremental_stress_is_cross_platform_instrumented_and_isolated():
     workflow = (ROOT / ".github" / "workflows" / "atomic.yml").read_text(
         encoding="utf-8"
     )
@@ -533,8 +657,8 @@ def test_v3_incremental_stress_is_cross_platform_instrumented_and_private():
         "data-generator-windows",
     ):
         job = workflow_job(workflow, name)
-        assert target in job, f"{name} omitted the private stress gate"
-        assert job.count(target) == 1, f"{name} duplicated the private stress gate"
+        assert target in job, f"{name} omitted the isolated stress gate"
+        assert job.count(target) == 1, f"{name} duplicated the isolated stress gate"
         assert fixture in job
 
     wire_policies = workflow_job(workflow, "nnue-v3-wire-policies")
@@ -679,7 +803,7 @@ def test_v3_full_refresh_simd_ci_executes_real_isas_and_checks_stable_symbols():
         "data-generator-windows",
     ):
         block = workflow_job(workflow, job)
-        assert target in block, f"{job} omitted the private SIMD target"
+        assert target in block, f"{job} omitted the isolated SIMD target"
         assert "ATOMIC_V3_SIMD_REQUIRED_ISA=scalar" in block
         assert fixture in block
     policies = workflow_job(workflow, "nnue-v3-wire-policies")
@@ -726,7 +850,7 @@ def test_v3_full_refresh_simd_ci_executes_real_isas_and_checks_stable_symbols():
         assert forbidden not in combined
 
 
-def test_v3_full_refresh_simd_target_is_fail_closed_and_private():
+def test_v3_full_refresh_simd_target_is_fail_closed_and_isolated():
     makefile = (ROOT / "src" / "Makefile").read_text(encoding="utf-8")
     header = (
         ROOT / "src" / "nnue" / "atomic_v3" / "simd_backend.h"
@@ -810,33 +934,34 @@ def test_v3_full_refresh_simd_target_is_fail_closed_and_private():
     production_sources = makefile.split("SRCS =", 1)[1].split("OTHER_SRCS =", 1)[0]
     production_headers = makefile.split("HEADERS =", 1)[1].split("OBJS =", 1)[0]
     assert simd_source not in production_sources
-    assert isa_source_path not in production_sources
+    assert isa_source_path in production_sources
     assert runner_source not in production_sources
     assert simd_header not in production_headers
-    assert isa_header_path not in production_headers
+    assert isa_header_path in production_headers
 
-    production_graphs = (
+    rules_only_graphs = (
         (ROOT / "setup.py").read_text(encoding="utf-8"),
         (ROOT / "src" / "Makefile_js").read_text(encoding="utf-8"),
-        (ROOT / "tests" / "wasm-engine" / "build.ps1").read_text(
-            encoding="utf-8"
-        ),
-        (ROOT / "tests" / "wasm-engine" / "build.py").read_text(
-            encoding="utf-8"
-        ),
     )
-    for graph in production_graphs:
+    for graph in rules_only_graphs:
         assert simd_source not in graph
         assert simd_header not in graph
         assert isa_source_path not in graph
         assert isa_header_path not in graph
         assert runner_source not in graph
+    wasm_inventory = (ROOT / "tests/wasm-engine/build.ps1").read_text(
+        encoding="utf-8"
+    )
+    assert simd_source not in wasm_inventory
+    assert simd_header not in wasm_inventory
+    assert f"'{isa_source_path}'" in wasm_inventory
+    assert runner_source not in wasm_inventory
 
     assert makefile.count(simd_source) == 2
     assert makefile.count(simd_header) == 1
     assert makefile.count(runner_source) == 2
-    assert makefile.count(isa_source_path) == 3
-    assert makefile.count(isa_header_path) == 2
+    assert makefile.count(isa_source_path) == 4
+    assert makefile.count(isa_header_path) == 3
     assert "atomic_v3_simd_isa.o:" in makefile
     assert "atomic_v3_simd_backend.o:" in makefile
     assert "atomic_v3_simd_tests.o:" in makefile

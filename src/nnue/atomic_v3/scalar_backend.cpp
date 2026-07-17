@@ -412,11 +412,9 @@ NumericError propagate_dense_scalar(const DenseStackParameters&      stack,
     if (error != NumericError::None)
         return error;
 
-    candidate.rawOutput = i64(candidate.layers.fc2[0]) + candidate.layers.fc0[Fc0Outputs - 2]
-                        - candidate.layers.fc0[Fc0Outputs - 1];
-    if (candidate.rawOutput < RawOutputMinimum || candidate.rawOutput > RawOutputMaximum)
-        return NumericError::RawOutputOverflow;
-    error = scale_raw_output(candidate.rawOutput, candidate.scaledOutput);
+    error = compose_dense_output(candidate.layers.fc2[0], candidate.layers.fc0[Fc0Outputs - 2],
+                                 candidate.layers.fc0[Fc0Outputs - 1], candidate.rawOutput,
+                                 candidate.scaledOutput);
     if (error != NumericError::None)
         return error;
     candidate.positionalValue = candidate.scaledOutput / OutputScale;

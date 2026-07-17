@@ -10,8 +10,13 @@
 
 #include "wire_network.h"
 
+#include <algorithm>
+#include <array>
+#include <cassert>
 #include <fstream>
+#include <iostream>
 #include <new>
+#include <streambuf>
 #include <utility>
 
 #include "numeric.h"
@@ -19,6 +24,24 @@
 
 namespace Stockfish::Eval::NNUE::AtomicV3 {
 namespace {
+
+class DenseRuntimeBuffer final: public std::streambuf {
+   public:
+    DenseRuntimeBuffer() noexcept {
+        char* const begin = storage_.data();
+        setp(begin, begin + storage_.size());
+    }
+
+    bool prepare_read() noexcept {
+        if (pptr() < pbase() || pptr() > epptr())
+            return false;
+        setg(pbase(), pbase(), pptr());
+        return true;
+    }
+
+   private:
+    std::array<char, DenseStackWireBytes> storage_{};
+};
 
 void set_error(WireError code, std::string message, WireError& resultCode, std::string& result) {
     resultCode = code;
@@ -85,6 +108,15 @@ SaveResult save_error(WireError code, std::string message) {
     return result;
 }
 
+void hash_content(u64& hash, const void* data, std::size_t size) noexcept {
+    const auto* bytes = static_cast<const unsigned char*>(data);
+    for (std::size_t index = 0; index < size; ++index)
+    {
+        hash ^= bytes[index];
+        hash *= 1099511628211ULL;
+    }
+}
+
 }  // namespace
 
 const char* wire_error_message(WireError error) noexcept {
@@ -130,6 +162,8 @@ const char* wire_error_message(WireError error) noexcept {
         return "Atomic V3 raw output numeric envelope exceeded";
     case WireError::InvalidPermutationShape :
         return "Atomic V3 parameter tensor cannot be permuted canonically";
+    case WireError::InvalidDenseRuntimeLayout :
+        return "Atomic V3 dense tail cannot be materialized for runtime execution";
     case WireError::TrailingBytes :
         return "trailing bytes after Atomic V3 network";
     case WireError::IoError :
@@ -146,50 +180,40 @@ const char* wire_error_message(WireError error) noexcept {
     return "unknown Atomic V3 wire error";
 }
 
-bool Network::allocate_parameters() noexcept {
-    biases_.reset(new (std::nothrow) BiasParameterStorage);
-    hmWeights_.reset(new (std::nothrow) HmParameterStorage);
-    capturePairWeights_.reset(new (std::nothrow) CapturePairParameterStorage);
-    kingBlastEpWeights_.reset(new (std::nothrow) KingBlastEpParameterStorage);
-    blastRingWeights_.reset(new (std::nothrow) BlastRingParameterStorage);
-    hmPsqtWeights_.reset(new (std::nothrow) HmPsqtParameterStorage);
-
-    return biases_ && hmWeights_ && capturePairWeights_ && kingBlastEpWeights_ && blastRingWeights_
-        && hmPsqtWeights_;
-}
+bool Network::allocate_parameters() noexcept { return true; }
 
 bool Network::read_feature_parameters(std::istream& stream, WireError& code, std::string& error) {
-    if (!WireIO::read_signed_leb(stream, biases_->values, BiasCount))
+    if (!WireIO::read_signed_leb(stream, biases_.values, BiasCount))
     {
         set_read_error(stream, WireError::InvalidBiases,
                        wire_error_message(WireError::InvalidBiases), code, error);
         return false;
     }
-    if (!WireIO::read_signed_leb(stream, hmWeights_->values, HmWeightCount))
+    if (!WireIO::read_signed_leb(stream, hmWeights_.values, HmWeightCount))
     {
         set_read_error(stream, WireError::InvalidHmWeights,
                        wire_error_message(WireError::InvalidHmWeights), code, error);
         return false;
     }
-    if (!WireIO::read_exact(stream, capturePairWeights_->values, CapturePairWeightCount))
+    if (!WireIO::read_exact(stream, capturePairWeights_.values, CapturePairWeightCount))
     {
         set_read_error(stream, WireError::TruncatedCapturePair,
                        wire_error_message(WireError::TruncatedCapturePair), code, error);
         return false;
     }
-    if (!WireIO::read_signed_leb(stream, kingBlastEpWeights_->values, KingBlastEpWeightCount))
+    if (!WireIO::read_signed_leb(stream, kingBlastEpWeights_.values, KingBlastEpWeightCount))
     {
         set_read_error(stream, WireError::InvalidKingBlastEp,
                        wire_error_message(WireError::InvalidKingBlastEp), code, error);
         return false;
     }
-    if (!WireIO::read_exact(stream, blastRingWeights_->values, BlastRingWeightCount))
+    if (!WireIO::read_exact(stream, blastRingWeights_.values, BlastRingWeightCount))
     {
         set_read_error(stream, WireError::TruncatedBlastRing,
                        wire_error_message(WireError::TruncatedBlastRing), code, error);
         return false;
     }
-    if (!WireIO::read_signed_leb(stream, hmPsqtWeights_->values, HmPsqtWeightCount))
+    if (!WireIO::read_signed_leb(stream, hmPsqtWeights_.values, HmPsqtWeightCount))
     {
         set_read_error(stream, WireError::InvalidPsqt, wire_error_message(WireError::InvalidPsqt),
                        code, error);
@@ -240,7 +264,7 @@ bool Network::read_dense_parameters(std::istream& stream, WireError& code, std::
 bool Network::validate_numeric(WireError& code, std::string& error) const {
     HmPsqtBounds       psqtBounds{};
     const NumericError psqt =
-      validate_hm_psqt_weights(hmPsqtWeights_->values, HmPsqtWeightCount, psqtBounds);
+      validate_hm_psqt_weights(hmPsqtWeights_.values, HmPsqtWeightCount, psqtBounds);
     if (psqt != NumericError::None)
     {
         set_error(WireError::PsqtRangeExceeded,
@@ -289,15 +313,65 @@ bool Network::validate_numeric(WireError& code, std::string& error) const {
 }
 
 bool Network::permute_feature_parameters() noexcept {
-    if (!WireIO::permute_parameters<i16, 16>(biases_->values, BiasCount)
-        || !WireIO::permute_parameters<i16, 16>(hmWeights_->values, HmWeightCount)
-        || !WireIO::permute_parameters<i8, 8>(capturePairWeights_->values, CapturePairWeightCount)
-        || !WireIO::permute_parameters<i16, 16>(kingBlastEpWeights_->values, KingBlastEpWeightCount)
-        || !WireIO::permute_parameters<i8, 8>(blastRingWeights_->values, BlastRingWeightCount))
+    if (!WireIO::permute_parameters<i16, 16>(biases_.values, BiasCount)
+        || !WireIO::permute_parameters<i16, 16>(hmWeights_.values, HmWeightCount)
+        || !WireIO::permute_parameters<i8, 8>(capturePairWeights_.values, CapturePairWeightCount)
+        || !WireIO::permute_parameters<i16, 16>(kingBlastEpWeights_.values, KingBlastEpWeightCount)
+        || !WireIO::permute_parameters<i8, 8>(blastRingWeights_.values, BlastRingWeightCount))
         return false;
 
     simdPermuted_ = true;
     return true;
+}
+
+bool Network::materialize_dense_runtime() noexcept {
+    denseRuntimeReady_ = false;
+    for (std::size_t bucket = 0; bucket < denseStacks_.size(); ++bucket)
+    {
+        const auto&        stack = denseStacks_[bucket];
+        DenseRuntimeBuffer buffer;
+        std::iostream      stream(&buffer);
+        if (!write_dense_biases(stream, stack.fc0Biases.data(), stack.fc0Biases.size())
+            || !WireIO::write_exact(stream, stack.fc0Weights.data(), stack.fc0Weights.size())
+            || !write_dense_biases(stream, stack.fc1Biases.data(), stack.fc1Biases.size())
+            || !WireIO::write_exact(stream, stack.fc1Weights.data(), stack.fc1Weights.size())
+            || !write_dense_biases(stream, stack.fc2Biases.data(), stack.fc2Biases.size())
+            || !WireIO::write_exact(stream, stack.fc2Weights.data(), stack.fc2Weights.size())
+            || !buffer.prepare_read())
+            return false;
+
+        stream.clear();
+        if (!denseRuntimeStacks_[bucket].read_parameters(stream)
+            || stream.peek() != std::char_traits<char>::eof())
+            return false;
+    }
+
+    denseRuntimeReady_ = true;
+    return true;
+}
+
+void Network::set_description(std::string_view description) noexcept {
+    assert(description.size() <= description_.size());
+    description_.fill('\0');
+    std::copy(description.begin(), description.end(), description_.begin());
+    descriptionSize_ = static_cast<u32>(description.size());
+}
+
+void Network::compute_content_hash() noexcept {
+    u64 hash = 1469598103934665603ULL;
+    hash_content(hash, &FileVersion, sizeof(FileVersion));
+    hash_content(hash, &NetworkHash, sizeof(NetworkHash));
+    hash_content(hash, description_.data(), descriptionSize_);
+    hash_content(hash, biases_.values, sizeof(biases_.values));
+    hash_content(hash, hmWeights_.values, sizeof(hmWeights_.values));
+    hash_content(hash, capturePairWeights_.values, sizeof(capturePairWeights_.values));
+    hash_content(hash, kingBlastEpWeights_.values, sizeof(kingBlastEpWeights_.values));
+    hash_content(hash, blastRingWeights_.values, sizeof(blastRingWeights_.values));
+    hash_content(hash, hmPsqtWeights_.values, sizeof(hmPsqtWeights_.values));
+    hash_content(hash, denseStacks_.data(), sizeof(denseStacks_));
+    contentHash_ = static_cast<usize>(hash);
+    if (contentHash_ == 0)
+        contentHash_ = 1;
 }
 
 SaveResult Network::write_parameters(std::ostream& stream, std::string_view description) const {
@@ -312,15 +386,15 @@ SaveResult Network::write_parameters(std::ostream& stream, std::string_view desc
         || !WireIO::write_little_endian(stream, static_cast<u32>(description.size()))
         || !WireIO::write_exact(stream, description.data(), description.size())
         || !WireIO::write_little_endian(stream, FeatureTransformerHash)
-        || !WireIO::write_signed_leb_unpermuted<i16, 16>(stream, biases_->values, BiasCount)
-        || !WireIO::write_signed_leb_unpermuted<i16, 16>(stream, hmWeights_->values, HmWeightCount)
-        || !WireIO::write_raw_unpermuted<i8, 8>(stream, capturePairWeights_->values,
+        || !WireIO::write_signed_leb_unpermuted<i16, 16>(stream, biases_.values, BiasCount)
+        || !WireIO::write_signed_leb_unpermuted<i16, 16>(stream, hmWeights_.values, HmWeightCount)
+        || !WireIO::write_raw_unpermuted<i8, 8>(stream, capturePairWeights_.values,
                                                 CapturePairWeightCount)
-        || !WireIO::write_signed_leb_unpermuted<i16, 16>(stream, kingBlastEpWeights_->values,
+        || !WireIO::write_signed_leb_unpermuted<i16, 16>(stream, kingBlastEpWeights_.values,
                                                          KingBlastEpWeightCount)
-        || !WireIO::write_raw_unpermuted<i8, 8>(stream, blastRingWeights_->values,
+        || !WireIO::write_raw_unpermuted<i8, 8>(stream, blastRingWeights_.values,
                                                 BlastRingWeightCount)
-        || !WireIO::write_signed_leb(stream, hmPsqtWeights_->values, HmPsqtWeightCount))
+        || !WireIO::write_signed_leb(stream, hmPsqtWeights_.values, HmPsqtWeightCount))
         return save_error(WireError::OutputError, wire_error_message(WireError::OutputError));
 
     for (const auto& stack : denseStacks_)
@@ -339,7 +413,7 @@ SaveResult Network::write_parameters(std::ostream& stream, std::string_view desc
 }
 
 SaveResult Network::save(std::ostream& stream) const {
-    return write_parameters(stream, description_);
+    return write_parameters(stream, description());
 }
 
 SaveResult Network::save(std::ostream& stream, std::string_view description) const {
@@ -438,11 +512,18 @@ LoadResult load_candidate(std::istream& stream) {
         result.error = wire_error_message(result.code);
         return result;
     }
+    if (!staging->materialize_dense_runtime())
+    {
+        result.code  = WireError::InvalidDenseRuntimeLayout;
+        result.error = wire_error_message(result.code);
+        return result;
+    }
 
-    staging->description_ = description;
-    result.description    = std::move(description);
-    result.network        = std::move(staging);
-    result.code           = WireError::None;
+    staging->set_description(description);
+    staging->compute_content_hash();
+    result.description = std::move(description);
+    result.network     = std::move(staging);
+    result.code        = WireError::None;
     return result;
 }
 

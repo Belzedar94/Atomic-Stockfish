@@ -58,6 +58,17 @@ $relativeSources = @(
     'nnue/network.cpp',
     'nnue/atomic_v2/atomic_v2_accumulator.cpp',
     'nnue/atomic_v2/atomic_v2_network.cpp',
+    'nnue/atomic_v3/hm_oracle.cpp',
+    'nnue/atomic_v3/capture_pair.cpp',
+    'nnue/atomic_v3/king_blast_ep.cpp',
+    'nnue/atomic_v3/blast_ring.cpp',
+    'nnue/atomic_v3/full_refresh.cpp',
+    'nnue/atomic_v3/numeric.cpp',
+    'nnue/atomic_v3/wire_network.cpp',
+    'nnue/atomic_v3/scalar_backend.cpp',
+    'nnue/atomic_v3/simd_isa.cpp',
+    'nnue/atomic_v3/incremental_simd_kernels.cpp',
+    'nnue/atomic_v3/incremental_backend.cpp',
     'nnue/features/half_ka_v2_atomic.cpp'
 )
 $sources = $relativeSources | ForEach-Object {
@@ -167,8 +178,8 @@ $manifest = [ordered]@{
     supportedEntrypoint = 'atomic-stockfish-nnue-node.mjs'
     generatedRuntimeGlue = 'atomic-stockfish-nnue.js'
     directRuntimeGlueSupported = $false
-    supportedNetworkBackends = @('Legacy Atomic V1', 'AtomicNNUEV2')
-    networkFileVersions = @('0x7AF32F20', '0xA70C0002')
+    supportedNetworkBackends = @('Legacy Atomic V1', 'AtomicNNUEV2', 'AtomicNNUEV3')
+    networkFileVersions = @('0x7AF32F20', '0xA70C0002', '0xA70C0003')
     stdinPump = [ordered]@{
         command = 'isready'
         response = 'readyok'

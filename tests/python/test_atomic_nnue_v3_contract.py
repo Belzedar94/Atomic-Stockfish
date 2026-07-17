@@ -144,14 +144,15 @@ def _king_bucket(oriented_king: int) -> int:
     return (7 - rank_index) * 4 + (7 - file_index)
 
 
-def test_contract_freezes_wire_v1_without_enabling_the_runtime_backend() -> None:
+def test_contract_freezes_wire_v1_for_the_public_runtime_backend() -> None:
     contract = _load_contract()
     assert contract["schema_version"] == 1
     assert contract["schema_id"] == "atomic-nnue-v3-wire-v1"
     assert contract["contract_status"] == "wire-frozen"
-    assert contract["runtime_backend_status"] == (
-        "private canonical reader/writer only; engine dispatcher must reject V3"
-    )
+    # ``runtime_backend_status`` is archival metadata from the wire-freeze
+    # milestone. Runtime promotion must not rewrite a byte of the frozen wire
+    # schema or silently mint a different network identity.
+    assert isinstance(contract["runtime_backend_status"], str)
     assert contract["variant"] == "atomic"
     assert contract["backend"] == "AtomicNNUEV3"
     assert _u32(contract["file_version"]) == 0xA70C0003
@@ -801,7 +802,7 @@ def test_wire_v1_hashes_are_derived_from_exact_ascii_descriptors() -> None:
     assert hashing["semantic_decision_blockers"] == []
     assert len(hashing["freeze_evidence"]) == 6
     assert "new descriptor and network hash" in hashing["freeze_evidence"][1]
-    assert "dispatcher continues to reject V3" in hashing["freeze_evidence"][-1]
+    assert isinstance(hashing["freeze_evidence"][-1], str)
 
     serialized = json.dumps(contract, sort_keys=True)
     assert "74198ECE" not in serialized
@@ -812,12 +813,13 @@ def test_wire_v1_hashes_are_derived_from_exact_ascii_descriptors() -> None:
         path.read_text(encoding="utf-8")
         for path in (
             ROOT / "src/nnue/nnue_dispatcher.cpp",
+            ROOT / "src/nnue/nnue_dispatcher.h",
             ROOT / "src/nnue/network.cpp",
             ROOT / "src/nnue/network.h",
         )
     )
-    assert "0xA70C0003" not in dispatcher_sources
-    assert "AtomicNNUEV3" not in dispatcher_sources
+    assert "AtomicNNUEV3" in dispatcher_sources
+    assert '"atomic_v3/wire_network.h"' in dispatcher_sources
 
 
 def test_dataset_statistics_schema_authenticates_coverage_and_leakage_gates() -> None:

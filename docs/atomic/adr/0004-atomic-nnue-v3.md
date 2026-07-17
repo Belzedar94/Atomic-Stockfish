@@ -1,6 +1,6 @@
 # ADR 0004: Design AtomicNNUEV3 as a blast-aware SFNNv15 backend
 
-- Status: accepted; wire v1 frozen, runtime backend pending
+- Status: accepted; wire v1 frozen, runtime backend promoted in H9.3n
 - Date: 2026-07-14
 
 ## Context
@@ -684,3 +684,28 @@ Atomic relations while keeping the hot dense head stable and every experiment
 attributable. It also accepts that the first correct relation implementation
 will be refresh-heavy; speed is recovered only after differential evidence,
 not by weakening the oracle.
+
+## H9.3n runtime promotion
+
+H9.3n promotes the frozen V3 reader and incremental evaluator as the third
+public production backend. The wire version (`0xA70C0003`), network hash,
+descriptor bytes and the isolated scalar/SIMD oracles do not change. The
+tagged inline dispatcher now accepts V1, V2 and V3 transactionally while
+preserving the trivial-copy contract required by NUMA and shared-memory
+replication.
+
+Promotion is gated by an exact 77,349,879-byte fixture with SHA-256
+`00E46223822D06D7927E884EEC10739BA19EF8DD82A6E262F627D361658080C2`.
+Native CI searches it in `true` and data-generation-only `pure` modes with
+1, 2, 4 and 8 threads, proves classical `false` remains independent, and
+round-trips export/import byte-for-byte. The same backend marker is required by
+UCI perft preflight, XBoard and bench. The data generator performs a focused
+one-record `pure` publication with matching manifest provenance.
+
+The complete pthread Node UCI WASM source inventory and runtime gate include
+V3 and exercise V1/V2/V3 switching plus V3 export/reimport. `pyffish` and the
+CommonJS/ES-module `ffish.Board` artifacts remain intentionally rules-only:
+they expose no UCI evaluator, but continue to run their complete Atomic and
+Atomic960 API suites beside the full NNUE WASM gate. The isolated V3 oracle,
+stress and instruction-audit targets remain as independent evidence even though
+their reviewed runtime sources are now part of production.

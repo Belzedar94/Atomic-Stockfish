@@ -1,6 +1,6 @@
 # ADR 0005: Vectorize only AtomicNNUEV3 incremental HM row application
 
-- Status: accepted for H9.3j-b; local validation complete, reviewed-head CI/PR pending
+- Status: accepted for H9.3j-b; promoted to production by H9.3n
 - Date: 2026-07-15
 
 ## Context
@@ -62,10 +62,10 @@ the wire layout or weaken the full-refresh oracle.
    promotion, en-passant and maximum nine-piece-blast transitions with one
    warm-up and five order-alternating trials. It reports raw samples, medians
    and ratios without a hard speed threshold.
-9. H9.3j-b remains private. Its sources are excluded from the production NNUE
-   dispatcher, search, UCI/XBoard, Python, JavaScript, WASM, generator and
-   trainer build graphs. Product dispatch and automatic ISA selection require
-   a later milestone.
+9. At H9.3j-b this implementation remains private and excluded from product
+   dispatch. H9.3n is the later promotion milestone: it preserves this exact
+   state machine and its isolated gates while linking the reviewed runtime
+   sources into the native engine, generator and complete NNUE WASM artifact.
 
 ## Consequences
 
@@ -75,8 +75,8 @@ overhead and remain visible in counters and the representative benchmark.
 Relation slices, transform and dense-tail SIMD are separate work; this ADR does
 not authorize them implicitly.
 
-Until V3 is connected to the production dispatcher and a trained V3 network
-can alter moves, this milestone makes no engine-NPS, Elo, LOS, OpenBench,
-data-generation or training claim. The validation index, completed local
-evidence and outstanding reviewed-head CI/PR artifacts are recorded in
+H9.3j-b itself makes no engine-NPS, Elo, LOS, OpenBench, data-generation or
+training claim. H9.3n later connects V3 to the production dispatcher without
+retroactively turning these kernel measurements into a strength claim. The
+validation index and completed local evidence are recorded in
 [`hito9-3j-b-v3-incremental-simd`](../evidence/hito9-3j-b-v3-incremental-simd/README.md).

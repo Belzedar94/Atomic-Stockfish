@@ -86,6 +86,13 @@ SRCS = atomic_init.cpp attacks.cpp benchmark.cpp bitboard.cpp evaluate.cpp main.
 	nnue/features/half_ka_v2_atomic.cpp \
 	engine.cpp score.cpp memory.cpp
 
+ATOMIC_V3_RUNTIME_SRCS = nnue/atomic_v3/hm_oracle.cpp nnue/atomic_v3/capture_pair.cpp \
+	nnue/atomic_v3/king_blast_ep.cpp nnue/atomic_v3/blast_ring.cpp \
+	nnue/atomic_v3/full_refresh.cpp nnue/atomic_v3/numeric.cpp \
+	nnue/atomic_v3/wire_network.cpp nnue/atomic_v3/scalar_backend.cpp \
+	nnue/atomic_v3/simd_isa.cpp nnue/atomic_v3/incremental_simd_kernels.cpp \
+	nnue/atomic_v3/incremental_backend.cpp
+
 OTHER_SRCS = universal/entry_x86.cpp universal/entry_arm64.cpp universal/entry_riscv64.cpp universal/nnue_embed.cpp
 
 HEADERS = atomic_init.h attacks.h benchmark.h bitboard.h evaluate.h misc.h movegen.h movepick.h history.h \
@@ -96,12 +103,25 @@ HEADERS = atomic_init.h attacks.h benchmark.h bitboard.h evaluate.h misc.h moveg
 		nnue/atomic_v2/network.h nnue/atomic_v2/nnz_helper.h \
 		nnue/atomic_v2/layers/affine_transform_sparse_input.h \
 		nnue/atomic_v2/layers/sqr_clipped_relu.h \
+		nnue/atomic_v3/orientation.h nnue/atomic_v3/hm_oracle.h \
+		nnue/atomic_v3/capture_pair.h nnue/atomic_v3/king_blast_ep.h \
+		nnue/atomic_v3/blast_ring.h nnue/atomic_v3/full_refresh.h \
+		nnue/atomic_v3/numeric.h nnue/atomic_v3/wire_contract.h \
+		nnue/atomic_v3/wire_io.h nnue/atomic_v3/wire_network.h \
+		nnue/atomic_v3/scalar_backend.h nnue/atomic_v3/simd_isa.h \
+		nnue/atomic_v3/incremental_simd_kernels.h nnue/atomic_v3/incremental_backend.h \
 		nnue/layers/affine_transform.h nnue/layers/clipped_relu.h nnue/nnue_accumulator.h \
 		nnue/nnue_architecture.h nnue/nnue_common.h nnue/nnue_dispatcher.h nnue/nnue_feature_transformer.h nnue/simd.h \
 		position.h search.h syzygy/tbprobe.h thread.h thread_win32_osx.h timeman.h \
 		tt.h tune.h types.h uci.h uci_move.h ucioption.h xboard.h perft.h nnue/network.h engine.h score.h numa.h memory.h shm.h shm_linux.h
 
 OBJS = $(notdir $(SRCS:.cpp=.o))
+ATOMIC_V3_RUNTIME_OBJS = atomic_v3_hm_oracle.o atomic_v3_capture_pair.o \
+	atomic_v3_king_blast_ep.o atomic_v3_blast_ring.o atomic_v3_full_refresh.o \
+	atomic_v3_numeric.o atomic_v3_wire_network.o atomic_v3_scalar_backend.o \
+	atomic_v3_simd_isa.o atomic_v3_incremental_simd_kernels.o \
+	atomic_v3_incremental_backend.o
+OBJS += $(ATOMIC_V3_RUNTIME_OBJS)
 
 ifeq ($(target_windows),yes)
 	ATOMIC_TEST_EXE_SUFFIX = .exe
@@ -124,34 +144,31 @@ ATOMIC_V2_INCREMENTAL_TEST_EXE  = atomic-v2-incremental-tests$(ATOMIC_TEST_EXE_S
 ATOMIC_V2_INCREMENTAL_TEST_OBJS = $(filter-out main.o,$(OBJS)) atomic_nnue_v2_incremental_tests.o
 ATOMIC_V3_HM_ORACLE_TEST_EXE  = atomic-v3-hm-oracle-tests$(ATOMIC_TEST_EXE_SUFFIX)
 ATOMIC_V3_HM_ORACLE_TEST_OBJS = $(filter-out main.o,$(OBJS)) \
-	atomic_v3_hm_oracle.o atomic_v3_hm_oracle_tests.o
+	atomic_v3_hm_oracle_tests.o
 ATOMIC_V3_HM_ORACLE_SRCS = nnue/atomic_v3/hm_oracle.cpp \
 	nnue/atomic_v3/tests/hm_oracle_cli.cpp
 ATOMIC_V3_HM_ORACLE_HEADERS = nnue/atomic_v3/orientation.h nnue/atomic_v3/hm_oracle.h
 ATOMIC_V3_CAPTURE_PAIR_TEST_EXE  = atomic-v3-capture-pair-tests$(ATOMIC_TEST_EXE_SUFFIX)
 ATOMIC_V3_CAPTURE_PAIR_TEST_OBJS = $(filter-out main.o,$(OBJS)) \
-	atomic_v3_hm_oracle.o atomic_v3_capture_pair.o atomic_v3_capture_pair_tests.o
+	atomic_v3_capture_pair_tests.o
 ATOMIC_V3_CAPTURE_PAIR_SRCS = nnue/atomic_v3/capture_pair.cpp \
 	nnue/atomic_v3/tests/capture_pair_cli.cpp
 ATOMIC_V3_CAPTURE_PAIR_HEADERS = nnue/atomic_v3/capture_pair.h
 ATOMIC_V3_KING_BLAST_EP_TEST_EXE  = atomic-v3-king-blast-ep-tests$(ATOMIC_TEST_EXE_SUFFIX)
 ATOMIC_V3_KING_BLAST_EP_TEST_OBJS = $(filter-out main.o,$(OBJS)) \
-	atomic_v3_hm_oracle.o atomic_v3_capture_pair.o atomic_v3_king_blast_ep.o \
 	atomic_v3_king_blast_ep_tests.o
 ATOMIC_V3_KING_BLAST_EP_SRCS = nnue/atomic_v3/king_blast_ep.cpp \
 	nnue/atomic_v3/tests/king_blast_ep_cli.cpp
 ATOMIC_V3_KING_BLAST_EP_HEADERS = nnue/atomic_v3/king_blast_ep.h
 ATOMIC_V3_BLAST_RING_TEST_EXE  = atomic-v3-blast-ring-tests$(ATOMIC_TEST_EXE_SUFFIX)
 ATOMIC_V3_BLAST_RING_TEST_OBJS = $(filter-out main.o,$(OBJS)) \
-	atomic_v3_hm_oracle.o atomic_v3_capture_pair.o atomic_v3_blast_ring.o \
 	atomic_v3_blast_ring_tests.o
 ATOMIC_V3_BLAST_RING_SRCS = nnue/atomic_v3/blast_ring.cpp \
 	nnue/atomic_v3/tests/blast_ring_cli.cpp
 ATOMIC_V3_BLAST_RING_HEADERS = nnue/atomic_v3/blast_ring.h
 ATOMIC_V3_FULL_REFRESH_TEST_EXE  = atomic-v3-full-refresh-tests$(ATOMIC_TEST_EXE_SUFFIX)
 ATOMIC_V3_FULL_REFRESH_TEST_OBJS = $(filter-out main.o,$(OBJS)) \
-	atomic_v3_hm_oracle.o atomic_v3_capture_pair.o atomic_v3_king_blast_ep.o \
-	atomic_v3_blast_ring.o atomic_v3_full_refresh.o atomic_v3_full_refresh_tests.o
+	atomic_v3_full_refresh_tests.o
 ATOMIC_V3_FULL_REFRESH_SRCS = nnue/atomic_v3/full_refresh.cpp \
 	nnue/atomic_v3/tests/full_refresh_cli.cpp
 ATOMIC_V3_FULL_REFRESH_HEADERS = nnue/atomic_v3/full_refresh.h
@@ -173,9 +190,7 @@ ATOMIC_V3_WIRE_HEADERS = nnue/atomic_v3/wire_contract.h nnue/atomic_v3/wire_io.h
 ATOMIC_V3_WIRE_DEPS = $(ATOMIC_V3_WIRE_HEADERS) $(ATOMIC_V3_NUMERIC_DEPS)
 ATOMIC_V3_SCALAR_TEST_EXE  = atomic-v3-scalar-tests$(ATOMIC_TEST_EXE_SUFFIX)
 ATOMIC_V3_SCALAR_TEST_OBJS = $(filter-out main.o,$(OBJS)) \
-	atomic_v3_hm_oracle.o atomic_v3_capture_pair.o atomic_v3_king_blast_ep.o \
-	atomic_v3_blast_ring.o atomic_v3_full_refresh.o atomic_v3_numeric.o \
-	atomic_v3_wire_network.o atomic_v3_scalar_backend.o atomic_v3_scalar_tests.o
+	atomic_v3_scalar_tests.o
 ATOMIC_V3_SCALAR_SRCS = nnue/atomic_v3/scalar_backend.cpp \
 	nnue/atomic_v3/tests/scalar_core.cpp
 ATOMIC_V3_SCALAR_HEADERS = nnue/atomic_v3/scalar_backend.h
@@ -183,10 +198,6 @@ ATOMIC_V3_SCALAR_DEPS = $(ATOMIC_V3_SCALAR_HEADERS) $(ATOMIC_V3_WIRE_DEPS) \
 	$(ATOMIC_V3_FULL_REFRESH_HEADERS)
 ATOMIC_V3_INCREMENTAL_TEST_EXE  = atomic-v3-incremental-tests$(ATOMIC_TEST_EXE_SUFFIX)
 ATOMIC_V3_INCREMENTAL_TEST_OBJS = $(filter-out main.o,$(OBJS)) \
-	atomic_v3_hm_oracle.o atomic_v3_capture_pair.o atomic_v3_king_blast_ep.o \
-	atomic_v3_blast_ring.o atomic_v3_full_refresh.o atomic_v3_numeric.o \
-	atomic_v3_wire_network.o atomic_v3_scalar_backend.o atomic_v3_simd_isa.o \
-	atomic_v3_incremental_simd_kernels.o atomic_v3_incremental_backend.o \
 	atomic_v3_incremental_tests.o
 ATOMIC_V3_INCREMENTAL_SRCS = nnue/atomic_v3/simd_isa.cpp \
 	nnue/atomic_v3/incremental_simd_kernels.cpp nnue/atomic_v3/incremental_backend.cpp \
@@ -196,10 +207,6 @@ ATOMIC_V3_INCREMENTAL_HEADERS = nnue/atomic_v3/simd_isa.h \
 ATOMIC_V3_INCREMENTAL_DEPS = $(ATOMIC_V3_INCREMENTAL_HEADERS) $(ATOMIC_V3_SCALAR_DEPS)
 ATOMIC_V3_INCREMENTAL_STRESS_TEST_EXE  = atomic-v3-incremental-stress-tests$(ATOMIC_TEST_EXE_SUFFIX)
 ATOMIC_V3_INCREMENTAL_STRESS_TEST_OBJS = $(filter-out main.o,$(OBJS)) \
-	atomic_v3_hm_oracle.o atomic_v3_capture_pair.o atomic_v3_king_blast_ep.o \
-	atomic_v3_blast_ring.o atomic_v3_full_refresh.o atomic_v3_numeric.o \
-	atomic_v3_wire_network.o atomic_v3_scalar_backend.o atomic_v3_simd_isa.o \
-	atomic_v3_incremental_simd_kernels.o atomic_v3_incremental_backend.o \
 	atomic_bin_v2_sha256_codec.o atomic_v3_incremental_stress_tests.o
 ATOMIC_V3_INCREMENTAL_STRESS_SRCS = nnue/atomic_v3/tests/incremental_stress.cpp
 ATOMIC_V3_INCREMENTAL_STRESS_DEPS = $(ATOMIC_V3_INCREMENTAL_DEPS) data/sha256.h
@@ -209,10 +216,6 @@ ATOMIC_V3_INCREMENTAL_SIMD_KERNEL_TEST_OBJS = atomic_v3_simd_isa.o \
 ATOMIC_V3_INCREMENTAL_SIMD_KERNEL_SRCS = nnue/atomic_v3/tests/incremental_simd_kernel_core.cpp
 ATOMIC_V3_INCREMENTAL_SIMD_BENCHMARK_EXE = atomic-v3-incremental-simd-benchmark$(ATOMIC_TEST_EXE_SUFFIX)
 ATOMIC_V3_INCREMENTAL_SIMD_BENCHMARK_OBJS = $(filter-out main.o,$(OBJS)) \
-	atomic_v3_hm_oracle.o atomic_v3_capture_pair.o atomic_v3_king_blast_ep.o \
-	atomic_v3_blast_ring.o atomic_v3_full_refresh.o atomic_v3_numeric.o \
-	atomic_v3_wire_network.o atomic_v3_scalar_backend.o atomic_v3_simd_isa.o \
-	atomic_v3_incremental_simd_kernels.o atomic_v3_incremental_backend.o \
 	atomic_v3_incremental_simd_benchmark.o
 ATOMIC_V3_INCREMENTAL_SIMD_BENCHMARK_SRCS = nnue/atomic_v3/tests/incremental_simd_benchmark.cpp
 ATOMIC_V3_INCREMENTAL_SIMD_REQUIRED_ISA ?= scalar
@@ -220,9 +223,6 @@ ATOMIC_V3_SIMD_ISA_HEADERS = nnue/atomic_v3/simd_isa.h
 ATOMIC_V3_SIMD_ISA_DEPS = $(ATOMIC_V3_SIMD_ISA_HEADERS) types.h
 ATOMIC_V3_SIMD_TEST_EXE  = atomic-v3-simd-tests$(ATOMIC_TEST_EXE_SUFFIX)
 ATOMIC_V3_SIMD_TEST_OBJS = $(filter-out main.o,$(OBJS)) \
-	atomic_v3_hm_oracle.o atomic_v3_capture_pair.o atomic_v3_king_blast_ep.o \
-	atomic_v3_blast_ring.o atomic_v3_full_refresh.o atomic_v3_numeric.o \
-	atomic_v3_wire_network.o atomic_v3_scalar_backend.o atomic_v3_simd_isa.o \
 	atomic_v3_simd_backend.o \
 	atomic_bin_v2_sha256_codec.o atomic_v3_simd_tests.o
 ATOMIC_V3_SIMD_SRCS = nnue/atomic_v3/simd_isa.cpp nnue/atomic_v3/simd_backend.cpp \
@@ -294,10 +294,12 @@ ATOMIC_DATA_GENERATOR_HEADERS = data/legacy_atomic_v1.h data/random_seed.h \
 	$(ATOMIC_BIN_V2_HEADERS)
 ATOMIC_DATA_GENERATOR_DATA_OBJS = \
 	$(patsubst data/%.cpp,atomic_data_generator_%.o,$(ATOMIC_DATA_GENERATOR_SRCS))
-ATOMIC_DATA_GENERATOR_OBJS = $(filter-out uci.o search.o tt.o,$(OBJS)) \
+ATOMIC_DATA_GENERATOR_OBJS = $(filter-out uci.o search.o tt.o $(ATOMIC_V3_RUNTIME_OBJS),$(OBJS)) \
 	atomic_data_generator_uci.o atomic_data_generator_search.o atomic_data_generator_tt.o \
 	atomic_v3_hm_oracle.o atomic_v3_capture_pair.o atomic_v3_king_blast_ep.o \
-	atomic_v3_blast_ring.o atomic_v3_full_refresh.o \
+	atomic_v3_blast_ring.o atomic_v3_full_refresh.o atomic_v3_numeric.o \
+	atomic_v3_wire_network.o atomic_v3_scalar_backend.o atomic_v3_simd_isa.o \
+	atomic_v3_incremental_simd_kernels.o atomic_v3_incremental_backend.o \
 	$(ATOMIC_DATA_GENERATOR_DATA_OBJS)
 
 ifeq ($(target_windows),yes)
@@ -353,7 +355,7 @@ else
 	ATOMIC_V3_WIRE_TEST_CPPFLAGS :=
 endif
 
-VPATH = api:syzygy:nnue:nnue/features:nnue/atomic_v2
+VPATH = api:syzygy:nnue:nnue/features:nnue/atomic_v2:nnue/atomic_v3
 
 ### ==========================================================================
 ### Section 2. High-level Configuration

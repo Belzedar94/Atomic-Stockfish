@@ -173,6 +173,13 @@ BlastRingError project_blast_ring(const CapturePairSnapshot& snapshot,
                                   const CapturePairEmission& capturePairs,
                                   BlastRingEmission&         result);
 
+// Faster internal seam for a CapturePair emission produced in the same call
+// chain. The caller owns the proof that capturePairs is exact and canonical.
+BlastRingError project_blast_ring_trusted(const CapturePairSnapshot& snapshot,
+                                          Color                      perspective,
+                                          const CapturePairEmission& capturePairs,
+                                          BlastRingEmission&         result);
+
 }  // namespace Detail
 
 BlastRingError

@@ -17,10 +17,19 @@
 
 #include "../../position.h"
 #include "incremental_simd_kernels.h"
+#include "../atomic_v2/nnz_helper.h"
 #include "wire_io.h"
 
 namespace Stockfish::Eval::NNUE::AtomicV3 {
 namespace {
+
+#if defined(_MSC_VER)
+    #define ATOMIC_V3_INCREMENTAL_NOINLINE __declspec(noinline)
+#elif defined(__GNUC__) || defined(__clang__)
+    #define ATOMIC_V3_INCREMENTAL_NOINLINE __attribute__((noinline))
+#else
+    #define ATOMIC_V3_INCREMENTAL_NOINLINE
+#endif
 
 constexpr std::size_t color_index(Color color) noexcept { return static_cast<std::size_t>(color); }
 
@@ -40,6 +49,9 @@ void add_counters(IncrementalCounters& destination, const IncrementalCounters& s
     destination.hmDeltas += source.hmDeltas;
     destination.hmReuses += source.hmReuses;
     destination.relationRefreshes += source.relationRefreshes;
+    destination.relationAccumulatorRefreshes += source.relationAccumulatorRefreshes;
+    destination.relationAccumulatorDeltas += source.relationAccumulatorDeltas;
+    destination.relationAccumulatorReuses += source.relationAccumulatorReuses;
     destination.snapshotMismatches += source.snapshotMismatches;
     destination.epSquareMismatches += source.epSquareMismatches;
 }
@@ -55,13 +67,161 @@ void add_hm_delta_counters(HmDeltaCounters& destination, const HmDeltaCounters& 
     destination.avx2KernelCalls += source.avx2KernelCalls;
 }
 
+ATOMIC_V3_INCREMENTAL_NOINLINE void clear_diagnostic(IncrementalDiagnostic& result) noexcept {
+    result = {};
+}
+
 IncrementalStatus fail(IncrementalDiagnostic& result,
                        IncrementalError       error,
                        FullRefreshError       featureError = FullRefreshError::None,
                        ScalarStatus           scalarStatus = {}) noexcept {
+    clear_diagnostic(result);
+    return {error, featureError, scalarStatus};
+}
+
+IncrementalStatus fail(RuntimeOutput&   result,
+                       IncrementalError error,
+                       FullRefreshError featureError = FullRefreshError::None,
+                       ScalarStatus     scalarStatus = {}) noexcept {
     result = {};
     return {error, featureError, scalarStatus};
 }
+
+constexpr ScalarStatus scalar_failure(ScalarError      error,
+                                      FullRefreshError featureError = FullRefreshError::None,
+                                      NumericError     numericError = NumericError::None) noexcept {
+    return {error, featureError, numericError};
+}
+
+template<typename WeightType>
+bool apply_runtime_row(std::array<i32, AccumulatorDimensions>& accumulator,
+                       const WeightType*                       weights,
+                       std::size_t                             row,
+                       std::size_t                             rowCount,
+                       bool                                    add) noexcept {
+    if (!weights || row >= rowCount)
+        return false;
+
+    const WeightType* const source = weights + row * AccumulatorDimensions;
+    if (add)
+        for (std::size_t output = 0; output < accumulator.size(); ++output)
+            accumulator[output] += static_cast<i32>(source[output]);
+    else
+        for (std::size_t output = 0; output < accumulator.size(); ++output)
+            accumulator[output] -= static_cast<i32>(source[output]);
+    return true;
+}
+
+bool apply_relation_row(const Network&                          network,
+                        IndexType                               physical,
+                        bool                                    add,
+                        std::array<i32, AccumulatorDimensions>& accumulator) noexcept {
+    if (physical >= CapturePairPhysicalOffset
+        && physical - CapturePairPhysicalOffset < CapturePairPhysicalDimensions)
+        return apply_runtime_row(accumulator, network.capture_pair_weights(),
+                                 physical - CapturePairPhysicalOffset,
+                                 CapturePairPhysicalDimensions, add);
+    if (physical >= KingBlastEpPhysicalOffset
+        && physical - KingBlastEpPhysicalOffset < KingBlastEpPhysicalDimensions)
+        return apply_runtime_row(accumulator, network.king_blast_ep_weights(),
+                                 physical - KingBlastEpPhysicalOffset,
+                                 KingBlastEpPhysicalDimensions, add);
+    if (physical >= BlastRingPhysicalOffset
+        && physical - BlastRingPhysicalOffset < BlastRingPhysicalDimensions)
+        return apply_runtime_row(accumulator, network.blast_ring_weights(),
+                                 physical - BlastRingPhysicalOffset, BlastRingPhysicalDimensions,
+                                 add);
+    return false;
+}
+
+u8 runtime_transform_value(i32 first, i32 second) noexcept {
+    const i32 clippedFirst  = std::clamp(first, 0, 255);
+    const i32 clippedSecond = std::clamp(second, 0, 255);
+    return static_cast<u8>((static_cast<u32>(clippedFirst) * static_cast<u32>(clippedSecond))
+                           / 512U);
+}
+
+IncrementalStatus compose_runtime(
+  const Network&                                                             network,
+  const CapturePairSnapshot&                                                 snapshot,
+  const std::array<FullRefreshEmission, COLOR_NB>&                           emissions,
+  const std::array<const ScalarHmPerspective*, COLOR_NB>&                    hmStates,
+  const std::array<const std::array<i32, AccumulatorDimensions>*, COLOR_NB>& relationAccumulators,
+  std::array<i32, AccumulatorDimensions>&                                    internal,
+  std::array<u8, Fc0Inputs>&                                                 transformed,
+  RuntimeOutput&                                                             result) noexcept {
+    result = {};
+    if ((snapshot.sideToMove != WHITE && snapshot.sideToMove != BLACK)
+        || !network.dense_runtime_ready())
+        return fail(result, IncrementalError::ScalarCompositionError,
+                    snapshot.sideToMove == WHITE || snapshot.sideToMove == BLACK
+                      ? FullRefreshError::None
+                      : FullRefreshError::InvalidSideToMove,
+                    scalar_failure(ScalarError::InvalidFeatureIndex));
+
+    const IndexType bucket = emissions[WHITE].hm.networkBucket;
+    if (bucket >= LayerStacks || emissions[BLACK].hm.networkBucket != bucket)
+        return fail(result, IncrementalError::ScalarCompositionError, FullRefreshError::None,
+                    scalar_failure(ScalarError::InconsistentPerspectiveBucket));
+
+    for (const Color perspective : {snapshot.sideToMove, ~snapshot.sideToMove})
+    {
+        const std::size_t                color     = color_index(perspective);
+        const ScalarHmPerspective* const hm        = hmStates[color];
+        const auto* const                relations = relationAccumulators[color];
+        const auto&                      emission  = emissions[color];
+        if (!hm || emission.hm.networkBucket != bucket)
+            return fail(result, IncrementalError::ScalarCompositionError, FullRefreshError::None,
+                        scalar_failure(ScalarError::InvalidFeatureIndex));
+
+        for (std::size_t canonical = 0; canonical < AccumulatorDimensions; ++canonical)
+        {
+            const std::size_t runtime = WireIO::internal_index_from_canonical<i16, 16>(canonical);
+            internal[runtime] =
+              hm->accumulator[canonical] + (relations ? (*relations)[runtime] : 0);
+        }
+
+        const std::size_t destination =
+          perspective == snapshot.sideToMove ? 0 : AccumulatorDimensions / 2;
+        for (std::size_t output = 0; output < AccumulatorDimensions / 2; ++output)
+        {
+            const std::size_t first = WireIO::internal_index_from_canonical<i16, 16>(output);
+            const std::size_t second =
+              WireIO::internal_index_from_canonical<i16, 16>(output + AccumulatorDimensions / 2);
+            if (!feature_transformer_accumulator_in_range(internal[first])
+                || !feature_transformer_accumulator_in_range(internal[second]))
+                return fail(result, IncrementalError::HmAccumulatorOutOfRange,
+                            FullRefreshError::None,
+                            scalar_failure(ScalarError::FeatureAccumulatorOutOfRange));
+            transformed[destination + output] =
+              runtime_transform_value(internal[first], internal[second]);
+        }
+    }
+
+    const auto&  stm = *hmStates[color_index(snapshot.sideToMove)];
+    const auto&  opp = *hmStates[color_index(~snapshot.sideToMove)];
+    NumericError numeric =
+      psqt_perspective_difference(stm.psqt[bucket], opp.psqt[bucket], result.psqtDifference);
+    if (numeric != NumericError::None)
+        return fail(
+          result, IncrementalError::ScalarCompositionError, FullRefreshError::None,
+          scalar_failure(ScalarError::NumericContractError, FullRefreshError::None, numeric));
+
+    AtomicV2::NNZInfo<AtomicV2::L1> nnzInfo{};
+    nnzInfo.reset_from(transformed.data());
+    const auto components =
+      network.dense_runtime_stacks()[bucket].propagate_components(transformed.data(), nnzInfo);
+    numeric =
+      compose_dense_output(components.fc2Output, components.fc0SkipAdd, components.fc0SkipSubtract,
+                           result.rawOutput, result.scaledOutput);
+    if (numeric != NumericError::None)
+        return fail(
+          result, IncrementalError::ScalarCompositionError, FullRefreshError::None,
+          scalar_failure(ScalarError::NumericContractError, FullRefreshError::None, numeric));
+    return {};
+}
+
+#undef ATOMIC_V3_INCREMENTAL_NOINLINE
 
 }  // namespace
 
@@ -85,7 +245,17 @@ void IncrementalStack::reset(const Network& network, SimdIsa requestedIsa) noexc
 DirtyPiece& IncrementalStack::push() noexcept {
     assert(size_ < MaxSize);
     Frame& target = frames_[size_++];
-    target        = {};
+    // Search pushes many frames that never reach evaluation. Invalidating the
+    // cached payload is sufficient; eagerly clearing several KiB of HM and
+    // relation accumulators here would tax every visited node.
+    for (const Color perspective : {WHITE, BLACK})
+    {
+        target.perspectives[color_index(perspective)].computed = false;
+        target.relations[color_index(perspective)].computed    = false;
+    }
+    target.dirtyPiece           = {};
+    target.snapshotComputed     = false;
+    target.epSquareWhenComputed = SQ_NONE;
     return target.dirtyPiece;
 }
 
@@ -115,6 +285,166 @@ bool IncrementalStack::extract_hm_rows(const HmEmission& emission, HmRows& resul
     std::sort(result.values.begin(), result.values.begin() + result.size);
     return std::adjacent_find(result.values.begin(), result.values.begin() + result.size)
         == result.values.begin() + result.size;
+}
+
+bool IncrementalStack::extract_relation_rows(const FullRefreshEmission& emission,
+                                             RelationRows&              result) noexcept {
+    result.size       = 0;
+    const auto append = [&result](const auto& slice, IndexType begin, IndexType count) {
+        if (slice.size > slice.features.size() || result.size + slice.size > result.values.size())
+            return false;
+        for (IndexType index = 0; index < slice.size; ++index)
+        {
+            const IndexType physical = slice.features[index].physicalIndex;
+            if (physical < begin || physical - begin >= count)
+                return false;
+            result.values[result.size++] = physical;
+        }
+        return true;
+    };
+
+    if (!append(emission.capturePairs, CapturePairPhysicalOffset, CapturePairPhysicalDimensions)
+        || !append(emission.kingBlastEp, KingBlastEpPhysicalOffset, KingBlastEpPhysicalDimensions)
+        || !append(emission.blastRing, BlastRingPhysicalOffset, BlastRingPhysicalDimensions))
+        return false;
+
+    return std::adjacent_find(result.values.begin(), result.values.begin() + result.size,
+                              [](IndexType lhs, IndexType rhs) { return lhs >= rhs; })
+        == result.values.begin() + result.size;
+}
+
+IncrementalStatus
+IncrementalStack::build_relation_perspective(const Network&             network,
+                                             const FullRefreshEmission& emission,
+                                             Color                      perspective,
+                                             RelationFrame&             target,
+                                             RelationUpdateDiagnostic&  diagnostic) noexcept {
+    diagnostic = {};
+
+    RelationRows currentRows;
+    if (!extract_relation_rows(emission, currentRows)
+        || !is_canonical_joint_orientation(emission.hm.orientation)
+        || emission.hm.orientation.perspective != perspective)
+        return {IncrementalError::InvalidRelationRows};
+
+    target.rows.size = currentRows.size;
+    std::copy(currentRows.values.begin(), currentRows.values.begin() + currentRows.size,
+              target.rows.values.begin());
+    const std::size_t perspectiveIndex = color_index(perspective);
+    const auto&       current          = latest().relations[perspectiveIndex];
+    const bool        exactCurrent =
+      current.computed && current.rows.size == currentRows.size
+      && std::equal(current.rows.values.begin(), current.rows.values.begin() + current.rows.size,
+                    currentRows.values.begin());
+    if (exactCurrent)
+    {
+        if (currentRows.size)
+            target.accumulator = current.accumulator;
+        target.computed           = true;
+        diagnostic.source         = RelationSourceKind::SameFrameReuse;
+        diagnostic.sourcePly      = size_ - 1;
+        diagnostic.sourceDistance = 0;
+        return {};
+    }
+
+    const RelationFrame* source    = nullptr;
+    usize                sourcePly = 0;
+    for (usize candidate = size_; candidate-- > 0;)
+    {
+        const auto& state = frames_[candidate].relations[perspectiveIndex];
+        if (state.computed)
+        {
+            source    = &state;
+            sourcePly = candidate;
+            break;
+        }
+    }
+
+    std::array<IndexType, RelationMaximumActiveDimensions> removed;
+    std::array<IndexType, RelationMaximumActiveDimensions> added;
+    IndexType                                              removedSize = 0;
+    IndexType                                              addedSize   = 0;
+    if (source)
+    {
+        IndexType oldIndex = 0;
+        IndexType newIndex = 0;
+        while (oldIndex < source->rows.size || newIndex < currentRows.size)
+        {
+            if (newIndex == currentRows.size
+                || (oldIndex < source->rows.size
+                    && source->rows.values[oldIndex] < currentRows.values[newIndex]))
+                removed[removedSize++] = source->rows.values[oldIndex++];
+            else if (oldIndex == source->rows.size
+                     || currentRows.values[newIndex] < source->rows.values[oldIndex])
+                added[addedSize++] = currentRows.values[newIndex++];
+            else
+            {
+                ++oldIndex;
+                ++newIndex;
+            }
+        }
+    }
+
+    // A king-orientation change can replace virtually every relation row. In
+    // that case rebuilding the current set is cheaper than removing the old
+    // set and adding the new one, while remaining byte-for-byte exact.
+    // Copying the cached 1024-lane accumulator costs roughly one relation-row
+    // update. Prefer rebuilding when a delta would not save at least one row.
+    const bool useFullRefresh = !source || removedSize + addedSize + 1 >= currentRows.size;
+    if (useFullRefresh)
+    {
+        if (currentRows.size)
+        {
+            target.accumulator.fill(0);
+            for (IndexType index = 0; index < currentRows.size; ++index)
+                if (!apply_relation_row(network, currentRows.values[index], true,
+                                        target.accumulator))
+                    return {IncrementalError::InvalidRelationRows};
+        }
+        target.computed           = true;
+        diagnostic.source         = RelationSourceKind::FullRefresh;
+        diagnostic.sourcePly      = size_ - 1;
+        diagnostic.sourceDistance = 0;
+        diagnostic.addedRows      = currentRows.size;
+        return {};
+    }
+
+    target.accumulator = source->accumulator;
+    for (IndexType index = 0; index < removedSize; ++index)
+        if (!apply_relation_row(network, removed[index], false, target.accumulator))
+            return {IncrementalError::InvalidRelationRows};
+    for (IndexType index = 0; index < addedSize; ++index)
+        if (!apply_relation_row(network, added[index], true, target.accumulator))
+            return {IncrementalError::InvalidRelationRows};
+
+    target.computed           = true;
+    diagnostic.source         = RelationSourceKind::StackDelta;
+    diagnostic.sourcePly      = sourcePly;
+    diagnostic.sourceDistance = size_ - 1 - sourcePly;
+    diagnostic.removedRows    = removedSize;
+    diagnostic.addedRows      = addedSize;
+    return {};
+}
+
+void IncrementalStack::commit_frame(Frame& candidate) noexcept {
+    Frame& target       = latest();
+    target.perspectives = std::move(candidate.perspectives);
+    for (const Color perspective : {WHITE, BLACK})
+    {
+        const std::size_t index       = color_index(perspective);
+        auto&             destination = target.relations[index];
+        auto&             source      = candidate.relations[index];
+        destination.rows.size         = source.rows.size;
+        std::copy(source.rows.values.begin(), source.rows.values.begin() + source.rows.size,
+                  destination.rows.values.begin());
+        if (source.rows.size)
+            destination.accumulator = source.accumulator;
+        destination.computed = source.computed;
+    }
+    target.dirtyPiece           = candidate.dirtyPiece;
+    target.snapshotWhenComputed = candidate.snapshotWhenComputed;
+    target.epSquareWhenComputed = candidate.epSquareWhenComputed;
+    target.snapshotComputed     = candidate.snapshotComputed;
 }
 
 IncrementalStatus IncrementalStack::build_hm_perspective(const Network&      network,
@@ -336,7 +666,7 @@ IncrementalStatus IncrementalStack::build_hm_perspective(const Network&      net
 IncrementalStatus IncrementalStack::evaluate(const Network&             network,
                                              const CapturePairSnapshot& snapshot,
                                              IncrementalDiagnostic&     result) noexcept {
-    result = {};
+    clear_diagnostic(result);
     if (network_ != &network)
         return {IncrementalError::NetworkMismatch};
     if (hmDeltaExecutionEnabled_ && !simd_isa_available(requestedIsa_))
@@ -361,9 +691,9 @@ IncrementalStatus IncrementalStack::evaluate(const Network&             network,
         candidateDiagnostic.previousEpSquare   = previous.epSquareWhenComputed;
         candidateDiagnostic.previousSideToMove = previous.snapshotWhenComputed.sideToMove;
 
-        // The EP comparison deliberately precedes every same-frame HM reuse.
-        // Relations and the dense result are never cached, so a mismatch can
-        // reuse only HM and must still pass through a fresh composition below.
+        // The EP comparison deliberately precedes every same-frame reuse.
+        // Relation rows are re-emitted by the frozen oracle before an exact
+        // row-set match may reuse their accumulator; dense is always recomposed.
         candidateDiagnostic.epSquareMismatch = previous.epSquareWhenComputed != snapshot.epSquare;
         candidateDiagnostic.sameFrameSnapshotMismatch =
           !same_snapshot(previous.snapshotWhenComputed, snapshot);
@@ -382,7 +712,7 @@ IncrementalStatus IncrementalStack::evaluate(const Network&             network,
         ++candidateDiagnostic.eventCounters.relationRefreshes;
     }
 
-    Frame candidateFrame{};
+    Frame candidateFrame;
     candidateFrame.dirtyPiece = previous.dirtyPiece;
     for (const Color perspective : {WHITE, BLACK})
     {
@@ -392,7 +722,7 @@ IncrementalStatus IncrementalStack::evaluate(const Network&             network,
           candidateDiagnostic.hmUpdates[index], candidateDiagnostic.hmDelta.counters);
         if (!status)
         {
-            result = {};
+            clear_diagnostic(result);
             return status;
         }
 
@@ -410,6 +740,29 @@ IncrementalStatus IncrementalStack::evaluate(const Network&             network,
             break;
         case HmSourceKind::None :
             return fail(result, IncrementalError::InvalidHmRows);
+        }
+
+        const IncrementalStatus relationStatus = build_relation_perspective(
+          network, emissions[index], perspective, candidateFrame.relations[index],
+          candidateDiagnostic.relationUpdates[index]);
+        if (!relationStatus)
+        {
+            clear_diagnostic(result);
+            return relationStatus;
+        }
+        switch (candidateDiagnostic.relationUpdates[index].source)
+        {
+        case RelationSourceKind::SameFrameReuse :
+            ++candidateDiagnostic.eventCounters.relationAccumulatorReuses;
+            break;
+        case RelationSourceKind::StackDelta :
+            ++candidateDiagnostic.eventCounters.relationAccumulatorDeltas;
+            break;
+        case RelationSourceKind::FullRefresh :
+            ++candidateDiagnostic.eventCounters.relationAccumulatorRefreshes;
+            break;
+        case RelationSourceKind::None :
+            return fail(result, IncrementalError::InvalidRelationRows);
         }
 
         if (perspective == WHITE && testFault_ == IncrementalFaultPoint::AfterFirstPerspective)
@@ -432,7 +785,7 @@ IncrementalStatus IncrementalStack::evaluate(const Network&             network,
     candidateFrame.epSquareWhenComputed = snapshot.epSquare;
     candidateFrame.snapshotComputed     = true;
 
-    latest() = std::move(candidateFrame);
+    commit_frame(candidateFrame);
     add_counters(counters_, candidateDiagnostic.eventCounters);
     add_hm_delta_counters(hmDeltaCounters_, candidateDiagnostic.hmDelta.counters);
     if (candidateDiagnostic.hmDelta.counters.avx2KernelCalls)
@@ -450,6 +803,121 @@ IncrementalStatus IncrementalStack::evaluate(const Network&         network,
     return evaluate(network, make_capture_pair_snapshot(position), result);
 }
 
+IncrementalStatus IncrementalStack::evaluate_runtime(const Network&             network,
+                                                     const CapturePairSnapshot& snapshot,
+                                                     RuntimeOutput&             result) noexcept {
+    result = {};
+    if (network_ != &network)
+        return {IncrementalError::NetworkMismatch};
+    if (hmDeltaExecutionEnabled_ && !simd_isa_available(requestedIsa_))
+        return {IncrementalError::UnsupportedIsa};
+
+    const Frame&        previous = latest();
+    IncrementalCounters eventCounters{};
+    HmDeltaCounters     deltaCounters{};
+
+    if (previous.snapshotComputed)
+    {
+        eventCounters.epSquareMismatches = previous.epSquareWhenComputed != snapshot.epSquare;
+        eventCounters.snapshotMismatches = !same_snapshot(previous.snapshotWhenComputed, snapshot);
+    }
+
+    auto& emissions = scratch_.emissions;
+    for (const Color perspective : {WHITE, BLACK})
+    {
+        const auto featureError =
+          emit_full_refresh(snapshot, perspective, emissions[color_index(perspective)]);
+        if (featureError != FullRefreshError::None)
+            return fail(result, IncrementalError::FeatureOracleError, featureError);
+        ++eventCounters.relationRefreshes;
+    }
+
+    Frame candidateFrame;
+    candidateFrame.dirtyPiece = previous.dirtyPiece;
+    for (const Color perspective : {WHITE, BLACK})
+    {
+        const std::size_t       index = color_index(perspective);
+        HmUpdateDiagnostic      update{};
+        const IncrementalStatus status =
+          build_hm_perspective(network, perspective, emissions[index].hm,
+                               candidateFrame.perspectives[index], update, deltaCounters);
+        if (!status)
+            return status;
+
+        switch (update.source)
+        {
+        case HmSourceKind::SameFrameReuse :
+            ++eventCounters.hmReuses;
+            break;
+        case HmSourceKind::StackDelta :
+            ++eventCounters.hmDeltas;
+            break;
+        case HmSourceKind::FullRefresh :
+            ++eventCounters.hmRefreshes;
+            break;
+        case HmSourceKind::None :
+            return fail(result, IncrementalError::InvalidHmRows);
+        }
+
+        RelationUpdateDiagnostic relationUpdate{};
+        const IncrementalStatus  relationStatus = build_relation_perspective(
+          network, emissions[index], perspective, candidateFrame.relations[index], relationUpdate);
+        if (!relationStatus)
+            return relationStatus;
+        switch (relationUpdate.source)
+        {
+        case RelationSourceKind::SameFrameReuse :
+            ++eventCounters.relationAccumulatorReuses;
+            break;
+        case RelationSourceKind::StackDelta :
+            ++eventCounters.relationAccumulatorDeltas;
+            break;
+        case RelationSourceKind::FullRefresh :
+            ++eventCounters.relationAccumulatorRefreshes;
+            break;
+        case RelationSourceKind::None :
+            return fail(result, IncrementalError::InvalidRelationRows);
+        }
+
+        if (perspective == WHITE && testFault_ == IncrementalFaultPoint::AfterFirstPerspective)
+            return fail(result, IncrementalError::InjectedFailure);
+    }
+
+    if (testFault_ == IncrementalFaultPoint::BeforeComposition)
+        return fail(result, IncrementalError::InjectedFailure);
+
+    const std::array<const ScalarHmPerspective*, COLOR_NB> hmStates{
+      &candidateFrame.perspectives[WHITE].hm, &candidateFrame.perspectives[BLACK].hm};
+    const std::array<const std::array<i32, AccumulatorDimensions>*, COLOR_NB> relationAccumulators{
+      candidateFrame.relations[WHITE].rows.size ? &candidateFrame.relations[WHITE].accumulator
+                                                : nullptr,
+      candidateFrame.relations[BLACK].rows.size ? &candidateFrame.relations[BLACK].accumulator
+                                                : nullptr};
+    const IncrementalStatus composition =
+      compose_runtime(network, snapshot, emissions, hmStates, relationAccumulators,
+                      scratch_.internalRuntimeAccumulator, scratch_.transformed, result);
+    if (!composition)
+        return composition;
+
+    if (testFault_ == IncrementalFaultPoint::AfterCompositionBeforeCommit)
+        return fail(result, IncrementalError::InjectedFailure);
+
+    candidateFrame.snapshotWhenComputed = snapshot;
+    candidateFrame.epSquareWhenComputed = snapshot.epSquare;
+    candidateFrame.snapshotComputed     = true;
+
+    commit_frame(candidateFrame);
+    add_counters(counters_, eventCounters);
+    add_hm_delta_counters(hmDeltaCounters_, deltaCounters);
+    return {};
+}
+
+IncrementalStatus IncrementalStack::evaluate_runtime(const Network&  network,
+                                                     const Position& position,
+                                                     RuntimeOutput&  result) noexcept {
+    return evaluate_runtime(network, make_capture_pair_snapshot(position), result);
+}
+
 const char* incremental_error_message(IncrementalError error) noexcept {
     switch (error)
     {
@@ -461,6 +929,8 @@ const char* incremental_error_message(IncrementalError error) noexcept {
         return "full-refresh feature oracle rejected the snapshot";
     case IncrementalError::InvalidHmRows :
         return "HM rows are invalid, duplicated or outside the physical tensor";
+    case IncrementalError::InvalidRelationRows :
+        return "relation rows are invalid, duplicated or outside the physical tensors";
     case IncrementalError::HmAccumulatorOutOfRange :
         return "HM-only accumulator escaped the proved i32 envelope";
     case IncrementalError::PsqtAccumulatorOutOfRange :

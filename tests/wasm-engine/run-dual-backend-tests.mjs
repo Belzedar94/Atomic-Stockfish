@@ -197,21 +197,26 @@ async function main() {
   const enginePath = fileOption('--engine');
   const legacyPath = fileOption('--legacy-net');
   const v2Path = fileOption('--v2-net');
+  const v3Path = fileOption('--v3-net');
   const expectedLegacy = argument('--legacy-sha256').toLowerCase();
   const expectedV2 = argument('--v2-sha256').toLowerCase();
+  const expectedV3 = argument('--v3-sha256').toLowerCase();
   const timeoutMs = Number(argument('--timeout-ms', '180000'));
   const maximumRssMiB = Number(argument('--max-rss-mib', '0'));
   assert.match(expectedLegacy, /^[0-9a-f]{64}$/);
   assert.match(expectedV2, /^[0-9a-f]{64}$/);
+  assert.match(expectedV3, /^[0-9a-f]{64}$/);
   assert.ok(Number.isFinite(timeoutMs) && timeoutMs > 0);
   assert.ok(Number.isFinite(maximumRssMiB) && maximumRssMiB >= 0);
 
-  const [legacyBytes, v2Bytes] = await Promise.all([
+  const [legacyBytes, v2Bytes, v3Bytes] = await Promise.all([
     readFile(legacyPath),
     readFile(v2Path),
+    readFile(v3Path),
   ]);
   assert.equal(sha256(legacyBytes), expectedLegacy, 'Legacy V1 network hash mismatch');
   assert.equal(sha256(v2Bytes), expectedV2, 'AtomicNNUEV2 network hash mismatch');
+  assert.equal(sha256(v3Bytes), expectedV3, 'AtomicNNUEV3 network hash mismatch');
 
   const manifest = JSON.parse(
     await readFile(path.join(path.dirname(enginePath), 'manifest.json'), 'utf8'),
@@ -223,10 +228,15 @@ async function main() {
   assert.deepEqual(manifest.supportedNetworkBackends, [
     'Legacy Atomic V1',
     'AtomicNNUEV2',
+    'AtomicNNUEV3',
   ]);
-  assert.deepEqual(manifest.networkFileVersions, ['0x7AF32F20', '0xA70C0002']);
+  assert.deepEqual(manifest.networkFileVersions, [
+    '0x7AF32F20',
+    '0xA70C0002',
+    '0xA70C0003',
+  ]);
 
-  const temp = await mkdtemp(path.join(os.tmpdir(), 'atomic-wasm-v2-'));
+  const temp = await mkdtemp(path.join(os.tmpdir(), 'atomic-wasm-v3-'));
   const engine = new UciProcess(enginePath, timeoutMs);
   const memory = new MemoryMonitor(engine.child.pid);
   let warmRss;
@@ -264,12 +274,34 @@ async function main() {
     assert.match(v2ExportOutput, /Network saved successfully/);
     assert.equal(sha256(await readFile(v2Export)), expectedV2, 'V2 export changed');
 
+    await engine.setOption('EvalFile', uciPath(v3Path));
+    requireBackend(await engine.search(), 'AtomicNNUEV3', 'initial V3 load');
+    await engine.setOption('Use NNUE', 'pure');
+    requireBackend(await engine.search(), 'AtomicNNUEV3', 'V3 pure mode');
+    await engine.setOption('Use NNUE', 'true');
+
+    const v3Export = path.join(temp, 'v3-export.nnue');
+    const v3ExportOutput = await engine.command(
+      `export_net ${uciPath(v3Export)}`,
+      /Network saved successfully|Failed to export/,
+    );
+    assert.match(v3ExportOutput, /Network saved successfully/);
+    assert.equal(sha256(await readFile(v3Export)), expectedV3, 'V3 export changed');
+    await engine.setOption('EvalFile', uciPath(v3Export));
+    requireBackend(await engine.search(), 'AtomicNNUEV3', 'V3 exported-byte reimport');
+
+    await engine.setOption('EvalFile', uciPath(v2Path));
+    requireBackend(await engine.search(), 'AtomicNNUEV2', 'V3 to V2 rollback baseline');
+
     const invalidV2 = path.join(temp, 'v2-trailing-byte.nnue');
     await writeFile(invalidV2, Buffer.concat([v2Bytes, Buffer.from([0xa5])]));
     await engine.setOption('EvalFile', uciPath(invalidV2));
     const rejection = await engine.search();
     assert.match(rejection, /bestmove \(none\)/);
-    assert.match(rejection, /compatible Legacy Atomic V1 or AtomicNNUEV2/);
+    assert.match(
+      rejection,
+      /compatible Legacy Atomic V1, AtomicNNUEV2, or AtomicNNUEV3/,
+    );
 
     const rollbackExport = path.join(temp, 'rollback-export.nnue');
     const rollbackOutput = await engine.command(
@@ -289,6 +321,8 @@ async function main() {
     requireBackend(await engine.search(), 'Legacy Atomic V1', 'V2 to V1 switch');
     await engine.setOption('EvalFile', uciPath(v2Path));
     requireBackend(await engine.search(), 'AtomicNNUEV2', 'V1 to V2 switch');
+    await engine.setOption('EvalFile', uciPath(v3Path));
+    requireBackend(await engine.search(), 'AtomicNNUEV3', 'V2 to V3 switch');
 
     await new Promise((resolve) => setTimeout(resolve, 150));
     warmRss = memory.sample();
@@ -306,6 +340,12 @@ async function main() {
         await engine.search(),
         'AtomicNNUEV2',
         `V2 reload with Threads=${threads}`,
+      );
+      await engine.setOption('EvalFile', uciPath(v3Path));
+      requireBackend(
+        await engine.search(),
+        'AtomicNNUEV3',
+        `V3 reload with Threads=${threads}`,
       );
     }
 
@@ -331,8 +371,8 @@ async function main() {
     memory.stop();
     await engine.close();
     console.log(
-      `WASM dual NNUE backend gate: PASS ` +
-        `(legacy=${expectedLegacy}, v2=${expectedV2}, ` +
+      `WASM three-backend NNUE gate: PASS ` +
+        `(legacy=${expectedLegacy}, v2=${expectedV2}, v3=${expectedV3}, ` +
         `rssWarmMiB=${warmRss === undefined ? 'n/a' : Math.ceil(warmRss / MIB)}, ` +
         `rssFinalMiB=${finalRss === undefined ? 'n/a' : Math.ceil(finalRss / MIB)}, ` +
         `rssPeakMiB=${memory.peakBytes ? Math.ceil(memory.peakBytes / MIB) : 'n/a'})`,
