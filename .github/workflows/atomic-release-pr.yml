@@ -262,7 +262,7 @@ jobs:
         with:
           name: release-pr-source
           path: build/source-authority
-      - name: Build and test the exact Windows release wheel twice
+      - name: Build and test the exact Windows release wheel four times
         shell: bash
         env:
           COMMIT: ${{ needs.source_sdist.outputs.commit }}
@@ -288,7 +288,7 @@ jobs:
             --kind python --platform source --architecture source
 
           mkdir -p build
-          for build_id in a b; do
+          for build_id in a b c d; do
             fingerprint="$PWD/build/windows-wheel-fingerprint-$build_id.json"
             bash scripts/build_atomic_python_wheel_release.sh \
               windows "${sdists[0]}" \
@@ -298,13 +298,22 @@ jobs:
           done
 
           mapfile -t first < <(find build/wheelhouse-a -maxdepth 1 -type f -name '*.whl')
-          mapfile -t second < <(find build/wheelhouse-b -maxdepth 1 -type f -name '*.whl')
           test "${#first[@]}" -eq 1
-          test "${#second[@]}" -eq 1
-          test "$(basename "${first[0]}")" = "$(basename "${second[0]}")"
-          cmp "${first[0]}" "${second[0]}"
-          cmp build/windows-wheel-fingerprint-a.json build/windows-wheel-fingerprint-b.json
           cmp build/windows-wheel-fingerprint-a.json docs/atomic/windows-wheel-fingerprint-v2.json
+          for build_id in b c d; do
+            mapfile -t candidate < <(
+              find "build/wheelhouse-$build_id" -maxdepth 1 -type f -name '*.whl'
+            )
+            test "${#candidate[@]}" -eq 1
+            test "$(basename "${first[0]}")" = "$(basename "${candidate[0]}")"
+            cmp "${first[0]}" "${candidate[0]}"
+            cmp \
+              build/windows-wheel-fingerprint-a.json \
+              "build/windows-wheel-fingerprint-$build_id.json"
+            cmp \
+              "build/windows-wheel-fingerprint-$build_id.json" \
+              docs/atomic/windows-wheel-fingerprint-v2.json
+          done
 
           fingerprint_sha256=$(python -c \
             'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' \
@@ -324,12 +333,14 @@ jobs:
           cp build/windows-wheel-fingerprint-a.json build/release-pr-evidence/
           echo "fingerprint_sha256=$fingerprint_sha256" >> "$GITHUB_STEP_SUMMARY"
           echo "wheel_sha256=$(sha256sum "${first[0]}" | cut -d ' ' -f 1)" >> "$GITHUB_STEP_SUMMARY"
-      - name: Preserve the actual hosted-runner fingerprint on failure
+      - name: Preserve all Windows reproducibility evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: release-pr-windows-fingerprint-${{ github.run_attempt }}
-          path: build/windows-wheel-fingerprint-*.json
+          name: release-pr-windows-repro-${{ github.run_attempt }}
+          path: |
+            build/windows-wheel-fingerprint-*.json
+            build/wheelhouse-*/*.whl
           if-no-files-found: warn
           retention-days: 14
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

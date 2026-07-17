@@ -90,7 +90,7 @@ def test_recipe_has_valid_bash_syntax() -> None:
     assert completed.returncode == 0, completed.stderr
 
 
-def test_windows_extension_normalizes_paths_and_ltcg_scheduling() -> None:
+def test_windows_extension_normalizes_paths_and_disables_ltcg() -> None:
     with (
         mock.patch("platform.python_compiler", return_value="MSC v.1944 64 bit"),
         mock.patch("setuptools.setup") as setup,
@@ -98,11 +98,28 @@ def test_windows_extension_normalizes_paths_and_ltcg_scheduling() -> None:
         runpy.run_path(str(ROOT / "setup.py"), run_name="__main__")
 
     extension = setup.call_args.kwargs["ext_modules"][0]
-    assert extension.extra_compile_args[-2:] == [
+    assert extension.extra_compile_args[-3:] == [
+        "/GL-",
         "/experimental:deterministic",
         f"/d1trimfile:{ROOT.resolve()}\\",
     ]
-    assert extension.extra_link_args == ["/Brepro"]
+    assert extension.extra_link_args == ["/Brepro", "/LTCG:OFF"]
+
+    # setuptools 80.9.0 prepends these defaults.  MSVC resolves conflicting
+    # command-line switches from left to right, so our explicit OFF forms must
+    # be the final whole-program switches seen by cl.exe and link.exe.
+    effective_compile = ["/nologo", "/O2", "/GL", "/MD"] + list(
+        extension.extra_compile_args
+    )
+    effective_link = ["/nologo", "/INCREMENTAL:NO", "/LTCG"] + list(
+        extension.extra_link_args
+    )
+    assert [flag for flag in effective_compile if flag.upper().startswith("/GL")][
+        -1
+    ] == "/GL-"
+    assert [flag for flag in effective_link if flag.upper().startswith("/LTCG")][
+        -1
+    ] == "/LTCG:OFF"
 
 
 def test_wheel_layout_typechecks_the_isolated_wheel_environment() -> None:

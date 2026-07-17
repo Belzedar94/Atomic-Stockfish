@@ -526,7 +526,7 @@ jobs:
             --kind python --platform source --architecture source
           echo "RELEASE_SDIST=${sdists[0]}" >> "$GITHUB_ENV"
           echo "RELEASE_SDIST_SHA256=$EXPECTED_SDIST_SHA256" >> "$GITHUB_ENV"
-      - name: Build wheels twice from the authoritative sdist
+      - name: Build reproducible wheels from the authoritative sdist
         shell: bash
         env:
           SOURCE_DATE_EPOCH: ${{ needs.validate.outputs.epoch }}
@@ -536,7 +536,11 @@ jobs:
           python -m pip install --disable-pip-version-check \
             --only-binary=:all: --require-hashes \
             -r tests/release-ci-requirements.txt
-          for build_id in a b; do
+          build_ids=(a b)
+          if [[ "$WHEEL_PLATFORM" == windows ]]; then
+            build_ids+=(c d)
+          fi
+          for build_id in "${build_ids[@]}"; do
             fingerprint=none
             expected_fingerprint=none
             if [[ "$WHEEL_PLATFORM" == windows ]]; then
@@ -551,15 +555,16 @@ jobs:
           done
 
           mapfile -t first < <(find build/wheelhouse-a -maxdepth 1 -type f -name '*.whl')
-          mapfile -t second < <(find build/wheelhouse-b -maxdepth 1 -type f -name '*.whl')
           test "${#first[@]}" -eq 1
-          test "${#second[@]}" -eq 1
-          test "$(basename "${first[0]}")" = "$(basename "${second[0]}")"
-          cmp "${first[0]}" "${second[0]}"
+          for build_id in "${build_ids[@]:1}"; do
+            mapfile -t candidate < <(
+              find "build/wheelhouse-$build_id" -maxdepth 1 -type f -name '*.whl'
+            )
+            test "${#candidate[@]}" -eq 1
+            test "$(basename "${first[0]}")" = "$(basename "${candidate[0]}")"
+            cmp "${first[0]}" "${candidate[0]}"
+          done
           if [[ "$WHEEL_PLATFORM" == windows ]]; then
-            cmp \
-              build/windows-wheel-fingerprint-a.json \
-              build/windows-wheel-fingerprint-b.json
             cmp \
               build/windows-wheel-fingerprint-a.json \
               docs/atomic/windows-wheel-fingerprint-v2.json
@@ -567,9 +572,14 @@ jobs:
               'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' \
               build/windows-wheel-fingerprint-a.json)
             test "$fingerprint_sha256" = "$WINDOWS_WHEEL_FINGERPRINT_SHA256"
-            cmp \
-              build/windows-wheel-fingerprint-b.json \
-              docs/atomic/windows-wheel-fingerprint-v2.json
+            for build_id in b c d; do
+              cmp \
+                build/windows-wheel-fingerprint-a.json \
+                "build/windows-wheel-fingerprint-$build_id.json"
+              cmp \
+                "build/windows-wheel-fingerprint-$build_id.json" \
+                docs/atomic/windows-wheel-fingerprint-v2.json
+            done
             test "$(python -c \
               'import json,sys; print(json.load(open(sys.argv[1], encoding="ascii"))["runner"]["imageOS"])' \
               build/windows-wheel-fingerprint-a.json)" = "$WINDOWS_WHEEL_IMAGE_OS"
@@ -579,6 +589,16 @@ jobs:
           fi
           python -m abi3audit --strict "${first[0]}"
           python tests/python/test_wheel_layout.py "${first[0]}"
+      - name: Preserve wheel reproducibility evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-python-repro-${{ matrix.platform }}-${{ github.run_attempt }}
+          path: |
+            build/wheelhouse-*/*.whl
+            build/windows-wheel-fingerprint-*.json
+          if-no-files-found: warn
+          retention-days: 14
       - name: Write wheel provenance
         shell: bash
         env:

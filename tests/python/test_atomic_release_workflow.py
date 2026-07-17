@@ -106,13 +106,21 @@ def test_python_wheels_consume_only_the_authenticated_source_job_sdist() -> None
     assert "EXPECTED_SDIST_SHA256: ${{ needs.source.outputs.sdist_sha256 }}" in wheels
     assert "setup.py sdist" not in wheels
     assert wheels.count("scripts/build_atomic_python_wheel_release.sh") == 2
-    assert 'for build_id in a b; do' in wheels
+    assert "build_ids=(a b)" in wheels
+    assert "build_ids+=(c d)" in wheels
+    assert 'for build_id in "${build_ids[@]}"; do' in wheels
     assert '"build/wheelhouse-$build_id" "build/cibw-cache-$build_id"' in wheels
     assert "SOURCE_DATE_EPOCH: ${{ needs.validate.outputs.epoch }}" in wheels
     assert "-r tests/release-ci-requirements.txt" in wheels
-    assert 'cmp "${first[0]}" "${second[0]}"' in wheels
+    assert 'for build_id in "${build_ids[@]:1}"; do' in wheels
+    assert 'cmp "${first[0]}" "${candidate[0]}"' in wheels
     assert "windows-wheel-fingerprint-a.json" in wheels
-    assert "windows-wheel-fingerprint-b.json" in wheels
+    assert "windows-wheel-fingerprint-$build_id.json" in wheels
+    assert "Preserve wheel reproducibility evidence" in wheels
+    assert (
+        "release-python-repro-${{ matrix.platform }}-${{ github.run_attempt }}"
+        in wheels
+    )
     assert 'python -m abi3audit --strict "${first[0]}"' in wheels
 
 
@@ -318,19 +326,21 @@ def test_release_pr_reproduces_real_windows_wheel_and_frozen_fingerprint() -> No
     assert "python-version: '3.12.10'" in gate
     assert "atomic_verify_release_asset.py" in gate
     assert "name: release-pr-source" in gate
-    assert "for build_id in a b; do" in gate
+    assert "for build_id in a b c d; do" in gate
     assert "scripts/build_atomic_python_wheel_release.sh" in gate
     assert 'windows "${sdists[0]}"' in gate
     assert '"build/wheelhouse-$build_id" "build/cibw-cache-$build_id"' in gate
     assert "docs/atomic/windows-wheel-fingerprint-v2.json" in gate
     assert "WINDOWS_WHEEL_FINGERPRINT_SHA256" in gate
     assert "WINDOWS_WHEEL_IMAGE_VERSION" in gate
-    assert 'cmp "${first[0]}" "${second[0]}"' in gate
+    assert "for build_id in b c d; do" in gate
+    assert 'cmp "${first[0]}" "${candidate[0]}"' in gate
     assert "python -m abi3audit --strict" in gate
     assert "test_wheel_layout.py" in gate
-    assert "Preserve the actual hosted-runner fingerprint on failure" in gate
+    assert "Preserve all Windows reproducibility evidence" in gate
     assert "if: always()" in gate
-    assert "release-pr-windows-fingerprint-${{ github.run_attempt }}" in gate
+    assert "release-pr-windows-repro-${{ github.run_attempt }}" in gate
+    assert "build/wheelhouse-*/*.whl" in gate
     assert "name: release-pr-windows-wheel" in gate
     for forbidden in ("contents: write", "gh release", "releases/", "draft=false"):
         assert forbidden not in text
