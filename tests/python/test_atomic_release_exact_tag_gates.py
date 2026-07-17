@@ -509,7 +509,7 @@ def test_nested_exact_gate_controller_is_forced_into_isolated_mode(
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX fail-before-target contract")
 def test_posix_rejects_supervisor_kill_attack_before_target_creation(
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     marker = tmp_path / "target-started.txt"
     attack = tmp_path / "kill-supervisor.py"
@@ -521,6 +521,14 @@ def test_posix_rejects_supervisor_kill_attack_before_target_creation(
         "time.sleep(120)\n",
         encoding="ascii",
     )
+
+    spawn_attempts: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
+
+    def reject_spawn(*args: Any, **kwargs: Any) -> Any:
+        spawn_attempts.append((args, kwargs))
+        raise AssertionError("POSIX rejection attempted to create a child process")
+
+    monkeypatch.setattr(CONTAINMENT.subprocess, "Popen", reject_spawn)
     with pytest.raises(
         CONTAINMENT.ProcessContainmentError,
         match="unsupported on POSIX; the target was not started",
@@ -533,17 +541,8 @@ def test_posix_rejects_supervisor_kill_attack_before_target_creation(
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
+    assert spawn_attempts == []
     assert not marker.exists()
-    source = (ROOT / "scripts" / "atomic_process_containment.py").read_text(
-        encoding="utf-8"
-    )
-    for forbidden in (
-        "PR_SET_CHILD_SUBREAPER",
-        "--linux-supervisor",
-        "start_new_session=True",
-        "os.killpg",
-    ):
-        assert forbidden not in source
 
 
 def test_outer_and_inner_output_limits_match_the_release_inventory() -> None:
