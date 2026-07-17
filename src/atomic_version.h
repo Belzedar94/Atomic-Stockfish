@@ -15,9 +15,9 @@ namespace Stockfish {
 
 inline constexpr int AtomicVersionMajor = 1;
 inline constexpr int AtomicVersionMinor = 0;
-inline constexpr int AtomicVersionPatch = 0;
+inline constexpr int AtomicVersionPatch = 1;
 
-inline constexpr std::string_view AtomicVersionString = "1.0.0";
+inline constexpr std::string_view AtomicVersionString = "1.0.1";
 
 }  // namespace Stockfish
 

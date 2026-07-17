@@ -67,7 +67,7 @@ ProcessContainmentError = _CONTAINMENT.ProcessContainmentError
 launch_contained = _CONTAINMENT.launch_contained
 
 REPOSITORY = "Belzedar94/Atomic-Stockfish"
-RELEASE_REF = "refs/tags/v1.0.0"
+RELEASE_REF = "refs/tags/v1.0.1"
 TOOLS_REPOSITORY = "Belzedar94/variant-nnue-tools"
 TRAINER_REPOSITORY = "Belzedar94/variant-nnue-pytorch"
 FAIRY_REPOSITORY = "fairy-stockfish/Fairy-Stockfish"

@@ -75,6 +75,15 @@ def test_release_identity_builds_pyffish_before_collecting_contracts() -> None:
     assert validate.index(build) < validate.index(contracts)
 
 
+def test_release_recovery_is_chained_to_the_original_1_0_merge() -> None:
+    text = workflow()
+    required_base = "16c57ea7369699bc8ecdbd4ae855b5bbb91cce39"
+
+    assert text.count("--release-pr 46") == 4
+    assert "--release-pr 44" not in text
+    assert text.count("--required-release-pr-base-sha " + required_base) == 4
+
+
 def test_orthodox_upstream_workflow_cannot_gate_atomic_release_tags() -> None:
     text = UPSTREAM_STOCKFISH_WORKFLOW.read_text(encoding="utf-8")
     trigger = text.split("\nconcurrency:", 1)[0]
@@ -488,7 +497,7 @@ def test_publication_requires_annotated_tag_immutable_policy_and_same_tag_ci() -
     assert text.count("$GITHUB_REPOSITORY/immutable-releases") == 2
     assert text.count(
         "if: github.event_name == 'push' && github.ref_type == 'tag' "
-        "&& github.ref_name == 'v1.0.0'"
+        "&& github.ref_name == 'v1.0.1'"
     ) == 2
     assert "pull_request" not in text.split("permissions:", 1)[0]
     assert '.name == "Atomic CI"' in gate

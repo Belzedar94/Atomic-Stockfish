@@ -7,7 +7,7 @@ import pytest
 from scripts.atomic_reproducible_sdist import SdistContractError, normalize_sdist
 
 
-ROOT = "atomic_pyffish-1.0.0"
+ROOT = "atomic_pyffish-1.0.1"
 EPOCH = 1_700_000_000
 
 

@@ -1,12 +1,18 @@
-# Atomic-Stockfish 1.0 release checklist
+# Atomic-Stockfish 1.0.1 release checklist
 
-This checklist is the release controller for `v1.0.0`. A green development CI
+This checklist is the release controller for `v1.0.1`. A green development CI
 run is necessary but is not, by itself, permission to publish. Every item is
 executed against the exact tagged commit. The release manifest authenticates
 the published assets and their producer provenance. The protected exact-tag
 workflow captures the six mandatory gate results and hashes with zero skips,
 attests that evidence, and preserves it in the follow-up gate-evidence PR
 described below.
+
+`v1.0.0` was a prepublication candidate only. Its workflow failed before the
+protected external gates because the clean Python binding bootstrap was
+missing, and it created no GitHub release, draft or release assets. The repaired
+`v1.0.1` tag is the first publication candidate. This patch bump records that
+recovery without changing the engine feature scope or weakening any gate.
 
 ## Frozen inputs
 
@@ -91,7 +97,7 @@ described below.
    and run classical plus Legacy V1/AtomicNNUEV2/AtomicNNUEV3 load, search,
    switch and export tests with authenticated external networks. `Use
    NNUE=pure` is exercised by the data-generation surface, not advertised as a
-   playing mode. No V3 network is bundled or strength-endorsed by 1.0.
+   playing mode. No V3 network is bundled or strength-endorsed by 1.0.1.
 8. Run Atomic Syzygy driver, production UCI and real-table fixtures against the
    exact tag, including touching kings and six-man positions, with tablebases
    enabled and disabled. Preserve this functional result independently of the
@@ -142,7 +148,7 @@ is no separate protocol binary.
 ## Publication transaction
 
 1. Verify `AtomicVersionMajor/Minor/Patch`, Python metadata, JavaScript metadata
-   and the proposed tag all equal `1.0.0`.
+   and the proposed tag all equal `1.0.1`.
 2. Enable GitHub immutable releases with the repository administration API
    before creating the tag. The release workflow only performs the read check
    and fails closed when `GET /immutable-releases` is absent or not `enabled`;
@@ -152,7 +158,7 @@ is no separate protocol binary.
    permission. Create or rotate it before expiry using the same minimal scope,
    replace the secret without logging its value, and remove it after the release
    if it is not part of the standing rotation policy. It is consumed only by
-   the trusted `v1.0.0` tag-push publication jobs, never by pull-request jobs,
+   the trusted `v1.0.1` tag-push publication jobs, never by pull-request jobs,
    and only for the two `GET /immutable-releases` calls.
 3. Create every asset in an isolated clean checkout with a fixed toolchain.
    Linux, MinGW and Emscripten producers are selected by immutable container
@@ -165,10 +171,12 @@ is no separate protocol binary.
 4. Re-read and hash all assets, then write the manifest and `SHA256SUMS` last.
    Every producer-side provenance descriptor freezes its asset SHA-256; the
    assembler verifies that digest again before and after its authenticated copy.
-5. Merge release PR #44 with a traditional two-parent merge commit, never a
-   squash or rebase. Immediately before tagging, authenticate online that
-   `main`, the merge commit, its ordered parents and the PR's reviewed head all
-   agree. Create an annotated `v1.0.0` tag only for that exact merge commit.
+5. Merge recovery PR #46 with a traditional two-parent merge commit, never a
+   squash or rebase, and require its first parent to be the exact reviewed PR
+   #44 release-candidate merge. Immediately before tagging, authenticate online
+   that `main`, the merge commit, its ordered parents, required base and the
+   recovery PR's reviewed head all agree. Create an annotated `v1.0.1` tag only
+   for that exact merge commit.
    Record and re-check both the tag-object SHA and its direct peeled commit SHA
    through local Git and the GitHub Git Database API; a lightweight or nested
    tag fails.
@@ -198,13 +206,13 @@ is no separate protocol binary.
    API and require all three recorded SHAs to remain byte-for-byte identical.
    Re-read the immutable-releases policy and require it to remain enabled. Fetch
    the reserved release by its exact ID and require it to remain the unique draft
-   for `v1.0.0`; download that draft again into a new empty directory, compare its
+   for `v1.0.1`; download that draft again into a new empty directory, compare its
    exact names and bytes with the frozen candidate, and re-run `SHA256SUMS`.
 10. Manually publish release notes that state the external NNUE/Syzygy requirements,
    supported protocols/bindings and exact known limitations.
 11. Immediately after publication, re-read the immutable-releases policy and
     require it still enabled. Fetch the release by the same exact ID and require
-    `draft=false`, a non-null publication timestamp and the unchanged `v1.0.0`
+    `draft=false`, a non-null publication timestamp and the unchanged `v1.0.1`
     tag. Re-read the tag ref, annotated tag object and direct peeled commit and
     require the recorded SHAs unchanged. Download the now-published assets into
     another new empty directory, require byte equality with the frozen candidate,

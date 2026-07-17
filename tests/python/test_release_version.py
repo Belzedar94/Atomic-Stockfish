@@ -8,7 +8,7 @@ import pyffish
 
 
 ROOT = Path(__file__).resolve().parents[2]
-EXPECTED = "1.0.0"
+EXPECTED = "1.0.1"
 
 
 def header_version() -> str:
@@ -54,7 +54,32 @@ def test_release_version_is_consistent_across_packaging_surfaces() -> None:
         "event": "push",
         "name": "Atomic CI",
         "path": ".github/workflows/atomic.yml",
-        "ref": "refs/tags/v1.0.0",
+        "ref": "refs/tags/v1.0.1",
+    }
+    assert policy["mainTagTrust"] == {
+        "defaultBranch": "main",
+        "mergeCommitParents": 2,
+        "mergeMethod": "merge",
+        "onlineRequired": True,
+        "releasePullRequest": 46,
+        "requiredBaseCommitSha": "16c57ea7369699bc8ecdbd4ae855b5bbb91cce39",
+        "revalidatedBy": [
+            "main-trust",
+            "exact-tag-external",
+            "publication-gate",
+            "publish",
+        ],
+    }
+    assert policy["prePublicationRecovery"] == {
+        "failedTag": "v1.0.0",
+        "failedTagObjectSha": "bfcd0598bafc22dcf2fac5212f406a6d0398e770",
+        "failedTagCommitSha": "16c57ea7369699bc8ecdbd4ae855b5bbb91cce39",
+        "failedWorkflowRunId": 29551760897,
+        "failedWorkflowJobId": 87795612017,
+        "githubReleaseCreated": False,
+        "releaseAssetsCreated": False,
+        "recoveryTag": "v1.0.1",
+        "reason": "clean-pyffish-bootstrap-missing",
     }
     assert policy["windowsMakeComp"] == "mingw"
     assert policy["abi3AuditVersion"] == "0.0.26"
@@ -174,7 +199,7 @@ def test_release_version_is_consistent_across_packaging_surfaces() -> None:
     assert "contents: write" in publish
     assert (
         "if: github.event_name == 'push' && github.ref_type == 'tag' "
-        "&& github.ref_name == 'v1.0.0'"
+        "&& github.ref_name == 'v1.0.1'"
     ) in publish
     assert "softprops/action-gh-release" not in publish
     assert 'test "$UPLOAD_URL" = "$expected_upload_url"' in publish
@@ -209,8 +234,8 @@ def test_release_version_is_consistent_across_packaging_surfaces() -> None:
 def test_compiled_python_surface_reports_release_version() -> None:
     module_path = Path(pyffish.__file__).resolve()
     assert module_path.parent == ROOT
-    assert pyffish.version() == (1, 0, 0)
-    assert pyffish.info().startswith("Atomic-Stockfish 1.0.0 ")
+    assert pyffish.version() == (1, 0, 1)
+    assert pyffish.info().startswith("Atomic-Stockfish 1.0.1 ")
 
 
 def test_native_incremental_build_tracks_the_release_version_header() -> None:

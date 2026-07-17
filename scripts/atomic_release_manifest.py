@@ -145,7 +145,10 @@ def expected_inventory_policy(version: str) -> Dict[str, Any]:
             "mergeCommitParents": 2,
             "mergeMethod": "merge",
             "onlineRequired": True,
-            "releasePullRequest": 44,
+            "releasePullRequest": 46,
+            "requiredBaseCommitSha": (
+                "16c57ea7369699bc8ecdbd4ae855b5bbb91cce39"
+            ),
             "revalidatedBy": [
                 "main-trust",
                 "exact-tag-external",
@@ -154,6 +157,17 @@ def expected_inventory_policy(version: str) -> Dict[str, Any]:
             ],
         },
         "nativeBuildRepetitions": 2,
+        "prePublicationRecovery": {
+            "failedTag": "v1.0.0",
+            "failedTagObjectSha": "bfcd0598bafc22dcf2fac5212f406a6d0398e770",
+            "failedTagCommitSha": "16c57ea7369699bc8ecdbd4ae855b5bbb91cce39",
+            "failedWorkflowRunId": 29551760897,
+            "failedWorkflowJobId": 87795612017,
+            "githubReleaseCreated": False,
+            "releaseAssetsCreated": False,
+            "recoveryTag": "v1.0.1",
+            "reason": "clean-pyffish-bootstrap-missing",
+        },
         "pythonManylinuxX86_64Image": PYTHON_MANYLINUX_X86_64_IMAGE,
         "releaseBuildRequirementsSha256": RELEASE_BUILD_REQUIREMENTS_SHA256,
         "releaseCiRequirementsSha256": RELEASE_CI_REQUIREMENTS_SHA256,

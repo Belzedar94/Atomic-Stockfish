@@ -1,9 +1,9 @@
-# Atomic-Stockfish 1.0.0 Node UCI/NNUE WebAssembly
+# Atomic-Stockfish 1.0.1 Node UCI/NNUE WebAssembly
 
 This archive contains the complete Atomic search engine for Node.js. It is a
 UCI-only, pthread-enabled WebAssembly build with Legacy Atomic V1,
 AtomicNNUEV2 and AtomicNNUEV3 network readers. It does not embed or redistribute
-an NNUE network, and version 1.0 does not endorse a V3 release-candidate net.
+an NNUE network, and version 1.0.1 does not endorse a V3 release-candidate net.
 
 Run all commands from the extracted archive directory. The supported entrypoint
 is `atomic-stockfish-nnue-node.mjs`; the generated
