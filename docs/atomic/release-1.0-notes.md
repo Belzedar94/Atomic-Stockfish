@@ -1,14 +1,17 @@
-# Atomic-Stockfish 1.0.1
+# Atomic-Stockfish 1.0.2
 
-Atomic-Stockfish 1.0.1 is the first stable release of the dedicated Atomic and
+Atomic-Stockfish 1.0.2 is the first stable release of the dedicated Atomic and
 Atomic960 engine derived from Stockfish and validated against the frozen
 Fairy-Stockfish Atomic reference.
 
 The earlier `v1.0.0` tag was a prepublication candidate whose release workflow
-failed before the protected external gates. It created no GitHub release,
-draft or release assets. Version `1.0.1` is therefore the first publication;
-the patch bump records the repaired release bootstrap and does not change the
-engine feature scope described below.
+failed before the protected external gates. The `v1.0.1` recovery then exposed
+an over-broad Linux wheel selector: it admitted musllinux in addition to the
+single contracted manylinux artifact and failed before the protected external
+gates. Neither attempt created a GitHub release, draft or release assets.
+Version `1.0.2` is therefore the first publication; the patch bump records the
+repaired release bootstrap and does not change the engine feature scope
+described below.
 
 ## Included surfaces
 
@@ -46,14 +49,14 @@ architecture and bytes rather than trusting a filename.
 - `Use NNUE=true` is the supported NNUE playing mode. `Use NNUE=pure` is a
   data-generation mode and is not presented as a playing-strength setting.
 - AtomicNNUEV3 is the third accepted runtime backend in native, data-generator
-  and pthread Node UCI/WASM builds. Version 1.0.1 validates and dispatches
+  and pthread Node UCI/WASM builds. Version 1.0.2 validates and dispatches
   structurally compatible external V3 networks, but does not bundle or endorse
   a V3 release-candidate network.
 - UCCI, USI and non-Atomic variants are deliberately out of scope.
 - The completed, owner-capped 375-million-position Atomic BIN V2 bootstrap is a
   distributed-generation pilot, not a V3 publication dataset. Its authorized
   sequential four-run campaign is active under the fail-closed non-publication
-  contract; neither its progress nor its outputs are a 1.0.1 release dependency.
+  contract; neither its progress nor its outputs are a 1.0.2 release dependency.
 
 Verify every downloaded asset with `SHA256SUMS` and
 `atomic-stockfish-release-manifest.json` before use.
@@ -98,8 +101,8 @@ Child output is streamed under one 32 MiB bound per gate, and timeout or
 overflow terminates the complete child process tree before cleanup continues.
 
 Automation may create only a draft after GitHub release immutability is already
-enabled, recovery PR #46 is proven to be a traditional two-parent merge on
-`main` whose exact base is the reviewed PR #44 release-candidate merge, the
+enabled, recovery PR #47 is proven to be a traditional two-parent merge on
+`main` whose exact base is the reviewed PR #46 recovery merge, the
 annotated tag object and peeled commit are exact, `Atomic CI` has succeeded for
 the same tag/SHA push, the protected exact gates have passed, and the same-run
 attestations verify. It downloads that draft from GitHub and verifies the exact

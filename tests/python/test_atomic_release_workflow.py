@@ -77,9 +77,10 @@ def test_release_identity_builds_pyffish_before_collecting_contracts() -> None:
 
 def test_release_recovery_is_chained_to_the_original_1_0_merge() -> None:
     text = workflow()
-    required_base = "16c57ea7369699bc8ecdbd4ae855b5bbb91cce39"
+    required_base = "8fa6a46c92a7471743051f7c6d1ce9b093590043"
 
-    assert text.count("--release-pr 46") == 4
+    assert text.count("--release-pr 47") == 4
+    assert "--release-pr 46" not in text
     assert "--release-pr 44" not in text
     assert text.count("--required-release-pr-base-sha " + required_base) == 4
 
@@ -279,7 +280,8 @@ def test_release_pr_reproduces_real_windows_wheel_and_frozen_fingerprint() -> No
         "tests/python/test_wheel_layout.py",
     ):
         assert f"      - {dependency}\n" in trigger
-    source = job(text, "source_sdist", "windows_wheel")
+    source = job(text, "source_sdist", "linux_wheel")
+    linux = job(text, "linux_wheel", "windows_wheel")
     gate = text.split("  windows_wheel:\n", 1)[1]
     assert "ref: ${{ github.event.pull_request.head.sha }}" in source
     assert "EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}" in source
@@ -294,6 +296,23 @@ def test_release_pr_reproduces_real_windows_wheel_and_frozen_fingerprint() -> No
     assert 'cp "$first.provenance.json"' in source
     assert "buildLockSha256=" in source
     assert "name: release-pr-source" in source
+    assert "needs: source_sdist" in linux
+    assert "runs-on: ubuntu-24.04" in linux
+    assert "python-version: '3.12.10'" in linux
+    assert "name: release-pr-source" in linux
+    assert "atomic_verify_release_asset.py" in linux
+    assert 'test "$(git rev-parse HEAD)" = "$COMMIT"' in linux
+    assert "for build_id in a b; do" in linux
+    assert 'linux "${sdists[0]}"' in linux
+    assert '"build/wheelhouse-$build_id" "build/cibw-cache-$build_id"' in linux
+    assert "none none" in linux
+    assert "cp39-abi3-manylinux*x86_64.whl" in linux
+    assert 'cmp "${first[0]}" "${second[0]}"' in linux
+    assert 'python -m abi3audit --strict "${first[0]}"' in linux
+    assert 'python tests/python/test_wheel_layout.py "${first[0]}"' in linux
+    assert "name: release-pr-linux-wheel" in linux
+    assert "setup.py sdist" not in linux
+    assert "git archive" not in linux
     assert "needs: source_sdist" in gate
     assert "runs-on: windows-2022" in gate
     assert "python-version: '3.12.10'" in gate
@@ -497,7 +516,7 @@ def test_publication_requires_annotated_tag_immutable_policy_and_same_tag_ci() -
     assert text.count("$GITHUB_REPOSITORY/immutable-releases") == 2
     assert text.count(
         "if: github.event_name == 'push' && github.ref_type == 'tag' "
-        "&& github.ref_name == 'v1.0.1'"
+        "&& github.ref_name == 'v1.0.2'"
     ) == 2
     assert "pull_request" not in text.split("permissions:", 1)[0]
     assert '.name == "Atomic CI"' in gate

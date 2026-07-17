@@ -30,7 +30,7 @@ const expectedPackageRoot = fs.realpathSync(
 assert.equal(fs.realpathSync(packageRoot), expectedPackageRoot);
 const metadata = JSON.parse(fs.readFileSync(path.join(packageRoot, 'package.json'), 'utf8'));
 assert.equal(metadata.name, PACKAGE);
-assert.equal(metadata.version, '1.0.1');
+assert.equal(metadata.version, '1.0.2');
 
 try {
   const ffish = await createAtomicStockfish({
@@ -39,7 +39,7 @@ try {
     },
   });
 
-  assert.equal(ffish.info(), 'Atomic-Stockfish 1.0.1 JS/WASM');
+  assert.equal(ffish.info(), 'Atomic-Stockfish 1.0.2 JS/WASM');
   assert.equal(ffish.variants(), 'atomic');
   const liveBefore = ffish.debugLiveBoards();
   const board = new ffish.Board('atomic', '', true);

@@ -8,7 +8,7 @@ import pyffish
 
 
 ROOT = Path(__file__).resolve().parents[2]
-EXPECTED = "1.0.1"
+EXPECTED = "1.0.2"
 
 
 def header_version() -> str:
@@ -30,14 +30,14 @@ def test_release_version_is_consistent_across_packaging_surfaces() -> None:
     assert header_version() == EXPECTED
 
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    assert "Version 1.0.1 is the first stable, strength-qualified release" in readme
-    assert "`v1.0.0` tag is a failed prepublication candidate" in readme
+    assert "Version 1.0.2 is the first stable, strength-qualified release" in readme
+    assert "`v1.0.0` and `v1.0.1` tags are failed prepublication candidates" in readme
 
     checklist = (
         ROOT / "docs" / "atomic" / "release-1.0-checklist.md"
     ).read_text(encoding="utf-8")
-    assert "permits exactly the tag\n   `v1.0.1`" in checklist
-    assert "require that `v1.0.0` is no longer\n   permitted" in checklist
+    assert "permits exactly the tag\n   `v1.0.2`" in checklist
+    assert "require that neither `v1.0.0` nor\n   `v1.0.1` is permitted" in checklist
 
     package = json.loads((ROOT / "tests" / "js" / "package.json").read_text(encoding="utf-8"))
     assert package["version"] == EXPECTED
@@ -64,15 +64,15 @@ def test_release_version_is_consistent_across_packaging_surfaces() -> None:
         "event": "push",
         "name": "Atomic CI",
         "path": ".github/workflows/atomic.yml",
-        "ref": "refs/tags/v1.0.1",
+        "ref": "refs/tags/v1.0.2",
     }
     assert policy["mainTagTrust"] == {
         "defaultBranch": "main",
         "mergeCommitParents": 2,
         "mergeMethod": "merge",
         "onlineRequired": True,
-        "releasePullRequest": 46,
-        "requiredBaseCommitSha": "16c57ea7369699bc8ecdbd4ae855b5bbb91cce39",
+        "releasePullRequest": 47,
+        "requiredBaseCommitSha": "8fa6a46c92a7471743051f7c6d1ce9b093590043",
         "revalidatedBy": [
             "main-trust",
             "exact-tag-external",
@@ -81,15 +81,15 @@ def test_release_version_is_consistent_across_packaging_surfaces() -> None:
         ],
     }
     assert policy["prePublicationRecovery"] == {
-        "failedTag": "v1.0.0",
-        "failedTagObjectSha": "bfcd0598bafc22dcf2fac5212f406a6d0398e770",
-        "failedTagCommitSha": "16c57ea7369699bc8ecdbd4ae855b5bbb91cce39",
-        "failedWorkflowRunId": 29551760897,
-        "failedWorkflowJobId": 87795612017,
+        "failedTag": "v1.0.1",
+        "failedTagObjectSha": "62084b84e1bbf9c432a8b898abe4e4f9b2f17983",
+        "failedTagCommitSha": "8fa6a46c92a7471743051f7c6d1ce9b093590043",
+        "failedWorkflowRunId": 29555199867,
+        "failedWorkflowJobId": 87806684417,
         "githubReleaseCreated": False,
         "releaseAssetsCreated": False,
-        "recoveryTag": "v1.0.1",
-        "reason": "clean-pyffish-bootstrap-missing",
+        "recoveryTag": "v1.0.2",
+        "reason": "linux-wheel-recipe-included-unintended-musllinux",
     }
     assert policy["windowsMakeComp"] == "mingw"
     assert policy["abi3AuditVersion"] == "0.0.26"
@@ -202,6 +202,8 @@ def test_release_version_is_consistent_across_packaging_surfaces() -> None:
     )
     assert "RELEASE_VERSION: " + EXPECTED in workflow
     assert "- v" + EXPECTED in workflow
+    assert "assert pyffish.version() == (1, 0, 2)" in workflow
+    assert "assert pyffish.version() == (1, 0, 1)" not in workflow
     assert workflow.count("contents: write") == 1
     assemble = workflow.split("  assemble:\n", 1)[1].split("  publish:\n", 1)[0]
     publish = workflow.split("  publish:\n", 1)[1]
@@ -209,7 +211,7 @@ def test_release_version_is_consistent_across_packaging_surfaces() -> None:
     assert "contents: write" in publish
     assert (
         "if: github.event_name == 'push' && github.ref_type == 'tag' "
-        "&& github.ref_name == 'v1.0.1'"
+        "&& github.ref_name == 'v1.0.2'"
     ) in publish
     assert "softprops/action-gh-release" not in publish
     assert 'test "$UPLOAD_URL" = "$expected_upload_url"' in publish
@@ -244,8 +246,8 @@ def test_release_version_is_consistent_across_packaging_surfaces() -> None:
 def test_compiled_python_surface_reports_release_version() -> None:
     module_path = Path(pyffish.__file__).resolve()
     assert module_path.parent == ROOT
-    assert pyffish.version() == (1, 0, 1)
-    assert pyffish.info().startswith("Atomic-Stockfish 1.0.1 ")
+    assert pyffish.version() == (1, 0, 2)
+    assert pyffish.info().startswith("Atomic-Stockfish 1.0.2 ")
 
 
 def test_native_incremental_build_tracks_the_release_version_header() -> None:

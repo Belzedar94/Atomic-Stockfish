@@ -184,7 +184,9 @@ def test_recipe_clears_overrides_and_sets_exact_cibuildwheel_contract() -> None:
     text = recipe_text()
     assert "compgen -A variable CIBW_" in text
     assert 'unset "$inherited_cibw"' in text
-    assert "export CIBW_BUILD='cp39-*'" in text
+    assert "export CIBW_BUILD='cp39-manylinux_x86_64'" in text
+    assert "export CIBW_BUILD='cp39-win_amd64'" in text
+    assert "export CIBW_BUILD='cp39-*'" not in text
     assert "export CIBW_ARCHS=x86_64" in text
     assert "export CIBW_ARCHS=AMD64" in text
     assert 'export CIBW_ENVIRONMENT="SOURCE_DATE_EPOCH=$epoch PYTHONHASHSEED=0"' in text
