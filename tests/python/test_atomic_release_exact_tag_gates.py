@@ -13,6 +13,7 @@ from jsonschema import Draft202012Validator  # type: ignore[import-untyped]
 import psutil
 import pytest
 
+from scripts import atomic_process_containment as CONTAINMENT
 from scripts import atomic_release_exact_tag_gates as EXACT
 
 BENCH: Any = importlib.import_module("tests.atomic_bench_compare")
@@ -903,6 +904,173 @@ def test_gate_timeout_terminates_a_real_grandchild_process(tmp_path: Path) -> No
     finally:
         if pid_file.exists():
             cleanup_process_tree(int(pid_file.read_text(encoding="ascii")))
+
+
+def test_gate_root_exit_still_terminates_inherited_pipe_grandchild(
+    tmp_path: Path,
+) -> None:
+    pid_file = tmp_path / "grandchild.pid"
+    stdout = tmp_path / "root-exit-stdout.log"
+    stderr = tmp_path / "root-exit-stderr.log"
+    parent = tmp_path / "root-exit-parent.py"
+    parent.write_text(
+        "\n".join(
+            (
+                "import pathlib, subprocess, sys",
+                "child = subprocess.Popen([sys.executable, '-c', "
+                "'import time; time.sleep(120)'])",
+                "pathlib.Path(sys.argv[1]).write_text(str(child.pid), encoding='ascii')",
+                "print('grandchild inherited stdout', flush=True)",
+            )
+        )
+        + "\n",
+        encoding="ascii",
+    )
+    started = time.monotonic()
+    try:
+        return_code, _ = EXACT._execute_gate(
+            [sys.executable, str(parent), str(pid_file)],
+            cwd=tmp_path,
+            environment=EXACT._safe_process_environment(),
+            timeout_seconds=30,
+            stdout_path=stdout,
+            stderr_path=stderr,
+            gate_id="hito4-release",
+        )
+        assert return_code == 0
+        assert time.monotonic() - started < 10
+        assert stdout.read_bytes().replace(b"\r\n", b"\n") == (
+            b"grandchild inherited stdout\n"
+        )
+        assert stderr.read_bytes() == b""
+        grandchild_pid = int(pid_file.read_text(encoding="ascii"))
+        assert wait_process_gone(grandchild_pid), (
+            f"grandchild {grandchild_pid} survived its root process"
+        )
+    finally:
+        if pid_file.exists():
+            cleanup_process_tree(int(pid_file.read_text(encoding="ascii")))
+
+
+def test_gate_infinite_writer_is_bounded_and_terminated(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pid_file = tmp_path / "writer.pid"
+    writer = tmp_path / "writer.py"
+    writer.write_text(
+        "\n".join(
+            (
+                "import os, pathlib, sys",
+                "pathlib.Path(sys.argv[1]).write_text(str(os.getpid()), encoding='ascii')",
+                "while True:",
+                "    os.write(1, b'x' * 4096)",
+            )
+        )
+        + "\n",
+        encoding="ascii",
+    )
+    monkeypatch.setattr(EXACT, "MAX_GATE_OUTPUT_BYTES", 1024)
+    started = time.monotonic()
+    try:
+        with pytest.raises(EXACT.ExactTagGateError, match="output exceeded"):
+            EXACT._execute_gate(
+                [sys.executable, str(writer), str(pid_file)],
+                cwd=tmp_path,
+                environment=EXACT._safe_process_environment(),
+                timeout_seconds=30,
+                stdout_path=tmp_path / "writer-stdout.log",
+                stderr_path=tmp_path / "writer-stderr.log",
+                gate_id="hito4-release",
+            )
+        assert time.monotonic() - started < 10
+        writer_pid = int(pid_file.read_text(encoding="ascii"))
+        assert wait_process_gone(writer_pid), (
+            f"writer {writer_pid} survived the outer output limit"
+        )
+    finally:
+        if pid_file.exists():
+            cleanup_process_tree(int(pid_file.read_text(encoding="ascii")))
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows Job Object fail-closed path")
+def test_windows_job_assignment_failure_never_resumes_child(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    marker = tmp_path / "resumed.txt"
+    child = tmp_path / "must-not-resume.py"
+    child.write_text(
+        "import pathlib, sys\npathlib.Path(sys.argv[1]).write_text('bad')\n",
+        encoding="ascii",
+    )
+    child_pids: list[int] = []
+
+    def reject_assignment(job: Any, pid: int) -> None:
+        del job
+        child_pids.append(pid)
+        raise CONTAINMENT.ProcessContainmentError("injected assignment failure")
+
+    monkeypatch.setattr(
+        CONTAINMENT, "_assign_process_to_windows_job", reject_assignment
+    )
+    with pytest.raises(
+        CONTAINMENT.ProcessContainmentError, match="injected assignment failure"
+    ):
+        CONTAINMENT.launch_contained(
+            [sys.executable, str(child), str(marker)],
+            cwd=tmp_path,
+            environment=EXACT._safe_process_environment(),
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+    assert len(child_pids) == 1
+    assert wait_process_gone(child_pids[0])
+    assert not marker.exists()
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows nested Job Object path")
+def test_windows_job_containment_supports_a_nested_job(tmp_path: Path) -> None:
+    worker = tmp_path / "nested-job-worker.py"
+    worker.write_text(
+        "\n".join(
+            (
+                "import os, pathlib, subprocess, sys",
+                "root = pathlib.Path(sys.argv[1])",
+                "sys.path.insert(0, str(root))",
+                "from scripts.atomic_process_containment import launch_contained",
+                "nested = launch_contained(",
+                "    [sys.executable, '-c', \"print('nested child', flush=True)\"],",
+                "    cwd=root, environment=os.environ, stdin=subprocess.DEVNULL,",
+                "    stdout=subprocess.PIPE, stderr=subprocess.PIPE,",
+                ")",
+                "try:",
+                "    output, errors = nested.process.communicate(timeout=10)",
+                "finally:",
+                "    nested.terminate_tree(timeout=10)",
+                "assert nested.process.returncode == 0",
+                "assert output.replace(b'\\r\\n', b'\\n') == b'nested child\\n'",
+                "assert errors == b''",
+                "print('nested job passed', flush=True)",
+            )
+        )
+        + "\n",
+        encoding="ascii",
+    )
+    outer = CONTAINMENT.launch_contained(
+        [sys.executable, str(worker), str(ROOT)],
+        cwd=ROOT,
+        environment=EXACT._safe_process_environment(),
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    try:
+        output, errors = outer.process.communicate(timeout=15)
+    finally:
+        outer.terminate_tree(timeout=10)
+    assert outer.process.returncode == 0
+    assert output.replace(b"\r\n", b"\n") == b"nested job passed\n"
+    assert errors == b""
 
 
 @pytest.mark.parametrize(

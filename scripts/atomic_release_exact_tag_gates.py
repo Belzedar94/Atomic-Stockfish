@@ -18,7 +18,6 @@ import json
 import os
 from pathlib import Path, PurePosixPath
 import re
-import signal
 import stat
 import subprocess
 import sys
@@ -34,6 +33,17 @@ try:
     )
 except ImportError as error:  # pragma: no cover - exact-tag environment is locked
     raise RuntimeError("jsonschema is required by the exact-tag verifier") from error
+
+try:
+    from scripts.atomic_process_containment import (
+        ProcessContainmentError,
+        launch_contained,
+    )
+except ModuleNotFoundError:  # pragma: no cover - direct ``python scripts/...``
+    from atomic_process_containment import (  # type: ignore[no-redef]
+        ProcessContainmentError,
+        launch_contained,
+    )
 
 
 SCHEMA_VERSION = 1
@@ -1260,51 +1270,6 @@ def _build_gate_environment(
     return environment
 
 
-def _terminate_process(process: subprocess.Popen[bytes]) -> None:
-    """Best-effort termination of the complete isolated process tree."""
-
-    if process.poll() is not None:
-        return
-
-    if os.name == "nt":
-        try:
-            system_root = Path(os.environ.get("SystemRoot", r"C:\Windows"))
-            taskkill = system_root / "System32" / "taskkill.exe"
-            metadata = taskkill.lstat()
-            if (
-                not stat.S_ISREG(metadata.st_mode)
-                or stat.S_ISLNK(metadata.st_mode)
-                or _has_reparse_attribute(metadata)
-            ):
-                raise OSError("taskkill is not a real regular file")
-            subprocess.run(
-                [str(taskkill.resolve(strict=True)), "/PID", str(process.pid), "/T", "/F"],
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                env=_safe_process_environment(),
-                shell=False,
-                timeout=15,
-                check=False,
-            )
-        except (OSError, subprocess.TimeoutExpired):
-            pass
-    else:
-        try:
-            os.killpg(process.pid, signal.SIGKILL)  # type: ignore[attr-defined]
-        except (OSError, ProcessLookupError):
-            pass
-
-    try:
-        process.kill()
-    except (OSError, ProcessLookupError):
-        pass
-    try:
-        process.wait(timeout=10)
-    except (OSError, subprocess.TimeoutExpired):
-        pass
-
-
 class _BoundedGateOutput:
     """Copy two child pipes to evidence logs under one strict byte budget."""
 
@@ -1319,7 +1284,7 @@ class _BoundedGateOutput:
     def copy(self, source: BinaryIO, destination: BinaryIO) -> None:
         try:
             while True:
-                chunk = source.read(OUTPUT_READ_BYTES)
+                chunk = os.read(source.fileno(), OUTPUT_READ_BYTES)
                 if not chunk:
                     return
                 with self._lock:
@@ -1342,6 +1307,39 @@ class _BoundedGateOutput:
                 pass
 
 
+def _join_reader_threads(
+    readers: Sequence[threading.Thread],
+    sources: Sequence[BinaryIO],
+    *,
+    timeout: float,
+    gate_id: str,
+) -> None:
+    deadline = time.monotonic() + timeout
+    capture_deadline = deadline - min(1.0, max(0.0, timeout))
+    for reader in readers:
+        reader.join(timeout=max(0.0, capture_deadline - time.monotonic()))
+    alive = [reader for reader in readers if reader.is_alive()]
+    if not alive:
+        return
+    for source in sources:
+        try:
+            source.close()
+        except OSError:
+            pass
+    for reader in alive:
+        reader.join(timeout=max(0.0, deadline - time.monotonic()))
+    if any(reader.is_alive() for reader in alive):
+        raise ExactTagGateError(f"{gate_id} output capture did not finish")
+
+
+def _close_output_sources(sources: Sequence[BinaryIO]) -> None:
+    for source in sources:
+        try:
+            source.close()
+        except OSError:
+            pass
+
+
 def _execute_gate(
     command: Sequence[str],
     *,
@@ -1352,62 +1350,99 @@ def _execute_gate(
     stderr_path: Path,
     gate_id: str,
 ) -> Tuple[int, int]:
-    creation_flags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) if os.name == "nt" else 0
     started = time.monotonic()
-    process: Optional[subprocess.Popen[bytes]] = None
     limit_error: Optional[str] = None
     try:
         with stdout_path.open("xb") as stdout, stderr_path.open("xb") as stderr:
-            process = subprocess.Popen(
-                list(command),
+            containment = launch_contained(
+                command,
                 cwd=cwd,
-                env=dict(environment),
+                environment=environment,
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                shell=False,
-                creationflags=creation_flags,
-                start_new_session=os.name != "nt",
             )
-            if process.stdout is None or process.stderr is None:  # pragma: no cover
-                raise ExactTagGateError(f"could not capture {gate_id} output")
+            process = containment.process
+            sources: tuple[BinaryIO, ...] = tuple(
+                source
+                for source in (process.stdout, process.stderr)
+                if source is not None
+            )
             capture = _BoundedGateOutput(MAX_GATE_OUTPUT_BYTES)
-            readers = (
-                threading.Thread(
-                    target=capture.copy,
-                    args=(process.stdout, stdout),
-                    name=f"{gate_id}-stdout",
-                    daemon=True,
-                ),
-                threading.Thread(
-                    target=capture.copy,
-                    args=(process.stderr, stderr),
-                    name=f"{gate_id}-stderr",
-                    daemon=True,
-                ),
-            )
-            for reader in readers:
-                reader.start()
-            while process.poll() is None:
-                elapsed = time.monotonic() - started
-                if elapsed > timeout_seconds:
-                    limit_error = f"{gate_id} timed out after {timeout_seconds}s"
-                    break
-                if capture.exceeded.is_set():
-                    limit_error = f"{gate_id} output exceeded {MAX_GATE_OUTPUT_BYTES} bytes"
-                    break
-                if capture.failed.is_set():
-                    limit_error = f"{gate_id} output capture failed"
-                    break
-                capture.exceeded.wait(PROCESS_POLL_SECONDS)
-            if limit_error is not None and process.poll() is None:
-                _terminate_process(process)
-            return_code = process.wait(timeout=10)
-            for reader in readers:
-                reader.join(timeout=10)
-            if any(reader.is_alive() for reader in readers):
-                _terminate_process(process)
-                raise ExactTagGateError(f"{gate_id} output capture did not finish")
+            readers: tuple[threading.Thread, ...] = ()
+            started_readers: list[threading.Thread] = []
+            operation_error: Optional[BaseException] = None
+            finalization_error: Optional[BaseException] = None
+            try:
+                if process.stdout is None or process.stderr is None:  # pragma: no cover
+                    raise ExactTagGateError(f"could not capture {gate_id} output")
+                readers = (
+                    threading.Thread(
+                        target=capture.copy,
+                        args=(process.stdout, stdout),
+                        name=f"{gate_id}-stdout",
+                        daemon=True,
+                    ),
+                    threading.Thread(
+                        target=capture.copy,
+                        args=(process.stderr, stderr),
+                        name=f"{gate_id}-stderr",
+                        daemon=True,
+                    ),
+                )
+                for reader in readers:
+                    reader.start()
+                    started_readers.append(reader)
+                while process.poll() is None:
+                    elapsed = time.monotonic() - started
+                    if elapsed > timeout_seconds:
+                        limit_error = f"{gate_id} timed out after {timeout_seconds}s"
+                        break
+                    if capture.exceeded.is_set():
+                        limit_error = (
+                            f"{gate_id} output exceeded {MAX_GATE_OUTPUT_BYTES} bytes"
+                        )
+                        break
+                    if capture.failed.is_set():
+                        limit_error = f"{gate_id} output capture failed"
+                        break
+                    capture.exceeded.wait(PROCESS_POLL_SECONDS)
+            except BaseException as error:
+                operation_error = error
+            finally:
+                try:
+                    containment.terminate_tree(timeout=15)
+                except ProcessContainmentError as error:
+                    finalization_error = error
+                if len(started_readers) != len(sources):
+                    _close_output_sources(sources[len(started_readers) :])
+                try:
+                    _join_reader_threads(
+                        started_readers,
+                        sources[: len(started_readers)],
+                        timeout=10,
+                        gate_id=gate_id,
+                    )
+                except ExactTagGateError as error:
+                    if finalization_error is None:
+                        finalization_error = error
+                finally:
+                    _close_output_sources(sources)
+            if finalization_error is not None:
+                raise ExactTagGateError(
+                    f"could not terminate {gate_id} process tree: {finalization_error}"
+                ) from operation_error
+            if operation_error is not None:
+                if isinstance(operation_error, (KeyboardInterrupt, SystemExit)):
+                    raise operation_error
+                if isinstance(operation_error, ExactTagGateError):
+                    raise operation_error
+                raise ExactTagGateError(
+                    f"could not execute {gate_id}: {operation_error}"
+                ) from operation_error
+            return_code = process.returncode
+            if return_code is None:  # pragma: no cover - containment verifies this
+                raise ExactTagGateError(f"{gate_id} root process was not reaped")
             if capture.failure is not None:
                 raise ExactTagGateError(
                     f"{gate_id} output capture failed: {capture.failure}"
@@ -1418,9 +1453,7 @@ def _execute_gate(
             stderr.flush()
             os.fsync(stdout.fileno())
             os.fsync(stderr.fileno())
-    except (OSError, subprocess.TimeoutExpired) as error:
-        if process is not None:
-            _terminate_process(process)
+    except (OSError, ProcessContainmentError) as error:
         raise ExactTagGateError(f"could not execute {gate_id}: {error}") from error
     if limit_error is not None:
         raise ExactTagGateError(limit_error)

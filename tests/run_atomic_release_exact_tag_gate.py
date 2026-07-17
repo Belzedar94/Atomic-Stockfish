@@ -25,7 +25,6 @@ from pathlib import Path, PurePosixPath
 import re
 import secrets
 import shutil
-import signal
 import stat
 import subprocess
 import sys
@@ -35,6 +34,13 @@ from typing import Any, BinaryIO, Callable, Mapping, Sequence
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from scripts.atomic_process_containment import (  # noqa: E402
+    ProcessContainmentError,
+    launch_contained,
+)
 
 REPOSITORY = "Belzedar94/Atomic-Stockfish"
 RELEASE_REF = "refs/tags/v1.0.0"
@@ -503,6 +509,11 @@ def _authenticate_release_context(
         actual_root,
         "tests/run_atomic_release_exact_tag_gate.py",
         "exact-tag gate orchestrator",
+    )
+    _require_tracked_file(
+        actual_root,
+        "scripts/atomic_process_containment.py",
+        "exact-tag process containment helper",
     )
     return ReleaseContext(repository, ref, commit, gate, evidence_root)
 
@@ -1506,44 +1517,6 @@ def _prepare_gate(
     raise GateError(f"unsupported exact-tag gate: {gate}")
 
 
-def _terminate_process(process: subprocess.Popen[Any]) -> None:
-    """Best-effort termination of the complete isolated process tree."""
-
-    if process.poll() is not None:
-        return
-    if os.name == "nt":
-        taskkill = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32" / "taskkill.exe"
-        try:
-            taskkill = _real_file(taskkill, "taskkill executable")
-            subprocess.run(
-                [str(taskkill), "/PID", str(process.pid), "/T", "/F"],
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                env=_minimal_environment(),
-                shell=False,
-                timeout=15,
-                check=False,
-            )
-        except (GateError, OSError, subprocess.TimeoutExpired):
-            pass
-    else:
-        try:
-            killpg = getattr(os, "killpg", None)
-            if killpg is not None:
-                killpg(process.pid, getattr(signal, "SIGKILL", 9))
-        except (OSError, ProcessLookupError):
-            pass
-    try:
-        process.kill()
-    except (OSError, ProcessLookupError):
-        pass
-    try:
-        process.wait(timeout=15)
-    except (OSError, subprocess.TimeoutExpired):
-        pass
-
-
 def _capture_bounded_output(
     source: BinaryIO,
     output: bytearray,
@@ -1553,7 +1526,7 @@ def _capture_bounded_output(
 ) -> None:
     try:
         while True:
-            chunk = source.read(OUTPUT_READ_BYTES)
+            chunk = os.read(source.fileno(), OUTPUT_READ_BYTES)
             if not chunk:
                 return
             remaining = maximum - len(output)
@@ -1570,6 +1543,26 @@ def _capture_bounded_output(
             source.close()
         except OSError:
             pass
+
+
+def _join_output_reader(
+    reader: threading.Thread,
+    source: BinaryIO,
+    *,
+    timeout: float,
+) -> None:
+    deadline = time.monotonic() + timeout
+    capture_deadline = deadline - min(1.0, max(0.0, timeout))
+    reader.join(timeout=max(0.0, capture_deadline - time.monotonic()))
+    if not reader.is_alive():
+        return
+    try:
+        source.close()
+    except OSError:
+        pass
+    reader.join(timeout=max(0.0, deadline - time.monotonic()))
+    if reader.is_alive():
+        raise GateError("gate output capture did not finish")
 
 
 def _execute_command(
@@ -1591,33 +1584,34 @@ def _execute_command(
     if not 1 <= timeout_seconds <= 43_200:
         raise GateError("exact gate timeout is outside the fixed release bound")
     started = time.monotonic()
-    creation_flags = (
-        getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) if os.name == "nt" else 0
-    )
-    process: subprocess.Popen[Any] | None = None
     output_buffer = bytearray()
     exceeded = threading.Event()
     reader_failures: list[BaseException] = []
-    reader: threading.Thread | None = None
     limit_error: str | None = None
     try:
-        process = subprocess.Popen(
-            list(command),
+        containment = launch_contained(
+            command,
             cwd=REPO_ROOT,
-            env=dict(environment),
+            environment=environment,
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            shell=False,
-            creationflags=creation_flags,
-            start_new_session=os.name != "nt",
         )
-        if process.stdout is None:  # pragma: no cover
+    except (OSError, ProcessContainmentError) as error:
+        raise GateError(f"could not launch exact gate: {error}") from error
+    process = containment.process
+    source = process.stdout
+    reader: threading.Thread | None = None
+    reader_started = False
+    operation_error: BaseException | None = None
+    finalization_error: BaseException | None = None
+    try:
+        if source is None:  # pragma: no cover
             raise GateError("could not capture exact gate output")
         reader = threading.Thread(
             target=_capture_bounded_output,
             args=(
-                process.stdout,
+                source,
                 output_buffer,
                 MAX_CHILD_OUTPUT,
                 exceeded,
@@ -1627,6 +1621,7 @@ def _execute_command(
             daemon=True,
         )
         reader.start()
+        reader_started = True
         while process.poll() is None:
             elapsed = time.monotonic() - started
             if elapsed > timeout_seconds:
@@ -1641,30 +1636,45 @@ def _execute_command(
                 limit_error = "gate output capture failed"
                 break
             exceeded.wait(PROCESS_POLL_SECONDS)
-        if limit_error is not None and process.poll() is None:
-            _terminate_process(process)
-        return_code = process.wait(timeout=15)
-        if reader is not None:
-            reader.join(timeout=15)
-        if reader is not None and reader.is_alive():
-            _terminate_process(process)
-            raise GateError("gate output capture did not finish")
-        if reader_failures:
-            raise GateError(
-                f"gate output capture failed: {reader_failures[0]}"
-            ) from reader_failures[0]
-        if exceeded.is_set() and limit_error is None:
-            limit_error = f"gate output exceeded its {MAX_CHILD_OUTPUT}-byte release bound"
-        if limit_error is not None:
-            raise GateError(limit_error)
-    except OSError as error:
-        if process is not None:
-            _terminate_process(process)
-        raise GateError(f"could not launch exact gate: {error}") from error
-    except subprocess.TimeoutExpired as error:
-        if process is not None:
-            _terminate_process(process)
-        raise GateError("gate process tree did not terminate within 15 seconds") from error
+    except BaseException as error:
+        operation_error = error
+    finally:
+        try:
+            containment.terminate_tree(timeout=15)
+        except ProcessContainmentError as error:
+            finalization_error = error
+        if reader_started and reader is not None and source is not None:
+            try:
+                _join_output_reader(reader, source, timeout=15)
+            except GateError as error:
+                if finalization_error is None:
+                    finalization_error = error
+        elif source is not None:
+            try:
+                source.close()
+            except OSError:
+                pass
+    if finalization_error is not None:
+        raise GateError(
+            f"gate process tree did not terminate cleanly: {finalization_error}"
+        ) from operation_error
+    if operation_error is not None:
+        if isinstance(operation_error, (KeyboardInterrupt, SystemExit)):
+            raise operation_error
+        if isinstance(operation_error, GateError):
+            raise operation_error
+        raise GateError(f"could not execute exact gate: {operation_error}") from operation_error
+    return_code = process.returncode
+    if return_code is None:  # pragma: no cover - containment verifies this
+        raise GateError("gate root process was not reaped")
+    if reader_failures:
+        raise GateError(
+            f"gate output capture failed: {reader_failures[0]}"
+        ) from reader_failures[0]
+    if exceeded.is_set() and limit_error is None:
+        limit_error = f"gate output exceeded its {MAX_CHILD_OUTPUT}-byte release bound"
+    if limit_error is not None:
+        raise GateError(limit_error)
     output = bytes(output_buffer)
     if output:
         sys.stdout.buffer.write(output)

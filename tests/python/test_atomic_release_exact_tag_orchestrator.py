@@ -954,6 +954,38 @@ def test_execute_command_timeout_terminates_a_real_grandchild(tmp_path: Path) ->
             cleanup_process_tree(int(pid_file.read_text(encoding="ascii")))
 
 
+def test_execute_command_root_exit_terminates_inherited_pipe_grandchild(
+    tmp_path: Path,
+) -> None:
+    pid_file = tmp_path / "grandchild.pid"
+    parent = touch(
+        tmp_path / "root-exit-parent.py",
+        (
+            "import pathlib, subprocess, sys\n"
+            "child = subprocess.Popen([sys.executable, '-c', "
+            "'import time; time.sleep(120)'])\n"
+            "pathlib.Path(sys.argv[1]).write_text(str(child.pid), encoding='ascii')\n"
+            "print('grandchild inherited output', flush=True)\n"
+        ).encode("ascii"),
+    )
+    started = time.monotonic()
+    try:
+        output = GATE._execute_command(
+            (str(Path(sys.executable).resolve()), str(parent), str(pid_file)),
+            timeout_seconds=30,
+            environment=GATE._minimal_environment(),
+        )
+        assert time.monotonic() - started < 10
+        assert output.replace(b"\r\n", b"\n") == b"grandchild inherited output\n"
+        grandchild_pid = int(pid_file.read_text(encoding="ascii"))
+        assert wait_process_gone(grandchild_pid), (
+            f"grandchild {grandchild_pid} survived its inner gate root"
+        )
+    finally:
+        if pid_file.exists():
+            cleanup_process_tree(int(pid_file.read_text(encoding="ascii")))
+
+
 def test_execute_command_enforces_output_limit_during_execution(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

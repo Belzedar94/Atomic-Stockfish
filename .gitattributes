@@ -34,6 +34,7 @@ schemas/atomic-release-exact-tag-gates-v1.json text eol=lf
 scripts/atomic-release-exact-tag-plan-v1.json text eol=lf
 scripts/atomic_release_exact_tag_gates.py text eol=lf
 scripts/atomic_release_main_trust.py text eol=lf
+scripts/atomic_process_containment.py text eol=lf
 tests/run_atomic_release_exact_tag_gate.py text eol=lf
 tests/fixtures/atomic-syzygy/*.epd text eol=lf
 tests/fixtures/atomic-syzygy/*.json text eol=lf

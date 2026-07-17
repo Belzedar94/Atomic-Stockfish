@@ -19,6 +19,7 @@ on:
       - docs/atomic/windows-wheel-fingerprint-v2.json
       - scripts/atomic_reproducible_sdist.py
       - scripts/atomic-release-*
+      - scripts/atomic_process_containment.py
       - scripts/atomic_release_*.py
       - scripts/atomic_verify_release_asset.py
       - scripts/atomic_windows_wheel_fingerprint.py

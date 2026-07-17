@@ -210,6 +210,7 @@ def test_release_pr_reproduces_real_windows_wheel_and_frozen_fingerprint() -> No
         "pyffish.pyi",
         "schemas/atomic-release-*",
         "scripts/atomic-release-*",
+        "scripts/atomic_process_containment.py",
         "scripts/atomic_reproducible_sdist.py",
         "scripts/build_atomic_python_wheel_release.sh",
         "scripts/build_atomic_source_release.sh",
