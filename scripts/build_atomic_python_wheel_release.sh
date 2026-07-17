@@ -161,7 +161,6 @@ export TZ=UTC
 umask 022
 unset PYTHONHOME PYTHONPATH
 
-export CIBW_BUILD='cp39-*'
 export CIBW_ENVIRONMENT="SOURCE_DATE_EPOCH=$epoch PYTHONHASHSEED=0"
 export CIBW_BUILD_FRONTEND='pip; args: --no-build-isolation'
 export CIBW_CACHE_PATH=$cache_for_cibuildwheel
@@ -176,12 +175,17 @@ export CIBW_TEST_COMMAND="python -c \"import pyffish; assert pyffish.version() =
 
 case "$platform" in
     linux)
+        # The release inventory publishes one manylinux wheel.  A wildcard here
+        # also selects musllinux, which is a distinct artifact and dependency
+        # environment rather than another way to build the same release wheel.
+        export CIBW_BUILD='cp39-manylinux_x86_64'
         export CIBW_ARCHS=x86_64
         export CIBW_MANYLINUX_X86_64_IMAGE=$MANYLINUX_X86_64_IMAGE
         [ "$CIBW_MANYLINUX_X86_64_IMAGE" = "$MANYLINUX_X86_64_IMAGE" ] || \
             die "manylinux image pin changed unexpectedly"
         ;;
     windows)
+        export CIBW_BUILD='cp39-win_amd64'
         export CIBW_ARCHS=AMD64
         fingerprint_command="python \"{project}/scripts/atomic_windows_wheel_fingerprint.py\" --output \"$fingerprint_for_cibuildwheel\""
         export CIBW_BEFORE_BUILD="$CIBW_BEFORE_BUILD && $fingerprint_command"
