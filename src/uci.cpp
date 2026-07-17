@@ -602,8 +602,12 @@ std::string UCIEngine::format_score(const Score& s) {
 int UCIEngine::to_cp(Value v, const Position& pos) {
     // Legacy Atomic V1 uses Fairy-Stockfish's fixed pawn normalization. The
     // orthodox Stockfish WDL fit is neither calibrated nor meaningful here.
+    // AtomicNNUEV3 trace components may use substantially more than the
+    // ordinary bounded search-value domain. Widen before multiplying so the
+    // diagnostic contribution table remains defined for every authenticated
+    // V3 component while preserving the historical integer truncation.
     (void) pos;
-    return 100 * int(v) / PawnValue;
+    return int(i64(100) * int(v) / PawnValue);
 }
 
 std::string UCIEngine::wdl(Value v, const Position& pos) {

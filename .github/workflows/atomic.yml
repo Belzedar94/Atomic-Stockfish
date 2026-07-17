@@ -126,6 +126,7 @@ jobs:
           --engine src/atomic-stockfish
           --v3-net "$RUNNER_TEMP/atomic-v3-wire-v1.nnue"
           --v3-sha256 "$ATOMIC_SYNTHETIC_V3_NNUE_SHA256"
+          --v2-net "$RUNNER_TEMP/atomic-v2.nnue"
       - name: AtomicNNUEV3 pure data-generator smoke
         if: matrix.comp == 'gcc'
         run: >-
@@ -184,6 +185,7 @@ jobs:
             --engine src/atomic-stockfish \
             --v3-net "$RUNNER_TEMP/atomic-v3-wire-v1.nnue" \
             --v3-sha256 "$ATOMIC_SYNTHETIC_V3_NNUE_SHA256" \
+            --v2-net "$RUNNER_TEMP/atomic-v2.nnue" \
             --timeout 180
       - name: AtomicNNUEV3 AVX2 wire permutation gate
         if: matrix.arch == 'x86-64-avx2'
@@ -642,10 +644,12 @@ jobs:
             ATOMIC_NNUE_V3_TEST_NET="$RUNNER_TEMP/atomic-v3-wire-v1.nnue" \
             ATOMIC_V3_SIMD_REQUIRED_ISA=scalar \
             atomic-v3-simd-tests
+          python tests/create_synthetic_atomic_v2_nnue.py --output "$RUNNER_TEMP/atomic-v2.nnue"
           python tests/nnue_v3_modes.py \
             --engine src/atomic-stockfish.exe \
             --v3-net "$RUNNER_TEMP/atomic-v3-wire-v1.nnue" \
             --v3-sha256 "$ATOMIC_SYNTHETIC_V3_NNUE_SHA256" \
+            --v2-net "$RUNNER_TEMP/atomic-v2.nnue" \
             --timeout 180
           make -C src -j2 ARCH=x86-64 COMP=mingw data-generator
           make -C src -j2 ARCH=x86-64 COMP=mingw legacy-atomic-v1-tests
@@ -664,7 +668,6 @@ jobs:
       - name: Functional Windows data-generator smoke (Threads=2)
         run: |
           python tests/create_synthetic_zero_nnue.py --output "$RUNNER_TEMP/atomic-zero.nnue"
-          python tests/create_synthetic_atomic_v2_nnue.py --output "$RUNNER_TEMP/atomic-v2.nnue"
           src/atomic-v2-backend-core-tests.exe "$RUNNER_TEMP/atomic-v2.nnue"
           src/atomic-v2-incremental-tests.exe --net "$RUNNER_TEMP/atomic-v2.nnue" --operations 4096 --full-refresh-interval 1
           python tests/data_generator.py --smoke-only \

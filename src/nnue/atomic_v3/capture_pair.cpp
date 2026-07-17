@@ -73,7 +73,10 @@ Bitboard geometric_targets(PieceType pieceType, CapturePairActorRelation relatio
     Bitboard result = 0;
     for (int to = 0; to < SQUARE_NB; ++to)
         if (capture_pair_geometric_edge(pieceType, relation, from, Square(to)))
-            result |= Square(to);
+            // Spell out the bitboard conversion here. Bitboard's Square
+            // operator|= already has these exact semantics, but the explicit
+            // form makes this feature-oracle invariant unambiguous.
+            result |= square_bb(Square(to));
     return result;
 }
 

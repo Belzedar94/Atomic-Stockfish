@@ -43,6 +43,10 @@ class AnyNetwork;
 
 namespace Detail {
 
+// Clamp an already-normalized diagnostic sum to the same ordinary evaluation
+// domain used by search.
+Value atomic_nnue_value_from_scaled(i64 scaled) noexcept;
+
 // Convert the two raw NNUE output components into the bounded engine value
 // domain. AtomicNNUEV3 authenticates each component as a full i32, so callers
 // must widen before adding them.

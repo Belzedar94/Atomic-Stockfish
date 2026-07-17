@@ -47,13 +47,12 @@ void report_incompatible(const std::function<void(std::string_view)>& onVerify,
     onVerify(message);
 }
 
-AtomicV3::LoadResult load_v3_candidate(const fs::path& rootDirectory,
-                                       const fs::path& evalfilePath) {
-    AtomicV3::LoadResult last;
-    if (evalfilePath.empty())
-        return last;
-
+std::vector<fs::path> requested_candidates(const fs::path& rootDirectory,
+                                           const fs::path& evalfilePath) {
     std::vector<fs::path> candidates;
+    if (evalfilePath.empty())
+        return candidates;
+
     if (evalfilePath.is_absolute())
         candidates.push_back(evalfilePath);
     else
@@ -63,15 +62,7 @@ AtomicV3::LoadResult load_v3_candidate(const fs::path& rootDirectory,
         if (rooted.lexically_normal() != evalfilePath.lexically_normal())
             candidates.push_back(rooted);
     }
-
-    for (const fs::path& candidate : candidates)
-    {
-        auto result = AtomicV3::load_candidate(candidate);
-        if (result)
-            return result;
-        last = std::move(result);
-    }
-    return last;
+    return candidates;
 }
 
 }  // namespace
@@ -132,27 +123,46 @@ bool AnyNetwork::load(const fs::path& rootDirectory,
                       EvalFile&       evalFile) {
     const fs::path requested = requested_path(evalfilePath);
 
-    // V2/V3 are external-only. Mismatching headers fail immediately, after
-    // which the byte-exact legacy loader gets an independent fresh object.
+    // Modern networks are external-only. Preserve the historical path order:
+    // probe every supported backend at the requested path before moving on to
+    // the binary-root-relative path. Otherwise a rooted V3 could incorrectly
+    // shadow a cwd V2 (or Legacy V1) with the same relative EvalFile name.
     if (!evalfilePath.empty())
     {
-        activate_v3();
-        auto v3 = load_v3_candidate(rootDirectory, evalfilePath);
-        if (v3)
+        for (const fs::path& candidate : requested_candidates(rootDirectory, evalfilePath))
         {
-            storage_.atomicV3       = *v3.network;
-            evalFile.current        = requested;
-            evalFile.netDescription = std::move(v3.description);
-            return true;
-        }
+            activate_v3();
+            auto v3 = AtomicV3::load_candidate(candidate);
+            if (v3)
+            {
+                storage_.atomicV3       = *v3.network;
+                evalFile.current        = requested;
+                evalFile.netDescription = std::move(v3.description);
+                return true;
+            }
 
-        activate_v2();
-        auto result = AtomicV2::load_candidate(rootDirectory, evalfilePath, storage_.atomicV2);
-        if (result)
-        {
-            evalFile.current        = requested;
-            evalFile.netDescription = std::move(result.description);
-            return true;
+            activate_v2();
+            std::ifstream v2Stream(candidate, std::ios::binary);
+            if (v2Stream)
+            {
+                auto v2 = AtomicV2::load_candidate(v2Stream, storage_.atomicV2);
+                if (v2)
+                {
+                    evalFile.current        = requested;
+                    evalFile.netDescription = std::move(v2.description);
+                    return true;
+                }
+            }
+
+            activate_legacy();
+            std::ifstream legacyStream(candidate, std::ios::binary);
+            EvalFile      legacyFile{std::nullopt, ""};
+            if (legacyStream
+                && storage_.legacy.load_authenticated(legacyStream, requested, legacyFile))
+            {
+                evalFile = std::move(legacyFile);
+                return true;
+            }
         }
     }
 

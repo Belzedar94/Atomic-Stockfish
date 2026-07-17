@@ -15,20 +15,24 @@ import hashlib
 from pathlib import Path
 import queue
 import re
+import shutil
 import struct
 import subprocess
 import tempfile
 import threading
-from typing import Callable
+from typing import Callable, Optional
 
 
 V3_SHA256 = "00E46223822D06D7927E884EEC10739BA19EF8DD82A6E262F627D361658080C2"
 V3_SIZE = 77_349_879
 V3_VERSION = 0xA70C0003
 V3_NETWORK_HASH = 0x0CF9A484
+V2_SHA256 = "4DEB05CFF79B5D5EBA51C560F64ED24224671C188B6C5DB27521033E587C87C6"
 THREAD_COUNTS = (1, 2, 4, 8)
 WIDE_TRACE_INTERNAL = 31_506
 WIDE_TRACE_WHITE_PAWNS = 151.47
+WIDE_TRACE_TABLE_COMPONENT = "+378092.30"
+WIDE_TRACE_TABLE_TOTAL = "+151.47"
 INTERNAL_TRACE_RE = re.compile(
     r"^NNUE evaluation\s+([+-]?\d+)\s+\(side to move, internal units\)$"
 )
@@ -36,10 +40,16 @@ FINAL_TRACE_RE = re.compile(
     r"^Final evaluation\s+([+-]?(?:\d+(?:\.\d*)?|\.\d+))\s+"
     r"\(white side\)\s+\[Use NNUE=true\]$"
 )
+TRACE_ROW_RE = re.compile(
+    r"^\|\s*(\d+)\s*\|\s*([+-]?\d+\.\d+)\s*\|\s*"
+    r"([+-]?\d+\.\d+)\s*\|\s*([+-]?\d+\.\d+)\s*\|"
+)
 
 
 class UciProcess:
-    def __init__(self, executable: Path, timeout: float) -> None:
+    def __init__(
+        self, executable: Path, timeout: float, *, cwd: Optional[Path] = None
+    ) -> None:
         self.timeout = timeout
         self.process = subprocess.Popen(
             [str(executable)],
@@ -50,6 +60,7 @@ class UciProcess:
             encoding="utf-8",
             errors="replace",
             bufsize=1,
+            cwd=cwd,
         )
         assert self.process.stdin is not None
         assert self.process.stdout is not None
@@ -183,6 +194,51 @@ def require_classical_search(output: list[str]) -> None:
         raise AssertionError(f"Use NNUE=false activated an NNUE backend: {output[-30:]}")
 
 
+def require_relative_v2_selection(output: list[str]) -> None:
+    bestmoves = [line for line in output if line.startswith("bestmove ")]
+    if len(bestmoves) != 1 or bestmoves[0] in {"bestmove (none)", "bestmove 0000"}:
+        raise AssertionError(
+            f"relative-path V2/V3 collision did not search: {output[-30:]}"
+        )
+    if not any("NNUE evaluation using AtomicNNUEV2" in line for line in output):
+        raise AssertionError(
+            "relative EvalFile did not select cwd AtomicNNUEV2 before rooted "
+            f"AtomicNNUEV3: {output[-30:]}"
+        )
+    if any("NNUE evaluation using AtomicNNUEV3" in line for line in output):
+        raise AssertionError(
+            f"rooted AtomicNNUEV3 shadowed cwd AtomicNNUEV2: {output[-30:]}"
+        )
+
+
+def require_relative_path_backend_precedence(
+    engine_path: Path,
+    v2_path: Path,
+    v3_path: Path,
+    root: Path,
+    timeout: float,
+) -> None:
+    binary_root = root / "relative-collision-binary"
+    working_root = root / "relative-collision-cwd"
+    binary_root.mkdir()
+    working_root.mkdir()
+
+    copied_engine = binary_root / engine_path.name
+    shutil.copy2(engine_path, copied_engine)
+    relative_name = "relative-backend-collision.nnue"
+    shutil.copyfile(v3_path, binary_root / relative_name)
+    shutil.copyfile(v2_path, working_root / relative_name)
+
+    with UciProcess(copied_engine, timeout, cwd=working_root) as engine:
+        engine.send("uci")
+        engine.read_until(lambda line: line == "uciok")
+        engine.setoption("Threads", "1")
+        engine.setoption("Hash", "16")
+        engine.setoption("EvalFile", relative_name)
+        engine.setoption("Use NNUE", "true")
+        require_relative_v2_selection(engine.search())
+
+
 def require_wide_v3_trace(output: list[str]) -> None:
     internal = [
         int(match.group(1))
@@ -206,6 +262,33 @@ def require_wide_v3_trace(output: list[str]) -> None:
         )
 
 
+def require_wide_v3_trace_table(output: list[str]) -> None:
+    rows = [
+        (
+            int(match.group(1)),
+            match.group(2),
+            match.group(3),
+            match.group(4),
+        )
+        for line in output
+        if (match := TRACE_ROW_RE.match(line)) is not None
+    ]
+    expected = [
+        (
+            bucket,
+            "0.00",
+            WIDE_TRACE_TABLE_COMPONENT,
+            WIDE_TRACE_TABLE_TOTAL,
+        )
+        for bucket in range(8)
+    ]
+    if rows != expected:
+        raise AssertionError(
+            "AtomicNNUEV3 contribution table overflowed or changed integer "
+            f"normalization: rows={rows}, output={output[-40:]}"
+        )
+
+
 def require_export(engine: UciProcess, destination: Path, expected_sha256: str) -> None:
     output = engine.export(destination)
     if "Network saved successfully" not in output[-1]:
@@ -218,6 +301,11 @@ def main() -> int:
     parser.add_argument("--engine", required=True, type=Path)
     parser.add_argument("--v3-net", required=True, type=Path)
     parser.add_argument("--v3-sha256", default=V3_SHA256)
+    parser.add_argument(
+        "--v2-net",
+        type=Path,
+        help="synthetic V2 fixture used for the relative-path backend-order regression",
+    )
     parser.add_argument("--timeout", type=float, default=180.0)
     args = parser.parse_args()
 
@@ -232,11 +320,22 @@ def main() -> int:
     ):
         parser.error("--v3-sha256 must be exactly 64 hexadecimal characters")
     authenticate_v3(network_path, expected_sha256)
+    v2_path = args.v2_net.expanduser().resolve() if args.v2_net else None
+    if v2_path is not None:
+        if not v2_path.is_file():
+            parser.error(f"V2 fixture does not exist: {v2_path}")
+        if sha256(v2_path) != V2_SHA256:
+            parser.error("V2 fixture SHA-256 mismatch")
 
     with tempfile.TemporaryDirectory(prefix="atomic-v3-modes-") as temp_dir:
         root = Path(temp_dir)
         first_export = root / "atomic-v3-export.nnue"
         second_export = root / "atomic-v3-reimport-export.nnue"
+
+        if v2_path is not None:
+            require_relative_path_backend_precedence(
+                engine_path, v2_path, network_path, root, args.timeout
+            )
 
         with UciProcess(engine_path, args.timeout) as engine:
             engine.send("uci")
@@ -251,7 +350,9 @@ def main() -> int:
             engine.setoption("Hash", "16")
             engine.setoption("EvalFile", str(network_path))
             engine.setoption("Use NNUE", "true")
-            require_wide_v3_trace(engine.trace())
+            trace_output = engine.trace()
+            require_wide_v3_trace(trace_output)
+            require_wide_v3_trace_table(trace_output)
             for threads in THREAD_COUNTS:
                 engine.setoption("Threads", str(threads))
                 for mode in ("true", "pure"):
@@ -272,8 +373,9 @@ def main() -> int:
 
     print(
         "AtomicNNUEV3 production gate passed: exact load/export/import, "
-        "wide trace/search saturation, modes=false,true,pure, "
+        "wide trace/search saturation and contribution table, modes=false,true,pure, "
         "threads=1,2,4,8, backend_count=3"
+        + (", relative_path_order=cwd-v2-before-root-v3" if v2_path else "")
     )
     return 0
 

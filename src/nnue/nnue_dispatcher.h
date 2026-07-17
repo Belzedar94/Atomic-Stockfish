@@ -395,6 +395,8 @@ inline NnueEvalTrace AnyNetwork::trace_evaluate(const Position& pos,
                 std::abort();
             trace.psqt[bucket]       = static_cast<Value>(psqtDifference / OutputScale);
             trace.positional[bucket] = static_cast<Value>(dense.positionalValue);
+            trace.total[bucket] =
+              Eval::Detail::atomic_nnue_value_from_raw(psqtDifference, dense.scaledOutput);
         }
         return trace;
     }

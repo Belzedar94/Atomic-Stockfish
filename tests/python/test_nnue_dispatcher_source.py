@@ -215,6 +215,30 @@ def test_failed_load_keeps_live_metadata_and_reports_all_accepted_backends():
     assert '"Legacy Atomic V1 "' in SOURCE
 
 
+def test_relative_evalfile_probes_all_backends_before_the_next_path():
+    dispatcher = compact(SOURCE)
+    assert "requested_candidates(rootDirectory, evalfilePath)" in dispatcher
+    loop = function_body(
+        dispatcher,
+        "bool AnyNetwork::load(",
+        "bool AnyNetwork::load_authenticated(",
+    )
+    candidate_loop = loop[loop.index("for (const fs::path& candidate") :]
+    v3 = candidate_loop.index("AtomicV3::load_candidate(candidate)")
+    v2 = candidate_loop.index("AtomicV2::load_candidate(v2Stream")
+    legacy = candidate_loop.index("storage_.legacy.load_authenticated(")
+    assert v3 < v2 < legacy
+    workflow = (ROOT / ".github/workflows/atomic.yml").read_text(encoding="utf-8")
+    assert workflow.count('--v2-net "$RUNNER_TEMP/atomic-v2.nnue"') >= 3
+    windows = workflow_job(workflow, "data-generator-windows")
+    create_v2 = (
+        'python tests/create_synthetic_atomic_v2_nnue.py --output '
+        '"$RUNNER_TEMP/atomic-v2.nnue"'
+    )
+    assert windows.count(create_v2) == 1
+    assert windows.index(create_v2) < windows.index("python tests/nnue_v3_modes.py")
+
+
 def test_modern_v2_and_v3_evaluation_do_not_reuse_legacy_calibration():
     evaluation = compact(
         without_cpp_comments(
@@ -241,9 +265,9 @@ def test_search_and_trace_share_wide_clamped_nnue_conversion():
             (ROOT / "src" / "evaluate.cpp").read_text(encoding="utf-8")
         )
     )
-    helper = function_body(
+    helpers = function_body(
         evaluation,
-        "Value Eval::Detail::atomic_nnue_value_from_raw",
+        "Value Eval::Detail::atomic_nnue_value_from_scaled",
         "Value Eval::evaluate",
     )
     trace = evaluation[evaluation.index("std::string Eval::trace") :]
@@ -251,9 +275,24 @@ def test_search_and_trace_share_wide_clamped_nnue_conversion():
     call = "Detail::atomic_nnue_value_from_raw(rawPsqt, rawPositional)"
     assert evaluation.count(call) == 3
     assert call in trace
-    assert "i64(rawPsqt) + i64(rawPositional)" in helper
-    assert "std::clamp(scaled, Minimum, Maximum)" in helper
+    assert "i64(rawPsqt) + i64(rawPositional)" in helpers
+    assert "std::clamp(scaled, Minimum, Maximum)" in helpers
+    assert "return atomic_nnue_value_from_scaled(scaled);" in helpers
     assert "rawPsqt + rawPositional" not in trace
+
+    dispatcher = compact(
+        without_cpp_comments(
+            (ROOT / "src/nnue/nnue_dispatcher.h").read_text(encoding="utf-8")
+        )
+    )
+    assert (
+        "trace.total[bucket] = Eval::Detail::atomic_nnue_value_from_raw("
+        "psqtDifference, dense.scaledOutput);"
+    ) in dispatcher
+    misc = compact(
+        (ROOT / "src/nnue/nnue_misc.cpp").read_text(encoding="utf-8")
+    )
+    assert "format_cp_aligned_dot(t.total[bucket], ss, pos);" in misc
 
 
 def test_worker_rebind_does_not_keep_a_concrete_replica_pointer():

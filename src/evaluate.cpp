@@ -86,15 +86,19 @@ Value damp_for_atomic_rule50(Value value, const Position& pos) {
 
 }  // namespace
 
+Value Eval::Detail::atomic_nnue_value_from_scaled(i64 scaled) noexcept {
+    constexpr i64 Minimum = i64(VALUE_TB_LOSS_IN_MAX_PLY) + 1;
+    constexpr i64 Maximum = i64(VALUE_TB_WIN_IN_MAX_PLY) - 1;
+    return Value(std::clamp(scaled, Minimum, Maximum));
+}
+
 Value Eval::Detail::atomic_nnue_value_from_raw(i32 rawPsqt, i32 rawPositional) noexcept {
     // V3's authenticated numeric domain permits the complete i32 range for
     // each raw component. Sum in i64, then enter the ordinary evaluation
     // domain before Chess960/rule-50 corrections so neither the addition nor
     // damp_for_atomic_rule50() can overflow.
-    constexpr i64 Minimum = i64(VALUE_TB_LOSS_IN_MAX_PLY) + 1;
-    constexpr i64 Maximum = i64(VALUE_TB_WIN_IN_MAX_PLY) - 1;
-    const i64     scaled  = (i64(rawPsqt) + i64(rawPositional)) / 16;
-    return Value(std::clamp(scaled, Minimum, Maximum));
+    const i64 scaled = (i64(rawPsqt) + i64(rawPositional)) / 16;
+    return atomic_nnue_value_from_scaled(scaled);
 }
 
 // Evaluate is the evaluator for the outer world. It returns a static evaluation

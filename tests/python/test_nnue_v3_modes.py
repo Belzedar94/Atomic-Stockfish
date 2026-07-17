@@ -24,9 +24,14 @@ def test_frozen_fixture_identity_matches_the_canonical_generator() -> None:
     assert MODES.V3_SHA256 in generator
     assert MODES.V3_VERSION == 0xA70C0003
     assert MODES.V3_NETWORK_HASH == 0x0CF9A484
+    assert MODES.V2_SHA256 == (
+        "4DEB05CFF79B5D5EBA51C560F64ED24224671C188B6C5DB27521033E587C87C6"
+    )
     assert MODES.THREAD_COUNTS == (1, 2, 4, 8)
     assert MODES.WIDE_TRACE_INTERNAL == 31_506
     assert MODES.WIDE_TRACE_WHITE_PAWNS == 151.47
+    assert MODES.WIDE_TRACE_TABLE_COMPONENT == "+378092.30"
+    assert MODES.WIDE_TRACE_TABLE_TOTAL == "+151.47"
 
 
 def test_authentication_is_fail_closed_for_size_hash_and_identity(
@@ -85,6 +90,20 @@ def test_search_markers_accept_only_real_v3_and_classical_paths() -> None:
         )
 
 
+def test_relative_path_collision_accepts_only_cwd_v2_before_root_v3() -> None:
+    MODES.require_relative_v2_selection(
+        ["NNUE evaluation using AtomicNNUEV2 fixture", "bestmove e2e4"]
+    )
+    with pytest.raises(AssertionError, match="did not select cwd AtomicNNUEV2"):
+        MODES.require_relative_v2_selection(
+            ["NNUE evaluation using AtomicNNUEV3 fixture", "bestmove e2e4"]
+        )
+    with pytest.raises(AssertionError, match="did not search"):
+        MODES.require_relative_v2_selection(
+            ["NNUE evaluation using AtomicNNUEV2 fixture", "bestmove (none)"]
+        )
+
+
 def test_wide_v3_trace_must_saturate_and_match_search_evaluation() -> None:
     valid = [
         "NNUE evaluation          +31506 (side to move, internal units)",
@@ -107,3 +126,19 @@ def test_wide_v3_trace_must_saturate_and_match_search_evaluation() -> None:
                 "Final evaluation      -0.01 (white side) [Use NNUE=true]",
             ]
         )
+
+
+def test_wide_v3_contribution_table_uses_overflow_safe_integer_normalization() -> None:
+    valid = [
+        (
+            f"|  {bucket}         |     0.00   |  +378092.30   |  "
+            f"+151.47   |"
+        )
+        for bucket in range(8)
+    ]
+    MODES.require_wide_v3_trace_table(valid)
+
+    wrapped = valid.copy()
+    wrapped[0] = "|  0         |     0.00   |  +34885.32   |  +34885.32   |"
+    with pytest.raises(AssertionError, match="contribution table overflowed"):
+        MODES.require_wide_v3_trace_table(wrapped)

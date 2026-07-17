@@ -241,6 +241,8 @@ NnueEvalTrace Network::trace_evaluate(const Position&    pos,
 
         t.psqt[bucket]       = static_cast<Value>(materialist / OutputScale);
         t.positional[bucket] = static_cast<Value>(positional / OutputScale);
+        t.total[bucket]      = Eval::Detail::atomic_nnue_value_from_scaled(i64(t.psqt[bucket])
+                                                                           + i64(t.positional[bucket]));
     }
 
     return t;
