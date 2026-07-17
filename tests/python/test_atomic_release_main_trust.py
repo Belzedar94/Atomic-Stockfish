@@ -18,11 +18,12 @@ trust = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(trust)
 
 REPOSITORY = "Belzedar94/Atomic-Stockfish"
-TAG = "v1.0.0"
+TAG = "v1.0.1"
 CHECKOUT = "a" * 40
 TAG_OBJECT = "b" * 40
 BASE = "c" * 40
 HEAD = "d" * 40
+RELEASE_PR = 46
 
 
 def api_documents(
@@ -41,7 +42,7 @@ def api_documents(
         "tag_object": {
             "sha": TAG_OBJECT,
             "tag": TAG,
-            "message": "Atomic-Stockfish 1.0.0",
+            "message": "Atomic-Stockfish 1.0.1",
             "tagger": {
                 "name": "Atomic release",
                 "email": "release@example.invalid",
@@ -60,7 +61,7 @@ def api_documents(
         "final_tag_object": {
             "sha": TAG_OBJECT,
             "tag": TAG,
-            "message": "Atomic-Stockfish 1.0.0",
+            "message": "Atomic-Stockfish 1.0.1",
             "tagger": {
                 "name": "Atomic release",
                 "email": "release@example.invalid",
@@ -73,7 +74,7 @@ def api_documents(
     }
     if with_pr:
         documents["release_pr"] = {
-            "number": 44,
+            "number": RELEASE_PR,
             "state": "closed",
             "merged": True,
             "merged_at": "2026-07-16T12:00:00Z",
@@ -102,6 +103,7 @@ def validate(
     with_pr: bool = False,
     checkout: str = CHECKOUT,
     source_mode: str = "saved",
+    required_base_sha: str | None = None,
 ) -> dict[str, object]:
     return trust.validate_release_trust(
         repository=documents["repository"],
@@ -115,9 +117,10 @@ def validate(
         tag=TAG,
         checkout_sha=checkout,
         source_mode=source_mode,
-        release_pr_number=44 if with_pr else None,
+        release_pr_number=RELEASE_PR if with_pr else None,
         release_pr=documents["release_pr"],
         merge_commit=documents["merge_commit"],
+        required_release_pr_base_sha=required_base_sha,
     )
 
 
@@ -190,9 +193,41 @@ def test_valid_release_pr_authenticates_merge_commit_and_ordered_parents() -> No
         "headCommitSha": HEAD,
         "mergeCommitSha": CHECKOUT,
         "mergeCommitPolicy": "exactly-two-parents-base-then-head",
-        "number": 44,
+        "number": RELEASE_PR,
         "parents": [BASE, HEAD],
     }
+
+
+def test_required_release_pr_base_authenticates_prepublication_recovery() -> None:
+    summary = validate(
+        api_documents(with_pr=True),
+        with_pr=True,
+        required_base_sha=BASE,
+    )
+
+    assert summary["releasePullRequest"] == {
+        "baseCommitSha": BASE,
+        "headCommitSha": HEAD,
+        "mergeCommitSha": CHECKOUT,
+        "mergeCommitPolicy": "exactly-two-parents-base-then-head",
+        "number": RELEASE_PR,
+        "parents": [BASE, HEAD],
+        "requiredBaseCommitSha": BASE,
+    }
+
+
+def test_required_release_pr_base_mismatch_fails_closed() -> None:
+    with pytest.raises(trust.MainTrustError, match="required recovery base"):
+        validate(
+            api_documents(with_pr=True),
+            with_pr=True,
+            required_base_sha="e" * 40,
+        )
+
+
+def test_required_release_pr_base_requires_complete_pr_evidence() -> None:
+    with pytest.raises(trust.MainTrustError, match="complete release PR evidence"):
+        validate(api_documents(), required_base_sha=BASE)
 
 
 @pytest.mark.parametrize(
@@ -204,11 +239,11 @@ def test_valid_release_pr_authenticates_merge_commit_and_ordered_parents() -> No
         (("main_ref", "object", "type"), "tag", "main ref object type mismatch"),
         (("main_ref", "object", "sha"), "A" * 40, "lowercase 40-hex"),
         (("main_ref", "object", "sha"), "e" * 40, "main ref commit SHA"),
-        (("tag_ref", "ref"), "refs/tags/v1.0.1", "tag ref mismatch"),
+        (("tag_ref", "ref"), "refs/tags/v1.0.2", "tag ref mismatch"),
         (("tag_ref", "object", "type"), "commit", "tag ref object type mismatch"),
         (("tag_ref", "object", "sha"), "short", "lowercase 40-hex"),
         (("tag_object", "sha"), "f" * 40, "does not match the exact tag ref"),
-        (("tag_object", "tag"), "v1.0.1", "annotated tag name mismatch"),
+        (("tag_object", "tag"), "v1.0.2", "annotated tag name mismatch"),
         (("tag_object", "object", "type"), "tree", "peeled object type mismatch"),
         (("tag_object", "object", "sha"), "e" * 40, "peeled commit SHA"),
     ],
@@ -338,7 +373,7 @@ def test_repository_argument_and_release_tag_are_fixed_and_safe() -> None:
         trust.validate_release_trust(
             **kwargs,
             expected_repository=REPOSITORY,
-            tag="v1.0.0/../../heads/main",
+            tag="v1.0.1/../../heads/main",
         )
 
 
@@ -436,7 +471,9 @@ def test_saved_api_cli_emits_one_canonical_line_file_and_github_outputs(
             "--checkout-sha",
             checkout,
             "--release-pr",
-            "44",
+            str(RELEASE_PR),
+            "--required-release-pr-base-sha",
+            BASE,
             "--api-directory",
             str(api_dir),
             "--json-output",
@@ -465,8 +502,9 @@ def test_saved_api_cli_emits_one_canonical_line_file_and_github_outputs(
     assert b"source_mode=saved\n" in outputs
     assert b"default_branch=main\n" in outputs
     assert ("main_commit_sha=" + checkout + "\n").encode() in outputs
-    assert b"release_pr_number=44\n" in outputs
+    assert (f"release_pr_number={RELEASE_PR}\n").encode() in outputs
     assert ("release_pr_merge_commit_sha=" + checkout + "\n").encode() in outputs
+    assert ("release_pr_required_base_commit_sha=" + BASE + "\n").encode() in outputs
 
 
 def test_failed_saved_api_cli_emits_no_success_payload_or_new_outputs(
@@ -594,7 +632,7 @@ def test_online_query_with_pr_authenticates_merge_commit_then_rechecks_refs(
         root + "/git/ref/heads/main": documents["main_ref"],
         root + "/git/ref/tags/" + TAG: documents["tag_ref"],
         root + "/git/tags/" + TAG_OBJECT: documents["tag_object"],
-        root + "/pulls/44": documents["release_pr"],
+        root + f"/pulls/{RELEASE_PR}": documents["release_pr"],
         root + "/git/commits/" + CHECKOUT: documents["merge_commit"],
     }
     calls: list[str] = []
@@ -608,7 +646,7 @@ def test_online_query_with_pr_authenticates_merge_commit_then_rechecks_refs(
 
     monkeypatch.setattr(trust.subprocess, "run", fake_run)
     fetched = trust.query_api_documents(
-        gh_executable="gh", tag=TAG, release_pr_number=44
+        gh_executable="gh", tag=TAG, release_pr_number=RELEASE_PR
     )
     summary = validate(fetched, with_pr=True, source_mode="online")
 
@@ -621,7 +659,7 @@ def test_online_query_with_pr_authenticates_merge_commit_then_rechecks_refs(
         root + "/git/ref/heads/main",
         root + "/git/ref/tags/" + TAG,
         root + "/git/tags/" + TAG_OBJECT,
-        root + "/pulls/44",
+        root + f"/pulls/{RELEASE_PR}",
         root + "/git/commits/" + CHECKOUT,
         root + "/git/ref/heads/main",
         root + "/git/ref/tags/" + TAG,
@@ -639,7 +677,7 @@ def test_online_open_release_pr_fails_closed(monkeypatch) -> None:
         root + "/git/ref/heads/main": documents["main_ref"],
         root + "/git/ref/tags/" + TAG: documents["tag_ref"],
         root + "/git/tags/" + TAG_OBJECT: documents["tag_object"],
-        root + "/pulls/44": documents["release_pr"],
+        root + f"/pulls/{RELEASE_PR}": documents["release_pr"],
         root + "/git/commits/" + CHECKOUT: documents["merge_commit"],
     }
 
@@ -650,7 +688,7 @@ def test_online_open_release_pr_fails_closed(monkeypatch) -> None:
 
     monkeypatch.setattr(trust.subprocess, "run", fake_run)
     fetched = trust.query_api_documents(
-        gh_executable="gh", tag=TAG, release_pr_number=44
+        gh_executable="gh", tag=TAG, release_pr_number=RELEASE_PR
     )
 
     with pytest.raises(trust.MainTrustError, match="state mismatch"):

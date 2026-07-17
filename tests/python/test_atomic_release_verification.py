@@ -12,7 +12,7 @@ from scripts.atomic_verify_release_download import (
 )
 
 
-VERSION = "1.0.0"
+VERSION = "1.0.1"
 COMMIT = "a" * 40
 EPOCH = 1_700_000_000
 
@@ -22,7 +22,7 @@ def digest(payload: bytes) -> str:
 
 
 def test_downloaded_source_asset_requires_hash_and_exact_provenance(tmp_path: Path) -> None:
-    asset = tmp_path / "atomic_pyffish-1.0.0.tar.gz"
+    asset = tmp_path / "atomic_pyffish-1.0.1.tar.gz"
     asset.write_bytes(b"normalized sdist")
     write_provenance(
         asset,
@@ -65,7 +65,7 @@ def test_downloaded_source_asset_requires_hash_and_exact_provenance(tmp_path: Pa
 
 
 def test_downloaded_source_asset_rejects_symlink(tmp_path: Path) -> None:
-    target = tmp_path / "atomic_pyffish-1.0.0.tar.gz"
+    target = tmp_path / "atomic_pyffish-1.0.1.tar.gz"
     target.write_bytes(b"normalized sdist")
     link = tmp_path / "downloaded.tar.gz"
     try:
@@ -87,7 +87,7 @@ def test_downloaded_source_asset_rejects_symlink(tmp_path: Path) -> None:
 
 
 def test_downloaded_asset_rejects_digest_not_frozen_by_producer(tmp_path: Path) -> None:
-    asset = tmp_path / "atomic_pyffish-1.0.0.tar.gz"
+    asset = tmp_path / "atomic_pyffish-1.0.1.tar.gz"
     asset.write_bytes(b"producer bytes")
     write_provenance(
         asset,
@@ -125,7 +125,7 @@ def write_release(root: Path, payloads: dict[str, bytes]) -> None:
 
 def test_github_download_requires_exact_names_bytes_and_checksums(tmp_path: Path) -> None:
     payloads = {
-        "Atomic-Stockfish-1.0.0-source.tar.xz": b"source",
+        "Atomic-Stockfish-1.0.1-source.tar.xz": b"source",
         "atomic-stockfish-release-manifest.json": json.dumps(
             {"version": VERSION}, sort_keys=True
         ).encode("ascii"),

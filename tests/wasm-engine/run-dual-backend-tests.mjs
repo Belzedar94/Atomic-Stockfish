@@ -203,11 +203,13 @@ async function main() {
   const expectedV3 = argument('--v3-sha256').toLowerCase();
   const timeoutMs = Number(argument('--timeout-ms', '180000'));
   const maximumRssMiB = Number(argument('--max-rss-mib', '0'));
+  const reloadCycles = Number(argument('--reload-cycles', '3'));
   assert.match(expectedLegacy, /^[0-9a-f]{64}$/);
   assert.match(expectedV2, /^[0-9a-f]{64}$/);
   assert.match(expectedV3, /^[0-9a-f]{64}$/);
   assert.ok(Number.isFinite(timeoutMs) && timeoutMs > 0);
   assert.ok(Number.isFinite(maximumRssMiB) && maximumRssMiB >= 0);
+  assert.ok(Number.isInteger(reloadCycles) && reloadCycles >= 3);
 
   const [legacyBytes, v2Bytes, v3Bytes] = await Promise.all([
     readFile(legacyPath),
@@ -327,26 +329,28 @@ async function main() {
     await new Promise((resolve) => setTimeout(resolve, 150));
     warmRss = memory.sample();
 
-    for (const threads of [1, 4, 2, 4]) {
-      await engine.setOption('Threads', String(threads));
-      await engine.setOption('EvalFile', uciPath(legacyPath));
-      requireBackend(
-        await engine.search(),
-        'Legacy Atomic V1',
-        `Legacy reload with Threads=${threads}`,
-      );
-      await engine.setOption('EvalFile', uciPath(v2Path));
-      requireBackend(
-        await engine.search(),
-        'AtomicNNUEV2',
-        `V2 reload with Threads=${threads}`,
-      );
-      await engine.setOption('EvalFile', uciPath(v3Path));
-      requireBackend(
-        await engine.search(),
-        'AtomicNNUEV3',
-        `V3 reload with Threads=${threads}`,
-      );
+    for (let cycle = 1; cycle <= reloadCycles; cycle += 1) {
+      for (const threads of [1, 4, 2, 4]) {
+        await engine.setOption('Threads', String(threads));
+        await engine.setOption('EvalFile', uciPath(legacyPath));
+        requireBackend(
+          await engine.search(),
+          'Legacy Atomic V1',
+          `Legacy reload cycle=${cycle} with Threads=${threads}`,
+        );
+        await engine.setOption('EvalFile', uciPath(v2Path));
+        requireBackend(
+          await engine.search(),
+          'AtomicNNUEV2',
+          `V2 reload cycle=${cycle} with Threads=${threads}`,
+        );
+        await engine.setOption('EvalFile', uciPath(v3Path));
+        requireBackend(
+          await engine.search(),
+          'AtomicNNUEV3',
+          `V3 reload cycle=${cycle} with Threads=${threads}`,
+        );
+      }
     }
 
     await new Promise((resolve) => setTimeout(resolve, 250));
@@ -375,7 +379,8 @@ async function main() {
         `(legacy=${expectedLegacy}, v2=${expectedV2}, v3=${expectedV3}, ` +
         `rssWarmMiB=${warmRss === undefined ? 'n/a' : Math.ceil(warmRss / MIB)}, ` +
         `rssFinalMiB=${finalRss === undefined ? 'n/a' : Math.ceil(finalRss / MIB)}, ` +
-        `rssPeakMiB=${memory.peakBytes ? Math.ceil(memory.peakBytes / MIB) : 'n/a'})`,
+        `rssPeakMiB=${memory.peakBytes ? Math.ceil(memory.peakBytes / MIB) : 'n/a'}, ` +
+        `reloadCycles=${reloadCycles})`,
     );
   } catch (error) {
     memory.stop();

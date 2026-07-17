@@ -218,8 +218,12 @@ def verify_uci_wasm_archive(
             "supportedEntrypoint": "atomic-stockfish-nnue-node.mjs",
             "generatedRuntimeGlue": "atomic-stockfish-nnue.js",
             "directRuntimeGlueSupported": False,
-            "supportedNetworkBackends": ["Legacy Atomic V1", "AtomicNNUEV2"],
-            "networkFileVersions": ["0x7AF32F20", "0xA70C0002"],
+            "supportedNetworkBackends": [
+                "Legacy Atomic V1",
+                "AtomicNNUEV2",
+                "AtomicNNUEV3",
+            ],
+            "networkFileVersions": ["0x7AF32F20", "0xA70C0002", "0xA70C0003"],
             "externalNetwork": True,
         }
         for key, expected in expected_contract.items():

@@ -420,8 +420,13 @@ SaveResult Network::save(std::ostream& stream, std::string_view description) con
     return write_parameters(stream, description);
 }
 
-LoadResult load_candidate(std::istream& stream) {
-    LoadResult result;
+InPlaceLoadResult load_candidate(std::istream& stream, Network& staging) {
+    InPlaceLoadResult result;
+
+    staging.descriptionSize_   = 0;
+    staging.contentHash_       = 0;
+    staging.simdPermuted_      = false;
+    staging.denseRuntimeReady_ = false;
 
     u32 version         = 0;
     u32 networkHash     = 0;
@@ -478,16 +483,15 @@ LoadResult load_candidate(std::istream& stream) {
         return result;
     }
 
-    std::unique_ptr<Network> staging(new (std::nothrow) Network());
-    if (!staging || !staging->allocate_parameters())
+    if (!staging.allocate_parameters())
     {
         result.code  = WireError::AllocationFailure;
         result.error = wire_error_message(result.code);
         return result;
     }
 
-    if (!staging->read_feature_parameters(stream, result.code, result.error)
-        || !staging->read_dense_parameters(stream, result.code, result.error))
+    if (!staging.read_feature_parameters(stream, result.code, result.error)
+        || !staging.read_dense_parameters(stream, result.code, result.error))
         return result;
 
     char trailing = 0;
@@ -504,26 +508,92 @@ LoadResult load_candidate(std::istream& stream) {
         return result;
     }
 
-    if (!staging->validate_numeric(result.code, result.error))
+    if (!staging.validate_numeric(result.code, result.error))
         return result;
-    if (!staging->permute_feature_parameters())
+    if (!staging.permute_feature_parameters())
     {
         result.code  = WireError::InvalidPermutationShape;
         result.error = wire_error_message(result.code);
         return result;
     }
-    if (!staging->materialize_dense_runtime())
+    if (!staging.materialize_dense_runtime())
     {
         result.code  = WireError::InvalidDenseRuntimeLayout;
         result.error = wire_error_message(result.code);
         return result;
     }
 
-    staging->set_description(description);
-    staging->compute_content_hash();
+    staging.set_description(description);
+    staging.compute_content_hash();
     result.description = std::move(description);
-    result.network     = std::move(staging);
     result.code        = WireError::None;
+    return result;
+}
+
+InPlaceLoadResult load_candidate(const std::filesystem::path& path, Network& destination) {
+    InPlaceLoadResult result;
+    if (path.empty())
+    {
+        result.code  = WireError::FileNotFound;
+        result.error = wire_error_message(result.code);
+        return result;
+    }
+
+    std::error_code statusError;
+    const bool      exists = std::filesystem::exists(path, statusError);
+    if (statusError)
+    {
+        result.code  = WireError::IoError;
+        result.error = wire_error_message(result.code);
+        return result;
+    }
+    if (!exists)
+    {
+        result.code  = WireError::FileNotFound;
+        result.error = wire_error_message(result.code);
+        return result;
+    }
+
+    const bool regular = std::filesystem::is_regular_file(path, statusError);
+    if (statusError || !regular)
+    {
+        result.code  = WireError::IoError;
+        result.error = wire_error_message(result.code);
+        return result;
+    }
+
+    std::ifstream stream(path, std::ios::binary);
+    if (!stream)
+    {
+        statusError.clear();
+        const bool stillExists = std::filesystem::exists(path, statusError);
+        result.code  = !statusError && !stillExists ? WireError::FileNotFound : WireError::IoError;
+        result.error = wire_error_message(result.code);
+        return result;
+    }
+
+    result              = load_candidate(stream, destination);
+    result.resolvedPath = path;
+    return result;
+}
+
+LoadResult load_candidate(std::istream& stream) {
+    LoadResult               result;
+    std::unique_ptr<Network> staging(new (std::nothrow) Network());
+    if (!staging)
+    {
+        result.code  = WireError::AllocationFailure;
+        result.error = wire_error_message(result.code);
+        return result;
+    }
+
+    InPlaceLoadResult loaded = load_candidate(stream, *staging);
+    result.code              = loaded.code;
+    result.description       = std::move(loaded.description);
+    result.resolvedPath      = std::move(loaded.resolvedPath);
+    result.error             = std::move(loaded.error);
+    if (loaded)
+        result.network = std::move(staging);
     return result;
 }
 

@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = ROOT / ".github" / "workflows" / "atomic-release.yml"
 ATOMIC_WORKFLOW = ROOT / ".github" / "workflows" / "atomic.yml"
 RELEASE_PR_WORKFLOW = ROOT / ".github" / "workflows" / "atomic-release-pr.yml"
+UPSTREAM_STOCKFISH_WORKFLOW = ROOT / ".github" / "workflows" / "stockfish.yml"
 CHECKLIST = ROOT / "docs" / "atomic" / "release-1.0-checklist.md"
 
 
@@ -56,9 +57,39 @@ def test_one_authoritative_runner_discovers_every_release_contract_module() -> N
     atomic_workflow = (ROOT / ".github" / "workflows" / "atomic.yml").read_text(
         encoding="utf-8"
     )
-    invocation = "python scripts/run_atomic_release_contract_tests.py"
-    assert release_workflow.count(invocation) == 1
-    assert atomic_workflow.count(invocation) == 1
+    release_invocation = "python -I scripts/run_atomic_release_contract_tests.py"
+    ci_invocation = "python scripts/run_atomic_release_contract_tests.py"
+    assert release_workflow.count(release_invocation) == 1
+    assert atomic_workflow.count(ci_invocation) == 1
+
+
+def test_release_identity_builds_pyffish_before_collecting_contracts() -> None:
+    validate = job(workflow(), "validate", "main-trust")
+    scrub = "unset PYTHONHOME PYTHONPATH"
+    build = "python -I setup.py build_ext --inplace"
+    contracts = "python -I scripts/run_atomic_release_contract_tests.py"
+    assert validate.count(scrub) == 1
+    assert validate.count(build) == 1
+    assert validate.count(contracts) == 1
+    assert validate.index(scrub) < validate.index(build)
+    assert validate.index(build) < validate.index(contracts)
+
+
+def test_release_recovery_is_chained_to_the_original_1_0_merge() -> None:
+    text = workflow()
+    required_base = "16c57ea7369699bc8ecdbd4ae855b5bbb91cce39"
+
+    assert text.count("--release-pr 46") == 4
+    assert "--release-pr 44" not in text
+    assert text.count("--required-release-pr-base-sha " + required_base) == 4
+
+
+def test_orthodox_upstream_workflow_cannot_gate_atomic_release_tags() -> None:
+    text = UPSTREAM_STOCKFISH_WORKFLOW.read_text(encoding="utf-8")
+    trigger = text.split("\nconcurrency:", 1)[0]
+    assert '      - "sf_*"\n' in trigger
+    assert '      - "*"\n' not in trigger
+    assert "      - v*\n" not in trigger
 
 
 def job(text: str, name: str, next_name: str) -> str:
@@ -466,7 +497,7 @@ def test_publication_requires_annotated_tag_immutable_policy_and_same_tag_ci() -
     assert text.count("$GITHUB_REPOSITORY/immutable-releases") == 2
     assert text.count(
         "if: github.event_name == 'push' && github.ref_type == 'tag' "
-        "&& github.ref_name == 'v1.0.0'"
+        "&& github.ref_name == 'v1.0.1'"
     ) == 2
     assert "pull_request" not in text.split("permissions:", 1)[0]
     assert '.name == "Atomic CI"' in gate
@@ -603,11 +634,11 @@ def test_uci_wasm_uses_clean_roots_and_never_packages_on_the_mutable_host() -> N
         "      - name: Build and package twice with the versioned UCI WASM recipe\n",
         1,
     )[1].split(
-        "      - name: Authenticate and exercise the exact packaged dual-NNUE engine\n",
+        "      - name: Authenticate and exercise the exact packaged three-backend NNUE engine\n",
         1,
     )[0]
     authenticate = uci.split(
-        "      - name: Authenticate and exercise the exact packaged dual-NNUE engine\n",
+        "      - name: Authenticate and exercise the exact packaged three-backend NNUE engine\n",
         1,
     )[1]
     assert 'for build_id in a b; do' in build
@@ -617,4 +648,11 @@ def test_uci_wasm_uses_clean_roots_and_never_packages_on_the_mutable_host() -> N
     assert "-cJf" not in build
     assert "-cJf" not in authenticate
     assert "python3 tests/create_synthetic_zero_nnue.py" in authenticate
+    assert "python3 tests/create_synthetic_atomic_v2_nnue.py" in authenticate
+    assert "python3 tests/create_synthetic_atomic_v3_nnue.py" in authenticate
+    assert "--v3-net build/wasm-fixtures/atomic-v3.nnue" in authenticate
+    assert (
+        "--v3-sha256 00E46223822D06D7927E884EEC10739BA19EF8DD82A6E262F627D361658080C2"
+        in authenticate
+    )
     assert 'build/wasm-archive-smoke' in authenticate

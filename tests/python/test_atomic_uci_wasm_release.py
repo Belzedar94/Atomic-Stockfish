@@ -16,9 +16,9 @@ from scripts.atomic_verify_uci_wasm_archive import (
 
 ROOT = Path(__file__).resolve().parents[2]
 README = ROOT / "docs" / "atomic" / "node-uci-wasm-release.md"
-VERSION = "1.0.0"
+VERSION = "1.0.1"
 EPOCH = 1_700_000_000
-ARCHIVE_ROOT = "Atomic-Stockfish-1.0.0-node-uci-nnue-wasm"
+ARCHIVE_ROOT = "Atomic-Stockfish-1.0.1-node-uci-nnue-wasm"
 
 
 def digest(payload: bytes) -> str:
@@ -42,8 +42,12 @@ def archive_payloads() -> dict[str, bytes]:
         "supportedEntrypoint": "atomic-stockfish-nnue-node.mjs",
         "generatedRuntimeGlue": "atomic-stockfish-nnue.js",
         "directRuntimeGlueSupported": False,
-        "supportedNetworkBackends": ["Legacy Atomic V1", "AtomicNNUEV2"],
-        "networkFileVersions": ["0x7AF32F20", "0xA70C0002"],
+        "supportedNetworkBackends": [
+            "Legacy Atomic V1",
+            "AtomicNNUEV2",
+            "AtomicNNUEV3",
+        ],
+        "networkFileVersions": ["0x7AF32F20", "0xA70C0002", "0xA70C0003"],
         "externalNetwork": True,
         "artifacts": [
             {"name": name, "bytes": len(payload), "sha256": digest(payload)}

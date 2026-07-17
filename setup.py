@@ -71,6 +71,10 @@ if platform.python_compiler().startswith("MSC"):
         "/permissive-",
         "/utf-8",
         "/Zc:__cplusplus",
+        # /GL defers code generation to the multithreaded LTCG backend.  Its
+        # default scheduling is not byte-reproducible between clean builds,
+        # even when link.exe receives /Brepro.
+        "/experimental:deterministic",
         # MSVC otherwise hashes the absolute translation-unit path into
         # anonymous-namespace symbols, making equivalent isolated wheel
         # builds differ solely because cibuildwheel uses fresh temp roots.

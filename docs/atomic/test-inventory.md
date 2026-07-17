@@ -47,6 +47,14 @@ explicitly recorded policy for each playing change. The release 1.0 Syzygy
 strength disposition is an owner waiver over stopped positive measurements and
 must not be presented as a completed LOS or fixed-game gate.
 
+The inherited upstream `Stockfish` workflow is retained only for upstream
+`sf_*` tags. It is not an Atomic release authority: its embedded orthodox-net,
+`stockfish` binary-name, orthodox bench, matetrack and game-harness assumptions
+are not applicable to this specialized engine. Atomic release tags instead run
+the `Atomic CI` matrix and the exact-tag release workflow, which cover the
+native protocols, Python, CommonJS/ESM, Board WASM, UCI/NNUE WASM, sanitizers,
+NNUE backends, data pipeline and Atomic Syzygy surfaces listed above.
+
 ## Source-to-test treatment
 
 | Original surface | Atomic-Stockfish treatment |

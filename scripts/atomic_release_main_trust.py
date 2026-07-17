@@ -301,6 +301,7 @@ def validate_release_trust(
     release_pr_number: Optional[int] = None,
     release_pr: Optional[Mapping[str, Any]] = None,
     merge_commit: Optional[Mapping[str, Any]] = None,
+    required_release_pr_base_sha: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Validate API documents and return their authenticated summary.
 
@@ -350,8 +351,19 @@ def validate_release_trust(
     tag_object_sha = initial_refs["tagObjectSha"]
     peeled_sha = initial_refs["tagCommitSha"]
 
+    required_base_sha = (
+        _sha(required_release_pr_base_sha, "required release PR base SHA")
+        if required_release_pr_base_sha is not None
+        else None
+    )
     pr_summary: Optional[Dict[str, Any]] = None
     optional_values = (release_pr_number, release_pr, merge_commit)
+    if required_base_sha is not None and not all(
+        value is not None for value in optional_values
+    ):
+        raise MainTrustError(
+            "required release PR base SHA requires complete release PR evidence"
+        )
     if any(value is not None for value in optional_values):
         if any(value is None for value in optional_values):
             raise MainTrustError(
@@ -378,6 +390,10 @@ def validate_release_trust(
             "release PR base repository full_name",
         )
         base_sha = _sha(base.get("sha"), "release PR base SHA")
+        if required_base_sha is not None and base_sha != required_base_sha:
+            raise MainTrustError(
+                "release PR base SHA does not match the required recovery base"
+            )
         head = _mapping(pr.get("head"), "release PR head")
         head_sha = _sha(head.get("sha"), "release PR head SHA")
         head_repo = _mapping(head.get("repo"), "release PR head repository")
@@ -423,6 +439,8 @@ def validate_release_trust(
             "number": expected_pr_number,
             "parents": parent_shas,
         }
+        if required_base_sha is not None:
+            pr_summary["requiredBaseCommitSha"] = required_base_sha
 
     return {
         "checkoutCommitSha": checkout,
@@ -655,6 +673,16 @@ def _github_output_lines(summary: Mapping[str, Any], canonical: bytes) -> bytes:
                 ),
             ]
         )
+        if pr_value.get("requiredBaseCommitSha") is not None:
+            values.append(
+                (
+                    "release_pr_required_base_commit_sha",
+                    _sha(
+                        pr_value.get("requiredBaseCommitSha"),
+                        "summary required PR base SHA",
+                    ),
+                )
+            )
     return "".join("%s=%s\n" % item for item in values).encode("ascii")
 
 
@@ -793,6 +821,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--repository-root", required=True, type=Path)
     parser.add_argument("--checkout-sha")
     parser.add_argument("--release-pr", type=int)
+    parser.add_argument("--required-release-pr-base-sha")
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--api-directory", "--api-dir", type=Path)
     source.add_argument("--query-gh", action="store_true")
@@ -840,6 +869,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             release_pr_number=args.release_pr,
             release_pr=documents["release_pr"],
             merge_commit=documents["merge_commit"],
+            required_release_pr_base_sha=args.required_release_pr_base_sha,
         )
         final_checkout_sha = authenticate_checkout(
             repository_root=args.repository_root,
