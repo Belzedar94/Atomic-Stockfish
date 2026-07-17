@@ -166,37 +166,16 @@ struct CapturePairGeometryLookup {
       prefixes{};
 };
 
-constexpr CapturePairGeometryLookup make_capture_pair_geometry_lookup() noexcept {
-    CapturePairGeometryLookup lookup{};
-    for (int pieceIndex = 0; pieceIndex < 5; ++pieceIndex)
-        for (IndexType relationIndex = 0; relationIndex < CapturePairActorRelations;
-             ++relationIndex)
-        {
-            IndexType  prefix    = 0;
-            const auto relation  = CapturePairActorRelation(relationIndex);
-            const auto pieceType = PieceType(int(PAWN) + pieceIndex);
-            for (int from = 0; from < SQUARE_NB; ++from)
-            {
-                lookup.prefixes[pieceIndex][relationIndex][from] = prefix;
-                Bitboard targets                                 = 0;
-                for (int to = 0; to < SQUARE_NB; ++to)
-                    if (capture_pair_geometric_edge(pieceType, relation, Square(from), Square(to)))
-                        targets |= Bitboard(1) << to;
-                lookup.targets[pieceIndex][relationIndex][from] = targets;
-                prefix += capture_pair_popcount(targets);
-            }
-        }
-    return lookup;
-}
+// Built once at process startup in capture_pair.cpp. Keeping this table out of
+// the header prevents every translation unit (and especially Emscripten) from
+// spending its constexpr-step budget rebuilding the same 40,960 edge probes.
+extern const CapturePairGeometryLookup CapturePairGeometry;
 
-inline constexpr CapturePairGeometryLookup CapturePairGeometry =
-  make_capture_pair_geometry_lookup();
-
-constexpr bool capture_pair_edge_ordinal(PieceType                pieceType,
-                                         CapturePairActorRelation relation,
-                                         Square                   from,
-                                         Square                   to,
-                                         IndexType&               result) {
+inline bool capture_pair_edge_ordinal(PieceType                pieceType,
+                                      CapturePairActorRelation relation,
+                                      Square                   from,
+                                      Square                   to,
+                                      IndexType&               result) noexcept {
     if (!capture_pair_geometric_edge(pieceType, relation, from, to))
         return false;
 

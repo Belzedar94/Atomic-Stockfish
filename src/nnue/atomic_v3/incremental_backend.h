@@ -245,8 +245,8 @@ class IncrementalStack {
     [[nodiscard]] const Frame& latest() const noexcept { return frames_[size_ - 1]; }
 
     [[nodiscard]] static bool extract_hm_rows(const HmEmission& emission, HmRows& result) noexcept;
-    [[nodiscard]] static bool extract_relation_rows(const FullRefreshEmission& emission,
-                                                    RelationRows&              result) noexcept;
+    [[nodiscard]] static bool       extract_relation_rows(const FullRefreshEmission& emission,
+                                                          RelationRows&              result) noexcept;
     [[nodiscard]] IncrementalStatus build_hm_perspective(const Network&      network,
                                                          Color               perspective,
                                                          const HmEmission&   emission,

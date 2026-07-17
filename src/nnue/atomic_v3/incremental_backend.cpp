@@ -23,6 +23,14 @@
 namespace Stockfish::Eval::NNUE::AtomicV3 {
 namespace {
 
+#if defined(_MSC_VER)
+    #define ATOMIC_V3_INCREMENTAL_NOINLINE __declspec(noinline)
+#elif defined(__GNUC__) || defined(__clang__)
+    #define ATOMIC_V3_INCREMENTAL_NOINLINE __attribute__((noinline))
+#else
+    #define ATOMIC_V3_INCREMENTAL_NOINLINE
+#endif
+
 constexpr std::size_t color_index(Color color) noexcept { return static_cast<std::size_t>(color); }
 
 bool same_orientation(const JointOrientation& lhs, const JointOrientation& rhs) noexcept {
@@ -59,11 +67,15 @@ void add_hm_delta_counters(HmDeltaCounters& destination, const HmDeltaCounters& 
     destination.avx2KernelCalls += source.avx2KernelCalls;
 }
 
+ATOMIC_V3_INCREMENTAL_NOINLINE void clear_diagnostic(IncrementalDiagnostic& result) noexcept {
+    result = {};
+}
+
 IncrementalStatus fail(IncrementalDiagnostic& result,
                        IncrementalError       error,
                        FullRefreshError       featureError = FullRefreshError::None,
                        ScalarStatus           scalarStatus = {}) noexcept {
-    result = {};
+    clear_diagnostic(result);
     return {error, featureError, scalarStatus};
 }
 
@@ -208,6 +220,8 @@ IncrementalStatus compose_runtime(
           scalar_failure(ScalarError::NumericContractError, FullRefreshError::None, numeric));
     return {};
 }
+
+#undef ATOMIC_V3_INCREMENTAL_NOINLINE
 
 }  // namespace
 
@@ -652,7 +666,7 @@ IncrementalStatus IncrementalStack::build_hm_perspective(const Network&      net
 IncrementalStatus IncrementalStack::evaluate(const Network&             network,
                                              const CapturePairSnapshot& snapshot,
                                              IncrementalDiagnostic&     result) noexcept {
-    result = {};
+    clear_diagnostic(result);
     if (network_ != &network)
         return {IncrementalError::NetworkMismatch};
     if (hmDeltaExecutionEnabled_ && !simd_isa_available(requestedIsa_))
@@ -708,7 +722,7 @@ IncrementalStatus IncrementalStack::evaluate(const Network&             network,
           candidateDiagnostic.hmUpdates[index], candidateDiagnostic.hmDelta.counters);
         if (!status)
         {
-            result = {};
+            clear_diagnostic(result);
             return status;
         }
 
@@ -733,7 +747,7 @@ IncrementalStatus IncrementalStack::evaluate(const Network&             network,
           candidateDiagnostic.relationUpdates[index]);
         if (!relationStatus)
         {
-            result = {};
+            clear_diagnostic(result);
             return relationStatus;
         }
         switch (candidateDiagnostic.relationUpdates[index].source)

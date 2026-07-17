@@ -135,6 +135,34 @@ def test_compact_dimensions_and_segment_constants_are_frozen() -> None:
     assert cp.MAX_ACTIVE_FEATURES == 240
 
 
+def test_geometry_lookup_has_one_non_constexpr_runtime_definition() -> None:
+    header = (ROOT / "src/nnue/atomic_v3/capture_pair.h").read_text(
+        encoding="utf-8"
+    )
+    source = (ROOT / "src/nnue/atomic_v3/capture_pair.cpp").read_text(
+        encoding="utf-8"
+    )
+
+    assert (
+        "extern const CapturePairGeometryLookup CapturePairGeometry;" in header
+    )
+    assert "inline constexpr CapturePairGeometryLookup" not in header
+    assert "make_capture_pair_geometry_lookup" not in header
+    assert (
+        source.count(
+            "const CapturePairGeometryLookup CapturePairGeometry = "
+            "make_capture_pair_geometry_lookup();"
+        )
+        == 1
+    )
+    builder = source.split(
+        "CapturePairGeometryLookup make_capture_pair_geometry_lookup() noexcept",
+        1,
+    )
+    assert len(builder) == 2
+    assert not builder[0].rstrip().endswith("constexpr")
+
+
 @pytest.mark.parametrize("actor_rel", cp.ACTOR_RELATIONS)
 def test_every_geometry_edge_is_lexicographic_and_has_one_ordinal(
     actor_rel: str,
