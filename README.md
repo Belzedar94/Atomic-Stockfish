@@ -6,8 +6,9 @@ with [Fairy-Stockfish](https://github.com/fairy-stockfish/Fairy-Stockfish) used 
 the frozen rules and playing-strength reference.
 
 > [!NOTE]
-> Version 1.0.1 is the first stable, strength-qualified release. The earlier
-> `v1.0.0` tag is a failed prepublication candidate and has no release assets.
+> Version 1.0.2 is the first stable, strength-qualified release. The earlier
+> `v1.0.0` and `v1.0.1` tags are failed prepublication candidates and have no
+> release assets.
 > Release assets include a machine-readable provenance manifest and
 > `SHA256SUMS`; NNUE networks and Atomic Syzygy files remain external and are not
 > silently downloaded.

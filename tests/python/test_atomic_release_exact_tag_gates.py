@@ -278,7 +278,7 @@ def make_tagged_repo(
     git(root, "add", ".")
     git(root, "commit", "--quiet", "-m", "exact tag fixture")
     commit = git(root, "rev-parse", "HEAD")
-    git(root, "tag", "-a", EXACT.RELEASE_TAG, "-m", "Atomic 1.0.1 fixture")
+    git(root, "tag", "-a", EXACT.RELEASE_TAG, "-m", "Atomic 1.0.2 fixture")
     tag_object = git(root, "rev-parse", f"refs/tags/{EXACT.RELEASE_TAG}^{{tag}}")
     return commit, tag_object
 

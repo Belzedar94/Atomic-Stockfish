@@ -139,7 +139,10 @@ def test_cibuildwheel_test_lock_is_complete_and_hash_closed() -> None:
     assert locked["mypy"].version == "1.19.1"
     assert locked["tomli"].version == "2.4.1"
     assert len(locked["mypy"].hashes) == 2
-    assert len(locked["librt"].hashes) == 2
+    assert set(locked["librt"].hashes) == {
+        "3657346f867469e962549435aa05fd15330b1d6a92829f8e27988e194382d005",
+        "b15e26cc0fe622d0c67e98bee6ef6bc8f792e20ee3006aa12627a00463d9399f",
+    }
     assert all(requirement.marker is None for requirement in locked.values())
 
 
@@ -199,4 +202,4 @@ def test_checked_in_inventory_matches_the_assembler_policy() -> None:
             encoding="utf-8"
         )
     )
-    assert inventory["releasePolicy"] == expected_inventory_policy("1.0.1")
+    assert inventory["releasePolicy"] == expected_inventory_policy("1.0.2")
