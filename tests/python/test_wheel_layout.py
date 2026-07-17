@@ -100,7 +100,7 @@ import pyffish
 
 root = pathlib.Path(sys.argv[1]).resolve()
 assert pathlib.Path(pyffish.__file__).resolve().parent == root
-assert pyffish.version() == (1, 0, 2)
+assert pyffish.version() == (1, 0, 3)
 assert pyffish.variants() == ["atomic"]
 assert pyffish.validate_fen(
     "7k/8/8/8/8/8/8/K7 w - - not-a-number 1", "atomic"

@@ -18,7 +18,7 @@ trust = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(trust)
 
 REPOSITORY = "Belzedar94/Atomic-Stockfish"
-TAG = "v1.0.2"
+TAG = "v1.0.3"
 CHECKOUT = "a" * 40
 TAG_OBJECT = "b" * 40
 BASE = "c" * 40
@@ -42,7 +42,7 @@ def api_documents(
         "tag_object": {
             "sha": TAG_OBJECT,
             "tag": TAG,
-            "message": "Atomic-Stockfish 1.0.2",
+            "message": "Atomic-Stockfish 1.0.3",
             "tagger": {
                 "name": "Atomic release",
                 "email": "release@example.invalid",
@@ -61,7 +61,7 @@ def api_documents(
         "final_tag_object": {
             "sha": TAG_OBJECT,
             "tag": TAG,
-            "message": "Atomic-Stockfish 1.0.2",
+            "message": "Atomic-Stockfish 1.0.3",
             "tagger": {
                 "name": "Atomic release",
                 "email": "release@example.invalid",
@@ -239,11 +239,11 @@ def test_required_release_pr_base_requires_complete_pr_evidence() -> None:
         (("main_ref", "object", "type"), "tag", "main ref object type mismatch"),
         (("main_ref", "object", "sha"), "A" * 40, "lowercase 40-hex"),
         (("main_ref", "object", "sha"), "e" * 40, "main ref commit SHA"),
-        (("tag_ref", "ref"), "refs/tags/v1.0.1", "tag ref mismatch"),
+        (("tag_ref", "ref"), "refs/tags/v1.0.2", "tag ref mismatch"),
         (("tag_ref", "object", "type"), "commit", "tag ref object type mismatch"),
         (("tag_ref", "object", "sha"), "short", "lowercase 40-hex"),
         (("tag_object", "sha"), "f" * 40, "does not match the exact tag ref"),
-        (("tag_object", "tag"), "v1.0.1", "annotated tag name mismatch"),
+        (("tag_object", "tag"), "v1.0.2", "annotated tag name mismatch"),
         (("tag_object", "object", "type"), "tree", "peeled object type mismatch"),
         (("tag_object", "object", "sha"), "e" * 40, "peeled commit SHA"),
     ],
@@ -373,7 +373,7 @@ def test_repository_argument_and_release_tag_are_fixed_and_safe() -> None:
         trust.validate_release_trust(
             **kwargs,
             expected_repository=REPOSITORY,
-            tag="v1.0.2/../../heads/main",
+            tag="v1.0.3/../../heads/main",
         )
 
 

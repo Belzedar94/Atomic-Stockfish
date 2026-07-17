@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run and verify the fail-closed external gates for the exact v1.0.2 tag.
+"""Run and verify the fail-closed external gates for the exact v1.0.3 tag.
 
 The executable plan is a canonical JSON file tracked by the exact annotated
 tag.  The command line supplies paths only; it cannot supply commands.  Every
@@ -71,10 +71,10 @@ SCHEMA_VERSION = 1
 COMMAND_PLAN_VERSION = 1
 PROJECT = "Atomic-Stockfish"
 REPOSITORY = "Belzedar94/Atomic-Stockfish"
-RELEASE_VERSION = "1.0.2"
-RELEASE_TAG = "v1.0.2"
+RELEASE_VERSION = "1.0.3"
+RELEASE_TAG = "v1.0.3"
 RELEASE_EVENT = "push"
-RELEASE_REF = "refs/tags/v1.0.2"
+RELEASE_REF = "refs/tags/v1.0.3"
 SCHEMA_PATH = "schemas/atomic-release-exact-tag-gates-v1.json"
 BENCH_GATE = "bmi2-vs-fairy"
 BENCH_ARTIFACT = "candidate_bmi2"
