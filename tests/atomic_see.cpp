@@ -8,6 +8,7 @@
 #include <array>
 #include <cstddef>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -15,6 +16,7 @@
 
 #include "attacks.h"
 #include "bitboard.h"
+#include "evaluate.h"
 #include "movegen.h"
 #include "position.h"
 #include "search.h"
@@ -888,6 +890,49 @@ bool expect_atomic_capture_futility_eligibility() {
     return ok;
 }
 
+bool expect_atomic_nnue_wide_sum() {
+    constexpr Value Minimum = Value(VALUE_TB_LOSS_IN_MAX_PLY + 1);
+    constexpr Value Maximum = Value(VALUE_TB_WIN_IN_MAX_PLY - 1);
+
+    struct WideSumCase {
+        std::string_view name;
+        i32              rawPsqt;
+        i32              rawPositional;
+        Value            expected;
+    };
+
+    constexpr std::array<WideSumCase, 8> tests = {{
+      {"positive boundary", i32(Maximum) * 16, 0, Maximum},
+      {"positive clamp", i32(Maximum) * 16 + 16, 0, Maximum},
+      {"negative boundary", i32(Minimum) * 16, 0, Minimum},
+      {"negative clamp", i32(Minimum) * 16 - 16, 0, Minimum},
+      {"full positive i32 components", std::numeric_limits<i32>::max(),
+       std::numeric_limits<i32>::max(), Maximum},
+      {"full negative i32 components", std::numeric_limits<i32>::min(),
+       std::numeric_limits<i32>::min(), Minimum},
+      {"opposite i32 limits", std::numeric_limits<i32>::max(), std::numeric_limits<i32>::min(),
+       VALUE_ZERO},
+      {"wide non-clamped sum", 1'000'000'000, -999'840'000, Value(10'000)},
+    }};
+
+    bool ok = true;
+    for (const auto& test : tests)
+    {
+        const Value actual =
+          Eval::Detail::atomic_nnue_value_from_raw(test.rawPsqt, test.rawPositional);
+        if (actual != test.expected)
+        {
+            std::cerr << "FAIL Atomic NNUE wide sum " << test.name << ": expected=" << test.expected
+                      << " actual=" << actual << '\n';
+            ok = false;
+        }
+        else
+            std::cout << "PASS Atomic NNUE wide sum " << test.name << " value=" << actual << '\n';
+    }
+
+    return ok;
+}
+
 bool expect_shared_search_history_baseline() {
     auto histories = std::make_unique<SharedHistories>(1);
     histories->clear_for_search(0, 1);
@@ -947,13 +992,14 @@ int main() {
     ok &= expect_atomic_move_count_thresholds();
     ok &= expect_atomic_null_move_reductions();
     ok &= expect_atomic_capture_futility_eligibility();
+    ok &= expect_atomic_nnue_wide_sum();
     ok &= expect_shared_search_history_baseline();
 
     if (!ok)
         return 1;
 
     constexpr usize TestCount =
-      SeeCases.size() + 3 + 7 + 8 + 14 + 2 + 13 + 3 + 6 + 7 + 7 + 6 + 2 + 1;
+      SeeCases.size() + 3 + 7 + 8 + 14 + 2 + 13 + 3 + 6 + 7 + 7 + 6 + 2 + 8 + 1;
     std::cout << "Atomic C++ unit tests passed: " << TestCount << "/" << TestCount << '\n';
     return 0;
 }

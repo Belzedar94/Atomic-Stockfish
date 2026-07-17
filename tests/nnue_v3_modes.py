@@ -14,6 +14,7 @@ import argparse
 import hashlib
 from pathlib import Path
 import queue
+import re
 import struct
 import subprocess
 import tempfile
@@ -26,6 +27,15 @@ V3_SIZE = 77_349_879
 V3_VERSION = 0xA70C0003
 V3_NETWORK_HASH = 0x0CF9A484
 THREAD_COUNTS = (1, 2, 4, 8)
+WIDE_TRACE_INTERNAL = 31_506
+WIDE_TRACE_WHITE_PAWNS = 151.47
+INTERNAL_TRACE_RE = re.compile(
+    r"^NNUE evaluation\s+([+-]?\d+)\s+\(side to move, internal units\)$"
+)
+FINAL_TRACE_RE = re.compile(
+    r"^Final evaluation\s+([+-]?(?:\d+(?:\.\d*)?|\.\d+))\s+"
+    r"\(white side\)\s+\[Use NNUE=true\]$"
+)
 
 
 class UciProcess:
@@ -90,6 +100,11 @@ class UciProcess:
         self.send("position startpos")
         self.send("go nodes 1")
         return self.read_until(lambda line: line.startswith("bestmove "))
+
+    def trace(self) -> list[str]:
+        self.send("position startpos")
+        self.send("eval")
+        return self.read_until(lambda line: line.startswith("Final evaluation"))
 
     def export(self, destination: Path) -> list[str]:
         self.send(f"export_net {destination}")
@@ -168,6 +183,29 @@ def require_classical_search(output: list[str]) -> None:
         raise AssertionError(f"Use NNUE=false activated an NNUE backend: {output[-30:]}")
 
 
+def require_wide_v3_trace(output: list[str]) -> None:
+    internal = [
+        int(match.group(1))
+        for line in output
+        if (match := INTERNAL_TRACE_RE.fullmatch(line)) is not None
+    ]
+    final = [
+        float(match.group(1))
+        for line in output
+        if (match := FINAL_TRACE_RE.fullmatch(line)) is not None
+    ]
+    if internal != [WIDE_TRACE_INTERNAL]:
+        raise AssertionError(
+            "AtomicNNUEV3 wide trace did not saturate without wrapping: "
+            f"internal={internal}, output={output[-30:]}"
+        )
+    if final != [WIDE_TRACE_WHITE_PAWNS]:
+        raise AssertionError(
+            "AtomicNNUEV3 trace and search evaluation disagree: "
+            f"final={final}, output={output[-30:]}"
+        )
+
+
 def require_export(engine: UciProcess, destination: Path, expected_sha256: str) -> None:
     output = engine.export(destination)
     if "Network saved successfully" not in output[-1]:
@@ -212,6 +250,8 @@ def main() -> int:
 
             engine.setoption("Hash", "16")
             engine.setoption("EvalFile", str(network_path))
+            engine.setoption("Use NNUE", "true")
+            require_wide_v3_trace(engine.trace())
             for threads in THREAD_COUNTS:
                 engine.setoption("Threads", str(threads))
                 for mode in ("true", "pure"):
@@ -232,7 +272,8 @@ def main() -> int:
 
     print(
         "AtomicNNUEV3 production gate passed: exact load/export/import, "
-        "modes=false,true,pure, threads=1,2,4,8, backend_count=3"
+        "wide trace/search saturation, modes=false,true,pure, "
+        "threads=1,2,4,8, backend_count=3"
     )
     return 0
 

@@ -25,6 +25,8 @@ def test_frozen_fixture_identity_matches_the_canonical_generator() -> None:
     assert MODES.V3_VERSION == 0xA70C0003
     assert MODES.V3_NETWORK_HASH == 0x0CF9A484
     assert MODES.THREAD_COUNTS == (1, 2, 4, 8)
+    assert MODES.WIDE_TRACE_INTERNAL == 31_506
+    assert MODES.WIDE_TRACE_WHITE_PAWNS == 151.47
 
 
 def test_authentication_is_fail_closed_for_size_hash_and_identity(
@@ -80,4 +82,28 @@ def test_search_markers_accept_only_real_v3_and_classical_paths() -> None:
     with pytest.raises(AssertionError, match="activated an NNUE backend"):
         MODES.require_classical_search(
             ["NNUE evaluation using AtomicNNUEV3 fixture", "bestmove e2e4"]
+        )
+
+
+def test_wide_v3_trace_must_saturate_and_match_search_evaluation() -> None:
+    valid = [
+        "NNUE evaluation          +31506 (side to move, internal units)",
+        "Final evaluation      +151.47 (white side) [Use NNUE=true]",
+    ]
+    MODES.require_wide_v3_trace(valid)
+
+    with pytest.raises(AssertionError, match="without wrapping"):
+        MODES.require_wide_v3_trace(
+            [
+                "NNUE evaluation          -2 (side to move, internal units)",
+                valid[1],
+            ]
+        )
+
+    with pytest.raises(AssertionError, match="trace and search evaluation disagree"):
+        MODES.require_wide_v3_trace(
+            [
+                valid[0],
+                "Final evaluation      -0.01 (white side) [Use NNUE=true]",
+            ]
         )

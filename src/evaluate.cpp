@@ -84,7 +84,9 @@ Value damp_for_atomic_rule50(Value value, const Position& pos) {
     return Value(int(value) * remaining / 100);
 }
 
-Value direct_atomic_nnue_value(i32 rawPsqt, i32 rawPositional) {
+}  // namespace
+
+Value Eval::Detail::atomic_nnue_value_from_raw(i32 rawPsqt, i32 rawPositional) noexcept {
     // V3's authenticated numeric domain permits the complete i32 range for
     // each raw component. Sum in i64, then enter the ordinary evaluation
     // domain before Chess960/rule-50 corrections so neither the addition nor
@@ -94,8 +96,6 @@ Value direct_atomic_nnue_value(i32 rawPsqt, i32 rawPositional) {
     const i64     scaled  = (i64(rawPsqt) + i64(rawPositional)) / 16;
     return Value(std::clamp(scaled, Minimum, Maximum));
 }
-
-}  // namespace
 
 // Evaluate is the evaluator for the outer world. It returns a static evaluation
 // of the position from the point of view of the side to move.
@@ -128,14 +128,14 @@ Value Eval::evaluate(const Eval::NNUE::AnyNetwork& network,
             // Pure is the raw selected network result: no compatibility
             // scaling, Chess960 correction, or fifty-move damping. It remains
             // a data-generation-only mode.
-            v = direct_atomic_nnue_value(rawPsqt, rawPositional);
+            v = Detail::atomic_nnue_value_from_raw(rawPsqt, rawPositional);
         else if (network.backend() == NNUE::NetworkBackend::AtomicNNUEV2
                  || network.backend() == NNUE::NetworkBackend::AtomicNNUEV3)
         {
             // Modern Atomic networks are trained directly in Atomic engine
             // units. The Legacy COMMONER material proxy, entertainment blend,
             // and V1 calibration scale must never leak into these backends.
-            v = direct_atomic_nnue_value(rawPsqt, rawPositional);
+            v = Detail::atomic_nnue_value_from_raw(rawPsqt, rawPositional);
 
             if (pos.is_chess960())
                 v += fix_frc(pos);
@@ -197,7 +197,7 @@ std::string Eval::trace(Position& pos, const Eval::NNUE::AnyNetwork& network, Us
     if (mode != UseNNUEMode::False)
     {
         auto [rawPsqt, rawPositional] = network.evaluate_raw(pos, *accumulator);
-        v                             = Value((rawPsqt + rawPositional) / 16);
+        v                             = Detail::atomic_nnue_value_from_raw(rawPsqt, rawPositional);
         ss << "NNUE evaluation          " << v << " (side to move, internal units)\n";
         v = pos.side_to_move() == WHITE ? v : -v;
         ss << "NNUE evaluation        " << double(v) / PawnValue << " (white side)\n";

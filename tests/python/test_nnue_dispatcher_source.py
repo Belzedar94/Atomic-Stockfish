@@ -228,11 +228,32 @@ def test_modern_v2_and_v3_evaluation_do_not_reuse_legacy_calibration():
         "else if (network.backend() == NNUE::NetworkBackend::AtomicNNUEV2",
         "else { const int deltaNpm",
     )
-    assert "direct_atomic_nnue_value(rawPsqt, rawPositional)" in v2
+    assert "Detail::atomic_nnue_value_from_raw(rawPsqt, rawPositional)" in v2
     assert "fix_frc(pos)" in v2
     assert "damp_for_atomic_rule50(v, pos)" in v2
     for legacy_only in ("entertainment", "legacyNpm", "LegacyAtomicRoyalValue"):
         assert legacy_only not in v2
+
+
+def test_search_and_trace_share_wide_clamped_nnue_conversion():
+    evaluation = compact(
+        without_cpp_comments(
+            (ROOT / "src" / "evaluate.cpp").read_text(encoding="utf-8")
+        )
+    )
+    helper = function_body(
+        evaluation,
+        "Value Eval::Detail::atomic_nnue_value_from_raw",
+        "Value Eval::evaluate",
+    )
+    trace = evaluation[evaluation.index("std::string Eval::trace") :]
+
+    call = "Detail::atomic_nnue_value_from_raw(rawPsqt, rawPositional)"
+    assert evaluation.count(call) == 3
+    assert call in trace
+    assert "i64(rawPsqt) + i64(rawPositional)" in helper
+    assert "std::clamp(scaled, Minimum, Maximum)" in helper
+    assert "rawPsqt + rawPositional" not in trace
 
 
 def test_worker_rebind_does_not_keep_a_concrete_replica_pointer():
