@@ -175,8 +175,10 @@ is no separate protocol binary.
    squash or rebase, and require its first parent to be the exact reviewed PR
    #44 release-candidate merge. Immediately before tagging, authenticate online
    that `main`, the merge commit, its ordered parents, required base and the
-   recovery PR's reviewed head all agree. Create an annotated `v1.0.1` tag only
-   for that exact merge commit.
+   recovery PR's reviewed head all agree. Replace the protected environment's
+   deployment-branch policy so `atomic-release-gates` permits exactly the tag
+   `v1.0.1`, then query the policy back and require that `v1.0.0` is no longer
+   permitted. Create an annotated `v1.0.1` tag only for that exact merge commit.
    Record and re-check both the tag-object SHA and its direct peeled commit SHA
    through local Git and the GitHub Git Database API; a lightweight or nested
    tag fails.

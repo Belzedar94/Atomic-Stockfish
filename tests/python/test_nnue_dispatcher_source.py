@@ -203,6 +203,31 @@ def test_wasm_fallback_adopts_the_validated_network_allocation():
     assert "fallback_object(std::move(value))" in shm
 
 
+def test_v3_loads_in_place_inside_the_unpublished_transactional_candidate():
+    dispatcher = compact(SOURCE)
+    v3_wire = (ROOT / "src/nnue/atomic_v3/wire_network.h").read_text(
+        encoding="utf-8"
+    )
+    assert (
+        "InPlaceLoadResult load_candidate(std::istream& stream, Network& destination)"
+        in compact(v3_wire)
+    )
+    assert "AtomicV3::load_candidate(candidate, storage_.atomicV3)" in dispatcher
+    assert "AtomicV3::load_candidate(v3Stream, storage_.atomicV3)" in dispatcher
+    assert "storage_.atomicV3 = *v3.network" not in dispatcher
+
+
+def test_wasm_three_backend_gate_repeats_churn_in_one_fixed_heap():
+    gate = (ROOT / "tests/wasm-engine/run-dual-backend-tests.mjs").read_text(
+        encoding="utf-8"
+    )
+    assert "argument('--reload-cycles', '3')" in gate
+    assert "Number.isInteger(reloadCycles) && reloadCycles >= 3" in gate
+    assert "cycle <= reloadCycles" in gate
+    assert "for (const threads of [1, 4, 2, 4])" in gate
+    assert "reloadCycles=${reloadCycles}" in gate
+
+
 def test_failed_load_keeps_live_metadata_and_reports_all_accepted_backends():
     dispatcher = compact(SOURCE)
     assert "EvalFile candidateFile{std::nullopt, \"\"};" in dispatcher
@@ -224,7 +249,9 @@ def test_relative_evalfile_probes_all_backends_before_the_next_path():
         "bool AnyNetwork::load_authenticated(",
     )
     candidate_loop = loop[loop.index("for (const fs::path& candidate") :]
-    v3 = candidate_loop.index("AtomicV3::load_candidate(candidate)")
+    v3 = candidate_loop.index(
+        "AtomicV3::load_candidate(candidate, storage_.atomicV3)"
+    )
     v2 = candidate_loop.index("AtomicV2::load_candidate(v2Stream")
     legacy = candidate_loop.index("storage_.legacy.load_authenticated(")
     assert v3 < v2 < legacy

@@ -132,10 +132,9 @@ bool AnyNetwork::load(const fs::path& rootDirectory,
         for (const fs::path& candidate : requested_candidates(rootDirectory, evalfilePath))
         {
             activate_v3();
-            auto v3 = AtomicV3::load_candidate(candidate);
+            auto v3 = AtomicV3::load_candidate(candidate, storage_.atomicV3);
             if (v3)
             {
-                storage_.atomicV3       = *v3.network;
                 evalFile.current        = requested;
                 evalFile.netDescription = std::move(v3.description);
                 return true;
@@ -189,10 +188,9 @@ bool AnyNetwork::load_authenticated(std::istream&   stream,
 
     activate_v3();
     std::istringstream v3Stream(bytes, std::ios::binary);
-    auto               v3 = AtomicV3::load_candidate(v3Stream);
+    auto               v3 = AtomicV3::load_candidate(v3Stream, storage_.atomicV3);
     if (v3)
     {
-        storage_.atomicV3       = *v3.network;
         evalFile.current        = logicalPath;
         evalFile.netDescription = std::move(v3.description);
         return true;

@@ -634,11 +634,11 @@ def test_uci_wasm_uses_clean_roots_and_never_packages_on_the_mutable_host() -> N
         "      - name: Build and package twice with the versioned UCI WASM recipe\n",
         1,
     )[1].split(
-        "      - name: Authenticate and exercise the exact packaged dual-NNUE engine\n",
+        "      - name: Authenticate and exercise the exact packaged three-backend NNUE engine\n",
         1,
     )[0]
     authenticate = uci.split(
-        "      - name: Authenticate and exercise the exact packaged dual-NNUE engine\n",
+        "      - name: Authenticate and exercise the exact packaged three-backend NNUE engine\n",
         1,
     )[1]
     assert 'for build_id in a b; do' in build
@@ -648,4 +648,11 @@ def test_uci_wasm_uses_clean_roots_and_never_packages_on_the_mutable_host() -> N
     assert "-cJf" not in build
     assert "-cJf" not in authenticate
     assert "python3 tests/create_synthetic_zero_nnue.py" in authenticate
+    assert "python3 tests/create_synthetic_atomic_v2_nnue.py" in authenticate
+    assert "python3 tests/create_synthetic_atomic_v3_nnue.py" in authenticate
+    assert "--v3-net build/wasm-fixtures/atomic-v3.nnue" in authenticate
+    assert (
+        "--v3-sha256 00E46223822D06D7927E884EEC10739BA19EF8DD82A6E262F627D361658080C2"
+        in authenticate
+    )
     assert 'build/wasm-archive-smoke' in authenticate

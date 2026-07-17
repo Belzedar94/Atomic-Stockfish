@@ -40,9 +40,9 @@ products and the NNUE file are ignored and must not be committed.
 
 The three-backend gate additionally verifies V1/V2/V3 switching, byte-exact V3
 export/reimport, transactional rejection of a V2 file with trailing data,
-repeated `Threads` changes, and stable process-tree RSS after warm-up. On Linux
-it polls the wrapper and runtime process tree rather than measuring only the
-lightweight launcher process.
+three complete V1/V2/V3 reload cycles at `Threads=1,4,2,4`, and stable
+process-tree RSS after warm-up. On Linux it polls the wrapper and runtime process
+tree rather than measuring only the lightweight launcher process.
 
 The engine uses a fixed 512 MiB initial memory and disables memory growth. It
 starts four pthread workers; consumers should size their Node process and host

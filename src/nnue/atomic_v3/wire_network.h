@@ -102,15 +102,21 @@ using BlastRingParameterStorage   = AlignedParameterArray<i8, BlastRingWeightCou
 using HmPsqtParameterStorage      = AlignedParameterArray<i32, HmPsqtWeightCount>;
 
 class Network;
+struct InPlaceLoadResult;
 struct LoadResult;
 
-[[nodiscard]] LoadResult load_candidate(std::istream& stream);
-[[nodiscard]] LoadResult load_candidate(const std::filesystem::path& path);
+[[nodiscard]] InPlaceLoadResult load_candidate(std::istream& stream, Network& destination);
+[[nodiscard]] InPlaceLoadResult load_candidate(const std::filesystem::path& path,
+                                               Network&                     destination);
+[[nodiscard]] LoadResult        load_candidate(std::istream& stream);
+[[nodiscard]] LoadResult        load_candidate(const std::filesystem::path& path);
 
-// A successful instance is only created after the complete canonical wire has
-// passed strict EOF and every numeric gate. Runtime parameters remain inline
-// and trivially copyable so AnyNetwork can publish them through Stockfish's
-// system-wide shared-memory/NUMA layer without process-local pointers.
+// A successful standalone instance is only created after the complete
+// canonical wire has passed strict EOF and every numeric gate. Engine may also
+// populate an unpublished transactional candidate in place. Runtime parameters
+// remain inline and trivially copyable so AnyNetwork can publish them through
+// Stockfish's system-wide shared-memory/NUMA layer without process-local
+// pointers.
 class Network final {
    public:
     ~Network() = default;
@@ -190,8 +196,21 @@ class Network final {
     bool                                                   simdPermuted_      = false;
     bool                                                   denseRuntimeReady_ = false;
 
-    friend LoadResult load_candidate(std::istream&);
+    friend InPlaceLoadResult load_candidate(std::istream&, Network&);
+    friend LoadResult        load_candidate(std::istream&);
     friend class ::Stockfish::Eval::NNUE::AnyNetwork;
+};
+
+// Engine already owns an unpublished AnyNetwork candidate. Loading V3 into
+// that storage avoids allocating a second full V3 staging object while the
+// previous live network is still retained for transactional rollback.
+struct InPlaceLoadResult {
+    WireError             code = WireError::NotInitialized;
+    std::string           description;
+    std::filesystem::path resolvedPath;
+    std::string           error;
+
+    explicit operator bool() const noexcept { return code == WireError::None; }
 };
 
 struct LoadResult {

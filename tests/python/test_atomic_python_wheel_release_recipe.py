@@ -90,7 +90,7 @@ def test_recipe_has_valid_bash_syntax() -> None:
     assert completed.returncode == 0, completed.stderr
 
 
-def test_windows_extension_normalizes_absolute_source_paths() -> None:
+def test_windows_extension_normalizes_paths_and_ltcg_scheduling() -> None:
     with (
         mock.patch("platform.python_compiler", return_value="MSC v.1944 64 bit"),
         mock.patch("setuptools.setup") as setup,
@@ -98,7 +98,10 @@ def test_windows_extension_normalizes_absolute_source_paths() -> None:
         runpy.run_path(str(ROOT / "setup.py"), run_name="__main__")
 
     extension = setup.call_args.kwargs["ext_modules"][0]
-    assert extension.extra_compile_args[-1] == f"/d1trimfile:{ROOT.resolve()}\\"
+    assert extension.extra_compile_args[-2:] == [
+        "/experimental:deterministic",
+        f"/d1trimfile:{ROOT.resolve()}\\",
+    ]
     assert extension.extra_link_args == ["/Brepro"]
 
 

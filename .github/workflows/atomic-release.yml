@@ -917,7 +917,7 @@ jobs:
           retention-days: 14
 
   uci-wasm:
-    name: Node UCI dual-NNUE WASM
+    name: Node UCI three-backend NNUE WASM
     needs: validate
     runs-on: ubuntu-24.04
     steps:
@@ -958,7 +958,7 @@ jobs:
             "build/uci-wasm-b/build/release/$asset"
           mkdir -p build/release
           cp "build/uci-wasm-a/build/release/$asset" build/release/
-      - name: Authenticate and exercise the exact packaged dual-NNUE engine
+      - name: Authenticate and exercise the exact packaged three-backend NNUE engine
         shell: bash
         env:
           COMMIT: ${{ needs.validate.outputs.commit }}
@@ -979,6 +979,8 @@ jobs:
             --output build/wasm-fixtures/atomic-zero.nnue
           python3 tests/create_synthetic_atomic_v2_nnue.py \
             --output build/wasm-fixtures/atomic-v2.nnue
+          python3 tests/create_synthetic_atomic_v3_nnue.py \
+            --output build/wasm-fixtures/atomic-v3.nnue
           docker run --rm --env "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" \
             --volume "$GITHUB_WORKSPACE:/src:ro" --workdir /src \
             "$EMSCRIPTEN_IMAGE" node tests/wasm-engine/run-engine-tests.mjs \
@@ -992,7 +994,9 @@ jobs:
             --legacy-net build/wasm-fixtures/atomic-zero.nnue \
             --legacy-sha256 9CF054CA00B82AB53A34473DE52D1104AEDDAA19B2E7B24091B5E613AF485985 \
             --v2-net build/wasm-fixtures/atomic-v2.nnue \
-            --v2-sha256 4DEB05CFF79B5D5EBA51C560F64ED24224671C188B6C5DB27521033E587C87C6
+            --v2-sha256 4DEB05CFF79B5D5EBA51C560F64ED24224671C188B6C5DB27521033E587C87C6 \
+            --v3-net build/wasm-fixtures/atomic-v3.nnue \
+            --v3-sha256 00E46223822D06D7927E884EEC10739BA19EF8DD82A6E262F627D361658080C2
           smoke_output=$(
             printf 'uci\nisready\nsetoption name Use NNUE value false\nposition startpos\ngo perft 1\nquit\n' |
               docker run --rm -i \

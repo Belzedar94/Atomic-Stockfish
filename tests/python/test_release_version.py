@@ -29,6 +29,16 @@ def header_version() -> str:
 def test_release_version_is_consistent_across_packaging_surfaces() -> None:
     assert header_version() == EXPECTED
 
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "Version 1.0.1 is the first stable, strength-qualified release" in readme
+    assert "`v1.0.0` tag is a failed prepublication candidate" in readme
+
+    checklist = (
+        ROOT / "docs" / "atomic" / "release-1.0-checklist.md"
+    ).read_text(encoding="utf-8")
+    assert "permits exactly the tag\n   `v1.0.1`" in checklist
+    assert "require that `v1.0.0` is no longer\n   permitted" in checklist
+
     package = json.loads((ROOT / "tests" / "js" / "package.json").read_text(encoding="utf-8"))
     assert package["version"] == EXPECTED
     assert package["repository"]["url"].endswith("Belzedar94/Atomic-Stockfish.git")
