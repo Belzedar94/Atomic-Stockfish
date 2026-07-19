@@ -15,18 +15,23 @@
 #include <filesystem>
 #include <iostream>
 #include <limits>
+#include <memory>
+#include <set>
 #include <sstream>
 #include <string>
 #include <string_view>
 #include <system_error>
 #include <utility>
+#include <vector>
 
 #include "atomic_bin_v2_manifest.h"
+#include "authenticated_datagen_v2.h"
 #include "engine.h"
 #include "misc.h"
 #include "openbench_bundle.h"
 #include "sha256.h"
 #include "training_data_generator.h"
+#include "syzygy/tbprobe.h"
 
 #ifdef _WIN32
     #ifndef NOMINMAX
@@ -54,7 +59,19 @@ struct BridgeParams {
     std::string seed;
     std::string book;
     std::string bookSha256;
+    bool        bookSha256Seen = false;
     std::string output;
+    std::string producerSha256;
+    bool        producerSha256Seen = false;
+    std::string teacherMode;
+    bool        teacherModeSeen = false;
+    std::string syzygyPath;
+    bool        syzygyPathSeen = false;
+    std::string syzygyManifestSha256;
+    bool        syzygyManifestSha256Seen = false;
+    int         syzygyMax = 0;
+    bool        syzygyMaxSeen = false;
+    bool        contractV2 = false;
     std::string generatorOptions;
 };
 
@@ -66,6 +83,40 @@ bool read_token(std::istream&    input,
         return true;
     error = "Missing value for openbench_generate_training_data option " + std::string(name);
     return false;
+}
+
+bool read_quoted_path(std::istream&    input,
+                      std::string&     value,
+                      std::string_view name,
+                      std::string&     error) {
+    input >> std::ws;
+    if (input.peek() != '"')
+        return read_token(input, value, name, error);
+
+    input.get();
+    if (std::getline(input, value, '"') && !input.eof())
+        return true;
+    error = "Missing closing quote for openbench_generate_training_data option "
+          + std::string(name);
+    return false;
+}
+
+bool safe_serialized_token(std::string_view value) {
+    if (value.empty())
+        return false;
+    for (const unsigned char c : value)
+        if (c <= 0x20 || c == 0x7f || c == '"')
+            return false;
+    return true;
+}
+
+bool safe_quoted_path(std::string_view value) {
+    if (value.empty() || value.front() == ' ' || value.back() == ' ')
+        return false;
+    for (const unsigned char c : value)
+        if (c < 0x20 || c == 0x7f || c == '"')
+            return false;
+    return true;
 }
 
 bool read_positive_int(std::istream& input, int& value, std::string_view name, std::string& error) {
@@ -160,60 +211,146 @@ bool generator_option_takes_value(std::string_view name) {
 bool parse_bridge_params(std::istream& input, BridgeParams& params, std::string& error) {
     std::ostringstream forwarded;
     std::string        token;
+    std::set<std::string> seenSerializedOptions;
+    std::string           duplicateSerializedOption;
+    std::string           unsafeSerializedOption;
+    const auto note_serialized_option = [&](std::string_view name) {
+        if (!seenSerializedOptions.emplace(name).second && duplicateSerializedOption.empty())
+            duplicateSerializedOption = name;
+    };
+    const auto note_serialized_value = [&](std::string_view name, std::string_view value) {
+        if (!safe_serialized_token(value) && unsafeSerializedOption.empty())
+            unsafeSerializedOption = name;
+    };
     while (input >> token)
     {
         if (token == "threads")
         {
+            note_serialized_option(token);
             if (!read_positive_int(input, params.threads, token, error))
                 return false;
         }
         else if (token == "hash")
         {
+            note_serialized_option(token);
             if (!read_positive_int(input, params.hashMb, token, error))
                 return false;
         }
         else if (token == "network")
         {
+            note_serialized_option(token);
             if (!read_token(input, params.network, token, error))
                 return false;
+            note_serialized_value(token, params.network);
         }
         else if (token == "network_sha256")
         {
+            note_serialized_option(token);
             if (!read_token(input, params.networkSha256, token, error))
                 return false;
         }
         else if (token == "count")
         {
+            note_serialized_option(token);
             if (!read_token(input, params.count, token, error))
                 return false;
         }
         else if (token == "seed")
         {
+            note_serialized_option(token);
             if (!read_token(input, params.seed, token, error))
                 return false;
+            note_serialized_value(token, params.seed);
         }
         else if (token == "book")
         {
+            note_serialized_option(token);
             if (!read_token(input, params.book, token, error))
                 return false;
+            note_serialized_value(token, params.book);
         }
         else if (token == "book_sha256")
         {
+            note_serialized_option(token);
             if (!read_token(input, params.bookSha256, token, error))
                 return false;
+            params.bookSha256Seen = true;
         }
         else if (token == "out")
         {
+            note_serialized_option(token);
             if (!read_token(input, params.output, token, error))
                 return false;
+            note_serialized_value(token, params.output);
+        }
+        else if (token == "teacher_mode")
+        {
+            if (params.teacherModeSeen)
+            {
+                error = "Duplicate openbench_generate_training_data option teacher_mode";
+                return false;
+            }
+            if (!read_token(input, params.teacherMode, token, error))
+                return false;
+            params.teacherModeSeen = true;
+        }
+        else if (token == "syzygy")
+        {
+            if (params.syzygyPathSeen)
+            {
+                error = "Duplicate openbench_generate_training_data option syzygy";
+                return false;
+            }
+            if (!read_quoted_path(input, params.syzygyPath, token, error))
+                return false;
+            params.syzygyPathSeen = true;
+        }
+        else if (token == "syzygy_manifest_sha256")
+        {
+            if (params.syzygyManifestSha256Seen)
+            {
+                error = "Duplicate openbench_generate_training_data option "
+                        "syzygy_manifest_sha256";
+                return false;
+            }
+            if (!read_token(input, params.syzygyManifestSha256, token, error))
+                return false;
+            params.syzygyManifestSha256Seen = true;
+        }
+        else if (token == "syzygy_max")
+        {
+            if (params.syzygyMaxSeen)
+            {
+                error = "Duplicate openbench_generate_training_data option syzygy_max";
+                return false;
+            }
+            if (!read_positive_int(input, params.syzygyMax, token, error))
+                return false;
+            params.syzygyMaxSeen = true;
+        }
+        else if (token == "producer_sha256")
+        {
+            if (params.producerSha256Seen)
+            {
+                error = "Duplicate openbench_generate_training_data option producer_sha256";
+                return false;
+            }
+            if (!read_token(input, params.producerSha256, token, error))
+                return false;
+            params.producerSha256Seen = true;
         }
         else if (token == "set_recommended_uci_options")
+        {
+            note_serialized_option(token);
             forwarded << ' ' << token;
+        }
         else if (generator_option_takes_value(token))
         {
+            note_serialized_option(token);
             std::string value;
             if (!read_token(input, value, token, error))
                 return false;
+            note_serialized_value(token, value);
             forwarded << ' ' << token << ' ' << value;
         }
         else
@@ -231,14 +368,90 @@ bool parse_bridge_params(std::istream& input, BridgeParams& params, std::string&
                 "network_sha256, count, seed, book, and out";
         return false;
     }
-    if (!params.bookSha256.empty() && !normalize_sha256(params.bookSha256))
+    const bool anyV2Field = params.teacherModeSeen || params.syzygyPathSeen
+                         || params.syzygyManifestSha256Seen || params.syzygyMaxSeen;
+    const bool allV2Fields = params.teacherModeSeen && params.syzygyPathSeen
+                          && params.syzygyManifestSha256Seen && params.syzygyMaxSeen;
+    if (anyV2Field && !allV2Fields)
     {
-        error = "book_sha256 must contain exactly 64 hexadecimal characters";
+        error = "Authenticated teacher/Syzygy V2 requires syzygy, syzygy_manifest_sha256, "
+                "syzygy_max, and teacher_mode together";
         return false;
     }
-    if (params.book == "NONE" && !params.bookSha256.empty())
+    params.contractV2 = allV2Fields;
+    if (params.contractV2)
     {
-        error = "book_sha256 cannot be supplied with book NONE";
+        if (!duplicateSerializedOption.empty())
+        {
+            error = "Authenticated teacher/Syzygy V2 rejects duplicate option "
+                  + duplicateSerializedOption;
+            return false;
+        }
+        if (!unsafeSerializedOption.empty())
+        {
+            error = "Authenticated teacher/Syzygy V2 requires option " + unsafeSerializedOption
+                  + " to be one unquoted token without whitespace or control characters";
+            return false;
+        }
+        if (!safe_quoted_path(params.syzygyPath))
+        {
+            error = "Authenticated teacher/Syzygy V2 syzygy path contains an unsafe control, "
+                    "quote, or boundary space";
+            return false;
+        }
+        if (!params.bookSha256Seen)
+        {
+            error = params.book == "NONE"
+                    ? "Authenticated teacher/Syzygy V2 requires exact sentinel book_sha256 "
+                      "NONE with book NONE"
+                    : "Authenticated teacher/Syzygy V2 requires book_sha256 for a file book";
+            return false;
+        }
+        if (params.book == "NONE")
+        {
+            if (params.bookSha256 != "NONE")
+            {
+                error = "Authenticated teacher/Syzygy V2 requires exact pair book NONE "
+                        "book_sha256 NONE";
+                return false;
+            }
+        }
+        else if (params.bookSha256 == "NONE" || !normalize_sha256(params.bookSha256))
+        {
+            error = "Authenticated teacher/Syzygy V2 requires a 64-hex book_sha256 for a file "
+                    "book";
+            return false;
+        }
+        if ((params.teacherMode != AtomicPureTeacherMode
+             && params.teacherMode != AtomicTrueTeacherMode)
+            || params.syzygyPath.empty() || params.syzygyPath == "NONE"
+            || !normalize_sha256(params.syzygyManifestSha256)
+            || params.syzygyManifestSha256 != AtomicTeacherSyzygyInventorySha256Hex
+            || params.syzygyMax != AtomicTeacherSyzygyCardinality)
+        {
+            error = "Authenticated teacher/Syzygy V2 requires teacher_mode pure|true, the "
+                    "pinned Atomic inventory SHA-256, and syzygy_max 6";
+            return false;
+        }
+    }
+    else
+    {
+        if (params.bookSha256Seen && !normalize_sha256(params.bookSha256))
+        {
+            error = "book_sha256 must contain exactly 64 hexadecimal characters";
+            return false;
+        }
+        if (params.book == "NONE" && params.bookSha256Seen)
+        {
+            error = "book_sha256 cannot be supplied with book NONE";
+            return false;
+        }
+    }
+    if (params.producerSha256Seen
+        && (!params.contractV2 || !normalize_sha256(params.producerSha256)))
+    {
+        error = "producer_sha256 requires the authenticated V2 field group and exactly 64 "
+                "hexadecimal characters";
         return false;
     }
     params.generatorOptions = std::move(forwarded).str();
@@ -253,7 +466,8 @@ void set_option(Engine& engine, std::string_view name, const std::string& value)
 bool authenticate_sha256_gate(const std::filesystem::path& path,
                               std::string_view             expectedSha256,
                               std::string_view             label,
-                              std::string&                 error) {
+                              std::string&                 error,
+                              u64*                         authenticatedBytes = nullptr) {
     std::string actualSha256;
     u64         bytes = 0;
     if (DataResult hashed = sha256_file(path, actualSha256, bytes); !hashed)
@@ -268,6 +482,8 @@ bool authenticate_sha256_gate(const std::filesystem::path& path,
               + " SHA-256 differs from the supplied pre-generation gate";
         return false;
     }
+    if (authenticatedBytes)
+        *authenticatedBytes = bytes;
     return true;
 }
 
@@ -326,6 +542,7 @@ class OwnedSidecar {
         identityDevice = std::uint64_t(information.dwVolumeSerialNumber);
         identityFile =
           (std::uint64_t(information.nFileIndexHigh) << 32) | information.nFileIndexLow;
+        active = true;
         if (!::CloseHandle(handle))
         {
             const unsigned long nativeError = ::GetLastError();
@@ -478,9 +695,19 @@ class GeneratedSidecars {
         shard(std::move(shardPath)),
         manifest(std::move(manifestPath)) {}
 
+    GeneratedSidecars(std::filesystem::path shardPath,
+                      std::filesystem::path manifestPath,
+                      std::filesystem::path attestationPath) :
+        shard(std::move(shardPath)),
+        manifest(std::move(manifestPath)),
+        attestation(std::make_unique<OwnedSidecar>(std::move(attestationPath))) {}
+
     bool preflight(std::string& error) {
         std::error_code ec;
-        for (const auto* sidecar : {&shard, &manifest})
+        std::vector<const OwnedSidecar*> paths{&shard, &manifest};
+        if (attestation)
+            paths.push_back(attestation.get());
+        for (const auto* sidecar : paths)
         {
             const auto& path = sidecar->output_path();
             ec.clear();
@@ -503,11 +730,17 @@ class GeneratedSidecars {
 
     ~GeneratedSidecars() = default;
 
-    bool take_ownership(std::string& error) {
+    bool take_primary_ownership(std::string& error) {
         return shard.capture(error) && manifest.capture(error);
     }
 
+    bool take_attestation_ownership(std::string& error) {
+        return !attestation || attestation->capture(error);
+    }
+
     bool cleanup(std::string& error) {
+        const auto attestationStatus =
+          attestation ? attestation->cleanup() : OwnedSidecar::CleanupStatus{};
         const auto manifestStatus = manifest.cleanup();
         const auto shardStatus    = shard.cleanup();
         const auto report         = [&](const OwnedSidecar&         sidecar,
@@ -528,12 +761,14 @@ class GeneratedSidecars {
             }
             return false;
         };
-        return report(manifest, manifestStatus) && report(shard, shardStatus);
+        return (!attestation || report(*attestation, attestationStatus))
+            && report(manifest, manifestStatus) && report(shard, shardStatus);
     }
 
    private:
     OwnedSidecar shard;
     OwnedSidecar manifest;
+    std::unique_ptr<OwnedSidecar> attestation;
 };
 
 void print_error(std::string_view message) { std::cout << "ERROR: " << message << std::endl; }
@@ -555,22 +790,39 @@ bool openbench_generate_training_data(Engine& engine, std::istream& input) {
         print_error("OpenBench bundle output must name a file");
         return false;
     }
-    std::error_code ec;
-    if (std::filesystem::exists(output, ec))
+    const bool contractV2 = params.contractV2;
+    if (contractV2)
     {
-        print_error("OpenBench bundle output already exists: " + output.string());
-        return false;
+        if (DataResult preflight = preflight_authenticated_datagen_v2_output(output); !preflight)
+        {
+            print_error(preflight.message);
+            return false;
+        }
     }
-    if (ec)
+    else
     {
-        print_error("Cannot inspect OpenBench bundle output: " + ec.message());
-        return false;
+        std::error_code ec;
+        if (std::filesystem::exists(output, ec))
+        {
+            print_error("OpenBench bundle output already exists: " + output.string());
+            return false;
+        }
+        if (ec)
+        {
+            print_error("Cannot inspect OpenBench bundle output: " + ec.message());
+            return false;
+        }
     }
 
-    const auto        shard    = std::filesystem::path(output.string() + ".atbin");
-    const auto        manifest = atomic_bin_v2_manifest_path(shard);
-    GeneratedSidecars sidecars(shard, manifest);
-    if (!sidecars.preflight(error))
+    const auto shard      = std::filesystem::path(output.string() + ".atbin");
+    const auto manifest   = contractV2 ? atomic_datagen_v2_manifest_path(shard)
+                                       : atomic_bin_v2_manifest_path(shard);
+    const auto attestation = contractV2 ? atomic_datagen_v2_attestation_path(output)
+                                        : std::filesystem::path{};
+    std::unique_ptr<GeneratedSidecars> sidecars =
+      contractV2 ? std::make_unique<GeneratedSidecars>(shard, manifest, attestation)
+                 : std::make_unique<GeneratedSidecars>(shard, manifest);
+    if (!sidecars->preflight(error))
     {
         print_error(error);
         return false;
@@ -593,16 +845,30 @@ bool openbench_generate_training_data(Engine& engine, std::istream& input) {
     set_option(engine, "Threads", std::to_string(params.threads));
     set_option(engine, "Hash", std::to_string(params.hashMb));
     set_option(engine, "UCI_Chess960", "false");
-    set_option(engine, "SyzygyPath", "<empty>");
+    set_option(engine, "SyzygyPath", contractV2 ? params.syzygyPath : "<empty>");
+    if (contractV2)
+    {
+        set_option(engine, "SyzygyProbeLimit", std::to_string(AtomicTeacherSyzygyProbeLimit));
+        set_option(engine, "SyzygyProbeDepth", std::to_string(AtomicTeacherSyzygyProbeDepth));
+        set_option(engine, "Syzygy50MoveRule", "true");
+    }
     set_option(engine, "EvalFile", params.network);
-    set_option(engine, "Use NNUE", "pure");
+    const std::string useNnue = params.teacherMode == AtomicTrueTeacherMode ? "true" : "pure";
+    set_option(engine, "Use NNUE", contractV2 ? useNnue : "pure");
 
     if (int(engine.get_options()["Threads"]) != params.threads
         || int(engine.get_options()["Hash"]) != params.hashMb
         || int(engine.get_options()["UCI_Chess960"]) != 0
-        || !std::string(engine.get_options()["SyzygyPath"]).empty()
+        || (contractV2 ? std::string(engine.get_options()["SyzygyPath"]) != params.syzygyPath
+                       : !std::string(engine.get_options()["SyzygyPath"]).empty())
         || std::string(engine.get_options()["EvalFile"]) != params.network
-        || engine.get_options()["Use NNUE"] != "pure")
+        || std::string(engine.get_options()["Use NNUE"])
+             != (contractV2 ? useNnue : std::string("pure"))
+        || (contractV2
+            && (int(engine.get_options()["SyzygyProbeLimit"]) != AtomicTeacherSyzygyProbeLimit
+                || int(engine.get_options()["SyzygyProbeDepth"]) != AtomicTeacherSyzygyProbeDepth
+                || !bool(engine.get_options()["Syzygy50MoveRule"])
+                || Tablebases::MaxCardinality != params.syzygyMax)))
     {
         print_error("OpenBench UCI option configuration was rejected");
         return false;
@@ -615,39 +881,110 @@ bool openbench_generate_training_data(Engine& engine, std::istream& input) {
     if (params.book != "NONE")
         command << " book " << params.book;
     std::istringstream generatorInput(command.str());
-    if (!generate_training_data(engine, generatorInput))
+    AtomicDatagenV2Manifest authenticatedV2;
+    if (contractV2)
+    {
+        authenticatedV2.manifestPath    = manifest;
+        authenticatedV2.inventorySha256 = params.syzygyManifestSha256;
+        authenticatedV2.producerSha256  = params.producerSha256;
+        authenticatedV2.teacherMode     = params.teacherMode;
+        authenticatedV2.useNnue         = useNnue;
+    }
+    const bool generated = contractV2
+                           ? generate_authenticated_training_data_v2(engine, generatorInput,
+                                                                     authenticatedV2)
+                           : generate_training_data(engine, generatorInput);
+    if (!generated)
         return false;
-    if (!sidecars.take_ownership(error))
+    if (!sidecars->take_primary_ownership(error))
     {
         print_error(error);
         return false;
     }
 
-    AtomicBinV2Manifest authenticatedManifest;
-    if (DataResult loaded = load_atomic_bin_v2_manifest(manifest, authenticatedManifest); !loaded)
+    if (!contractV2)
     {
-        print_error(loaded.message);
-        return false;
+        AtomicBinV2Manifest authenticatedManifest;
+        if (DataResult loaded = load_atomic_bin_v2_manifest(manifest, authenticatedManifest);
+            !loaded)
+        {
+            print_error(loaded.message);
+            return false;
+        }
+        if (authenticatedManifest.networkSha256 != params.networkSha256)
+        {
+            print_error("Generated manifest network SHA-256 differs from network_sha256");
+            return false;
+        }
+        if (!params.bookSha256.empty()
+            && (!authenticatedManifest.bookIsFile
+                || authenticatedManifest.bookSha256 != params.bookSha256))
+        {
+            print_error("Generated manifest book SHA-256 differs from book_sha256");
+            return false;
+        }
+        if (DataResult bundled = write_openbench_datagen_bundle(output, shard, manifest); !bundled)
+        {
+            print_error(bundled.message);
+            return false;
+        }
     }
-    if (authenticatedManifest.networkSha256 != params.networkSha256)
+    else
     {
-        print_error("Generated manifest network SHA-256 differs from network_sha256");
-        return false;
+        if (authenticatedV2.networkSha256 != params.networkSha256
+            || (params.book != "NONE"
+                && (!authenticatedV2.bookIsFile
+                    || authenticatedV2.bookSha256 != params.bookSha256)))
+        {
+            print_error("Generated manifest differs from a supplied asset SHA-256 gate");
+            return false;
+        }
+        AtomicDatagenV2Attestation proof;
+        proof.attestationPath = attestation;
+        proof.manifestPath    = manifest;
+        proof.shardPath       = shard;
+        proof.inventorySha256 = authenticatedV2.inventorySha256;
+        proof.producerSha256  = authenticatedV2.producerSha256;
+        proof.teacherMode     = authenticatedV2.teacherMode;
+        proof.useNnue         = authenticatedV2.useNnue;
+        proof.records         = authenticatedV2.records;
+        proof.tbProbes        = authenticatedV2.tbProbes;
+        proof.tbHits          = authenticatedV2.tbHits;
+        if (DataResult hashed = sha256_file(manifest, proof.manifestSha256,
+                                            proof.manifestBytes);
+            !hashed)
+        {
+            print_error(hashed.message);
+            return false;
+        }
+        if (DataResult hashed = sha256_file(shard, proof.shardSha256, proof.shardBytes); !hashed)
+        {
+            print_error(hashed.message);
+            return false;
+        }
+        if (proof.shardSha256 != authenticatedV2.shard.sha256
+            || proof.shardBytes != authenticatedV2.shard.bytes)
+        {
+            print_error("Generated shard changed before attestation");
+            return false;
+        }
+        if (DataResult published = write_atomic_datagen_v2_attestation(proof); !published)
+        {
+            print_error(published.message);
+            return false;
+        }
+        if (!sidecars->take_attestation_ownership(error))
+        {
+            print_error(error);
+            return false;
+        }
+        if (DataResult bundled = write_openbench_datagen_bundle_v2(output, proof); !bundled)
+        {
+            print_error(bundled.message);
+            return false;
+        }
     }
-    if (!params.bookSha256.empty()
-        && (!authenticatedManifest.bookIsFile
-            || authenticatedManifest.bookSha256 != params.bookSha256))
-    {
-        print_error("Generated manifest book SHA-256 differs from book_sha256");
-        return false;
-    }
-
-    if (DataResult bundled = write_openbench_datagen_bundle(output, shard, manifest); !bundled)
-    {
-        print_error(bundled.message);
-        return false;
-    }
-    if (!sidecars.cleanup(error))
+    if (!sidecars->cleanup(error))
     {
         print_error(error);
         return false;

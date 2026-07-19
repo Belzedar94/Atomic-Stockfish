@@ -67,6 +67,66 @@ python tools/validate_openbench_datagen_bundle.py <OUT>
 python tools/validate_openbench_datagen_bundle.py <OUT> --extract-dir <DIR>
 ```
 
+### Experimental authenticated teacher/Syzygy contract V2
+
+The command above remains contract V1 and is unchanged. OpenBench protocol v40
+selects the additive V2 contract only when it supplies this complete four-field
+group; a partial group is an error and V2 has no teacher default:
+
+```text
+openbench_generate_training_data threads 30 hash 512 \
+  network <teacher.nnue> network_sha256 <64-lower-hex> \
+  count <records> seed <seed> book <book-or-NONE> out <bundle> \
+  syzygy "<worker-local-table-directory>" \
+  syzygy_manifest_sha256 <64-lower-hex> \
+  syzygy_max 6 teacher_mode pure \
+  <ordinary generator options>
+```
+
+`producer_sha256 <64-hex>` may appear before the Syzygy group. It is the
+orthogonal protocol-v39 executable-artifact identity and, when supplied, is
+bound explicitly by manifest V2 and attestation V1. Publicable campaigns should
+activate `{PRODUCER_SHA256}`; it does not select V2 by itself.
+
+V2 requires an explicit book identity in both cases. A file book uses
+`book <path> book_sha256 <64-hex>`. The OpenBench v40 startpos cohort uses the
+exact no-file sentinel `book NONE book_sha256 NONE`; no other crossing or
+omission is accepted. Repeated core or forwarded generator fields are rejected
+as ambiguous in V2. Values that the bridge must pass to the generator must be
+single unquoted tokens without whitespace or control characters; only the
+direct `syzygy "<path with spaces>"` value has quoted-path syntax.
+
+`teacher_mode pure` is the fixed publicable production mode and maps to exact
+`Use NNUE=pure`. `teacher_mode true` maps to exact `Use NNUE=true` and is
+retained only as a controlled comparison mode. The bridge derives the UCI
+value, and generator, manifest, attestation and validator check the pair again.
+Descriptive aliases such as `legacy-playing` are not accepted on the wire.
+
+Before self-play, V2 authenticates the network and every file book, checks every
+destination, requires the pinned official Atomic inventory SHA, loads the table
+path, and derives `SyzygyProbeLimit=6`, `SyzygyProbeDepth=1` and
+`Syzygy50MoveRule=true`. Loaded cardinality must be exactly six. The v40 worker
+is the authority that rehashes the inventory JSON and validates every runtime
+table name, byte count, hardlink and acquisition marker before advertising the
+SHA; its hashed lease/receipt joins that proof to the SHA recorded by the
+engine. The engine does not claim that it received or rehashed an inventory
+file path that is absent from the wire. A mismatch exits before an accepted
+shard, manifest, attestation or bundle. Existing paths are never overwritten.
+
+Successful V2 output uses magic `ATOBNDL2`; it is not a V1 bundle. Validate it
+against the same inventory before extraction:
+
+```bash
+python tools/validate_authenticated_datagen_bundle_v2.py \
+  <bundle> \
+  --syzygy-inventory <remote-inventory.json> \
+  --extract-dir <new-output-directory>
+```
+
+The report includes teacher mode, exact `Use NNUE`, records, `tb_probes`,
+`tb_hits` and artifact hashes. ADR 0007 defines counter semantics, fixes `pure`
+for publicable production, and confines `true` to authenticated controls.
+
 The output executable is `atomic-stockfish-data-generator` (with `.exe` on
 Windows). Its `atomic_data_schema` command reports the exact write capability:
 

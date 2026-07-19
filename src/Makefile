@@ -286,11 +286,13 @@ endif
 # with ATOMIC_DATA_GENERATOR enabled, so a generator build can never change or
 # reuse the normal uci.o/search.o objects.
 ATOMIC_DATA_GENERATOR_SRCS = data/legacy_atomic_v1.cpp data/training_data_generator.cpp \
-	data/openbench_datagen.cpp data/openbench_bundle.cpp data/atomic_v3_trajectory.cpp \
+	data/openbench_datagen.cpp data/openbench_bundle.cpp data/authenticated_datagen_v2.cpp \
+	data/atomic_v3_trajectory.cpp \
 	$(ATOMIC_BIN_V2_SRCS)
 ATOMIC_DATA_GENERATOR_HEADERS = data/legacy_atomic_v1.h data/random_seed.h \
 	data/training_data.h data/training_data_generator.h data/openbench_datagen.h \
-	data/openbench_bundle.h data/atomic_v3_trajectory.h data/atomic_v3_private_staging.h \
+	data/openbench_bundle.h data/authenticated_datagen_v2.h data/atomic_v3_trajectory.h \
+	data/atomic_v3_private_staging.h \
 	$(ATOMIC_BIN_V2_HEADERS)
 ATOMIC_DATA_GENERATOR_DATA_OBJS = \
 	$(patsubst data/%.cpp,atomic_data_generator_%.o,$(ATOMIC_DATA_GENERATOR_SRCS))

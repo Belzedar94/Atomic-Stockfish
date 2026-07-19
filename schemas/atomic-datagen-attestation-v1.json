@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atomic-stockfish.example/schemas/atomic-datagen-attestation-v1.json",
+  "title": "Atomic authenticated teacher datagen attestation V1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["attestation_version", "attestation_schema_sha256", "contract", "manifest", "shard", "syzygy_inventory", "teacher", "counters"],
+  "properties": {
+    "attestation_version": {"const": 1},
+    "attestation_schema_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "contract": {"const": "atomic-openbench-authenticated-teacher-syzygy-v2"},
+    "producer_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "manifest": {"$ref": "#/$defs/artifact"},
+    "shard": {"$ref": "#/$defs/artifact"},
+    "syzygy_inventory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sha256", "cardinality"],
+      "properties": {
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "cardinality": {"const": 6}
+      }
+    },
+    "teacher": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "use_nnue", "syzygy_probe_limit", "syzygy_probe_depth", "syzygy_50_move_rule"],
+      "properties": {
+        "mode": {"enum": ["pure", "true"]},
+        "use_nnue": {"enum": ["pure", "true"]},
+        "syzygy_probe_limit": {"const": 6},
+        "syzygy_probe_depth": {"const": 1},
+        "syzygy_50_move_rule": {"const": true}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"mode": {"const": "pure"}}},
+          "then": {"properties": {"use_nnue": {"const": "pure"}}},
+          "else": {"properties": {"use_nnue": {"const": "true"}}}
+        }
+      ]
+    },
+    "counters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tb_probes", "tb_hits"],
+      "properties": {
+        "tb_probes": {"type": "string", "pattern": "^(0|[1-9][0-9]{0,19})$"},
+        "tb_hits": {"type": "string", "pattern": "^(0|[1-9][0-9]{0,19})$"}
+      }
+    }
+  },
+  "$defs": {
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["file", "bytes", "sha256", "schema_sha256"],
+      "properties": {
+        "file": {"type": "string", "minLength": 1},
+        "bytes": {"type": "string", "pattern": "^[1-9][0-9]{0,19}$"},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "schema_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    }
+  }
+}

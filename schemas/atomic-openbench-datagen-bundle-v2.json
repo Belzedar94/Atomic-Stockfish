@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atomic-stockfish.example/schemas/atomic-openbench-datagen-bundle-v2.json",
+  "title": "Atomic OpenBench datagen bundle V2 wire layout",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["magic", "version", "header_bytes", "endian", "alignment", "entries", "reserved_bytes"],
+  "properties": {
+    "magic": {"const": "ATOBNDL2"},
+    "version": {"const": 2},
+    "header_bytes": {"const": 384},
+    "endian": {"const": "little"},
+    "alignment": {"const": 64},
+    "entries": {
+      "const": [
+        {"kind": "manifest", "offset": 152, "bytes": 160, "sha256": 168},
+        {"kind": "attestation", "offset": 200, "bytes": 208, "sha256": 216},
+        {"kind": "atomic-bin-v2", "offset": 248, "bytes": 256, "sha256": 264}
+      ]
+    },
+    "reserved_bytes": {"const": [352, 384]}
+  }
+}

@@ -67,14 +67,31 @@ namespace Stockfish::Tablebases {
 
 int MaxCardinality;
 
+namespace {
+std::atomic<std::uint64_t> ProbeAttempts{0};
+std::atomic<std::uint64_t> ProbeHits{0};
+}  // namespace
+
+void reset_probe_counters() noexcept {
+    ProbeAttempts.store(0, std::memory_order_relaxed);
+    ProbeHits.store(0, std::memory_order_relaxed);
+}
+
+ProbeCounters probe_counters() noexcept {
+    return {ProbeAttempts.load(std::memory_order_relaxed),
+            ProbeHits.load(std::memory_order_relaxed)};
+}
+
 void init(const std::string&) {}
 
 WDLScore probe_wdl(Position&, ProbeState* result) {
+    ProbeAttempts.fetch_add(1, std::memory_order_relaxed);
     *result = FAIL;
     return WDLDraw;
 }
 
 int probe_dtz(Position&, ProbeState* result) {
+    ProbeAttempts.fetch_add(1, std::memory_order_relaxed);
     *result = FAIL;
     return 0;
 }
@@ -97,6 +114,35 @@ Config rank_root_moves(
 using namespace Stockfish::Tablebases;
 
 int Stockfish::Tablebases::MaxCardinality;
+
+namespace {
+std::atomic<std::uint64_t> ProbeAttempts{0};
+std::atomic<std::uint64_t> ProbeHits{0};
+
+class ProbeCounterScope {
+   public:
+    explicit ProbeCounterScope(Stockfish::Tablebases::ProbeState* state_) : state(state_) {
+        ProbeAttempts.fetch_add(1, std::memory_order_relaxed);
+    }
+    ~ProbeCounterScope() {
+        if (state && *state != Stockfish::Tablebases::FAIL)
+            ProbeHits.fetch_add(1, std::memory_order_relaxed);
+    }
+
+   private:
+    Stockfish::Tablebases::ProbeState* state;
+};
+}  // namespace
+
+void Stockfish::Tablebases::reset_probe_counters() noexcept {
+    ProbeAttempts.store(0, std::memory_order_relaxed);
+    ProbeHits.store(0, std::memory_order_relaxed);
+}
+
+Stockfish::Tablebases::ProbeCounters Stockfish::Tablebases::probe_counters() noexcept {
+    return {ProbeAttempts.load(std::memory_order_relaxed),
+            ProbeHits.load(std::memory_order_relaxed)};
+}
 
 namespace Stockfish {
 
@@ -1598,6 +1644,7 @@ void Tablebases::init(const std::string& paths) {
 //  2 : win
 WDLScore Tablebases::probe_wdl(Position& pos, ProbeState* result) {
 
+    ProbeCounterScope counter(result);
     *result = OK;
     return search<false>(pos, result);
 }
@@ -1630,6 +1677,7 @@ WDLScore Tablebases::probe_wdl(Position& pos, ProbeState* result) {
 // then do not accept moves leading to dtz + 50-move-counter == 100.
 int Tablebases::probe_dtz(Position& pos, ProbeState* result) {
 
+    ProbeCounterScope counter(result);
     *result      = OK;
     WDLScore wdl = search<true>(pos, result);
 

@@ -23,6 +23,8 @@ class Engine;
 
 namespace Data {
 
+struct AtomicDatagenV2Manifest;
+
 enum class TrainingResolutionSource {
     NONE,
     OUTCOME,
@@ -73,6 +75,14 @@ inline void advance_atomic_v3_commit_game_id(std::atomic<std::uint64_t>& cursor,
 // The isolated UCI target translates that result to a non-zero process status,
 // matching the historical tools command contract.
 bool generate_training_data(Engine& engine, std::istream& input);
+
+// Explicit authenticated teacher path used only by the OpenBench bridge V2.
+// The caller must pre-fill manifestPath, inventory identity and an explicit
+// teacherMode/useNnue pair. The generator fills the remaining authenticated
+// metadata and publishes only the new manifest V2 contract.
+bool generate_authenticated_training_data_v2(Engine&                  engine,
+                                              std::istream&            input,
+                                              AtomicDatagenV2Manifest& manifest);
 
 // Additive AtomicNNUEV3 producer. Unlike the historical command it buffers a
 // complete game, partitions by a label-free trajectory hash, and publishes a
