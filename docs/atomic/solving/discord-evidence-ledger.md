@@ -19,6 +19,7 @@ Documento complementario: [hoja de ruta de weak-solving](./weak-solution-roadmap
 
 | Fecha UTC | Autor / message ID | Evidencia exacta | Consecuencia |
 |---|---|---|---|
+| 2021-01-24 | belzedar_ `802962819049717800` | [general](https://discord.com/channels/779317816897699850/779317816897699854/802962819049717800): “It would be awesome if we had a standard solver machine. I imagine it similar to fishtest, so we can cluster as many cpu power as needed”; el [mensaje siguiente](https://discord.com/channels/779317816897699850/779317816897699854/802962902884810752) lo aplica a variantes con potencial de ser resueltas | Antecedente explícito de un scheduler comunitario distribuido para solving, no solo de un clúster local |
 | 2021-01-26 | ubdip `803658203891630150` | [nnue-general:338](https://discord.com/channels/779317816897699850/784418118503235625/803658203891630150): la rama cluster basada en TT se limita a clúster local, no distributed computing abierto | No confundir cluster HPC con OpenBench WAN |
 | 2021-03-08 | ubdip `818442571582930979` | [analysis:94](https://discord.com/channels/779317816897699850/812407482369441813/818442571582930979): un engine fuerte reduce mucho la complejidad al señalar la jugada del ganador, pero no es una prueba estricta | Atomic-Stockfish es oracle de ordenación, nunca autoridad de cierre |
 | 2021-03-08 | ubdip `818443628808372225` | [analysis:99](https://discord.com/channels/779317816897699850/812407482369441813/818443628808372225): recomienda proof-number search para convertir el motor en solver estricto | PNS de referencia y DFPN como primer backend |
@@ -200,6 +201,8 @@ Cada identificador enlaza directamente al mensaje. Autor y fecha UTC proceden de
 | 2020-12-27 | `ubdip` | [`792903316614545438`](https://discord.com/channels/779317816897699850/779319972614242354/792903316614545438) | roadmap — Discord: divergencia de reglas |
 | 2021-01-15 | `ubdip` | [`799645341489430568`](https://discord.com/channels/779317816897699850/779319972614242354/799645341489430568) | roadmap — Discord: rama sin jaque |
 | 2021-01-19 | `bianca5` | [`800946306209546260`](https://discord.com/channels/779317816897699850/779317816897699854/800946306209546260) | ledger — general:1346 |
+| 2021-01-24 | `belzedar_` | [`802962819049717800`](https://discord.com/channels/779317816897699850/779317816897699854/802962819049717800) | ledger — antecedente de máquina solver estilo fishtest |
+| 2021-01-24 | `belzedar_` | [`802962902884810752`](https://discord.com/channels/779317816897699850/779317816897699854/802962902884810752) | ledger — continuación sobre variantes resolubles |
 | 2021-01-26 | `ubdip` | [`803658203891630150`](https://discord.com/channels/779317816897699850/784418118503235625/803658203891630150) | ledger — nnue-general:338 |
 | 2021-02-27 | `Deleted User` | [`815323198496440371`](https://discord.com/channels/779317816897699850/812407482369441813/815323198496440371) | ledger — analysis:53 |
 | 2021-03-03 | `belzedar_` | [`816735608231821352`](https://discord.com/channels/779317816897699850/791247944463417374/816735608231821352) | roadmap — mensaje; ledger — help:793 |
