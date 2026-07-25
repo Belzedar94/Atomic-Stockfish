@@ -1027,3 +1027,88 @@ Windows Python regression now verifies exact stdout bytes, zero CR/BOM and
 byte-empty stderr; an adversarial PowerShell regression accepts LF and rejects
 the same JSON with CRLF. No schedule, input, time control, engine, network,
 referee or result contract changes.
+
+### 07:10 CEST — Launch5 smoke sound; validator-only false negative
+
+Launch5 was committed at
+`22607146ea2c3c204c5f509b458129b54c61c48f`, tree
+`2bb3076a4d52ffecaaecd3a982251e21be80e6bb`. Its fresh design sealed
+exactly 53 files and 20 directories, and its one-pair/two-game smoke
+completed, committed and cleaned up naturally:
+
+- design inventory: 9,077 B,
+  `8cc17c59eb5d188596dce2d2cbca7b1f7e1e77d6cdb1a7e73e29d523496ce1dd`;
+- design receipt: 2,714 B,
+  `581287d7e3292b04b70c89cb738456d187bdb05e8851c2aa1f7d61a32251ead3`;
+- games: 996,908 B,
+  `9d2c4dd5b069bb5058469b477a8b4c0b459a54b9ceb7ec0102ef986fd0c71856`;
+- execution receipt: 262,891 B,
+  `861f3c487640eeb0906f87243375cafac6745be08eb0df14c3a45b0803419a86`;
+- runner stdout: 250 B, canonical LF and no CR,
+  `278938eeaa9c0c8d6b50ca8fffc781b175362f9f89548c9036564430d7b16ea4`;
+- byte-empty runner stderr and rejection ledger;
+- zero rejected games, zero time losses, natural zero-descendant cleanup;
+- full root absent.
+
+Three independent read-only audits agree: `P0=0`, `P1=1`, `NO-GO` only for
+the wrapper authorization; the smoke science itself is sound and
+uncontaminated. The producer stored the correct 19-option advertised-options
+digest
+`0c2ef87b8de44c286f0f6032ad7f0906835a731df5038c903959ce189a8e6cf5`.
+The PowerShell validator delegated strings to Windows PowerShell 5.1
+`ConvertTo-Json`, which encoded each literal `<empty>` as
+`\u003cempty\u003e`. Three empty-string options expose that value in both
+`default` and `raw`: six occurrences add exactly 60 bytes and produce the
+incorrect validator digest
+`91f5b6bc71720937f128ca2d72b9e439b7c7e3c10740b5a79234af413d2a0a08`.
+
+Launch5 is therefore terminal and immutable. No full authorization exists;
+its full root must remain absent and forbidden.
+
+### 07:10 CEST — Launch6 canonical-string correction under test
+
+Launch6 receives fresh identity only:
+
+- experiment `atomic-e00-src-v3-launch6-20260725`;
+- roots `e00-src-v3-launch6-{design,smoke,full,captures}`;
+- batteries `atomic-e00-src-v3-launch6-{smoke,full}`;
+- seeds `atomic-e00-src-{smoke,full}-v3-launch6-20260725`;
+- design schemas `atomic-e00-launch6-design-{inventory,receipt}-v1`.
+
+The minimal code correction replaces only the PowerShell string branch of
+the namespaced canonical-JSON recomputation with a character-wise encoder
+matching Python `ensure_ascii=False`: quote, backslash and U+0000-U+001F are
+escaped; `<`, `>`, `&`, apostrophe, U+0085, U+2028, U+2029, non-ASCII and
+valid surrogate pairs remain literal.
+
+Cross-runtime regressions now cover `<empty>`, every relevant escape class,
+literal `\u003c`, Unicode and emoji. The exact 19-option production fixture,
+constructed through the real UCI parser and advertised-options builder,
+recomputes
+`0c2ef87b8de44c286f0f6032ad7f0906835a731df5038c903959ce189a8e6cf5`
+in both Python and Windows PowerShell. Focused checks pass 4/4. No engine,
+native build, schedule builder or E00 root has been invoked for Launch6 yet.
+
+### 07:23 CEST — Launch6 staged candidate receives triple GO
+
+The two dedicated Launch6 launcher files pass 64/64 tests. The complete
+Atomic-mining suite passes 392/392. Both PowerShell ASTs and both changed
+Python ASTs are clean; `git diff --cached --check` and the unstaged diff-check
+pass; all four Launch6 roots remain absent.
+
+Three independent read-only audits return `GO`, `P0=0`, `P1=0`:
+
+- executable-diff audit: the full launcher differs only by fresh identity,
+  and the prepare launcher differs only by fresh identity plus the canonical
+  string encoder; all scientific parameters remain byte-equivalent;
+- identity/documentation audit: roots, IDs, seeds, schemas, tombstones and
+  active links are complete and consistent;
+- independent test audit: exact 19-option and adversarial cross-runtime
+  coverage, 64/64 launcher tests, ASTs, root absence and staged cleanliness
+  all pass.
+
+The independent test process created ignored Python bytecode during imports.
+Those exact files and their now-empty cache directories were removed after
+verifying that every resolved path remained inside the repository. The final
+pre-commit ignored-bytecode count below `tools`, the launcher's source
+boundary, is zero.

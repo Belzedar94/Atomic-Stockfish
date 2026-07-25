@@ -15,9 +15,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 LAUNCHER = REPO_ROOT / "tools" / "atomic_mining" / "invoke_e00_full.ps1"
 POWERSHELL = shutil.which("powershell.exe")
 
-EXPERIMENT_ID = "atomic-e00-src-v3-launch5-20260725"
-SMOKE_BATTERY_ID = "atomic-e00-src-v3-launch5-smoke"
-FULL_BATTERY_ID = "atomic-e00-src-v3-launch5-full"
+EXPERIMENT_ID = "atomic-e00-src-v3-launch6-20260725"
+SMOKE_BATTERY_ID = "atomic-e00-src-v3-launch6-smoke"
+FULL_BATTERY_ID = "atomic-e00-src-v3-launch6-full"
 EMPTY_SHA256 = hashlib.sha256(b"").hexdigest()
 
 UCI_OPTIONS = [
@@ -314,10 +314,10 @@ def _fixture(tmp_path: Path) -> dict[str, Any]:
     module_paths, commit, tree = _create_source_repo(tmp_path)
     source_root = next(iter(module_paths.values())).parents[1]
 
-    design = tmp_path / "e00-src-v3-launch5-design"
-    smoke_root = tmp_path / "e00-src-v3-launch5-smoke"
-    full_root = tmp_path / "e00-src-v3-launch5-full"
-    capture_root = tmp_path / "e00-src-v3-launch5-captures"
+    design = tmp_path / "e00-src-v3-launch6-design"
+    smoke_root = tmp_path / "e00-src-v3-launch6-smoke"
+    full_root = tmp_path / "e00-src-v3-launch6-full"
+    capture_root = tmp_path / "e00-src-v3-launch6-captures"
     smoke_root.mkdir()
     capture_root.mkdir()
 
@@ -342,13 +342,13 @@ def _fixture(tmp_path: Path) -> dict[str, Any]:
         design / "full-schedule",
         pairs=84,
         games=168,
-        seed="atomic-e00-src-full-v3-launch5-20260725",
+        seed="atomic-e00-src-full-v3-launch6-20260725",
     )
     smoke_schedule, smoke_schedule_receipt = _publish_schedule(
         design / "smoke-schedule",
         pairs=1,
         games=2,
-        seed="atomic-e00-src-smoke-v3-launch5-20260725",
+        seed="atomic-e00-src-smoke-v3-launch6-20260725",
     )
 
     input_paths = {
@@ -788,6 +788,7 @@ def test_launcher_has_no_start_process_or_design_root_captures() -> None:
     assert FULL_BATTERY_ID in source
     assert "launch3" not in source.lower()
     assert "launch4" not in source.lower()
+    assert "launch5" not in source.lower()
     assert "Start-Process" not in source
     assert "$PSScriptRoot" not in source
     assert "$PSCommandPath" in source

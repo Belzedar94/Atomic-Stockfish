@@ -5,4 +5,4 @@ exist. Its full root remains absent and must never be created. Do not execute,
 recover, collect, analyse, edit, delete or reuse any Launch3 identity or root.
 
 The active fresh-launch procedure is
-[`e00-launch5-full-runbook.md`](e00-launch5-full-runbook.md).
+[`e00-launch6-full-runbook.md`](e00-launch6-full-runbook.md).

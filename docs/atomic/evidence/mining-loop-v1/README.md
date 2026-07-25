@@ -335,9 +335,9 @@ ledger.  The current V3 hash and byte count match its final training receipt.
 > **Historical evidence only.** Launch2 is terminal and immutable. Never run,
 > recover, edit, delete or reuse any command, root or battery ID in this
 > section. The only current prepare/smoke authority is
-> [`../../e00-launch5-prepare-smoke-runbook.md`](../../e00-launch5-prepare-smoke-runbook.md).
+> [`../../e00-launch6-prepare-smoke-runbook.md`](../../e00-launch6-prepare-smoke-runbook.md).
 > The only current full-launch authority is
-> [`../../e00-launch5-full-runbook.md`](../../e00-launch5-full-runbook.md).
+> [`../../e00-launch6-full-runbook.md`](../../e00-launch6-full-runbook.md).
 
 The block below records the exact path that was used for Launch2. It is kept
 only to preserve forensic provenance.
@@ -664,19 +664,23 @@ Any nonzero exit, non-empty outer stderr, missing commit marker, hash mismatch,
 unexpected namespace entry or incomplete owned-process proof makes that exact
 root terminal. Do not recover, overwrite or reuse it.
 
-### E00 v3 Launch3/Launch4 terminal; Launch5 active
+### E00 v3 Launch3/Launch4/Launch5 terminal; Launch6 active
 
 Launch3 failed closed before smoke because its PowerShell design inventory
 serialized arrays with one unintended nesting level. It is terminal and
 immutable. Launch4 completed sound smoke science, but failed closed because
 Python text-mode stdout translated its canonical LF to CRLF on Windows; its
-full root remains absent and forbidden. Launch5 uses the corrected, committed,
-self-contained launcher documented in
-[`../../e00-launch5-full-runbook.md`](../../e00-launch5-full-runbook.md).
+full root remains absent and forbidden. Launch5 also completed sound smoke
+science, but its wrapper failed closed because Windows PowerShell 5.1
+HTML-escaped literal `<empty>` option strings while recomputing a Python
+canonical digest. Its full root likewise remains absent and forbidden.
+
+Launch6 uses the corrected, committed, self-contained launcher documented in
+[`../../e00-launch6-full-runbook.md`](../../e00-launch6-full-runbook.md).
 It authenticates the exact clean source, full schedule/runtime design,
 committed one-pair smoke and post-smoke independent GO before starting the
 fixed 84-pair battery. It never rehydrates PowerShell state from this
-historical document and never uses a Launch1 through Launch4 root.
+historical document and never uses a Launch1 through Launch5 root.
 
 ## Pending gates
 

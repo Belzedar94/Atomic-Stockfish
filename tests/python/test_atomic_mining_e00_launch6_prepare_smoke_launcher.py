@@ -7,8 +7,12 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+from types import SimpleNamespace
 
 import pytest
+
+from tools.atomic_mining import run_e00_source
+from tools.atomic_mining import uci_session
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -121,6 +125,8 @@ def _run_contract_harness(
         "  'boolean' { Assert-JsonBooleanEquals $value $true 'fixture' }\n"
         "  'integer' { Assert-JsonIntegerEquals $value 1 'fixture' }\n"
         "  'number' { Assert-JsonNumberEquals $value 1.5 'fixture' }\n"
+        "  'digest' { Get-NamespacedJsonSha256 "
+        "$value.namespace $value.value }\n"
         "  'owned' { Assert-OwnedProcessEvidence $value 'fixture' }\n"
         "  'artifact' { Assert-ArtifactMap $value 'fixture' @('one') "
         "-RequireNonEmpty }\n"
@@ -181,21 +187,22 @@ def test_launcher_is_prepare_and_smoke_only() -> None:
     assert "$PSScriptRoot" not in source
     assert "$PSCommandPath" in source
     assert "Resolve-RepositoryRoot" in source
-    assert "$ExperimentId = 'atomic-e00-src-v3-launch5-20260725'" in source
-    assert "$SmokeBatteryId = 'atomic-e00-src-v3-launch5-smoke'" in source
-    assert "$FullBatteryId = 'atomic-e00-src-v3-launch5-full'" in source
+    assert "$ExperimentId = 'atomic-e00-src-v3-launch6-20260725'" in source
+    assert "$SmokeBatteryId = 'atomic-e00-src-v3-launch6-smoke'" in source
+    assert "$FullBatteryId = 'atomic-e00-src-v3-launch6-full'" in source
     assert (
-        "$SmokeSeed = 'atomic-e00-src-smoke-v3-launch5-20260725'"
+        "$SmokeSeed = 'atomic-e00-src-smoke-v3-launch6-20260725'"
         in source
     )
     assert (
-        "$FullSeed = 'atomic-e00-src-full-v3-launch5-20260725'"
+        "$FullSeed = 'atomic-e00-src-full-v3-launch6-20260725'"
         in source
     )
     assert "e00-src-v2" not in source
     assert "launch2" not in source.lower()
     assert "launch3" not in source.lower()
     assert "launch4" not in source.lower()
+    assert "launch5" not in source.lower()
     assert "Invoke-StrictPythonCli '06-smoke' $smokeArguments" in source
     assert source.count("'tools.atomic_mining.run_e00_source'") == 1
     assert (
@@ -234,7 +241,7 @@ def test_no_destructive_or_ambient_process_primitives() -> None:
 def test_captures_are_outside_the_sealed_design_and_roots_are_fresh() -> None:
     source = _source()
     assert (
-        "'F:\\Atomic-V3-E00\\e00-src-v3-launch5-captures'" in source
+        "'F:\\Atomic-V3-E00\\e00-src-v3-launch6-captures'" in source
     )
     assert "Assert-FreshDisjointRoots $targetRoots" in source
     assert (
@@ -590,7 +597,15 @@ def test_artifact_map_rejects_keyset_and_numeric_string_mutations(
 def test_rules_calls_reject_digest_drift_and_field_omission(
     tmp_path: Path,
 ) -> None:
-    request = {"moves": ["e2e4"], "unicode": "café"}
+    request = {
+        "angle": "<empty>",
+        "controls": "\b\f\n\r\t\u0001",
+        "literal_escape": r"\u003c",
+        "moves": ["e2e4"],
+        "quote_and_slash": '"\\/',
+        "separators": "\u0085\u2028\u2029<>&'",
+        "unicode": "café \U0001f9e8",
+    }
     response = {"terminal": True, "count": 1}
     call = {
         "operation": "outcome",
@@ -619,6 +634,113 @@ def test_rules_calls_reject_digest_drift_and_field_omission(
     )
     assert refused.returncode != 0
     assert "fields differ" in refused.stderr
+
+
+@pytest.mark.skipif(
+    POWERSHELL is None, reason="Windows PowerShell is required"
+)
+def test_advertised_option_digest_matches_python_canonical_json(
+    tmp_path: Path,
+) -> None:
+    options = [
+        {
+            "choices": [],
+            "default": "<empty>",
+            "kind": "string",
+            "maximum": None,
+            "minimum": None,
+            "name": "Debug Log File",
+            "raw": "option name Debug Log File type string default <empty>",
+        },
+        {
+            "choices": ["false", "true", "pure"],
+            "default": "true",
+            "kind": "combo",
+            "maximum": None,
+            "minimum": None,
+            "name": "Use NNUE",
+            "raw": (
+                "option name Use NNUE type combo default true "
+                "var false var true var pure"
+            ),
+        },
+    ]
+    fixture = {
+        "namespace": "atomic-e00-advertised-options-v2",
+        "value": options,
+    }
+    completed = _run_contract_harness(
+        tmp_path, mode="digest", value=fixture
+    )
+    assert completed.returncode == 0, completed.stderr
+    assert completed.stdout.splitlines() == [
+        _canonical_sha256(fixture),
+        "ok",
+    ]
+
+
+@pytest.mark.skipif(
+    POWERSHELL is None, reason="Windows PowerShell is required"
+)
+def test_real_nineteen_option_digest_matches_recorded_evidence(
+    tmp_path: Path,
+) -> None:
+    declarations = [
+        "option name Clear Hash type button",
+        "option name Debug Log File type string default <empty>",
+        (
+            "option name EvalFile type string default "
+            "atomic_run3b_e202_l05.nnue"
+        ),
+        "option name Hash type spin default 16 min 1 max 33554432",
+        "option name Move Overhead type spin default 10 min 0 max 5000",
+        "option name MultiPV type spin default 1 min 1 max 256",
+        "option name nodestime type spin default 0 min 0 max 10000",
+        "option name NumaPolicy type string default auto",
+        "option name Ponder type check default false",
+        "option name Skill Level type spin default 20 min 0 max 20",
+        "option name Syzygy50MoveRule type check default true",
+        "option name SyzygyPath type string default <empty>",
+        "option name SyzygyProbeDepth type spin default 1 min 1 max 100",
+        "option name SyzygyProbeLimit type spin default 6 min 0 max 6",
+        "option name Threads type spin default 1 min 1 max 1024",
+        "option name UCI_Chess960 type check default false",
+        (
+            "option name UCI_Variant type combo default atomic "
+            "var atomic"
+        ),
+        (
+            "option name Use NNUE type combo default true "
+            "var false var true var pure"
+        ),
+        "option name VariantPath type string default <empty>",
+    ]
+    specs = [
+        uci_session._parse_option_declaration(line)
+        for line in declarations
+    ]
+    engine = SimpleNamespace(
+        option_specs={spec.name: spec for spec in specs}
+    )
+    options = run_e00_source._advertised_options(engine)
+    fixture = {
+        "namespace": "atomic-e00-advertised-options-v2",
+        "value": options,
+    }
+    evidence_digest = (
+        "0c2ef87b8de44c286f0f6032ad7f0906"
+        "835a731df5038c903959ce189a8e6cf5"
+    )
+    assert _canonical_sha256(fixture) == evidence_digest
+
+    completed = _run_contract_harness(
+        tmp_path, mode="digest", value=fixture
+    )
+    assert completed.returncode == 0, completed.stderr
+    assert completed.stdout.splitlines() == [
+        evidence_digest,
+        "ok",
+    ]
 
 
 @pytest.mark.skipif(

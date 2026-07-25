@@ -11,6 +11,6 @@ collected, analysed, edited, deleted or reused. Its full root remains absent
 and must never be created.
 
 The active fresh-launch procedure is
-[`e00-launch5-prepare-smoke-runbook.md`](e00-launch5-prepare-smoke-runbook.md).
+[`e00-launch6-prepare-smoke-runbook.md`](e00-launch6-prepare-smoke-runbook.md).
 The complete evidence and hashes are recorded in
 [`evidence/mining-loop-v1/overnight-2026-07-25.md`](evidence/mining-loop-v1/overnight-2026-07-25.md).

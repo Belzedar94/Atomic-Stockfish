@@ -12,13 +12,13 @@ param(
     [AllowEmptyString()]
     [string] $RepositoryRoot,
     [string] $DesignRoot =
-        'F:\Atomic-V3-E00\e00-src-v3-launch5-design',
+        'F:\Atomic-V3-E00\e00-src-v3-launch6-design',
     [string] $SmokeOutputRoot =
-        'F:\Atomic-V3-E00\e00-src-v3-launch5-smoke',
+        'F:\Atomic-V3-E00\e00-src-v3-launch6-smoke',
     [string] $FullOutputRoot =
-        'F:\Atomic-V3-E00\e00-src-v3-launch5-full',
+        'F:\Atomic-V3-E00\e00-src-v3-launch6-full',
     [string] $CaptureRoot =
-        'F:\Atomic-V3-E00\e00-src-v3-launch5-captures',
+        'F:\Atomic-V3-E00\e00-src-v3-launch6-captures',
     [string] $PythonPath =
         'C:\Users\djime\AppData\Local\Programs\Python\Python312\python.exe',
     [string] $BookPath =
@@ -38,13 +38,13 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$ExperimentId = 'atomic-e00-src-v3-launch5-20260725'
-$SmokeBatteryId = 'atomic-e00-src-v3-launch5-smoke'
-$FullBatteryId = 'atomic-e00-src-v3-launch5-full'
-$SmokeSeed = 'atomic-e00-src-smoke-v3-launch5-20260725'
-$FullSeed = 'atomic-e00-src-full-v3-launch5-20260725'
-$DesignInventorySchema = 'atomic-e00-launch5-design-inventory-v1'
-$DesignReceiptSchema = 'atomic-e00-launch5-design-receipt-v1'
+$ExperimentId = 'atomic-e00-src-v3-launch6-20260725'
+$SmokeBatteryId = 'atomic-e00-src-v3-launch6-smoke'
+$FullBatteryId = 'atomic-e00-src-v3-launch6-full'
+$SmokeSeed = 'atomic-e00-src-smoke-v3-launch6-20260725'
+$FullSeed = 'atomic-e00-src-full-v3-launch6-20260725'
+$DesignInventorySchema = 'atomic-e00-launch6-design-inventory-v1'
+$DesignReceiptSchema = 'atomic-e00-launch6-design-receipt-v1'
 $ExecutionReceiptSchema = 'atomic-e00-execution-receipt-v3'
 $GameSchema = 'atomic-e00-game-v3'
 $EngineEvidenceSchema = 'atomic-e00-engine-evidence-v3'
@@ -315,12 +315,55 @@ function Assert-JsonStringArrayEquals(
     }
 }
 
+function ConvertTo-CanonicalJsonString([string] $Value) {
+    $builder = New-Object System.Text.StringBuilder
+    [void] $builder.Append('"')
+    foreach ($character in $Value.ToCharArray()) {
+        $code = [int] $character
+        if ($code -eq 0x22) {
+            [void] $builder.Append('\"')
+        }
+        elseif ($code -eq 0x5c) {
+            [void] $builder.Append('\\')
+        }
+        elseif ($code -eq 0x08) {
+            [void] $builder.Append('\b')
+        }
+        elseif ($code -eq 0x0c) {
+            [void] $builder.Append('\f')
+        }
+        elseif ($code -eq 0x0a) {
+            [void] $builder.Append('\n')
+        }
+        elseif ($code -eq 0x0d) {
+            [void] $builder.Append('\r')
+        }
+        elseif ($code -eq 0x09) {
+            [void] $builder.Append('\t')
+        }
+        elseif ($code -lt 0x20) {
+            [void] $builder.Append('\u')
+            [void] $builder.Append(
+                $code.ToString(
+                    'x4',
+                    [System.Globalization.CultureInfo]::InvariantCulture
+                )
+            )
+        }
+        else {
+            [void] $builder.Append($character)
+        }
+    }
+    [void] $builder.Append('"')
+    return $builder.ToString()
+}
+
 function ConvertTo-CanonicalJsonText([object] $Value) {
     if ($null -eq $Value) {
         return 'null'
     }
     if ($Value -is [string]) {
-        return [string] (ConvertTo-Json -InputObject $Value -Compress)
+        return ConvertTo-CanonicalJsonString ([string] $Value)
     }
     if ($Value -is [bool]) {
         if ($Value) {
@@ -449,7 +492,7 @@ function Assert-FreshDisjointRoots([hashtable] $Roots) {
         $leftName = $names[$left]
         $leftPath = Get-AbsolutePath ([string] $Roots[$leftName])
         if (Test-Path -LiteralPath $leftPath) {
-            throw "$leftName already exists; this Launch5 root is terminal"
+            throw "$leftName already exists; this Launch6 root is terminal"
         }
         for ($right = $left + 1; $right -lt $names.Count; $right++) {
             $rightName = $names[$right]
@@ -781,14 +824,14 @@ function Invoke-StrictPythonCli(
         -StandardOutputPath $stdoutPath `
         -StandardErrorPath $stderrPath
     if ($exitCode -ne 0) {
-        throw "$Step exited $exitCode; Launch5 is terminal"
+        throw "$Step exited $exitCode; Launch6 is terminal"
     }
     $stderrState = Get-StableFileState $stderrPath "$Step stderr"
     if (
         $stderrState.SizeBytes -ne 0 -or
         $stderrState.Sha256 -cne $EmptySha256
     ) {
-        throw "$Step stderr is not byte-empty; Launch5 is terminal"
+        throw "$Step stderr is not byte-empty; Launch6 is terminal"
     }
     return Read-StrictJson $stdoutPath "$Step stdout"
 }
@@ -1335,7 +1378,7 @@ function Publish-DesignSeal(
     }
     $inventoryState = Write-NewCompactJson (
         $inventoryPath
-    ) $inventory 'Launch5 design inventory'
+    ) $inventory 'Launch6 design inventory'
     $inputBindings = [ordered]@{}
     $inputNames = @($Inputs.Keys)
     [Array]::Sort($inputNames, [System.StringComparer]::Ordinal)
@@ -1383,7 +1426,7 @@ function Publish-DesignSeal(
     }
     $receiptState = Write-NewCompactJson (
         $receiptPath
-    ) $receipt 'Launch5 design receipt'
+    ) $receipt 'Launch6 design receipt'
     return [pscustomobject]@{
         InventoryPath = $inventoryPath
         InventoryState = $inventoryState
@@ -1395,85 +1438,85 @@ function Publish-DesignSeal(
 function Assert-DesignSeal([object] $ExpectedSeal) {
     $inventoryDocument = Read-StrictJson (
         $ExpectedSeal.InventoryPath
-    ) 'Launch5 design inventory'
+    ) 'Launch6 design inventory'
     $receiptDocument = Read-StrictJson (
         $ExpectedSeal.ReceiptPath
-    ) 'Launch5 design receipt'
+    ) 'Launch6 design receipt'
     if (
         $inventoryDocument.State.Sha256 -cne
             $ExpectedSeal.InventoryState.Sha256 -or
         $receiptDocument.State.Sha256 -cne
             $ExpectedSeal.ReceiptState.Sha256
     ) {
-        throw "Launch5 design seal changed"
+        throw "Launch6 design seal changed"
     }
     $inventory = $inventoryDocument.Value
     Assert-JsonStringEquals (
         $inventory.schema
-    ) $DesignInventorySchema 'Launch5 design inventory schema'
-    Assert-JsonArray $inventory.entries 'Launch5 design inventory entries'
+    ) $DesignInventorySchema 'Launch6 design inventory schema'
+    Assert-JsonArray $inventory.entries 'Launch6 design inventory entries'
     Assert-JsonArray (
         $inventory.directories
-    ) 'Launch5 design inventory directories'
+    ) 'Launch6 design inventory directories'
     Assert-JsonIntegerEquals (
         $inventory.file_count
-    ) @($inventory.entries).Count 'Launch5 design inventory file_count'
+    ) @($inventory.entries).Count 'Launch6 design inventory file_count'
     Assert-JsonIntegerEquals (
         $inventory.directory_count
     ) @($inventory.directories).Count (
-        'Launch5 design inventory directory_count'
+        'Launch6 design inventory directory_count'
     )
     $actualEntries = @(Get-DesignInventoryEntries $DesignRoot)
     $expectedEntries = @($inventory.entries)
     $actualDirectories = @(Get-DesignDirectoryPaths $DesignRoot)
     $expectedDirectories = @($inventory.directories)
     if ($actualDirectories.Count -ne $expectedDirectories.Count) {
-        throw "Launch5 design directory count changed"
+        throw "Launch6 design directory count changed"
     }
     for ($index = 0; $index -lt $actualDirectories.Count; $index++) {
         $expectedDirectory = Assert-JsonString (
             $expectedDirectories[$index]
-        ) "Launch5 design inventory directory $index" -NonEmpty
+        ) "Launch6 design inventory directory $index" -NonEmpty
         if ($actualDirectories[$index] -cne $expectedDirectory) {
-            throw "Launch5 design directory inventory changed"
+            throw "Launch6 design directory inventory changed"
         }
     }
     if ($actualEntries.Count -ne $expectedEntries.Count) {
-        throw "Launch5 design file count changed"
+        throw "Launch6 design file count changed"
     }
     for ($index = 0; $index -lt $actualEntries.Count; $index++) {
         if ($expectedEntries[$index] -is [System.Array]) {
-            throw "Launch5 design inventory entry $index must be an object"
+            throw "Launch6 design inventory entry $index must be an object"
         }
         Assert-ExactProperties $expectedEntries[$index] @(
             'path', 'sha256', 'size_bytes'
-        ) "Launch5 design inventory entry $index"
+        ) "Launch6 design inventory entry $index"
         Assert-JsonStringEquals (
             $expectedEntries[$index].path
         ) $actualEntries[$index].path (
-            "Launch5 design inventory entry $index path"
+            "Launch6 design inventory entry $index path"
         )
         Assert-JsonStringEquals (
             $expectedEntries[$index].sha256
         ) $actualEntries[$index].sha256 (
-            "Launch5 design inventory entry $index SHA-256"
+            "Launch6 design inventory entry $index SHA-256"
         )
         Assert-JsonIntegerEquals (
             $expectedEntries[$index].size_bytes
         ) $actualEntries[$index].size_bytes (
-            "Launch5 design inventory entry $index size"
+            "Launch6 design inventory entry $index size"
         )
     }
     Assert-JsonStringEquals (
         $receiptDocument.Value.schema
-    ) $DesignReceiptSchema 'Launch5 design receipt schema'
+    ) $DesignReceiptSchema 'Launch6 design receipt schema'
     Assert-JsonStringEquals (
         $receiptDocument.Value.status
-    ) 'sealed' 'Launch5 design receipt status'
+    ) 'sealed' 'Launch6 design receipt status'
     Assert-JsonStringEquals (
         $receiptDocument.Value.trust_boundary
     ) 'procedural-independent-hash-bound-v1' (
-        'Launch5 design receipt trust boundary'
+        'Launch6 design receipt trust boundary'
     )
 }
 
@@ -3505,7 +3548,7 @@ $planned = [ordered]@{
         seed = $FullSeed
     }
     mode = if ($ValidateOnly) { 'validate-only' } else { 'prepare-smoke' }
-    schema = 'atomic-e00-launch5-prepare-smoke-validation-v1'
+    schema = 'atomic-e00-launch6-prepare-smoke-validation-v1'
     smoke = [ordered]@{
         battery_id = $SmokeBatteryId
         output_root = Get-AbsolutePath $SmokeOutputRoot
@@ -3733,7 +3776,7 @@ if (Test-Path -LiteralPath $FullOutputRoot) {
             $fullRuntime.BuildReceiptState.Sha256
         schedule_receipt_sha256 = $fullSchedule.ReceiptState.Sha256
     }
-    schema = 'atomic-e00-launch5-prepare-smoke-summary-v1'
+    schema = 'atomic-e00-launch6-prepare-smoke-summary-v1'
     smoke = [ordered]@{
         battery_id = $SmokeBatteryId
         games_sha256 = $smoke.GamesState.Sha256
