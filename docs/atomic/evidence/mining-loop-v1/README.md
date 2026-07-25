@@ -343,9 +343,9 @@ $ErrorActionPreference = 'Stop'
 
 $Repo = (Resolve-Path '.').Path
 $Python = 'C:\Users\djime\AppData\Local\Programs\Python\Python312\python.exe'
-$DesignRoot = 'F:\Atomic-V3-E00\e00-src-v2-launch1-design'
-$SmokeOutput = 'F:\Atomic-V3-E00\e00-src-v2-launch1-smoke'
-$FullOutput = 'F:\Atomic-V3-E00\e00-src-v2-launch1-full'
+$DesignRoot = 'F:\Atomic-V3-E00\e00-src-v2-launch2-design'
+$SmokeOutput = 'F:\Atomic-V3-E00\e00-src-v2-launch2-smoke'
+$FullOutput = 'F:\Atomic-V3-E00\e00-src-v2-launch2-full'
 
 $Book = 'C:\Users\djime\Documents\Chess_variants\Match script\books\atomic.epd'
 $Engine = 'C:\Users\djime\Documents\Chess_variants\Codex\Fairy-Stockfish organization\Atomic Project\Atomic-Stockfish-teacher-syzygy-v2-build-launch1\src\atomic-stockfish.exe'
@@ -635,7 +635,7 @@ function Invoke-E00Battery {
 # sample and require the independent audit GO. Do not start any other worker.
 Invoke-E00Battery `
     -ExperimentId 'atomic-e00-src-v2-20260725' `
-    -BatteryId 'atomic-e00-src-v2-launch1-smoke' `
+    -BatteryId 'atomic-e00-src-v2-launch2-smoke' `
     -ScheduleBundle $SmokeSchedule `
     -RuntimeBundle $SmokeRuntime `
     -OutputRoot $SmokeOutput
@@ -649,7 +649,7 @@ sample may the fixed full battery be invoked:
 ```powershell
 Invoke-E00Battery `
     -ExperimentId 'atomic-e00-src-v2-20260725' `
-    -BatteryId 'atomic-e00-src-v2-launch1-full' `
+    -BatteryId 'atomic-e00-src-v2-launch2-full' `
     -ScheduleBundle $FullSchedule `
     -RuntimeBundle $FullRuntime `
     -OutputRoot $FullOutput

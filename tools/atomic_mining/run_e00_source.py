@@ -5589,6 +5589,7 @@ class DirectUciBackend:
             command = [
                 sys.executable,
                 "-I",
+                "-B",
                 "-c",
                 _ISOLATED_BOOTSTRAP,
                 runtime_root,

@@ -392,6 +392,62 @@ def test_runner_source_has_no_python_chess_execution_surface() -> None:
     assert "alter_sys=True" in runner._ISOLATED_BOOTSTRAP
 
 
+def test_isolated_child_uses_explicit_no_bytecode_flag(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    observed: list[str] = []
+
+    class LaunchCaptured(RuntimeError):
+        pass
+
+    def capture_launch(
+        _cls: type[object], command: list[str], **_kwargs: object
+    ) -> None:
+        observed.extend(command)
+        raise LaunchCaptured
+
+    monkeypatch.setattr(
+        runner.owned_process.OwnedProcess,
+        "launch",
+        classmethod(capture_launch),
+    )
+    with pytest.raises(LaunchCaptured):
+        runner.DirectUciBackend()._run_child(
+            mode="--internal-discover-runtime",
+            request_wire={"runtime_package_root": str(tmp_path)},
+            result_label="no-bytecode command probe",
+            deadline_seconds=5.0,
+        )
+
+    assert observed[:4] == [sys.executable, "-I", "-B", "-c"]
+
+
+def test_real_isolated_child_does_not_mutate_fresh_runtime_package(
+    tmp_path: Path,
+) -> None:
+    runtime_root = tmp_path / "runtime-package"
+    for key, relative in runner._RUNTIME_PACKAGE_LAYOUT.items():
+        destination = runtime_root / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(_runtime_package_sources()[key].read_bytes())
+
+    before = runner._directory_inventory(runtime_root)
+    with pytest.raises(
+        runner.E00RunnerError,
+        match="runtime import-only probe wrapper exited with code 70",
+    ):
+        runner.DirectUciBackend()._run_child(
+            mode="--internal-discover-runtime",
+            request_wire={"runtime_package_root": str(runtime_root)},
+            result_label="runtime import-only probe",
+            deadline_seconds=30.0,
+        )
+
+    assert runner._directory_inventory(runtime_root) == before
+    assert not list(runtime_root.rglob("__pycache__"))
+    assert not list(runtime_root.rglob("*.pyc"))
+
+
 def test_child_import_inventory_requires_canonical_order_and_unique_modules(
     tmp_path: Path,
 ) -> None:

@@ -601,3 +601,52 @@ Only the missing final character in the runbook was repaired. No native build,
 engine, schedule, runtime package or scientific output was created. The three
 launch1 roots remain absent and must pass the same no-reuse check after this
 documentation fix is committed into a new clean source identity.
+
+### Launch1 runtime-package bytecode P1 — terminal before science
+
+The fresh Launch1 native build and both schedules completed, but the first
+runtime-manifest builder failed closed. Its outer stderr was exactly 99 bytes,
+SHA-256
+`1c7d2763bcb30cdea58054464367c3ae40abc560e977c6951af3cefbdeefd92d`,
+with:
+
+`runtime manifest NO-GO: strict namespace enumeration changed for runtime builder executed package`
+
+Read-only forensics authenticated the cause. The builder sealed and inventoried
+the staged nine-module runtime package, then `DirectUciBackend` started its real
+child as `python -I -c ...` while relying on
+`PYTHONDONTWRITEBYTECODE=1`. Python isolated mode implies `-E`, so it ignored
+that `PYTHON*` environment variable. Importing the authenticated package
+created two `__pycache__` directories and nine `.pyc` files approximately one
+second after the nine source files were staged. All nine staged `.py` files
+still matched the clean source byte-for-byte. The strict namespace guard then
+detected its own child's additions exactly as designed.
+
+This is a deterministic operational P1, not a P0: it blocks every real runtime
+build, but it failed closed before `runtime-discovery.receipt.json`,
+`runtime-manifest.json` or the final `build.receipt.json` existed. No engine or
+result-bearing science started. The Launch1 design root is terminal, frozen and
+must never be recovered, overwritten, edited or reused.
+
+The minimal authorized repair is an explicit interpreter `-B` beside `-I`.
+The environment variable remains defense in depth; the namespace guard is not
+weakened and bytecode files are not added to the accepted inventory. A
+structural command test freezes the exact `-I -B -c` order, and a real isolated
+child regression imports a freshly staged runtime package, then proves its
+recursive inventory remains identical with no `__pycache__` or `.pyc`.
+
+The next attempt uses only fresh Launch2 design/smoke/full roots and Launch2
+battery IDs after a new clean commit, focused and integrated serial tests,
+independent zero-P0/P1 audit and a new resource sample. Launch1 remains
+immutable evidence.
+
+Independent and root closure both returned binary GO for the four-file fix:
+`P0=0`, `P1=0`. The independent suite passed `308/308` in `49.72 s`;
+the root repeated `308/308` in `52.26 s`. Both new regressions pass, including
+the real isolated child with an unchanged recursive inventory and no bytecode
+artifacts. Python compilation, diff-check and both runbook PowerShell ASTs
+pass. The pre-validation resource sample was CPU `23%`, RAM
+`24.85/31.92 GiB`, committed memory `53.51/127.91 GiB`, pagefile
+`22,958 MiB`, GPU `37%`, VRAM `1,305/10,240 MiB`, `46 C` and
+`28.17 W`. This sample authorized only the serial validation; Launch2 still
+requires a fresh immediate pre-execution sample after its clean commit.
