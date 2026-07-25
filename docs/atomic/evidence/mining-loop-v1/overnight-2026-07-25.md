@@ -982,3 +982,48 @@ The current generic pre-suite sample was CPU `40%, 38%, 24%`, RAM
 `6.24/31.92 GiB`, GPU `43%`, VRAM `1,299/10,240 MiB`, `46 C` and `28.89 W`.
 Only serial unit tests were run under that sample; no engine, native build or
 GPU job was launched and no unrelated process was changed.
+
+### 06:28 CEST — Launch4 smoke science completes; wrapper fails closed
+
+The committed Launch4 source was
+`81535efc42ffb985deacd6fbbac1cbfea9306e4f`, tree
+`713204f4123fbc96bd4e9e78504b3bb0ebfee7c1`. Its design sealed exactly
+20 directories and 53 non-seal files. The one-pair/two-game runner committed
+durable v3 evidence with byte-empty rejection and stderr ledgers:
+
+- design inventory
+  `7e177bb3f68de592f3aec8a41fb0ba0816ab768d35ec88f993bd591e3b234908`;
+- design receipt
+  `810fc3822b004865238178122ef0cb54596fd94adf40d96922123586d2fb88b9`;
+- games
+  `114e33990067938f9f5ca8f042460a71346bd91e3636654d07c3a9d71a136238`;
+- smoke receipt
+  `be0c8289a61c73f49affd607636a0d10e1dbb94dc2b9ab9e1c5d548840f9c9e9`.
+
+Three independent read-only audits recomputed the exact color-swapped pair,
+trajectory and source-game IDs, native referee/verifier evidence, owned-process
+natural-zero proofs, handshakes, networks, 142 imports and all rule-operation
+digests. The smoke science is sound and uncontaminated.
+
+The wrapper nevertheless could not reach its final `sealed-smoke-committed`
+summary. `06-smoke.stdout.json` is 251 bytes, SHA-256
+`1e1d5733c2414c5b0c3d13d6eb784bd408fe5b415296745b746ba021990957c6`,
+and terminates with CRLF. The runner used Python `print`, whose Windows text
+translation introduced the carriage return; both launchers deliberately reject
+all CR bytes. The same defect would make a full run commit its expensive
+battery and then fail its wrapper validation.
+
+Classification: `P0=0`, `P1=1`, `NO-GO` for Launch4 full. No authorization
+was issued and the full root remains absent. Every Launch4 root is frozen
+terminal evidence and must never be reused.
+
+### 06:35 CEST — Launch5 minimal correction enters audit
+
+Launch5 receives fresh experiment, roots, battery IDs, seeds and design schemas.
+The only scientific-code correction is binary emission of the already
+canonical summary bytes through `sys.stdout.buffer`, with a complete-write
+check and flush. The strict LF-only parser remains unchanged. A real fresh
+Windows Python regression now verifies exact stdout bytes, zero CR/BOM and
+byte-empty stderr; an adversarial PowerShell regression accepts LF and rejects
+the same JSON with CRLF. No schedule, input, time control, engine, network,
+referee or result contract changes.

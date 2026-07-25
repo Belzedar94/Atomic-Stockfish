@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import copy
+import inspect
 import json
 from pathlib import Path
+import subprocess
 import sys
 from types import ModuleType, SimpleNamespace
 from typing import Mapping
@@ -33,6 +35,39 @@ CLOCK_POLICY = {
     "equality": "elapsed-ns-equal-remaining-ns-is-on-time",
     "uci_millisecond_conversion": "floor-nanoseconds",
 }
+
+
+def test_success_summary_stdout_is_canonical_lf_in_real_child() -> None:
+    """Exercise the Windows text-translation boundary in a fresh process."""
+
+    script = (
+        "from tools.atomic_mining.run_e00_source "
+        "import _write_success_summary;"
+        "_write_success_summary({'schema':'probe','status':'ok'})"
+    )
+    completed = subprocess.run(
+        [sys.executable, "-B", "-c", script],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        timeout=30,
+    )
+    assert completed.returncode == 0, completed.stderr.decode(
+        "utf-8", errors="replace"
+    )
+    assert completed.stdout == b'{"schema":"probe","status":"ok"}\n'
+    assert b"\r" not in completed.stdout
+    assert completed.stderr == b""
+
+
+def test_runner_main_uses_binary_success_summary_writer() -> None:
+    source = inspect.getsource(runner.main)
+    assert "_write_success_summary(summary.__dict__)" in source
+    assert "print(common.canonical_json_line" not in source
+    writer = inspect.getsource(runner._write_success_summary)
+    assert "common.canonical_json_bytes(value)" in writer
+    assert "sys.stdout.buffer.write(payload)" in writer
+    assert "written != len(payload)" in writer
+    assert "sys.stdout.buffer.flush()" in writer
 
 
 def _sha(path: Path) -> str:

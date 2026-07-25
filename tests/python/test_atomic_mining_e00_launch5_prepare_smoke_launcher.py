@@ -181,20 +181,21 @@ def test_launcher_is_prepare_and_smoke_only() -> None:
     assert "$PSScriptRoot" not in source
     assert "$PSCommandPath" in source
     assert "Resolve-RepositoryRoot" in source
-    assert "$ExperimentId = 'atomic-e00-src-v3-launch4-20260725'" in source
-    assert "$SmokeBatteryId = 'atomic-e00-src-v3-launch4-smoke'" in source
-    assert "$FullBatteryId = 'atomic-e00-src-v3-launch4-full'" in source
+    assert "$ExperimentId = 'atomic-e00-src-v3-launch5-20260725'" in source
+    assert "$SmokeBatteryId = 'atomic-e00-src-v3-launch5-smoke'" in source
+    assert "$FullBatteryId = 'atomic-e00-src-v3-launch5-full'" in source
     assert (
-        "$SmokeSeed = 'atomic-e00-src-smoke-v3-launch4-20260725'"
+        "$SmokeSeed = 'atomic-e00-src-smoke-v3-launch5-20260725'"
         in source
     )
     assert (
-        "$FullSeed = 'atomic-e00-src-full-v3-launch4-20260725'"
+        "$FullSeed = 'atomic-e00-src-full-v3-launch5-20260725'"
         in source
     )
     assert "e00-src-v2" not in source
     assert "launch2" not in source.lower()
     assert "launch3" not in source.lower()
+    assert "launch4" not in source.lower()
     assert "Invoke-StrictPythonCli '06-smoke' $smokeArguments" in source
     assert source.count("'tools.atomic_mining.run_e00_source'") == 1
     assert (
@@ -233,7 +234,7 @@ def test_no_destructive_or_ambient_process_primitives() -> None:
 def test_captures_are_outside_the_sealed_design_and_roots_are_fresh() -> None:
     source = _source()
     assert (
-        "'F:\\Atomic-V3-E00\\e00-src-v3-launch4-captures'" in source
+        "'F:\\Atomic-V3-E00\\e00-src-v3-launch5-captures'" in source
     )
     assert "Assert-FreshDisjointRoots $targetRoots" in source
     assert (
@@ -426,6 +427,56 @@ def test_strict_json_hash_is_from_the_parsed_byte_snapshot() -> None:
     assert "Sha256 = Get-ByteArraySha256 $payload" in body
     assert "SizeBytes = [long] $payload.Length" in body
     assert "Get-StableFileState $Path $Label" not in body
+
+
+@pytest.mark.skipif(
+    POWERSHELL is None, reason="Windows PowerShell is required"
+)
+def test_strict_json_accepts_lf_and_rejects_crlf(
+    tmp_path: Path,
+) -> None:
+    source = _source()
+    functions = source[
+        source.index("function Get-ByteArraySha256"):
+        source.index("function Read-StrictJsonLines")
+    ]
+    harness = tmp_path / "strict-json.ps1"
+    harness.write_text(
+        "param([string]$Payload)\n"
+        "$ErrorActionPreference='Stop'\n"
+        "Set-StrictMode -Version Latest\n"
+        f"{functions}\n"
+        "[void](Read-StrictJson $Payload 'fixture')\n"
+        "Write-Output 'ok'\n",
+        encoding="utf-8",
+    )
+    payload = tmp_path / "payload.json"
+    command = [
+        POWERSHELL,
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        str(harness),
+        "-Payload",
+        str(payload),
+    ]
+
+    payload.write_bytes(b'{"status":"ok"}\n')
+    accepted = subprocess.run(
+        command, capture_output=True, text=True, timeout=30
+    )
+    assert accepted.returncode == 0, accepted.stderr
+    assert accepted.stdout.strip() == "ok"
+
+    payload.write_bytes(b'{"status":"ok"}\r\n')
+    refused = subprocess.run(
+        command, capture_output=True, text=True, timeout=30
+    )
+    assert refused.returncode != 0
+    assert "strict newline-terminated UTF-8 JSON" in refused.stderr
 
 
 @pytest.mark.skipif(

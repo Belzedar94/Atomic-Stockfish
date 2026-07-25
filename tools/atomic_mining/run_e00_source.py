@@ -6069,6 +6069,16 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _write_success_summary(value: object) -> None:
+    """Emit one canonical LF-only summary without Windows text translation."""
+
+    payload = common.canonical_json_bytes(value)
+    written = sys.stdout.buffer.write(payload)
+    if written != len(payload):
+        raise E00RunnerError("cannot write the complete success summary")
+    sys.stdout.buffer.flush()
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     arguments = _parser().parse_args(argv)
     try:
@@ -6119,7 +6129,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     except (E00RunnerError, FileExistsError, common.MiningArtifactError) as error:
         print(f"E00-SRC NO-GO: {error}", file=sys.stderr)
         return 2
-    print(common.canonical_json_line(summary.__dict__).rstrip())
+    _write_success_summary(summary.__dict__)
     return 0
 
 

@@ -166,5 +166,5 @@ non-canonical failure, or any mode/stage/digest drift is a hard failure.
 - [ ] smoke is authenticated before the fixed 84-pair battery is launched.
 
 The exact post-commit builder and runner commands are maintained in
-[`e00-launch4-full-runbook.md`](e00-launch4-full-runbook.md). Any command-line,
+[`e00-launch5-full-runbook.md`](e00-launch5-full-runbook.md). Any command-line,
 hash, schema or timeout change requires a new design root and a fresh audit.
