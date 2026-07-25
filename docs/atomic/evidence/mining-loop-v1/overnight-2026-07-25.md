@@ -893,3 +893,92 @@ the root and final auditor each pass the complete `385/385` atomic-mining
 suite. Both PowerShell ASTs and `git diff --check` pass. Ignored Python
 bytecode created by isolated regression children was removed, and the
 pre-commit bytecode count is zero.
+
+### 06:15 CEST — Launch3 aborts before smoke; exact array-shape cause
+
+The committed Launch3 source was
+`3559c9b2c8f5206d5aceb3adf826bddb225e54f3`, tree
+`e9c6135e30cfe43874b542fc59100f2f99b1843b`. Its fresh-shell
+`-ValidateOnly` passed with strict `validated-not-started` JSON and all four
+roots absent. The immediate resource sample was CPU
+`26.4%, 22.4%, 21.0%`, RAM `25.88/31.92 GiB`, pagefile `22,819 MiB`, GPU
+`32%`, VRAM `1,309/10,240 MiB`, `46 C`, `29.15 W`; free space was
+`123.3 GiB` on `C:`, `128.0 GiB` on `D:` and `1,126.8 GiB` on `F:`.
+The refined exact E00 process count was zero. Unrelated processes were not
+modified.
+
+Prepare/seal exited 1 after `35.8 s` at the first post-publication design
+assertion with `Launch3 design directory inventory changed`. It had completed
+only native binding, smoke/full schedule and smoke/full runtime packaging.
+There is no smoke output root, no full output root and no stage-06 capture:
+zero games and zero scientific outcomes were produced.
+
+Read-only forensics proved no actual design mutation. The inventory contained
+the exact 20 directories and 53 non-seal files, and every flattened file
+size/SHA-256 matched the filesystem. However, both arrays were serialized as
+one nested element because their helpers used `return ,$array` while every
+caller already wrapped the result in `@(...)`. The malformed receipt therefore
+declared `directory_count=1` and `file_count=1`; PowerShell's elementwise
+array `-cne` then returned a truthy collection at outer index zero. The latent
+same pattern also existed in referee timing/rules and execution-input key
+helpers, so all six boundaries require the same minimal correction before a
+fresh launch.
+
+Forensic anchors:
+
+- design inventory: `9,079 B`,
+  `41f41757271b99aec31f5583d696bac638fff096945c0849fb1488d537581c4e`;
+- design receipt: `2,690 B`,
+  `1103dad709e8b0950906aaa8dcaae0b531805e990a533b619f61a565184af629`;
+- captures 01–05 all have byte-empty stderr
+  (`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`);
+- smoke schedule: 1 pair / 2 games; full schedule: 84 pairs / 168 games;
+- smoke and full roots are absent.
+
+Classification: `P0=0`, `P1=1` operational/schema false positive. Launch3
+design and capture roots are frozen terminal evidence; they must never be
+executed, recovered, collected, analysed, edited, deleted or reused.
+
+Launch4 receives fresh roots, experiment, battery IDs, seeds and
+launch-specific schemas. Its only code correction is flat PowerShell array
+emission plus scalar/object assertions, extended to every identical latent
+boundary. The schedule sizes, time controls, T1 policy, inputs and scientific
+contract remain unchanged.
+
+### 06:23 CEST — Launch4 replacement receives triple GO
+
+Launch4 uses fresh identity throughout:
+
+- experiment `atomic-e00-src-v3-launch4-20260725`;
+- roots `e00-src-v3-launch4-{design,smoke,full,captures}`;
+- batteries `atomic-e00-src-v3-launch4-{smoke,full}`;
+- seeds `atomic-e00-src-{smoke,full}-v3-launch4-20260725`;
+- design schemas `atomic-e00-launch4-design-{inventory,receipt}-v1`.
+
+The exact frozen candidate hashes are:
+
+- prepare launcher
+  `3fed00d692fef071103ba166e18ece22d2ad16f2e9e30ca1711ae603c9e98a72`;
+- prepare tests
+  `272476e4af0b6565d175f26f8c13aaf0a16ffb481ecc1458fa801ad14267fdc6`;
+- prepare runbook
+  `39ef4da0d68d14a124e664802b6095d31f801cc1356b395e399c0840492a4dc2`;
+- full launcher
+  `3bf12d3863d6ba7d2752ec1fd57c5af8e21de41032811fdd8972aa1fcb127a1e`;
+- full tests
+  `c4c582dede2a84871ebfd58a33ec86756a503f188cfc7b630974ffbb36a0fac9`;
+- full runbook
+  `32084617ec41de05ad45de96c5dc628d8f4acc473aaf7f1f54619138d49b0543`.
+
+Three independent read-only audits return `GO`, `P0=0`, `P1=0`: code/
+fail-closed, PowerShell 5.1 behavior/tests, and identity/documentation.
+The behavioral auditor reproduced old versus new array output for zero, one
+and multiple elements. Launcher tests pass `61/61`; the focused complete E00
+contract suite passes `151/151`; the root passes the entire Atomic-mining
+selection `387/387` in `97.14 s`. Both PowerShell ASTs, changed Python ASTs
+and `git diff --check` pass. Ignored bytecode below `tools` is zero.
+
+The current generic pre-suite sample was CPU `40%, 38%, 24%`, RAM
+`6.24/31.92 GiB`, GPU `43%`, VRAM `1,299/10,240 MiB`, `46 C` and `28.89 W`.
+Only serial unit tests were run under that sample; no engine, native build or
+GPU job was launched and no unrelated process was changed.

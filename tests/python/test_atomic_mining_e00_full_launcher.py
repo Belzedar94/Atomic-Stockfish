@@ -15,9 +15,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 LAUNCHER = REPO_ROOT / "tools" / "atomic_mining" / "invoke_e00_full.ps1"
 POWERSHELL = shutil.which("powershell.exe")
 
-EXPERIMENT_ID = "atomic-e00-src-v3-20260725"
-SMOKE_BATTERY_ID = "atomic-e00-src-v3-launch3-smoke"
-FULL_BATTERY_ID = "atomic-e00-src-v3-launch3-full"
+EXPERIMENT_ID = "atomic-e00-src-v3-launch4-20260725"
+SMOKE_BATTERY_ID = "atomic-e00-src-v3-launch4-smoke"
+FULL_BATTERY_ID = "atomic-e00-src-v3-launch4-full"
 EMPTY_SHA256 = hashlib.sha256(b"").hexdigest()
 
 UCI_OPTIONS = [
@@ -314,10 +314,10 @@ def _fixture(tmp_path: Path) -> dict[str, Any]:
     module_paths, commit, tree = _create_source_repo(tmp_path)
     source_root = next(iter(module_paths.values())).parents[1]
 
-    design = tmp_path / "e00-src-v3-launch3-design"
-    smoke_root = tmp_path / "e00-src-v3-launch3-smoke"
-    full_root = tmp_path / "e00-src-v3-launch3-full"
-    capture_root = tmp_path / "e00-src-v3-launch3-captures"
+    design = tmp_path / "e00-src-v3-launch4-design"
+    smoke_root = tmp_path / "e00-src-v3-launch4-smoke"
+    full_root = tmp_path / "e00-src-v3-launch4-full"
+    capture_root = tmp_path / "e00-src-v3-launch4-captures"
     smoke_root.mkdir()
     capture_root.mkdir()
 
@@ -342,13 +342,13 @@ def _fixture(tmp_path: Path) -> dict[str, Any]:
         design / "full-schedule",
         pairs=84,
         games=168,
-        seed="atomic-e00-src-full-v3-20260725",
+        seed="atomic-e00-src-full-v3-launch4-20260725",
     )
     smoke_schedule, smoke_schedule_receipt = _publish_schedule(
         design / "smoke-schedule",
         pairs=1,
         games=2,
-        seed="atomic-e00-src-smoke-v3-20260725",
+        seed="atomic-e00-src-smoke-v3-launch4-20260725",
     )
 
     input_paths = {
@@ -647,6 +647,10 @@ def test_full_result_receipt_execution_contract_is_type_exact(
 
 def test_full_result_requires_deep_receipt_reauthentication() -> None:
     source = LAUNCHER.read_text(encoding="utf-8")
+    expected_keys = _powershell_function(
+        source, "Get-ExpectedExecutionInputKeys", "Assert-NamespaceGuards"
+    )
+    assert "return ,$" not in expected_keys
     assert "'full' -RequireComplete" in source
     assert "Get-ExpectedExecutionInputKeys $receipt" in source
     assert (
@@ -779,6 +783,10 @@ def test_process_helper_round_trips_windows_crt_arguments_and_raw_captures(
 
 def test_launcher_has_no_start_process_or_design_root_captures() -> None:
     source = LAUNCHER.read_text(encoding="utf-8")
+    assert EXPERIMENT_ID in source
+    assert SMOKE_BATTERY_ID in source
+    assert FULL_BATTERY_ID in source
+    assert "launch3" not in source.lower()
     assert "Start-Process" not in source
     assert "$PSScriptRoot" not in source
     assert "$PSCommandPath" in source

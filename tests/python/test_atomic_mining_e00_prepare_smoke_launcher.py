@@ -181,13 +181,20 @@ def test_launcher_is_prepare_and_smoke_only() -> None:
     assert "$PSScriptRoot" not in source
     assert "$PSCommandPath" in source
     assert "Resolve-RepositoryRoot" in source
-    assert "$ExperimentId = 'atomic-e00-src-v3-20260725'" in source
-    assert "$SmokeBatteryId = 'atomic-e00-src-v3-launch3-smoke'" in source
-    assert "$FullBatteryId = 'atomic-e00-src-v3-launch3-full'" in source
-    assert "$SmokeSeed = 'atomic-e00-src-smoke-v3-20260725'" in source
-    assert "$FullSeed = 'atomic-e00-src-full-v3-20260725'" in source
+    assert "$ExperimentId = 'atomic-e00-src-v3-launch4-20260725'" in source
+    assert "$SmokeBatteryId = 'atomic-e00-src-v3-launch4-smoke'" in source
+    assert "$FullBatteryId = 'atomic-e00-src-v3-launch4-full'" in source
+    assert (
+        "$SmokeSeed = 'atomic-e00-src-smoke-v3-launch4-20260725'"
+        in source
+    )
+    assert (
+        "$FullSeed = 'atomic-e00-src-full-v3-launch4-20260725'"
+        in source
+    )
     assert "e00-src-v2" not in source
     assert "launch2" not in source.lower()
+    assert "launch3" not in source.lower()
     assert "Invoke-StrictPythonCli '06-smoke' $smokeArguments" in source
     assert source.count("'tools.atomic_mining.run_e00_source'") == 1
     assert (
@@ -226,7 +233,7 @@ def test_no_destructive_or_ambient_process_primitives() -> None:
 def test_captures_are_outside_the_sealed_design_and_roots_are_fresh() -> None:
     source = _source()
     assert (
-        "'F:\\Atomic-V3-E00\\e00-src-v3-launch3-captures'" in source
+        "'F:\\Atomic-V3-E00\\e00-src-v3-launch4-captures'" in source
     )
     assert "Assert-FreshDisjointRoots $targetRoots" in source
     assert (
@@ -287,6 +294,86 @@ def test_design_is_sealed_before_smoke_and_reverified_after() -> None:
     assert "'procedural-independent-hash-bound-v1'" in source
     assert "design.inventory.json" in source
     assert "design.receipt.json" in source
+
+
+def test_array_producers_do_not_emit_nested_arrays() -> None:
+    source = _source()
+    for name, next_name in (
+        ("Get-DesignInventoryEntries", "Get-DesignDirectoryPaths"),
+        ("Get-DesignDirectoryPaths", "Publish-DesignSeal"),
+        ("Assert-RulesCalls", "Assert-ChildImportInventory"),
+        ("Assert-TimingEvidence", "Assert-RefereeEvidence"),
+        ("Get-ExpectedExecutionInputKeys", "Assert-NamespaceGuards"),
+    ):
+        body = _powershell_function(source, name, next_name)
+        assert "return ,$" not in body
+
+
+@pytest.mark.skipif(
+    POWERSHELL is None, reason="Windows PowerShell is required"
+)
+def test_design_inventory_helpers_emit_flat_sorted_arrays(
+    tmp_path: Path,
+) -> None:
+    source = _source()
+    functions = source[
+        source.index("function Get-DesignInventoryEntries"):
+        source.index("function Publish-DesignSeal")
+    ]
+    root = tmp_path / "design"
+    (root / "zeta" / "nested").mkdir(parents=True)
+    (root / "alpha").mkdir()
+    (root / "alpha" / "one.bin").write_bytes(b"one")
+    (root / "zeta" / "nested" / "two.bin").write_bytes(b"two")
+    harness = tmp_path / "flat-design-inventory.ps1"
+    harness.write_text(
+        "param([string]$Root)\n"
+        "$ErrorActionPreference='Stop'\n"
+        "Set-StrictMode -Version Latest\n"
+        "function Get-StableFileState([string]$Path,[string]$Label){\n"
+        "  $item=Get-Item -LiteralPath $Path\n"
+        "  return [pscustomobject]@{"
+        "Sha256=('0'*64);SizeBytes=[long]$item.Length}\n"
+        "}\n"
+        f"{functions}\n"
+        "$entries=@(Get-DesignInventoryEntries $Root)\n"
+        "$directories=@(Get-DesignDirectoryPaths $Root)\n"
+        "foreach($entry in $entries){"
+        "if($entry -is [System.Array]){throw 'nested entry'}}\n"
+        "foreach($directory in $directories){"
+        "if($directory -isnot [string]){throw 'nested directory'}}\n"
+        "[ordered]@{directories=$directories;"
+        "directory_count=$directories.Count;"
+        "entries=$entries;file_count=$entries.Count}|"
+        "ConvertTo-Json -Compress -Depth 8\n",
+        encoding="utf-8",
+    )
+    completed = subprocess.run(
+        [
+            POWERSHELL,
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(harness),
+            "-Root",
+            str(root),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert completed.returncode == 0, completed.stderr
+    payload = json.loads(completed.stdout)
+    assert payload["directory_count"] == 3
+    assert payload["directories"] == ["alpha", "zeta", "zeta/nested"]
+    assert payload["file_count"] == 2
+    assert [entry["path"] for entry in payload["entries"]] == [
+        "alpha/one.bin",
+        "zeta/nested/two.bin",
+    ]
 
 
 def test_smoke_requires_v3_commit_empty_rejections_and_exact_handshake() -> None:
