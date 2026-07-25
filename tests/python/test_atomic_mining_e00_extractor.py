@@ -377,6 +377,22 @@ def _hydrate_game_evidence(
     }
     network_keys = {"current-v3": "current_net", "run3b": "teacher_net"}
     roles = (row["white_network_role"], row["black_network_role"])
+    engine_id = {
+        "name": "Atomic-Stockfish 1.0.3",
+        "author": "the Atomic-Stockfish developers (see AUTHORS file)",
+    }
+    handshake_core = {
+        "expected_preamble": list(extractor.ENGINE_HANDSHAKE_PREAMBLE),
+        "observed_preamble": list(extractor.ENGINE_HANDSHAKE_PREAMBLE),
+        "expected_identity_order": list(
+            extractor.ENGINE_HANDSHAKE_IDENTITY_ORDER
+        ),
+        "observed_identity_order": list(
+            extractor.ENGINE_HANDSHAKE_IDENTITY_ORDER
+        ),
+        "expect_single_blank_after_ids": True,
+        "observed_blank_after_ids": True,
+    }
     engines: list[dict[str, object]] = []
     for role in roles:
         network = snapshots[network_keys[str(role)]]
@@ -389,7 +405,14 @@ def _hydrate_game_evidence(
         engines.append(
             {
                 "role": role,
-                "id": {"name": "Synthetic Atomic", "author": "Tests"},
+                "id": copy.deepcopy(engine_id),
+                "handshake": {
+                    **copy.deepcopy(handshake_core),
+                    "sha256": _digest(
+                        "atomic-e00-uci-handshake-v1",
+                        handshake_core,
+                    ),
+                },
                 "advertised_options": advertised,
                 "advertised_options_sha256": _digest(
                     "atomic-e00-advertised-options-v2", advertised
@@ -1133,6 +1156,76 @@ def test_committed_source_extracts_every_pre_move_position_without_dedup(
     }
     assert extraction_receipt["output"]["sha256"] == common.sha256_file(output)
     assert common.sha256_file(receipt_path) == summary.receipt_sha256
+
+
+def test_engine_evidence_v3_handshake_is_exact_and_type_strict(
+    tmp_path: Path,
+) -> None:
+    source, rows = _publish_source(tmp_path / "handshake-v3")
+    receipt = json.loads(
+        (source / "receipt.json").read_text(encoding="utf-8")
+    )
+    evidence = rows[0]["engine_evidence"]
+
+    extractor._validate_engine_evidence_v3(
+        evidence,
+        row=rows[0],
+        receipt=receipt,
+        label="test evidence",
+    )
+
+    int_flag = copy.deepcopy(evidence)
+    int_flag["engines"][0]["handshake"][
+        "expect_single_blank_after_ids"
+    ] = 1
+    with pytest.raises(extractor.E00ExtractionError, match="must be bool"):
+        extractor._validate_engine_evidence_v3(
+            int_flag,
+            row=rows[0],
+            receipt=receipt,
+            label="test evidence",
+        )
+
+    copied_digest = copy.deepcopy(evidence)
+    copied_digest["engines"][0]["handshake"][
+        "observed_preamble"
+    ] = ["changed banner"]
+    with pytest.raises(
+        extractor.E00ExtractionError, match="handshake differs"
+    ):
+        extractor._validate_engine_evidence_v3(
+            copied_digest,
+            row=rows[0],
+            receipt=receipt,
+            label="test evidence",
+        )
+
+    recomputed_drift = copy.deepcopy(evidence)
+    handshake = recomputed_drift["engines"][0]["handshake"]
+    handshake["observed_preamble"] = ["changed banner"]
+    handshake["sha256"] = _digest(
+        "atomic-e00-uci-handshake-v1",
+        {
+            key: handshake[key]
+            for key in (
+                "expected_preamble",
+                "observed_preamble",
+                "expected_identity_order",
+                "observed_identity_order",
+                "expect_single_blank_after_ids",
+                "observed_blank_after_ids",
+            )
+        },
+    )
+    with pytest.raises(
+        extractor.E00ExtractionError, match="handshake differs"
+    ):
+        extractor._validate_engine_evidence_v3(
+            recomputed_drift,
+            row=rows[0],
+            receipt=receipt,
+            label="test evidence",
+        )
 
 
 def test_receipt_validation_failure_occurs_before_commit_marker(
@@ -1931,29 +2024,29 @@ def test_deep_input_snapshot_tamper_fails_before_replay(
     assert not (tmp_path / "tampered-source.jsonl").exists()
 
 
-def test_v2_extractor_rejects_v1_and_mixed_wire_contracts_before_replay(
+def test_v3_extractor_rejects_v2_and_mixed_wire_contracts_before_replay(
     tmp_path: Path,
     replay_engine_binding: extractor.ReplayEngineBinding,
 ) -> None:
     engine = FakeReplayEngine()
 
-    receipt_v1, _rows = _publish_source(tmp_path / "receipt-v1")
+    receipt_v2, _rows = _publish_source(tmp_path / "receipt-v2")
 
     def downgrade_receipt(receipt: dict[str, object]) -> None:
-        receipt["schema"] = "atomic-e00-execution-receipt-v1"
+        receipt["schema"] = "atomic-e00-execution-receipt-v2"
 
-    _rewrite_receipt(receipt_v1, downgrade_receipt)
+    _rewrite_receipt(receipt_v2, downgrade_receipt)
     with pytest.raises(
         extractor.E00ExtractionError,
-        match="execution-receipt-v2 only",
+        match="execution-receipt-v3 only",
     ):
         extractor.extract_e00_positions(
-            receipt_v1,
-            tmp_path / "receipt-v1.positions.jsonl",
-            tmp_path / "receipt-v1.extraction.json",
+            receipt_v2,
+            tmp_path / "receipt-v2.positions.jsonl",
+            tmp_path / "receipt-v2.extraction.json",
             engine,
             replay_engine_binding=replay_engine_binding,
-            expected_execution_receipt_sha256=_receipt_sha(receipt_v1),
+            expected_execution_receipt_sha256=_receipt_sha(receipt_v2),
         )
 
     mixed_runtime, _rows = _publish_source(
@@ -1973,12 +2066,12 @@ def test_v2_extractor_rejects_v1_and_mixed_wire_contracts_before_replay(
             expected_execution_receipt_sha256=_receipt_sha(mixed_runtime),
         )
 
-    v1_games = [_game_row(0), _game_row(1)]
-    for row in v1_games:
-        row["schema"] = "atomic-e00-game-v1"
+    v2_games = [_game_row(0), _game_row(1)]
+    for row in v2_games:
+        row["schema"] = "atomic-e00-game-v2"
     mixed_game, _rows = _publish_source(
         tmp_path / "mixed-game",
-        games=v1_games,
+        games=v2_games,
     )
     with pytest.raises(extractor.E00ExtractionError, match="schema differs"):
         extractor.extract_e00_positions(
@@ -1992,7 +2085,7 @@ def test_v2_extractor_rejects_v1_and_mixed_wire_contracts_before_replay(
 
     mixed_evidence, _rows = _publish_source(
         tmp_path / "mixed-evidence",
-        engine_evidence_schema="atomic-e00-engine-evidence-v1",
+        engine_evidence_schema="atomic-e00-engine-evidence-v2",
     )
     with pytest.raises(extractor.E00ExtractionError, match="schema differs"):
         extractor.extract_e00_positions(

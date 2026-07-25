@@ -403,6 +403,9 @@ class UciEngine:
         process_factory: Callable[..., Any] | None = None,
         clock_ns: Callable[[], int] | None = None,
         line_clock_ns: Callable[[str], int] | None = None,
+        expected_handshake_preamble: Sequence[str] = (),
+        expected_identity_order: Sequence[str] = (),
+        expect_single_blank_after_ids: bool = False,
     ) -> None:
         if isinstance(command, (str, bytes, os.PathLike)):
             raise TypeError("command must be a sequence of arguments, not one path")
@@ -418,6 +421,40 @@ class UciEngine:
         normalized_options = tuple(options)
         if any(not isinstance(setting, UciOptionSetting) for setting in normalized_options):
             raise TypeError("options must contain only UciOptionSetting values")
+        if not isinstance(expected_handshake_preamble, Sequence) or isinstance(
+            expected_handshake_preamble, (str, bytes)
+        ):
+            raise TypeError("expected_handshake_preamble must be a sequence of lines")
+        normalized_preamble = tuple(expected_handshake_preamble)
+        for index, line in enumerate(normalized_preamble):
+            _require_clean_text(
+                line,
+                label=f"expected handshake preamble line {index}",
+                allow_spaces=True,
+            )
+            if line == "uciok" or line.startswith(("id ", "option ")):
+                raise ValueError(
+                    "expected handshake preamble must not contain UCI declarations"
+                )
+        if not isinstance(expected_identity_order, Sequence) or isinstance(
+            expected_identity_order, (str, bytes)
+        ):
+            raise TypeError("expected_identity_order must be a sequence")
+        normalized_identity_order = tuple(expected_identity_order)
+        if (
+            any(
+                not isinstance(identity, str)
+                or identity not in {"name", "author"}
+                for identity in normalized_identity_order
+            )
+            or len(normalized_identity_order)
+            != len(set(normalized_identity_order))
+        ):
+            raise ValueError(
+                "expected_identity_order must contain unique name/author keys"
+            )
+        if not isinstance(expect_single_blank_after_ids, bool):
+            raise TypeError("expect_single_blank_after_ids must be bool")
         for label, value in (
             ("startup_timeout", startup_timeout),
             ("command_timeout", command_timeout),
@@ -428,6 +465,9 @@ class UciEngine:
 
         self.command = normalized_command
         self.initial_options = normalized_options
+        self.expected_handshake_preamble = normalized_preamble
+        self.expected_identity_order = normalized_identity_order
+        self.expect_single_blank_after_ids = expect_single_blank_after_ids
         self.startup_timeout = float(startup_timeout)
         self.command_timeout = float(command_timeout)
         self.shutdown_timeout = float(shutdown_timeout)
@@ -448,6 +488,9 @@ class UciEngine:
         self._stderr_thread: threading.Thread | None = None
         self._option_specs: dict[str, UciOptionSpec] = {}
         self._engine_ids: dict[str, str] = {}
+        self._handshake_preamble: list[str] = []
+        self._handshake_identity_order: list[str] = []
+        self._handshake_blank_after_ids = False
         self._applied_options: list[UciOptionSetting] = []
         self._entered = False
         self._closed = False
@@ -462,6 +505,18 @@ class UciEngine:
     @property
     def engine_ids(self) -> Mapping[str, str]:
         return MappingProxyType(dict(self._engine_ids))
+
+    @property
+    def handshake_preamble(self) -> tuple[str, ...]:
+        return tuple(self._handshake_preamble)
+
+    @property
+    def handshake_identity_order(self) -> tuple[str, ...]:
+        return tuple(self._handshake_identity_order)
+
+    @property
+    def handshake_blank_after_ids(self) -> bool:
+        return self._handshake_blank_after_ids
 
     @property
     def applied_options(self) -> tuple[UciOptionSetting, ...]:
@@ -667,9 +722,53 @@ class UciEngine:
         identities: dict[str, str] = {}
         while True:
             line = self._read_line(deadline, operation="uciok")
+            if len(self._handshake_preamble) < len(
+                self.expected_handshake_preamble
+            ):
+                expected = self.expected_handshake_preamble[
+                    len(self._handshake_preamble)
+                ]
+                if line != expected:
+                    raise UciProtocolError(
+                        "engine omitted or changed the expected UCI handshake "
+                        f"preamble at line {len(self._handshake_preamble)}"
+                    )
+                self._handshake_preamble.append(line)
+                continue
+            if line == "":
+                if (
+                    self.expect_single_blank_after_ids
+                    and not self._handshake_blank_after_ids
+                    and set(identities) == {"name", "author"}
+                    and (
+                        not self.expected_identity_order
+                        or tuple(self._handshake_identity_order)
+                        == self.expected_identity_order
+                    )
+                    and not specifications
+                ):
+                    self._handshake_blank_after_ids = True
+                    continue
+                raise UciProtocolError(
+                    "unexpected blank line during UCI handshake"
+                )
             if line == "uciok":
+                if (
+                    self.expect_single_blank_after_ids
+                    and not self._handshake_blank_after_ids
+                ):
+                    raise UciProtocolError(
+                        "engine omitted the expected blank UCI separator"
+                    )
                 break
             if line.startswith("option "):
+                if (
+                    self.expect_single_blank_after_ids
+                    and not self._handshake_blank_after_ids
+                ):
+                    raise UciProtocolError(
+                        "engine omitted the expected blank UCI separator"
+                    )
                 specification = _parse_option_declaration(line)
                 key = specification.name.casefold()
                 if key in specifications:
@@ -679,6 +778,10 @@ class UciEngine:
                 specifications[key] = specification
                 continue
             if line.startswith("id "):
+                if self._handshake_blank_after_ids:
+                    raise UciProtocolError(
+                        "UCI identity appeared after the blank separator"
+                    )
                 tokens = line.split(maxsplit=2)
                 if (
                     len(tokens) != 3
@@ -689,18 +792,42 @@ class UciEngine:
                     raise UciProtocolError(
                         f"malformed or duplicate UCI identity: {line!r}"
                     )
+                if (
+                    self.expected_identity_order
+                    and (
+                        len(self._handshake_identity_order)
+                        >= len(self.expected_identity_order)
+                        or tokens[1]
+                        != self.expected_identity_order[
+                            len(self._handshake_identity_order)
+                        ]
+                    )
+                ):
+                    raise UciProtocolError(
+                        "UCI identity order differs from the expected "
+                        "handshake contract"
+                    )
                 _require_clean_text(
                     tokens[2],
                     label=f"UCI id {tokens[1]}",
                     allow_spaces=True,
                 )
                 identities[tokens[1]] = tokens[2]
+                self._handshake_identity_order.append(tokens[1])
                 continue
             raise UciProtocolError(
                 f"unexpected line during UCI handshake: {line!r}"
             )
         self._option_specs = specifications
         self._engine_ids = identities
+        if (
+            self.expected_identity_order
+            and tuple(self._handshake_identity_order)
+            != self.expected_identity_order
+        ):
+            raise UciProtocolError(
+                "engine omitted an expected UCI identity declaration"
+            )
 
         # Validate the complete list before mutating engine state.
         rendered = tuple(

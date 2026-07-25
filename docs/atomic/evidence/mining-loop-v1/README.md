@@ -330,12 +330,17 @@ ledger.  The current V3 hash and byte count match its final training receipt.
   `compileall`/`py_compile` pass. These are implementation results, not
   authority to execute science.
 
-### E00 v2 post-commit runbook
+### Historical E00 v2 Launch2 runbook — terminal, never execute
 
-This is the only approved operational path after the implementation has been
-committed and the independent audit has returned zero P0/P1. Run it from a new
-PowerShell session. It captures native stdout/stderr directly to files through
-`Start-Process`, requires byte-empty outer stderr and never reuses a root.
+> **Historical evidence only.** Launch2 is terminal and immutable. Never run,
+> recover, edit, delete or reuse any command, root or battery ID in this
+> section. The only current prepare/smoke authority is
+> [`../../e00-launch3-prepare-smoke-runbook.md`](../../e00-launch3-prepare-smoke-runbook.md).
+> The only current full-launch authority is
+> [`../../e00-launch3-full-runbook.md`](../../e00-launch3-full-runbook.md).
+
+The block below records the exact path that was used for Launch2. It is kept
+only to preserve forensic provenance.
 
 ```powershell
 Set-StrictMode -Version Latest
@@ -658,6 +663,15 @@ Invoke-E00Battery `
 Any nonzero exit, non-empty outer stderr, missing commit marker, hash mismatch,
 unexpected namespace entry or incomplete owned-process proof makes that exact
 root terminal. Do not recover, overwrite or reuse it.
+
+### E00 v3 Launch3 post-commit runbook
+
+Launch3 uses the committed, self-contained full-only launcher documented in
+[`../../e00-launch3-full-runbook.md`](../../e00-launch3-full-runbook.md).
+It authenticates the exact clean source, full schedule/runtime design,
+committed one-pair smoke and post-smoke independent GO before starting the
+fixed 84-pair battery. It never rehydrates PowerShell state from this
+historical document and never uses a Launch1 or Launch2 root.
 
 ## Pending gates
 

@@ -650,3 +650,192 @@ pass. The pre-validation resource sample was CPU `23%`, RAM
 `22,958 MiB`, GPU `37%`, VRAM `1,305/10,240 MiB`, `46 C` and
 `28.17 W`. This sample authorized only the serial validation; Launch2 still
 requires a fresh immediate pre-execution sample after its clean commit.
+
+### 04:05 CEST — Launch2 terminal before an accepted leg
+
+Launch2 passed the clean-source preflight, exact native build, smoke/full
+schedule creation and both isolated runtime-manifest builds. The following
+create-new design evidence was committed before the smoke:
+
+- native binding SHA-256
+  `0869efbb6d0bacf1f5e0c193f6dd4ac2102706af17faa94787ae380350dd35bf`
+  (`142,336` bytes);
+- native manifest SHA-256
+  `a107103092f2d0a96c0e4e0dfff00be003655def71aec69fa408e4c7c3d4a3b5`;
+- smoke runtime manifest SHA-256
+  `dbdb2a42a99759140d4d4735becc059a8a771d520a1e5d9c48c1145fc47f0d1d`;
+- smoke discovery/build receipt SHA-256 values
+  `dc76ae9cf71eccba15b132f6057311f8f9dd9c5fe92bb609adaed8a5587fbf31`
+  and
+  `f54d9ac7ce7a043baf2c753c20c5f7f0a22f561e2ecfddb8a2a9396281fdf1ae`;
+- full runtime manifest SHA-256
+  `90223b330ee4cb74501b25116f0d74e5ea5663281572b9f2d32f6920aa459ead`;
+- full runtime build receipt SHA-256
+  `7d7be3c1ad3cad21d24cbe079aa1e79276625d7f1107dacdd79c315981b657ea`.
+
+The first smoke pair then failed before either leg became complete. Outer
+stderr was exactly 51 bytes with SHA-256
+`b554f790f472c8cd768525b54da4cb8dce9ef210fc772d3ddde490522b936d8e`;
+the create-new rejection was 261 bytes with SHA-256
+`3e4e95fc00f84958803d10019859f8756069cb2a85db5de8ae145c34bc2c99d1`
+and recorded `completed_legs=0`. No execution receipt was published and the
+full root remained absent.
+
+Read-only reproduction proved the first rejected line was the engine's
+non-UCI startup preamble:
+
+`Atomic-Stockfish 1.0.3 by the Atomic-Stockfish developers (see AUTHORS file)`
+
+The engine then emitted the exact `id name`, exact `id author`, and one empty
+separator line before its first `option`. The sealed generic UCI parser
+rejected the preamble; after accepting that line it would also have rejected
+the separator. This is an operational handshake-contract defect, not a
+scientific result. The Launch2 design and smoke roots are terminal and
+immutable; the Launch2 full root must never be created or reused.
+
+### 04:28 CEST — exact handshake and classified-child v3 candidate
+
+The minimal repair requires the exact authenticated startup preamble, exact
+`id name` then exact `id author`, and exactly one empty post-ID separator
+before any option. Omitted, changed, duplicated, reordered, moved,
+whitespace-only and type-coerced variants fail closed. A direct real-engine
+`Threads=1`, `go nodes 1` preflight passed for both exact networks with
+byte-empty stderr and the expected backend markers:
+
+- current V3: `AtomicNNUEV3`, best move `g1f3`;
+- run3b teacher: `Legacy Atomic V1`, best move `g1f3`.
+
+The immediate diagnostic-only resource sample was CPU `19%`, RAM
+`25.74/31.92 GiB`, GPU `10%`, VRAM `1,346/10,240 MiB`, `53 C` and
+`93.72 W`.
+
+Because the accepted row now carries exact handshake evidence, the public
+wire is explicitly versioned as `atomic-e00-game-v3`,
+`atomic-e00-engine-evidence-v3` and
+`atomic-e00-execution-receipt-v3`. The downstream extractor accepts that
+dialect only and rejects the real v2 predecessor before replay.
+
+Isolated child exit 70 now produces a separate canonical,
+request-bound `atomic-e00-internal-failure-v1` file with an allowlisted mode,
+stage, failure code and exception type. It never serializes exception text,
+paths or tracebacks. The parent requires result/failure exclusivity and
+validates natural-zero owned-process evidence before publishing a terminal
+`atomic-e00-rejection-v2`.
+
+The focused runner/UCI/extractor selection passes `97/97`. Independent audits
+have already caught and closed bool-versus-int coercion, digesting the expected
+rather than observed handshake, unbound failure stages, stale v2 extractor
+acceptance, unvalidated failure process evidence, identity-order ambiguity and
+schema-version ambiguity. This remains a candidate, not execution authority,
+until the self-contained Launch3 full-only launcher, documentation, complete
+suite and both independent audits return zero P0/P1.
+
+### 04:40 CEST — Launch3 code/packaging double GO
+
+Two independent read-only audits of the complete v3 candidate returned
+`GO`, `P0=0`, `P1=0`. Each independently ran the 112-test focal selection;
+both runs passed. PowerShell and Python AST checks passed, and
+`git diff --check` reported no defect (only the repository's expected
+LF-to-CRLF notices).
+
+The audited candidate binds the exact startup preamble, ordered
+`id name -> id author` identity, single separator line, v3 game/engine/
+execution evidence, canonical classified child failures, result/failure
+exclusivity, owned-process cleanup evidence, clean source commit/tree,
+full schedule/runtime hashes, a committed one-pair smoke and create-new raw
+captures outside the sealed design root. The auditors explicitly authorized
+the commit/seal workflow only; execution still requires a hash-pinned
+post-smoke authorization receipt, a fresh-shell read-only validation and an
+immediate resource gate.
+
+After the user reported closing League of Legends, a new generic sample
+observed CPU `26.5%, 33.8%, 41.6%`, RAM `25.60/31.92 GiB`, pagefile
+`22,890/98,295 MiB`, GPU `31%`, VRAM `1,331/10,240 MiB`, `46 C` and
+`27.66 W`. Free space was `123.6 GiB` on `C:`, `128.0 GiB` on `D:` and
+`1,126.8 GiB` on `F:`. A process-name plus E00-command filter found zero
+E00 Python/engine processes. This sample is documentary only because the
+source is not yet committed and the Launch3 design does not yet exist; the
+one-pair smoke will receive a fresh immediate sample.
+
+### 05:09 CEST — final pre-seal audits correctly revoke GO
+
+The two independent final audits both returned `NO-GO`, `P0=0`, after finding
+the same remaining `P1`: the prepare/smoke launcher authenticated hashes,
+counts, legs and the engine handshake, but did not independently validate the
+complete accepted-game result, referee/verifier and owned-process evidence.
+One audit also demonstrated a separate type-integrity gap: PowerShell JSON
+comparisons and casts could accept `1` for `true` and numeric strings for
+integer or floating fields. The launcher digest then reconstructed expected
+typed values instead of proving the observed JSON types.
+
+This is a successful fail-closed interception. No Launch3 root, native build,
+engine invocation or scientific output exists. The candidate remains
+uncommitted. The required repair is limited to strict CLR-type predicates,
+complete exact-field validation for both smoke game rows, exact natural-zero
+owned-process evidence for the leg and verifier child, non-empty/exact
+artifact key sets, and adversarial mutation/omission fixtures. A fresh double
+audit is mandatory after the repair.
+
+The ChatGPT Pro Oracle review in the `Atomic-Stockfish` project completed after
+`10m 39s`. Its critical-path advice agrees with the local inventory:
+
+- E00 may execute while sealed, but no E00 outcome may be opened before the
+  downstream mining design and trust anchors are frozen.
+- Before opening E00, authenticate real `REPLAY` and opaque `DENY_E05`
+  manifests, bind caller-supplied hashes in the split receipt, and publish a
+  pre-probe design receipt.
+- Post-bestmove children inherit the parent's component; they never reopen or
+  merge the split. A post-generation global leakage audit rejects a child that
+  touches another component, `REPLAY`, or `DENY_E05`.
+- Exact labels require `go depth 7`, legal PV replay and explicit proof that
+  the returned lane reached depth 7.
+- Score-only training needs a new semantic schema/provider with
+  `game_result_present=false`; fabricating a draw is a kill condition. The
+  existing binary container may be reused only if it can carry that absence
+  without a sentinel result.
+- V3 initialization must load model weights only, with fresh optimizer,
+  scheduler, RNG, provider, cursor and counters.
+- The confirmatory gate must bootstrap component groups, and the later match
+  gate must commit complete colour-swapped pairs and support both `0%` and
+  `100%` LOS boundaries.
+
+The Oracle therefore returns `GO` for sealed E00 execution and `NO-GO` for
+opening its outputs until the downstream pre-result implementation and design
+receipt are complete.
+
+### 05:49 CEST — final Launch3 candidate receives double GO
+
+The final type- and evidence-exact candidate is frozen at:
+
+- prepare/smoke launcher
+  `65cb19089861086391666e6a61503840442a77d9f49b427423669407f85174fb`;
+- prepare/smoke tests
+  `a9afcfd56e1734398acb547943268df4ff1d30845f7bd6ff323e369a617b8942`;
+- prepare/smoke runbook
+  `8bd61818866017a1db9a96d1362cff25a47796b4cce7bb62b5832791cedaa80a`;
+- full launcher
+  `a774656f0de38b0e08aad43c473f46f59b66a4817d490448a829a5a0ed06cceb`;
+- full tests
+  `d00853c1e7c48b806de8c2f5207fa11738a2fd0d0794198cc7fae00503b29991`;
+- full runbook
+  `1f82fdb4c06f92216b797ebae092c8665850cd9ba3c765daba6ef3f97bd324f4`.
+
+Two independent read-only audits returned `GO`, `P0=0`, `P1=0` on those
+exact bytes. The first passed `181/181` integrated tests and `56/56`
+launcher tests; the second repeated the complete `382/382` atomic-mining
+suite and the same 56 launcher cases. Both PowerShell ASTs, all changed
+Python ASTs and `git diff --check` pass. The root independently repeated
+`382/382` in `100.09 s`.
+
+The repaired boundary rejects PowerShell scalar coercion, validates the full
+two-row smoke game/referee/verifier/owned-process wire, requires exact
+non-empty artifact maps, and treats the later canonical authorization receipt
+as the explicit deep-smoke audit authority for the full launcher. The full
+launcher in turn requires complete type-exact bindings for its own result.
+
+The pre-test resource sample was CPU `16.2%, 18.7%, 17.5%`, RAM
+`25.82/31.92 GiB`, pagefile `22,829 MiB`, GPU `29%`, VRAM
+`1,302/10,240 MiB`, `46 C` and `29.36 W`; free space remained `123.3 GiB`
+on `C:`, `128.0 GiB` on `D:` and `1,126.8 GiB` on `F:`. Four unrelated
+Stockfish-named processes were visible and were not inspected, stopped or
+modified. No E00 root, engine or native build was touched during validation.

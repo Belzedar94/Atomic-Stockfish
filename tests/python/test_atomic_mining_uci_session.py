@@ -81,6 +81,7 @@ class FakeUciProcess:
         silent_search: bool = False,
         die_on_uci: bool = False,
         clocked_bestmoves: tuple[str, ...] = ("e2e4", "d2d4"),
+        uci_lines: tuple[str, ...] | None = None,
     ) -> None:
         self.stdout = _BlockingReader()
         self.stderr = _BlockingReader()
@@ -94,6 +95,7 @@ class FakeUciProcess:
         self.silent_search = silent_search
         self.die_on_uci = die_on_uci
         self.clocked_bestmoves = list(clocked_bestmoves)
+        self.uci_lines = uci_lines
         self._done = threading.Event()
         self._last_position = ""
 
@@ -106,6 +108,10 @@ class FakeUciProcess:
                 self.stdout.close_stream()
                 self.stderr.close_stream()
                 self._done.set()
+                return
+            if self.uci_lines is not None:
+                for line in self.uci_lines:
+                    self.stdout.emit(line)
                 return
             self.stdout.emit("id name Fake Atomic")
             if self.malformed_option:
@@ -352,6 +358,99 @@ def test_context_handshake_inspection_and_fixed_node_probe() -> None:
     assert process.commands[-1] == "quit"
 
 
+_REALISTIC_BANNER = (
+    "Atomic-Stockfish 1.0.3 by the Atomic-Stockfish developers "
+    "(see AUTHORS file)"
+)
+_REALISTIC_HANDSHAKE = (
+    _REALISTIC_BANNER,
+    "id name Atomic-Stockfish 1.0.3",
+    "id author the Atomic-Stockfish developers (see AUTHORS file)",
+    "",
+    "option name Threads type spin default 1 min 1 max 128",
+    "uciok",
+)
+
+
+def test_exact_preamble_and_blank_separator_are_observed() -> None:
+    process = FakeUciProcess(uci_lines=_REALISTIC_HANDSHAKE)
+    with UciEngine(
+        ["fake-engine"],
+        options=(),
+        process_factory=ProcessFactory(process),
+        expected_handshake_preamble=(_REALISTIC_BANNER,),
+        expected_identity_order=("name", "author"),
+        expect_single_blank_after_ids=True,
+    ) as engine:
+        assert engine.handshake_preamble == (_REALISTIC_BANNER,)
+        assert engine.handshake_identity_order == ("name", "author")
+        assert engine.handshake_blank_after_ids is True
+        assert engine.engine_ids == {
+            "name": "Atomic-Stockfish 1.0.3",
+            "author": "the Atomic-Stockfish developers (see AUTHORS file)",
+        }
+
+
+@pytest.mark.parametrize(
+    "lines",
+    (
+        _REALISTIC_HANDSHAKE[1:],
+        ("changed banner",) + _REALISTIC_HANDSHAKE[1:],
+        (_REALISTIC_BANNER, _REALISTIC_BANNER)
+        + _REALISTIC_HANDSHAKE[1:],
+        tuple(line for line in _REALISTIC_HANDSHAKE if line != ""),
+        _REALISTIC_HANDSHAKE[:4] + ("",) + _REALISTIC_HANDSHAKE[4:],
+        (
+            _REALISTIC_BANNER,
+            "id author the Atomic-Stockfish developers (see AUTHORS file)",
+            "id name Atomic-Stockfish 1.0.3",
+            "",
+            "option name Threads type spin default 1 min 1 max 128",
+            "uciok",
+        ),
+        (
+            _REALISTIC_BANNER,
+            "id name Atomic-Stockfish 1.0.3",
+            "",
+            "id author the Atomic-Stockfish developers (see AUTHORS file)",
+            "uciok",
+        ),
+        (
+            _REALISTIC_BANNER,
+            "id name Atomic-Stockfish 1.0.3",
+            "id author the Atomic-Stockfish developers (see AUTHORS file)",
+            " ",
+            "uciok",
+        ),
+    ),
+)
+def test_preamble_or_blank_separator_drift_fails_closed(
+    lines: tuple[str, ...],
+) -> None:
+    process = FakeUciProcess(uci_lines=lines)
+    with pytest.raises(UciProtocolError):
+        with UciEngine(
+            ["fake-engine"],
+            options=(),
+            process_factory=ProcessFactory(process),
+            expected_handshake_preamble=(_REALISTIC_BANNER,),
+            expected_identity_order=("name", "author"),
+            expect_single_blank_after_ids=True,
+        ):
+            raise AssertionError("unreachable")
+
+
+def test_default_handshake_policy_still_rejects_banner() -> None:
+    process = FakeUciProcess(uci_lines=_REALISTIC_HANDSHAKE)
+    with pytest.raises(UciProtocolError, match="unexpected line"):
+        with UciEngine(
+            ["fake-engine"],
+            options=(),
+            process_factory=ProcessFactory(process),
+        ):
+            raise AssertionError("unreachable")
+
+
 @pytest.mark.parametrize(
     "setting, message",
     (
@@ -544,6 +643,42 @@ def test_constructor_rejects_ambiguous_commands_and_control_injection() -> None:
         UciEngine("fake-engine", options=())  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="control"):
         UciEngine(["fake-engine", "bad\nargument"], options=())
+    with pytest.raises(TypeError, match="sequence"):
+        UciEngine(
+            ["fake-engine"],
+            options=(),
+            expected_handshake_preamble="banner",  # type: ignore[arg-type]
+        )
+    with pytest.raises(ValueError, match="control"):
+        UciEngine(
+            ["fake-engine"],
+            options=(),
+            expected_handshake_preamble=("bad\nbanner",),
+        )
+    with pytest.raises(ValueError, match="declarations"):
+        UciEngine(
+            ["fake-engine"],
+            options=(),
+            expected_handshake_preamble=("id name fake",),
+        )
+    with pytest.raises(TypeError, match="must be bool"):
+        UciEngine(
+            ["fake-engine"],
+            options=(),
+            expect_single_blank_after_ids=1,  # type: ignore[arg-type]
+        )
+    with pytest.raises(TypeError, match="must be a sequence"):
+        UciEngine(
+            ["fake-engine"],
+            options=(),
+            expected_identity_order="name",  # type: ignore[arg-type]
+        )
+    with pytest.raises(ValueError, match="unique name/author"):
+        UciEngine(
+            ["fake-engine"],
+            options=(),
+            expected_identity_order=("name", "name"),
+        )
     with pytest.raises(ValueError, match="six fields"):
         process = FakeUciProcess()
         with UciEngine(

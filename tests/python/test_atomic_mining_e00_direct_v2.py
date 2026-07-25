@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from pathlib import Path
 import sys
 from types import MappingProxyType, ModuleType, SimpleNamespace
@@ -147,8 +148,18 @@ class _FakeEngine:
             {name: _spec(name, kind) for name, kind in kinds.items()}
         )
         self.engine_ids = MappingProxyType(
-            {"name": "stub", "author": "test"}
+            {
+                "name": "Atomic-Stockfish 1.0.3",
+                "author": (
+                    "the Atomic-Stockfish developers (see AUTHORS file)"
+                ),
+            }
         )
+        self.handshake_preamble = runner.ENGINE_HANDSHAKE_PREAMBLE
+        self.handshake_identity_order = (
+            runner.ENGINE_HANDSHAKE_IDENTITY_ORDER
+        )
+        self.handshake_blank_after_ids = True
         self.applied_options: tuple[uci_session.UciOptionSetting, ...] = ()
         self.stderr = ""
         self.new_games = 0
@@ -292,7 +303,8 @@ def test_direct_native_loop_uses_persistent_engines_and_equality_is_on_time(
     _FakeEngine.completion_ns = 2_000_000
     _install_native_stubs(monkeypatch)
 
-    execution = runner._play_direct(_request(tmp_path, base_ms=2))
+    request = _request(tmp_path, base_ms=2)
+    execution = runner._play_direct(request)
 
     assert execution.result_white == "1-0"
     assert execution.time_loss is False
@@ -310,6 +322,34 @@ def test_direct_native_loop_uses_persistent_engines_and_equality_is_on_time(
         call["operation"]
         for call in execution.referee_evidence["rules_calls"]
     ] == ["outcome", "legal-moves", "outcome"]
+    runner._validate_engine_evidence(execution.engine_evidence, request)
+
+    int_flag = copy.deepcopy(execution.engine_evidence)
+    int_flag["engines"][0]["handshake"][
+        "observed_blank_after_ids"
+    ] = 1
+    with pytest.raises(runner.E00RunnerError, match="must be bool"):
+        runner._validate_engine_evidence(int_flag, request)
+
+    drift = copy.deepcopy(execution.engine_evidence)
+    handshake = drift["engines"][0]["handshake"]
+    handshake["observed_preamble"] = ["changed banner"]
+    handshake["sha256"] = runner._digest_document(
+        "atomic-e00-uci-handshake-v1",
+        {
+            key: handshake[key]
+            for key in (
+                "expected_preamble",
+                "observed_preamble",
+                "expected_identity_order",
+                "observed_identity_order",
+                "expect_single_blank_after_ids",
+                "observed_blank_after_ids",
+            )
+        },
+    )
+    with pytest.raises(runner.E00RunnerError, match="handshake evidence differs"):
+        runner._validate_engine_evidence(drift, request)
 
 
 def test_direct_native_loop_flags_one_nanosecond_late_without_applying_move(

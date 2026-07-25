@@ -434,7 +434,10 @@ def test_real_isolated_child_does_not_mutate_fresh_runtime_package(
     before = runner._directory_inventory(runtime_root)
     with pytest.raises(
         runner.E00RunnerError,
-        match="runtime import-only probe wrapper exited with code 70",
+        match=(
+            "runtime import-only probe wrapper failed at decode-request "
+            "\\[artifact-contract\\] with code 70"
+        ),
     ):
         runner.DirectUciBackend()._run_child(
             mode="--internal-discover-runtime",
@@ -446,6 +449,225 @@ def test_real_isolated_child_does_not_mutate_fresh_runtime_package(
     assert runner._directory_inventory(runtime_root) == before
     assert not list(runtime_root.rglob("__pycache__"))
     assert not list(runtime_root.rglob("*.pyc"))
+
+
+def test_internal_failure_wire_is_classified_and_does_not_leak_message(
+    tmp_path: Path,
+) -> None:
+    request_path = tmp_path / "request.json"
+    result_path = tmp_path / "result.json"
+    common.write_new_json(request_path, {"request": "bound"})
+    secret = "C:/secret/operator/path"
+
+    assert (
+        runner._write_internal_failure(
+            mode="play-leg",
+            stage="play-direct",
+            request_path=request_path,
+            result_path=result_path,
+            error=runner.uci_session.UciProtocolError(secret),
+        )
+        == 70
+    )
+
+    failure_path = tmp_path / "failure.json"
+    failure = _read_json(failure_path)
+    assert failure == {
+        "schema": runner.INTERNAL_FAILURE_SCHEMA,
+        "mode": "play-leg",
+        "stage": "play-direct",
+        "failure_code": "uci-protocol",
+        "exception_type": "UciProtocolError",
+        "request_sha256": _sha(request_path),
+    }
+    assert secret not in failure_path.read_text(encoding="utf-8")
+    assert not result_path.exists()
+    assert (
+        runner._validate_internal_failure(
+            failure,
+            expected_mode="play-leg",
+            expected_request_sha256=_sha(request_path),
+        )
+        == failure
+    )
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    (
+        ("schema", "atomic-e00-internal-failure-v0", "schema differs"),
+        ("mode", "verify-game", "mode differs"),
+        (
+            "stage",
+            "verify-game",
+            "stage is malformed or not valid for mode",
+        ),
+        (
+            "failure_code",
+            ["uci-protocol"],
+            "failure code is not allowlisted",
+        ),
+        ("request_sha256", "f" * 64, "request binding differs"),
+    ),
+)
+def test_internal_failure_wire_rejects_drift(
+    field: str,
+    value: object,
+    message: str,
+) -> None:
+    failure: dict[str, object] = {
+        "schema": runner.INTERNAL_FAILURE_SCHEMA,
+        "mode": "play-leg",
+        "stage": "play-direct",
+        "failure_code": "uci-protocol",
+        "exception_type": "UciProtocolError",
+        "request_sha256": "a" * 64,
+    }
+    failure[field] = value
+    with pytest.raises(runner.E00RunnerError, match=message):
+        runner._validate_internal_failure(
+            failure,
+            expected_mode="play-leg",
+            expected_request_sha256="a" * 64,
+        )
+
+
+def test_isolated_child_result_failure_exclusivity_is_fail_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    valid_process = {
+        "schema": "atomic-e00-owned-process-v1",
+        "containment": "windows-job-object",
+        "kill_on_close": True,
+        "created_suspended_before_assignment": True,
+        "resumed_primary_thread": True,
+        "active_processes_zero": True,
+        "termination_requested": False,
+    }
+
+    class FakeOwner:
+        def __init__(
+            self,
+            *,
+            return_code: int,
+            process_evidence: Mapping[str, object],
+        ) -> None:
+            self.process = SimpleNamespace(
+                wait=lambda **_kwargs: return_code
+            )
+            self._process_evidence = dict(process_evidence)
+
+        def prove_natural_zero(self, **_kwargs: object) -> None:
+            return None
+
+        def evidence(self) -> SimpleNamespace:
+            return SimpleNamespace(
+                payload=lambda: dict(self._process_evidence)
+            )
+
+        def close(self) -> None:
+            return None
+
+    def invoke(
+        *,
+        return_code: int,
+        publish_result: bool = False,
+        publish_failure: bool = False,
+        noncanonical_failure: bool = False,
+        process_evidence: Mapping[str, object] = valid_process,
+    ) -> object:
+        def launch(
+            _cls: type[object],
+            command: list[str],
+            **_kwargs: object,
+        ) -> FakeOwner:
+            request_path = Path(command[-2])
+            result_path = Path(command[-1])
+            if publish_result:
+                common.write_new_json(result_path, {"unexpected": True})
+            if publish_failure:
+                failure = {
+                    "schema": runner.INTERNAL_FAILURE_SCHEMA,
+                    "mode": "discover-runtime",
+                    "stage": "discover-runtime",
+                    "failure_code": "artifact-contract",
+                    "exception_type": "MiningArtifactError",
+                    "request_sha256": _sha(request_path),
+                }
+                failure_path = result_path.with_name("failure.json")
+                if noncanonical_failure:
+                    failure_path.write_bytes(
+                        json.dumps(failure, indent=2).encode("utf-8")
+                    )
+                else:
+                    common.write_new_json(failure_path, failure)
+            return FakeOwner(
+                return_code=return_code,
+                process_evidence=process_evidence,
+            )
+
+        monkeypatch.setattr(
+            runner.owned_process.OwnedProcess,
+            "launch",
+            classmethod(launch),
+        )
+        return runner.DirectUciBackend()._run_child(
+            mode="--internal-discover-runtime",
+            request_wire={"runtime_package_root": str(tmp_path)},
+            result_label="synthetic child",
+            deadline_seconds=5.0,
+        )
+
+    with pytest.raises(
+        runner.E00ChildFailure,
+        match=(
+            "synthetic child wrapper failed at discover-runtime "
+            "\\[artifact-contract\\] with code 70"
+        ),
+    ):
+        invoke(return_code=70, publish_failure=True)
+
+    for kwargs, message in (
+        (
+            {
+                "return_code": 70,
+                "publish_result": True,
+                "publish_failure": True,
+            },
+            "unclassified failure",
+        ),
+        (
+            {"return_code": 70},
+            "unclassified failure",
+        ),
+        (
+            {"return_code": 0, "publish_failure": True},
+            "published a failure on success",
+        ),
+        (
+            {
+                "return_code": 70,
+                "publish_failure": True,
+                "noncanonical_failure": True,
+            },
+            "canonical",
+        ),
+    ):
+        with pytest.raises(runner.E00RunnerError, match=message):
+            invoke(**kwargs)
+
+    drifted_process = dict(valid_process)
+    drifted_process["active_processes_zero"] = False
+    with pytest.raises(
+        runner.E00RunnerError,
+        match="did not prove active-process-zero",
+    ):
+        invoke(
+            return_code=70,
+            publish_failure=True,
+            process_evidence=drifted_process,
+        )
 
 
 def test_child_import_inventory_requires_canonical_order_and_unique_modules(

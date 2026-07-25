@@ -1,4 +1,4 @@
-# Atomic E00 source battery contract v2
+# Atomic E00 source battery contract v3
 
 - Status: wire-frozen implementation candidate; no scientific E00 has
   started.
@@ -118,11 +118,13 @@ The schedule:
 No filesystem order, Python RNG state, clock time or thread completion order
 may affect the schedule.
 
-The exact post-commit native-build, schedule, runtime-manifest and runner
+The exact post-commit native-build, schedule, runtime-manifest and smoke
 commands are maintained in
-[`evidence/mining-loop-v1/README.md`](evidence/mining-loop-v1/README.md) under
-“E00 v2 post-commit runbook”. The smoke and full battery use different
-create-new schedule, runtime-design and execution roots.
+[`e00-launch3-prepare-smoke-runbook.md`](e00-launch3-prepare-smoke-runbook.md).
+The separately authorized full-only entrypoint is documented in
+[`e00-launch3-full-runbook.md`](e00-launch3-full-runbook.md). The smoke and
+full battery use different create-new schedule, runtime-design and execution
+roots.
 
 ## Result-bearing game wire
 
@@ -130,19 +132,22 @@ The frozen public schemas are:
 
 | Product | Schema |
 | --- | --- |
-| Accepted game | `atomic-e00-game-v2` |
-| Execution commit marker | `atomic-e00-execution-receipt-v2` |
+| Accepted game | `atomic-e00-game-v3` |
+| Execution commit marker | `atomic-e00-execution-receipt-v3` |
 | Runtime manifest | `atomic-e00-runtime-manifest-v2` |
 | Runtime discovery receipt | `atomic-e00-runtime-discovery-receipt-v2` |
-| Internal leg request/result | `atomic-e00-internal-leg-request-v2` / `atomic-e00-internal-leg-result-v2` |
-| Internal verifier request/result | `atomic-e00-internal-verify-request-v2` / `atomic-e00-internal-verify-result-v2` |
+| Engine evidence | `atomic-e00-engine-evidence-v3` |
+| Internal leg request/result | `atomic-e00-internal-leg-request-v2` / `atomic-e00-internal-leg-result-v3` |
+| Internal verifier request/result | `atomic-e00-internal-verify-request-v3` / `atomic-e00-internal-verify-result-v2` |
 | Internal discovery request/result | `atomic-e00-internal-runtime-discovery-request-v2` / `atomic-e00-internal-runtime-discovery-result-v2` |
+| Internal classified failure | `atomic-e00-internal-failure-v1` |
+| Terminal rejection | `atomic-e00-rejection-v2` |
 | Owned-process proof | `atomic-e00-owned-process-v1` |
 
-The pair, inventory, rejection, trajectory, source-game, schedule and schedule
-receipt schemas remain v1 because their semantics did not change.
+The pair, inventory, trajectory, source-game, schedule and schedule receipt
+schemas remain v1 because their semantics did not change.
 
-Each accepted game is one `atomic-e00-game-v2` canonical JSONL row:
+Each accepted game is one `atomic-e00-game-v3` canonical JSONL row:
 
 - experiment ID, battery ID and schedule SHA-256;
 - pair ID, pair ordinal and leg;
@@ -157,6 +162,8 @@ Each accepted game is one `atomic-e00-game-v2` canonical JSONL row:
 - stdout/stderr or per-game diagnostic transcript SHA-256;
 - exact engine lifecycle/options evidence for both single-use engine
   processes;
+- exact startup preamble, `id name`, `id author` and the single empty
+  post-ID UCI separator for both engine processes;
 - independent native-referee and native-verifier evidence;
 - owned-process cleanup evidence proving direct-child exit, no forced
   termination and zero active descendants after cleanup.
@@ -178,6 +185,10 @@ the runner's real `-I`/`runpy(..., run_name="__main__")` bootstrap under
   identity.
 - Any engine exception, malformed move/result, time-accounting error, missing
   leg, unexpected process exit or stderr policy violation aborts the battery.
+- An isolated child exit 70 is classified only by a canonical
+  `internal-failure-v1` record bound to the exact request, mode and allowlisted
+  stage. It must coexist with no result and contains no free-form exception
+  text, paths or traceback.
 - There is no silent retry. A predeclared retry creates a new attempt identity
   and cannot overwrite or disguise the failed attempt.
 - Final JSONL is ordered by pair ordinal and leg, never by completion order.
@@ -219,7 +230,7 @@ Any failed condition is a terminal `NO-GO` for that battery ID.
 
 ## Initial resource policy
 
-The v2 source runner is CPU-only, requires `Threads=1`, and executes pairs
+The v3 source runner is CPU-only, requires `Threads=1`, and executes pairs
 serially. Any concurrent-pair mode is a new contract and a new launch, not an
 operational tuning knob. A fresh generic CPU/RAM/pagefile/GPU sample is
 mandatory immediately before the one-pair smoke and again before the fixed

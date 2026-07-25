@@ -40,22 +40,22 @@ from . import (
 )
 
 
-GAME_SCHEMA = "atomic-e00-game-v2"
+GAME_SCHEMA = "atomic-e00-game-v3"
 PAIR_SCHEMA = "atomic-e00-pair-v1"
 INVENTORY_SCHEMA = "atomic-e00-inventory-v1"
-RECEIPT_SCHEMA = "atomic-e00-execution-receipt-v2"
-REJECTION_SCHEMA = "atomic-e00-rejection-v1"
+RECEIPT_SCHEMA = "atomic-e00-execution-receipt-v3"
+REJECTION_SCHEMA = "atomic-e00-rejection-v2"
 TRAJECTORY_SCHEMA = "atomic-e00-trajectory-v1"
 SOURCE_GAME_SCHEMA = "atomic-e00-source-game-v1"
 RUNTIME_MANIFEST_SCHEMA = "atomic-e00-runtime-manifest-v2"
-ENGINE_EVIDENCE_SCHEMA = "atomic-e00-engine-evidence-v2"
+ENGINE_EVIDENCE_SCHEMA = "atomic-e00-engine-evidence-v3"
 REFEREE_EVIDENCE_SCHEMA = "atomic-e00-native-referee-evidence-v2"
 VERIFIER_EVIDENCE_SCHEMA = "atomic-e00-native-verifier-evidence-v2"
 SCHEDULE_SCHEMA = "atomic-e00-schedule-v1"
 SCHEDULE_RECEIPT_SCHEMA = "atomic-e00-schedule-receipt-v1"
 INTERNAL_LEG_REQUEST_SCHEMA = "atomic-e00-internal-leg-request-v2"
-INTERNAL_LEG_RESULT_SCHEMA = "atomic-e00-internal-leg-result-v2"
-INTERNAL_VERIFY_REQUEST_SCHEMA = "atomic-e00-internal-verify-request-v2"
+INTERNAL_LEG_RESULT_SCHEMA = "atomic-e00-internal-leg-result-v3"
+INTERNAL_VERIFY_REQUEST_SCHEMA = "atomic-e00-internal-verify-request-v3"
 INTERNAL_VERIFY_RESULT_SCHEMA = "atomic-e00-internal-verify-result-v2"
 INTERNAL_RUNTIME_DISCOVERY_REQUEST_SCHEMA = (
     "atomic-e00-internal-runtime-discovery-request-v2"
@@ -63,6 +63,7 @@ INTERNAL_RUNTIME_DISCOVERY_REQUEST_SCHEMA = (
 INTERNAL_RUNTIME_DISCOVERY_RESULT_SCHEMA = (
     "atomic-e00-internal-runtime-discovery-result-v2"
 )
+INTERNAL_FAILURE_SCHEMA = "atomic-e00-internal-failure-v1"
 RUNTIME_DISCOVERY_RECEIPT_SCHEMA = (
     "atomic-e00-runtime-discovery-receipt-v2"
 )
@@ -73,12 +74,89 @@ NETWORK_BACKENDS = {
     "current-v3": "AtomicNNUEV3",
     "run3b": "Legacy Atomic V1",
 }
+ENGINE_HANDSHAKE_PREAMBLE = (
+    "Atomic-Stockfish 1.0.3 by the Atomic-Stockfish developers "
+    "(see AUTHORS file)",
+)
+ENGINE_HANDSHAKE_IDENTITY_ORDER = ("name", "author")
 _UCI_MOVE = re.compile(r"^[a-h][1-8][a-h][1-8][nbrq]?$")
 _CLEAN_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
+_EXCEPTION_TYPE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,127}$")
+_INTERNAL_FAILURE_CODES = frozenset(
+    {
+        "artifact-contract",
+        "atomic-outcome",
+        "create-new",
+        "interrupted",
+        "invalid-input",
+        "runner-contract",
+        "uci-option",
+        "uci-process",
+        "uci-protocol",
+        "uci-timeout",
+        "unexpected",
+    }
+)
+_INTERNAL_FAILURE_MODES = frozenset(
+    {
+        "discover-runtime",
+        "play-leg",
+        "verify-game",
+    }
+)
+_INTERNAL_FAILURE_STAGES = {
+    "discover-runtime": frozenset(
+        {
+            "load-request",
+            "decode-request",
+            "discover-runtime",
+            "publish-result",
+        }
+    ),
+    "play-leg": frozenset(
+        {
+            "load-request",
+            "decode-request",
+            "play-direct",
+            "publish-result",
+        }
+    ),
+    "verify-game": frozenset(
+        {
+            "load-request",
+            "decode-request",
+            "verify-game",
+            "publish-result",
+        }
+    ),
+}
 
 
 class E00RunnerError(RuntimeError):
     """The E00 battery failed a scientific or operational precondition."""
+
+
+class E00ChildFailure(E00RunnerError):
+    """A classified isolated-child failure with authenticated safe evidence."""
+
+    def __init__(
+        self,
+        *,
+        result_label: str,
+        return_code: int,
+        diagnostic: Mapping[str, object],
+        process_evidence: Mapping[str, object],
+    ) -> None:
+        self.diagnostic = dict(diagnostic)
+        self.diagnostic_sha256 = _digest_document(
+            "atomic-e00-internal-failure-evidence-v1", self.diagnostic
+        )
+        self.process_evidence = dict(process_evidence)
+        super().__init__(
+            f"{result_label} wrapper failed at "
+            f"{self.diagnostic['stage']} "
+            f"[{self.diagnostic['failure_code']}] with code {return_code}"
+        )
 
 
 _ACTIVE_ARTIFACT_GUARDS: ContextVar[
@@ -2642,6 +2720,7 @@ def _validate_engine_evidence(
             (
                 "role",
                 "id",
+                "handshake",
                 "advertised_options",
                 "advertised_options_sha256",
                 "configured_options",
@@ -2662,6 +2741,81 @@ def _validate_engine_evidence(
         ):
             raise E00RunnerError("engine evidence id is incomplete")
         identifiers.append(dict(identifier))
+        handshake = raw["handshake"]
+        if not isinstance(handshake, Mapping):
+            raise E00RunnerError("engine handshake evidence must be an object")
+        common.require_exact_fields(
+            handshake,
+            (
+                "expected_preamble",
+                "observed_preamble",
+                "expected_identity_order",
+                "observed_identity_order",
+                "expect_single_blank_after_ids",
+                "observed_blank_after_ids",
+                "sha256",
+            ),
+            label=f"engine handshake evidence {index}",
+        )
+        expected_handshake = {
+            "expected_preamble": list(ENGINE_HANDSHAKE_PREAMBLE),
+            "observed_preamble": list(ENGINE_HANDSHAKE_PREAMBLE),
+            "expected_identity_order": list(
+                ENGINE_HANDSHAKE_IDENTITY_ORDER
+            ),
+            "observed_identity_order": list(
+                ENGINE_HANDSHAKE_IDENTITY_ORDER
+            ),
+            "expect_single_blank_after_ids": True,
+            "observed_blank_after_ids": True,
+        }
+        observed_handshake = {
+            key: handshake[key]
+            for key in (
+                "expected_preamble",
+                "observed_preamble",
+                "expected_identity_order",
+                "observed_identity_order",
+                "expect_single_blank_after_ids",
+                "observed_blank_after_ids",
+            )
+        }
+        for label in (
+            "expected_preamble",
+            "observed_preamble",
+            "expected_identity_order",
+            "observed_identity_order",
+        ):
+            if (
+                not isinstance(observed_handshake[label], list)
+                or not all(
+                    isinstance(line, str)
+                    for line in observed_handshake[label]
+                )
+            ):
+                raise E00RunnerError(
+                    f"engine handshake {label} is malformed"
+                )
+        for label in (
+            "expect_single_blank_after_ids",
+            "observed_blank_after_ids",
+        ):
+            if type(observed_handshake[label]) is not bool:
+                raise E00RunnerError(
+                    f"engine handshake {label} must be bool"
+                )
+        if (
+            observed_handshake != expected_handshake
+            or handshake["sha256"]
+            != _digest_document(
+                "atomic-e00-uci-handshake-v1", observed_handshake
+            )
+            or ENGINE_HANDSHAKE_PREAMBLE
+            != (
+                f"{identifier['name']} by {identifier['author']}",
+            )
+        ):
+            raise E00RunnerError("engine handshake evidence differs")
         common.require_lower_hex_sha256(
             raw["advertised_options_sha256"],
             label="advertised options SHA-256",
@@ -4014,18 +4168,26 @@ def _prepare_battery(
                 pair_dir.mkdir(parents=False, exist_ok=pair_dir.exists())
                 rejection_path = pair_dir / "rejection.json"
                 if not rejection_path.exists():
-                    common.write_new_json(
-                        rejection_path,
-                        {
-                            "schema": REJECTION_SCHEMA,
-                            "pair_id": pair.pair_id,
-                            "pair_ordinal": pair.pair_ordinal,
-                            "completed_legs": len(executions),
-                            "error_type": type(error).__name__,
-                            "error_message": str(error),
-                            "retry_performed": False,
-                        },
-                    )
+                    rejection: dict[str, object] = {
+                        "schema": REJECTION_SCHEMA,
+                        "pair_id": pair.pair_id,
+                        "pair_ordinal": pair.pair_ordinal,
+                        "completed_legs": len(executions),
+                        "error_type": type(error).__name__,
+                        "error_message": str(error),
+                        "retry_performed": False,
+                    }
+                    if isinstance(error, E00ChildFailure):
+                        rejection.update(
+                            {
+                                "child_failure": error.diagnostic,
+                                "child_failure_sha256": (
+                                    error.diagnostic_sha256
+                                ),
+                                "child_process": error.process_evidence,
+                            }
+                        )
+                    common.write_new_json(rejection_path, rejection)
                 raise E00RunnerError(
                     f"E00 pair {pair.pair_ordinal} failed; battery aborted"
                 ) from error
@@ -5157,6 +5319,13 @@ def _play_direct(request: LegRequest) -> GameExecution:  # noqa: C901
                         shutdown_timeout=min(
                             10.0, request.command_timeout_seconds
                         ),
+                        expected_handshake_preamble=(
+                            ENGINE_HANDSHAKE_PREAMBLE
+                        ),
+                        expected_identity_order=(
+                            ENGINE_HANDSHAKE_IDENTITY_ORDER
+                        ),
+                        expect_single_blank_after_ids=True,
                     )
                 )
                 engines.append(engine)
@@ -5204,6 +5373,45 @@ def _play_direct(request: LegRequest) -> GameExecution:  # noqa: C901
                     {
                         "role": role,
                         "id": dict(sorted(engine.engine_ids.items())),
+                        "handshake": {
+                            "expected_preamble": list(
+                                ENGINE_HANDSHAKE_PREAMBLE
+                            ),
+                            "observed_preamble": list(
+                                engine.handshake_preamble
+                            ),
+                            "expected_identity_order": list(
+                                ENGINE_HANDSHAKE_IDENTITY_ORDER
+                            ),
+                            "observed_identity_order": list(
+                                engine.handshake_identity_order
+                            ),
+                            "expect_single_blank_after_ids": True,
+                            "observed_blank_after_ids": (
+                                engine.handshake_blank_after_ids
+                            ),
+                            "sha256": _digest_document(
+                                "atomic-e00-uci-handshake-v1",
+                                {
+                                    "expected_preamble": list(
+                                        ENGINE_HANDSHAKE_PREAMBLE
+                                    ),
+                                    "observed_preamble": list(
+                                        engine.handshake_preamble
+                                    ),
+                                    "expected_identity_order": list(
+                                        ENGINE_HANDSHAKE_IDENTITY_ORDER
+                                    ),
+                                    "observed_identity_order": list(
+                                        engine.handshake_identity_order
+                                    ),
+                                    "expect_single_blank_after_ids": True,
+                                    "observed_blank_after_ids": (
+                                        engine.handshake_blank_after_ids
+                                    ),
+                                },
+                            ),
+                        },
                         "advertised_options": advertised,
                         "advertised_options_sha256": _digest_document(
                             "atomic-e00-advertised-options-v2",
@@ -5563,6 +5771,7 @@ class DirectUciBackend:
             root = Path(directory)
             request_path = root / "request.json"
             result_path = root / "result.json"
+            failure_path = root / "failure.json"
             stdin_path = root / "outer.stdin.bin"
             stdout_path = root / "outer.stdout.bin"
             stderr_path = root / "outer.stderr.bin"
@@ -5586,6 +5795,14 @@ class DirectUciBackend:
                 raise E00RunnerError(
                     "isolated child runtime package root is absent"
                 )
+            failure_mode = {
+                "--internal-discover-runtime": "discover-runtime",
+                "--internal-play-leg": "play-leg",
+                "--internal-verify-game": "verify-game",
+            }.get(mode)
+            if failure_mode is None:
+                raise E00RunnerError("isolated child mode is not recognized")
+            request_sha256 = common.sha256_file(request_path)
             command = [
                 sys.executable,
                 "-I",
@@ -5624,6 +5841,10 @@ class DirectUciBackend:
                     process_evidence = owner.evidence().payload()
                 finally:
                     owner.close()
+            _validate_process_evidence(
+                process_evidence,
+                label=f"{result_label} owned process",
+            )
             outer_stdout = common.read_stable_file_bytes(
                 stdout_path, label=f"{result_label} wrapper stdout"
             )
@@ -5635,8 +5856,32 @@ class DirectUciBackend:
                     f"{result_label} wrapper emitted output"
                 )
             if return_code != 0:
+                if (
+                    return_code != 70
+                    or result_path.exists()
+                    or not failure_path.is_file()
+                ):
+                    raise E00RunnerError(
+                        f"{result_label} wrapper had an unclassified failure "
+                        f"with code {return_code}"
+                    )
+                failure_value, _failure_payload = _load_canonical_json(
+                    failure_path, label=f"{result_label} failure"
+                )
+                diagnostic = _validate_internal_failure(
+                    failure_value,
+                    expected_mode=failure_mode,
+                    expected_request_sha256=request_sha256,
+                )
+                raise E00ChildFailure(
+                    result_label=result_label,
+                    return_code=return_code,
+                    diagnostic=diagnostic,
+                    process_evidence=process_evidence,
+                )
+            if failure_path.exists():
                 raise E00RunnerError(
-                    f"{result_label} wrapper exited with code {return_code}"
+                    f"{result_label} wrapper published a failure on success"
                 )
             value, _payload = _load_canonical_json(
                 result_path, label=result_label
@@ -5878,23 +6123,135 @@ def main(argv: Sequence[str] | None = None) -> int:
     return 0
 
 
+def _internal_failure_code(error: BaseException) -> str:
+    if isinstance(error, uci_session.UciTimeoutError):
+        return "uci-timeout"
+    if isinstance(error, uci_session.UciProtocolError):
+        return "uci-protocol"
+    if isinstance(error, uci_session.UciProcessError):
+        return "uci-process"
+    if isinstance(error, uci_session.UciOptionError):
+        return "uci-option"
+    if isinstance(error, atomic_outcome_helper.AtomicOutcomeHelperError):
+        return "atomic-outcome"
+    if isinstance(error, common.MiningArtifactError):
+        return "artifact-contract"
+    if isinstance(error, FileExistsError):
+        return "create-new"
+    if isinstance(error, E00RunnerError):
+        return "runner-contract"
+    if isinstance(error, (KeyError, TypeError, ValueError)):
+        return "invalid-input"
+    if isinstance(error, (KeyboardInterrupt, SystemExit)):
+        return "interrupted"
+    return "unexpected"
+
+
+def _write_internal_failure(
+    *,
+    mode: str,
+    stage: str,
+    request_path: Path,
+    result_path: Path,
+    error: BaseException,
+) -> int:
+    """Best-effort create-new safe diagnostic; absence stays fail-closed."""
+
+    request_sha256: str | None = None
+    try:
+        request_sha256 = common.sha256_file(request_path)
+    except BaseException:
+        pass
+    failure = {
+        "schema": INTERNAL_FAILURE_SCHEMA,
+        "mode": mode,
+        "stage": stage,
+        "failure_code": _internal_failure_code(error),
+        "exception_type": type(error).__name__,
+        "request_sha256": request_sha256,
+    }
+    try:
+        common.write_new_json(result_path.with_name("failure.json"), failure)
+    except BaseException:
+        pass
+    return 70
+
+
+def _validate_internal_failure(
+    value: Mapping[str, object],
+    *,
+    expected_mode: str,
+    expected_request_sha256: str,
+) -> dict[str, object]:
+    common.require_exact_fields(
+        value,
+        (
+            "schema",
+            "mode",
+            "stage",
+            "failure_code",
+            "exception_type",
+            "request_sha256",
+        ),
+        label="internal child failure",
+    )
+    if value["schema"] != INTERNAL_FAILURE_SCHEMA:
+        raise E00RunnerError("internal child failure schema differs")
+    if (
+        expected_mode not in _INTERNAL_FAILURE_MODES
+        or value["mode"] != expected_mode
+    ):
+        raise E00RunnerError("internal child failure mode differs")
+    if (
+        not isinstance(value["stage"], str)
+        or _CLEAN_ID.fullmatch(value["stage"]) is None
+        or value["stage"] not in _INTERNAL_FAILURE_STAGES[expected_mode]
+    ):
+        raise E00RunnerError(
+            "internal child failure stage is malformed or not valid for mode"
+        )
+    if (
+        not isinstance(value["failure_code"], str)
+        or value["failure_code"] not in _INTERNAL_FAILURE_CODES
+    ):
+        raise E00RunnerError("internal child failure code is not allowlisted")
+    if (
+        not isinstance(value["exception_type"], str)
+        or _EXCEPTION_TYPE.fullmatch(value["exception_type"]) is None
+    ):
+        raise E00RunnerError(
+            "internal child failure exception type is malformed"
+        )
+    if value["request_sha256"] != expected_request_sha256:
+        raise E00RunnerError("internal child failure request binding differs")
+    return dict(value)
+
+
 def _internal_play_leg_main(argv: Sequence[str]) -> int:
     if len(argv) != 2:
         return 64
     request_path = Path(argv[0])
     result_path = Path(argv[1])
+    stage = "load-request"
     try:
         value, _payload = _load_canonical_json(
             request_path, label="internal leg request"
         )
+        stage = "decode-request"
         request = _request_from_wire(value)
+        stage = "play-direct"
         execution = _play_direct(request)
+        stage = "publish-result"
         common.write_new_json(result_path, _execution_wire(execution))
         return 0
-    except BaseException:
-        # The parent records the terminal failure against this exact pair.
-        # Never print paths, engine diagnostics or other environment details.
-        return 70
+    except BaseException as error:
+        return _write_internal_failure(
+            mode="play-leg",
+            stage=stage,
+            request_path=request_path,
+            result_path=result_path,
+            error=error,
+        )
 
 
 def _internal_verify_game_main(argv: Sequence[str]) -> int:
@@ -5902,10 +6259,12 @@ def _internal_verify_game_main(argv: Sequence[str]) -> int:
         return 64
     request_path = Path(argv[0])
     result_path = Path(argv[1])
+    stage = "load-request"
     try:
         value, _payload = _load_canonical_json(
             request_path, label="internal verifier request"
         )
+        stage = "decode-request"
         common.require_exact_fields(
             value,
             ("schema", "request", "execution"),
@@ -5923,13 +6282,21 @@ def _internal_verify_game_main(argv: Sequence[str]) -> int:
             )
         request = _request_from_wire(request_wire)
         execution = _execution_from_wire(execution_wire)
+        stage = "verify-game"
         evidence = _verify_direct(request, execution)
+        stage = "publish-result"
         common.write_new_json(
             result_path, _verification_result_wire(evidence)
         )
         return 0
-    except BaseException:
-        return 70
+    except BaseException as error:
+        return _write_internal_failure(
+            mode="verify-game",
+            stage=stage,
+            request_path=request_path,
+            result_path=result_path,
+            error=error,
+        )
 
 
 def _internal_discover_runtime_main(argv: Sequence[str]) -> int:
@@ -5937,16 +6304,26 @@ def _internal_discover_runtime_main(argv: Sequence[str]) -> int:
         return 64
     request_path = Path(argv[0])
     result_path = Path(argv[1])
+    stage = "load-request"
     try:
         value, _payload = _load_canonical_json(
             request_path, label="internal runtime discovery request"
         )
+        stage = "decode-request"
         request = _runtime_discovery_request_from_wire(value)
+        stage = "discover-runtime"
         result = _discover_runtime(request)
+        stage = "publish-result"
         common.write_new_json(result_path, result)
         return 0
-    except BaseException:
-        return 70
+    except BaseException as error:
+        return _write_internal_failure(
+            mode="discover-runtime",
+            stage=stage,
+            request_path=request_path,
+            result_path=result_path,
+            error=error,
+        )
 
 
 def _entrypoint(argv: Sequence[str]) -> int:

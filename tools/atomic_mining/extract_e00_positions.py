@@ -74,14 +74,14 @@ if os.name == "nt":  # pragma: no branch - official replay platform
     _snapshot_kernel32.CloseHandle.restype = wintypes.BOOL
 
 
-GAME_SCHEMA = "atomic-e00-game-v2"
-EXECUTION_RECEIPT_SCHEMA = "atomic-e00-execution-receipt-v2"
+GAME_SCHEMA = "atomic-e00-game-v3"
+EXECUTION_RECEIPT_SCHEMA = "atomic-e00-execution-receipt-v3"
 INVENTORY_SCHEMA = "atomic-e00-inventory-v1"
 PAIR_SCHEMA = "atomic-e00-pair-v1"
 POSITION_SCHEMA = "atomic-e00-position-v1"
 EXTRACTION_RECEIPT_SCHEMA = "atomic-e00-position-extraction-receipt-v1"
 RUNTIME_MANIFEST_SCHEMA = "atomic-e00-runtime-manifest-v2"
-ENGINE_EVIDENCE_SCHEMA = "atomic-e00-engine-evidence-v2"
+ENGINE_EVIDENCE_SCHEMA = "atomic-e00-engine-evidence-v3"
 REFEREE_EVIDENCE_SCHEMA = "atomic-e00-native-referee-evidence-v2"
 VERIFIER_EVIDENCE_SCHEMA = "atomic-e00-native-verifier-evidence-v2"
 OWNED_PROCESS_SCHEMA = "atomic-e00-owned-process-v1"
@@ -92,6 +92,11 @@ POSITION_HISTORY_SCHEMA = "atomic-e00-position-history-v1"
 REPLAY_SNAPSHOT_POLICY = (
     "exclusive-content-addressed-create-new-read-only-live-guarded-v2"
 )
+ENGINE_HANDSHAKE_PREAMBLE = (
+    "Atomic-Stockfish 1.0.3 by the Atomic-Stockfish developers "
+    "(see AUTHORS file)",
+)
+ENGINE_HANDSHAKE_IDENTITY_ORDER = ("name", "author")
 
 RESULTS_WHITE = frozenset({"1-0", "0-1", "1/2-1/2"})
 RESULTS_ROLE = frozenset({"win", "loss", "draw"})
@@ -2475,7 +2480,7 @@ def _validate_process_evidence_v2(value: object, *, label: str) -> None:
         raise E00ExtractionError(f"{label} does not prove clean owned exit")
 
 
-def _validate_engine_evidence_v2(
+def _validate_engine_evidence_v3(
     value: object,
     *,
     row: Mapping[str, object],
@@ -2515,6 +2520,7 @@ def _validate_engine_evidence_v2(
             (
                 "role",
                 "id",
+                "handshake",
                 "advertised_options",
                 "advertised_options_sha256",
                 "configured_options",
@@ -2532,6 +2538,81 @@ def _validate_engine_evidence_v2(
             for field in ("name", "author")
         ):
             raise E00ExtractionError(f"{label} engine id is incomplete")
+        handshake = _mapping(
+            engine["handshake"], label=f"{label} engine handshake"
+        )
+        _require_exact(
+            handshake,
+            (
+                "expected_preamble",
+                "observed_preamble",
+                "expected_identity_order",
+                "observed_identity_order",
+                "expect_single_blank_after_ids",
+                "observed_blank_after_ids",
+                "sha256",
+            ),
+            label=f"{label} engine handshake",
+        )
+        observed_handshake = {
+            key: handshake[key]
+            for key in (
+                "expected_preamble",
+                "observed_preamble",
+                "expected_identity_order",
+                "observed_identity_order",
+                "expect_single_blank_after_ids",
+                "observed_blank_after_ids",
+            )
+        }
+        for preamble_key in (
+            "expected_preamble",
+            "observed_preamble",
+            "expected_identity_order",
+            "observed_identity_order",
+        ):
+            preamble = observed_handshake[preamble_key]
+            if (
+                not isinstance(preamble, list)
+                or not all(isinstance(line, str) for line in preamble)
+            ):
+                raise E00ExtractionError(
+                    f"{label} engine handshake {preamble_key} is malformed"
+                )
+        for flag_key in (
+            "expect_single_blank_after_ids",
+            "observed_blank_after_ids",
+        ):
+            if type(observed_handshake[flag_key]) is not bool:
+                raise E00ExtractionError(
+                    f"{label} engine handshake {flag_key} must be bool"
+                )
+        expected_handshake = {
+            "expected_preamble": list(ENGINE_HANDSHAKE_PREAMBLE),
+            "observed_preamble": list(ENGINE_HANDSHAKE_PREAMBLE),
+            "expected_identity_order": list(
+                ENGINE_HANDSHAKE_IDENTITY_ORDER
+            ),
+            "observed_identity_order": list(
+                ENGINE_HANDSHAKE_IDENTITY_ORDER
+            ),
+            "expect_single_blank_after_ids": True,
+            "observed_blank_after_ids": True,
+        }
+        if (
+            observed_handshake != expected_handshake
+            or handshake["sha256"]
+            != _digest(
+                "atomic-e00-uci-handshake-v1", observed_handshake
+            )
+            or ENGINE_HANDSHAKE_PREAMBLE
+            != (
+                f"{identifier['name']} by {identifier['author']}",
+            )
+        ):
+            raise E00ExtractionError(
+                f"{label} engine handshake differs"
+            )
         advertised = _array(
             engine["advertised_options"], label=f"{label} advertised options"
         )
@@ -3028,7 +3109,7 @@ def _validate_game(
         raise E00ExtractionError(
             f"{label} time_loss and terminal_reason differ"
         )
-    _validate_engine_evidence_v2(
+    _validate_engine_evidence_v3(
         row["engine_evidence"], row=row, receipt=receipt, label=f"{label} engine"
     )
     _validate_referee_evidence_v2(
@@ -3345,7 +3426,7 @@ def authenticate_e00(
     )
     if receipt["schema"] != EXECUTION_RECEIPT_SCHEMA:
         raise E00ExtractionError(
-            "E00 extractor accepts execution-receipt-v2 only"
+            "E00 extractor accepts execution-receipt-v3 only"
         )
     if receipt["status"] != "committed":
         raise E00ExtractionError("E00 execution receipt is not committed")
