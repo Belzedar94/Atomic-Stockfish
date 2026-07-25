@@ -268,6 +268,10 @@ def _create_source_repo(root: Path) -> tuple[dict[str, Path], str, str]:
     for name, path in paths.items():
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(f"# sealed fixture: {name}\n", encoding="utf-8")
+    shutil.copy2(
+        LAUNCHER,
+        repo / "tools" / "atomic_mining" / "invoke_e00_full.ps1",
+    )
     (repo / ".gitignore").write_text(
         "__pycache__/\n*.pyc\n*.pyo\n", encoding="utf-8"
     )
@@ -478,6 +482,12 @@ def _fixture(tmp_path: Path) -> dict[str, Any]:
         "full_root": full_root,
         "full_schedule": full_schedule,
         "full_schedule_receipt": full_schedule_receipt,
+        "launcher": (
+            source_root
+            / "tools"
+            / "atomic_mining"
+            / "invoke_e00_full.ps1"
+        ),
         "python": python,
         "repo": source_root,
         "runtime_build_receipt": runtime_build_receipt,
@@ -492,23 +502,32 @@ def _fixture(tmp_path: Path) -> dict[str, Any]:
     return fixture
 
 
-def _invoke(fixture: dict[str, Any]) -> subprocess.CompletedProcess[str]:
+def _invoke(
+    fixture: dict[str, Any],
+    *,
+    derive_repository_root: bool = False,
+    explicit_empty_repository_root: bool = False,
+) -> subprocess.CompletedProcess[str]:
     assert POWERSHELL is not None
-    return subprocess.run(
+    command = [
+        POWERSHELL,
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        str(fixture["launcher"] if derive_repository_root else LAUNCHER),
+        "-ValidateOnly",
+        "-AuditReceiptPath",
+        str(fixture["audit"]),
+    ]
+    if not derive_repository_root:
+        command.extend(["-RepositoryRoot", str(fixture["repo"])])
+    elif explicit_empty_repository_root:
+        command.extend(["-RepositoryRoot", ""])
+    command.extend(
         [
-            POWERSHELL,
-            "-NoLogo",
-            "-NoProfile",
-            "-NonInteractive",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            str(LAUNCHER),
-            "-ValidateOnly",
-            "-AuditReceiptPath",
-            str(fixture["audit"]),
-            "-RepositoryRoot",
-            str(fixture["repo"]),
             "-DesignRoot",
             str(fixture["design"]),
             "-SmokeOutputRoot",
@@ -529,7 +548,10 @@ def _invoke(fixture: dict[str, Any]) -> subprocess.CompletedProcess[str]:
             str(fixture["teacher_net"]),
             "-VariantConfigPath",
             str(fixture["variant_config"]),
-        ],
+        ]
+    )
+    return subprocess.run(
+        command,
         capture_output=True,
         text=True,
         timeout=30,
@@ -758,6 +780,9 @@ def test_process_helper_round_trips_windows_crt_arguments_and_raw_captures(
 def test_launcher_has_no_start_process_or_design_root_captures() -> None:
     source = LAUNCHER.read_text(encoding="utf-8")
     assert "Start-Process" not in source
+    assert "$PSScriptRoot" not in source
+    assert "$PSCommandPath" in source
+    assert "Resolve-RepositoryRoot" in source
     assert "[System.IO.FileMode]::CreateNew" in source
     assert "$FullStdoutPath = Join-Path $CaptureRoot" in source
     assert "$FullStderrPath = Join-Path $CaptureRoot" in source
@@ -786,6 +811,32 @@ def test_validate_only_is_fresh_process_rehydratable_and_non_mutating(
         "tools.atomic_mining.run_e00_source",
     ]
     assert str(fixture["full_root"]) in value["argv"]
+    assert not fixture["full_root"].exists()
+    assert not Path(value["stdout_path"]).exists()
+    assert not Path(value["stderr_path"]).exists()
+
+
+@pytest.mark.parametrize("explicit_empty_repository_root", [False, True])
+def test_validate_only_derives_repository_from_pscommandpath_without_writes(
+    tmp_path: Path,
+    explicit_empty_repository_root: bool,
+) -> None:
+    fixture = _fixture(tmp_path)
+
+    completed = _invoke(
+        fixture,
+        derive_repository_root=True,
+        explicit_empty_repository_root=explicit_empty_repository_root,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert completed.stderr == ""
+    value = json.loads(completed.stdout)
+    assert value["status"] == "validated-not-started"
+    assert value["source"] == {
+        "commit": fixture["commit"],
+        "tree": fixture["tree"],
+    }
     assert not fixture["full_root"].exists()
     assert not Path(value["stdout_path"]).exists()
     assert not Path(value["stderr_path"]).exists()

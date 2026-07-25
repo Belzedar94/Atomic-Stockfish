@@ -3,9 +3,9 @@ param(
     [Parameter(Mandatory = $true)]
     [string] $AuditReceiptPath,
 
-    [string] $RepositoryRoot = (
-        Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
-    ),
+    [AllowNull()]
+    [AllowEmptyString()]
+    [string] $RepositoryRoot,
     [string] $DesignRoot =
         'F:\Atomic-V3-E00\e00-src-v3-launch3-design',
     [string] $SmokeOutputRoot =
@@ -46,6 +46,60 @@ $ValidationSchema = 'atomic-e00-full-launch-validation-v1'
 
 function Get-AbsolutePath([string] $Path) {
     return [System.IO.Path]::GetFullPath($Path)
+}
+
+function Resolve-RepositoryRoot(
+    [AllowNull()]
+    [AllowEmptyString()]
+    [string] $RequestedRoot,
+    [AllowNull()]
+    [AllowEmptyString()]
+    [string] $LauncherPath,
+    [string] $ExpectedLauncherName
+) {
+    if (-not [string]::IsNullOrEmpty($RequestedRoot)) {
+        if ([string]::IsNullOrWhiteSpace($RequestedRoot)) {
+            throw "repository root must not be whitespace"
+        }
+        return Get-AbsolutePath $RequestedRoot
+    }
+    if ([string]::IsNullOrWhiteSpace($LauncherPath)) {
+        throw "PSCommandPath is unavailable; RepositoryRoot is required"
+    }
+    $resolvedLauncher = Get-AbsolutePath $LauncherPath
+    if (-not (Test-Path -LiteralPath $resolvedLauncher -PathType Leaf)) {
+        throw "launcher path is not an existing file"
+    }
+    if (
+        [System.IO.Path]::GetFileName($resolvedLauncher) -cne
+        $ExpectedLauncherName
+    ) {
+        throw "launcher filename differs from the expected entrypoint"
+    }
+    $atomicMiningRoot = Split-Path -Parent $resolvedLauncher
+    if ((Split-Path -Leaf $atomicMiningRoot) -cne 'atomic_mining') {
+        throw "launcher is not inside the exact tools\atomic_mining path"
+    }
+    $toolsRoot = Split-Path -Parent $atomicMiningRoot
+    if ((Split-Path -Leaf $toolsRoot) -cne 'tools') {
+        throw "launcher is not inside the exact tools\atomic_mining path"
+    }
+    $derivedRoot = Get-AbsolutePath (Split-Path -Parent $toolsRoot)
+    $expectedLauncher = Get-AbsolutePath (
+        Join-Path (
+            Join-Path $derivedRoot 'tools\atomic_mining'
+        ) $ExpectedLauncherName
+    )
+    if (
+        -not [string]::Equals(
+            $resolvedLauncher,
+            $expectedLauncher,
+            [System.StringComparison]::OrdinalIgnoreCase
+        )
+    ) {
+        throw "launcher path does not bind to the derived repository root"
+    }
+    return $derivedRoot
 }
 
 function Assert-PathEqual(
@@ -1509,7 +1563,9 @@ function Assert-AbsentLaunchTargets {
     }
 }
 
-$RepositoryRoot = Get-AbsolutePath $RepositoryRoot
+$RepositoryRoot = Resolve-RepositoryRoot (
+    $RepositoryRoot
+) $PSCommandPath 'invoke_e00_full.ps1'
 $DesignRoot = Get-AbsolutePath $DesignRoot
 $SmokeOutputRoot = Get-AbsolutePath $SmokeOutputRoot
 $FullOutputRoot = Get-AbsolutePath $FullOutputRoot

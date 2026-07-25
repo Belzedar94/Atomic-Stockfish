@@ -11,6 +11,13 @@ or objects left in an earlier PowerShell process. Launch1 and Launch2, and any
 partial Launch3 root, are terminal evidence: never execute, recover, collect,
 edit or delete them.
 
+When `-RepositoryRoot` is omitted or empty, the launcher resolves the exact
+repository root from `$PSCommandPath` in the script body, after parameter
+binding. It does not use `$PSScriptRoot` in a parameter default, which is not
+reliably populated by fresh Windows PowerShell 5.1 `-File` invocation. The
+derived path must be the exact `tools\atomic_mining\invoke_e00_full.ps1`
+layout or validation fails.
+
 ## Frozen identity
 
 The launcher accepts only:
@@ -93,7 +100,10 @@ CLI captures are absent. It also rejects ignored `__pycache__`, `.pyc` and
 `.pyo` artifacts in the relevant source packages. The dedicated Launch3 capture
 root must already exist outside both the sealed design and smoke roots. The
 validation does not invoke Python, the engine, native builder, schedule builder
-or runner and does not create the full root or either capture.
+or runner and does not create the full root or either capture. The regression
+suite invokes this exact fresh-shell form without `-RepositoryRoot` from a
+temporary clean repository and proves exit 0, strict JSON and zero full-output
+or capture writes.
 
 Review the single JSON result. It must say `validated-not-started` and identify
 the expected experiment, full battery, source commit/tree, authorization hash

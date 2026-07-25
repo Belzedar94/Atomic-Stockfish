@@ -178,6 +178,9 @@ def test_windows_powershell_ast_is_clean() -> None:
 
 def test_launcher_is_prepare_and_smoke_only() -> None:
     source = _source()
+    assert "$PSScriptRoot" not in source
+    assert "$PSCommandPath" in source
+    assert "Resolve-RepositoryRoot" in source
     assert "$ExperimentId = 'atomic-e00-src-v3-20260725'" in source
     assert "$SmokeBatteryId = 'atomic-e00-src-v3-launch3-smoke'" in source
     assert "$FullBatteryId = 'atomic-e00-src-v3-launch3-full'" in source
@@ -603,8 +606,10 @@ def test_no_private_key_or_signature_authority_is_invented() -> None:
     or not all(path.is_file() for path in PRODUCTION_INPUTS.values()),
     reason="Windows PowerShell and the pinned local inputs are required",
 )
+@pytest.mark.parametrize("explicit_empty_repository_root", [False, True])
 def test_validate_only_rehydrates_in_fresh_process_without_writes(
     tmp_path: Path,
+    explicit_empty_repository_root: bool,
 ) -> None:
     repo = tmp_path / "clean-source"
     shutil.copytree(
@@ -638,22 +643,31 @@ def test_validate_only_rehydrates_in_fresh_process_without_writes(
         "full": tmp_path / "fresh-full",
         "captures": tmp_path / "fresh-captures",
     }
-    completed = subprocess.run(
+    fixture_launcher = (
+        repo
+        / "tools"
+        / "atomic_mining"
+        / "invoke_e00_prepare_smoke.ps1"
+    )
+    assert fixture_launcher.is_file()
+    command = [
+        POWERSHELL,
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        str(fixture_launcher),
+        "-ExpectedSourceCommit",
+        commit,
+        "-ExpectedSourceTree",
+        tree,
+    ]
+    if explicit_empty_repository_root:
+        command.extend(["-RepositoryRoot", ""])
+    command.extend(
         [
-            POWERSHELL,
-            "-NoLogo",
-            "-NoProfile",
-            "-NonInteractive",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            str(LAUNCHER),
-            "-ExpectedSourceCommit",
-            commit,
-            "-ExpectedSourceTree",
-            tree,
-            "-RepositoryRoot",
-            str(repo),
             "-DesignRoot",
             str(targets["design"]),
             "-SmokeOutputRoot",
@@ -675,7 +689,10 @@ def test_validate_only_rehydrates_in_fresh_process_without_writes(
             "-VariantConfigPath",
             str(PRODUCTION_INPUTS["variant_config"]),
             "-ValidateOnly",
-        ],
+        ]
+    )
+    completed = subprocess.run(
+        command,
         capture_output=True,
         text=True,
         timeout=60,

@@ -839,3 +839,57 @@ The pre-test resource sample was CPU `16.2%, 18.7%, 17.5%`, RAM
 on `C:`, `128.0 GiB` on `D:` and `1,126.8 GiB` on `F:`. Four unrelated
 Stockfish-named processes were visible and were not inspected, stopped or
 modified. No E00 root, engine or native build was touched during validation.
+
+### 05:51 CEST — real fresh-shell validation catches a pre-mutation defect
+
+The audited candidate was committed as
+`4ee9a0598b662386a22fea329dde28668bbe3a68`, tree
+`3b609d864a21f127cbdc00978ba5657259bc90e6`. The first real Windows
+PowerShell 5.1 `-File ... -ValidateOnly` invocation then exited 1 before the
+launcher body because `$PSScriptRoot` was empty while evaluating the
+`RepositoryRoot` default inside the `param` block. The synthetic process
+fixture had always supplied `-RepositoryRoot` and therefore missed this
+default-path defect.
+
+All four Launch3 roots were explicitly rechecked and remain absent. No Python,
+schedule, native binding or engine ran. This is not a terminal Launch3
+attempt because the launcher failed before its first mutation and the roots
+remain pristine, but the committed candidate is not execution authority.
+
+The minimal repair moves default repository resolution into the script body
+and derives it from `$PSCommandPath` after parameter binding. It applies to
+both launchers and requires a real Windows PowerShell 5.1 regression without
+`-RepositoryRoot`, followed by a new commit, clean source identity and two
+fresh independent audits.
+
+### 06:02 CEST — default-path repair receives replacement double GO
+
+Both launchers now accept an omitted or explicitly empty `RepositoryRoot` and
+derive the exact repository root in the script body from `$PSCommandPath`.
+They reject a missing command path, whitespace input, the wrong launcher name
+or a path outside the exact `tools\atomic_mining` layout.
+
+The new frozen hashes are:
+
+- prepare launcher
+  `b3f13e108bd993d9a0150a555567e0d876f58114f6a3afac30f76a032527c538`;
+- prepare tests
+  `52635548dc55d18894eaab4a39a778506c582124aeedafebde3006502c1d3492`;
+- prepare runbook
+  `4a87b8f499969fb1454bf6f6ed966db4ef4d6800a93e11ac07bf64c8034d5041`;
+- full launcher
+  `426fa0b345e329aa1dbedf79b7ca52da5f58208c50b40c87ecd7a8bd264b14ad`;
+- full tests
+  `f831853cc23c82e008f6a47ca376d7ed384eff8c0d7a1ac232aeaf6eead071f8`;
+- full runbook
+  `c6886807594a0a320efedc438c610b9b1d882c4d4fc23f820adeb59e88fc275e`.
+
+The replacement independent audits both return `GO`, `P0=0`, `P1=0`.
+Windows PowerShell `5.1.19041` real-process tests cover prepare and full with
+the parameter omitted and explicitly empty: all four exit 0, emit byte-empty
+stderr and strict `validated-not-started` JSON, bind the exact source
+commit/tree and create zero target/capture files. Launcher tests pass `59/59`;
+the root and final auditor each pass the complete `385/385` atomic-mining
+suite. Both PowerShell ASTs and `git diff --check` pass. Ignored Python
+bytecode created by isolated regression children was removed, and the
+pre-commit bytecode count is zero.

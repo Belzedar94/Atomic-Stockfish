@@ -12,6 +12,13 @@ reuse variables, functions, roots, experiment IDs or battery IDs from Launch1
 or Launch2. Those launches are terminal forensic evidence and must never be
 executed, recovered, edited, deleted or reused.
 
+When `-RepositoryRoot` is omitted or empty, the launcher resolves the exact
+repository root from `$PSCommandPath` in the script body, after parameter
+binding. It does not use `$PSScriptRoot` in a parameter default, which is not
+reliably populated by fresh Windows PowerShell 5.1 `-File` invocation. The
+derived path must be the exact
+`tools\atomic_mining\invoke_e00_prepare_smoke.ps1` layout or validation fails.
+
 The launcher does **not** execute the 84-pair full battery. It stops after:
 
 1. authenticating one exact clean source commit/tree and all pinned inputs;
@@ -76,7 +83,9 @@ if ($LASTEXITCODE -ne 0) {
 `-ValidateOnly` is read-only. It does not create a directory or file and does
 not invoke Python, the native builder, an engine, a schedule builder or the
 runner. Its JSON must say `validated-not-started`, identify the exact commit,
-tree, fresh roots, IDs, seeds and 1/84 pair plan.
+tree, fresh roots, IDs, seeds and 1/84 pair plan. The regression suite invokes
+this exact fresh-shell form without `-RepositoryRoot` from a temporary clean
+repository and proves exit 0, strict JSON and zero target-root writes.
 
 ## Resource gate and prepare/smoke execution
 
