@@ -394,7 +394,7 @@ if ($Commit -notmatch '^[0-9a-f]{40}$' -or $Tree -notmatch '^[0-9a-f]{40}$') {
 }
 
 $ExpectedInputs = [ordered]@{
-    $Book = '28ed51c2f42e723d5e127d2d3f21c0bfa4a9b318615afdb299b93ea62dea2b1'
+    $Book = '28ed51c2f42e723d5e127d2d3f21c0bfa4a9b318615afdb299b93ea62dea2b1e'
     $Engine = '86d2bb669ff2a56123a78fd1892c2acf8b4294fb1464da049ddb30877ce5127f'
     $CurrentNet = '0797cdbaf857aa4552d4eab301227ce3ba7c23a731973c255bb1dfc763659e5b'
     $TeacherNet = '99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f92a04a6'

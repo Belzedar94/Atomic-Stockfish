@@ -586,3 +586,18 @@ VRAM `1,297/10,240 MiB`, `45 C` and `29.20 W`; free space was
 This authorizes the lightweight validation only. A fresh resource sample and
 complete production-input rehash remain mandatory immediately before native
 build or engine execution. The OpenBench worker remains stopped.
+
+### 03:38 CEST — operational preflight stopped before root creation
+
+The first post-commit runbook invocation stopped at the input-hash gate before
+creating any design, smoke or full root. Diagnosis showed a documentation-only
+transcription error: the expected `atomic.epd` SHA-256 literal had 63
+characters because its final `e` was missing. The actual book remained
+byte-identical at `394,785` bytes and SHA-256
+`28ed51c2f42e723d5e127d2d3f21c0bfa4a9b318615afdb299b93ea62dea2b1e`;
+all other pinned inputs also matched.
+
+Only the missing final character in the runbook was repaired. No native build,
+engine, schedule, runtime package or scientific output was created. The three
+launch1 roots remain absent and must pass the same no-reuse check after this
+documentation fix is committed into a new clean source identity.
