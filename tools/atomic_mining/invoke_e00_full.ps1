@@ -7,13 +7,13 @@ param(
     [AllowEmptyString()]
     [string] $RepositoryRoot,
     [string] $DesignRoot =
-        'F:\Atomic-V3-E00\e00-src-v3-launch6-design',
+        'F:\Atomic-V3-E00\e00-src-v3-launch7-design',
     [string] $SmokeOutputRoot =
-        'F:\Atomic-V3-E00\e00-src-v3-launch6-smoke',
+        'F:\Atomic-V3-E00\e00-src-v3-launch7-smoke',
     [string] $FullOutputRoot =
-        'F:\Atomic-V3-E00\e00-src-v3-launch6-full',
+        'F:\Atomic-V3-E00\e00-src-v3-launch7-full',
     [string] $CaptureRoot =
-        'F:\Atomic-V3-E00\e00-src-v3-launch6-captures',
+        'F:\Atomic-V3-E00\e00-src-v3-launch7-captures',
     [string] $PythonPath =
         'C:\Users\djime\AppData\Local\Programs\Python\Python312\python.exe',
     [string] $BookPath =
@@ -33,9 +33,9 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$ExperimentId = 'atomic-e00-src-v3-launch6-20260725'
-$SmokeBatteryId = 'atomic-e00-src-v3-launch6-smoke'
-$FullBatteryId = 'atomic-e00-src-v3-launch6-full'
+$ExperimentId = 'atomic-e00-src-v3-launch7-20260725'
+$SmokeBatteryId = 'atomic-e00-src-v3-launch7-smoke'
+$FullBatteryId = 'atomic-e00-src-v3-launch7-full'
 $AuditSchema = 'atomic-e00-full-authorization-v1'
 $ExecutionReceiptSchema = 'atomic-e00-execution-receipt-v3'
 $RuntimeBuildReceiptSchema =
@@ -1601,13 +1601,13 @@ $PyffishBuildManifestPath = Join-Path (
 ) 'native-binding\manifest.json'
 
 if (-not (Test-Path -LiteralPath $DesignRoot -PathType Container)) {
-    throw "Launch6 design root is absent"
+    throw "Launch7 design root is absent"
 }
 if (-not (Test-Path -LiteralPath $SmokeOutputRoot -PathType Container)) {
-    throw "Launch6 smoke root is absent"
+    throw "Launch7 smoke root is absent"
 }
 if (-not (Test-Path -LiteralPath $CaptureRoot -PathType Container)) {
-    throw "Launch6 capture root is absent"
+    throw "Launch7 capture root is absent"
 }
 Assert-PathOutside $CaptureRoot $DesignRoot 'capture root'
 Assert-PathOutside $CaptureRoot $SmokeOutputRoot 'capture root'
@@ -1626,7 +1626,7 @@ $bindings = @(
         Where-Object { $_.Name -like 'pyffish*.pyd' }
 )
 if ($bindings.Count -ne 1) {
-    throw "Launch6 native bundle must contain exactly one pyffish binding"
+    throw "Launch7 native bundle must contain exactly one pyffish binding"
 }
 $PyffishPath = $bindings[0].FullName
 
@@ -1680,7 +1680,7 @@ $fullSchedule = Assert-ScheduleBundle (
     $FullSchedulePath
 ) $FullScheduleReceiptPath (
     $audit.full.schedule_receipt_sha256
-) 84 168 'atomic-e00-src-full-v3-launch6-20260725' 'full schedule'
+) 84 168 'atomic-e00-src-full-v3-launch7-20260725' 'full schedule'
 $runtime = Assert-RuntimeBundle (
     $FullRuntimeManifestPath
 ) $FullRuntimeBuildReceiptPath (
@@ -1694,7 +1694,7 @@ $smokeSchedule = Assert-ScheduleBundle (
     $SmokeSchedulePath
 ) $SmokeScheduleReceiptPath (
     $smokeScheduleReceiptState.Sha256
-) 1 2 'atomic-e00-src-smoke-v3-launch6-20260725' 'smoke schedule'
+) 1 2 'atomic-e00-src-smoke-v3-launch7-20260725' 'smoke schedule'
 $smoke = Assert-ExecutionReceipt (
     $SmokeReceiptPath
 ) $audit.smoke.execution_receipt_sha256 (
@@ -1789,13 +1789,13 @@ $exitCode = Invoke-CapturedProcessCreateNew `
     -StandardOutputPath $FullStdoutPath `
     -StandardErrorPath $FullStderrPath
 if ($exitCode -ne 0) {
-    throw "full runner exited $exitCode; Launch6 full is terminal"
+    throw "full runner exited $exitCode; Launch7 full is terminal"
 }
 if (
     -not (Test-Path -LiteralPath $FullStderrPath -PathType Leaf) -or
     (Get-Item -LiteralPath $FullStderrPath).Length -ne 0
 ) {
-    throw "full runner stderr is not byte-empty; Launch6 full is terminal"
+    throw "full runner stderr is not byte-empty; Launch7 full is terminal"
 }
 $summary = Read-StrictJson $FullStdoutPath 'full runner stdout'
 $fullReceiptPath = Join-Path $FullOutputRoot 'receipt.json'

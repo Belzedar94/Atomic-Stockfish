@@ -1112,3 +1112,62 @@ Those exact files and their now-empty cache directories were removed after
 verifying that every resolved path remained inside the repository. The final
 pre-commit ignored-bytecode count below `tools`, the launcher's source
 boundary, is zero.
+
+### 07:48 CEST — Launch6 smoke terminal on an empty-module false invariant
+
+After a fresh resource sample (CPU 43%, 57%, 58%; 4.39 GiB free RAM; GPU
+23% and 1,246 MiB VRAM; zero exact E00 processes), the committed Launch6
+one-pair/two-game `Threads=1` smoke was started in a fresh PowerShell process.
+It ran for approximately 93 seconds. The two games completed and committed,
+but the outer wrapper exited 1 while authenticating child import inventory
+row 124:
+
+`smoke game 0 referee evidence child import inventory row 124 size is below its minimum`
+
+Launch6 is terminal and immutable. The design and smoke roots exist; the full
+root remains absent. Never execute, recover, collect, analyse, edit, delete or
+reuse any Launch6 root.
+
+Committed evidence:
+
+- source commit
+  `4ef0af27833a871b3ddce6f0305b60a099e0bb93`, tree
+  `508817593e6fe9a474977f4590b8da63bed9751d`;
+- design inventory
+  `e59e9181b36c11c493fa251e533e957c193a0ec2a13460c2c6ada015db104b35`;
+- design receipt
+  `54f48a2bd7bbe2db8f643a0b7b09247eb83f4df4a12e630a831ea5889e8bf49b`;
+- games
+  `019572d88882989483ac519fafe8e07e78153ca4da5d86a67f83ecaa55d56cf2`;
+- execution receipt
+  `e65db654d050d8649107029cd0fd115bd78a2b3d20261f7fc760845a5db50262`;
+- smoke inventory
+  `f06222a5064e38ba70d03fd5b56c8b86bf30d28eb5bd8ce78467508e483eb2b1`;
+- outer runner stdout
+  `0b9168ae29964b73e01046bbf69a2d628596948e5e1e5dd951d37d8a3ec93705`;
+- all captured stderr and the rejection ledger byte-empty;
+- both games natural, with zero descendants and zero time losses.
+
+Independent read-only forensics returned `P0=0`, `P1=1`. The rejected row is
+the legitimate empty Python 3.12 standard-library file
+`urllib\__init__.py`, source `python-installation`, size zero, SHA-256
+`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+The row is identical in runtime discovery, runtime manifest, build receipt,
+smoke snapshot and all referee/verifier inventories. Python correctly accepts
+non-negative import sizes; only the PowerShell wrapper required a minimum of
+one byte. Changing that one predicate to zero makes the complete in-memory
+smoke assertion pass with no hidden next rejection. This is a validator-only
+false negative, not a scientific failure.
+
+### Launch7 — fresh correction worktree
+
+Launch7 starts from the exact Launch6 source in an isolated worktree and uses
+fresh experiment, design/smoke/full/capture roots, battery IDs, seeds and
+design schemas. The child-import validator now accepts a zero-byte file only
+when its digest is the canonical empty-file SHA-256, and rejects both a
+zero-size/non-empty-digest row and a positive-size/empty-digest row.
+
+The focused real Windows PowerShell regression passes. Launch7 is not yet
+authorized: complete suites, AST/diff checks, terminal tombstones, independent
+audits, a clean source commit, real `ValidateOnly`, fresh root absence and a
+new resource gate must all pass before its smoke may start.

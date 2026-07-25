@@ -120,9 +120,9 @@ may affect the schedule.
 
 The exact post-commit native-build, schedule, runtime-manifest and smoke
 commands are maintained in
-[`e00-launch6-prepare-smoke-runbook.md`](e00-launch6-prepare-smoke-runbook.md).
+[`e00-launch7-prepare-smoke-runbook.md`](e00-launch7-prepare-smoke-runbook.md).
 The separately authorized full-only entrypoint is documented in
-[`e00-launch6-full-runbook.md`](e00-launch6-full-runbook.md). The smoke and
+[`e00-launch7-full-runbook.md`](e00-launch7-full-runbook.md). The smoke and
 full battery use different create-new schedule, runtime-design and execution
 roots.
 

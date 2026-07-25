@@ -6,6 +6,6 @@ file inventories as nested arrays. The design and external captures must never
 be executed, recovered, edited, deleted or reused.
 
 The active fresh-launch procedure is
-[`e00-launch6-prepare-smoke-runbook.md`](e00-launch6-prepare-smoke-runbook.md).
+[`e00-launch7-prepare-smoke-runbook.md`](e00-launch7-prepare-smoke-runbook.md).
 The full evidence and hashes are recorded in
 [`evidence/mining-loop-v1/overnight-2026-07-25.md`](evidence/mining-loop-v1/overnight-2026-07-25.md).

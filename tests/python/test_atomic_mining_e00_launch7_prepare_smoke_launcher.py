@@ -93,6 +93,9 @@ def _run_contract_harness(
         source.index("function Get-ByteArraySha256"):
         source.index("function Read-StrictJson")
     ]
+    canonical_equality_function = _powershell_function(
+        source, "Assert-CanonicalJsonEquals", "Assert-ArtifactMap"
+    )
     artifact_function = _powershell_function(
         source, "Assert-ArtifactMap", "Assert-ArtifactEvidence"
     )
@@ -101,6 +104,9 @@ def _run_contract_harness(
     )
     rules_function = _powershell_function(
         source, "Assert-RulesCalls", "Assert-ChildImportInventory"
+    )
+    child_import_function = _powershell_function(
+        source, "Assert-ChildImportInventory", "Assert-NativeProvenance"
     )
     harness = tmp_path / f"contract-{mode}.ps1"
     payload = tmp_path / f"contract-{mode}.json"
@@ -113,11 +119,16 @@ def _run_contract_harness(
         "$ErrorActionPreference='Stop'\n"
         "Set-StrictMode -Version Latest\n"
         "$OwnedProcessSchema='atomic-e00-owned-process-v1'\n"
+        "$EmptySha256="
+        "'e3b0c44298fc1c149afbf4c8996fb924"
+        "27ae41e4649b934ca495991b7852b855'\n"
         f"{strict_functions}\n"
         f"{file_functions}\n"
+        f"{canonical_equality_function}\n"
         f"{artifact_function}\n"
         f"{owned_function}\n"
         f"{rules_function}\n"
+        f"{child_import_function}\n"
         "$utf8=New-Object System.Text.UTF8Encoding($false,$true)\n"
         "$value=$utf8.GetString([System.IO.File]::ReadAllBytes($Payload)) | "
         "ConvertFrom-Json\n"
@@ -131,6 +142,8 @@ def _run_contract_harness(
         "  'artifact' { Assert-ArtifactMap $value 'fixture' @('one') "
         "-RequireNonEmpty }\n"
         "  'rules' { [void](Assert-RulesCalls $value 'fixture') }\n"
+        "  'child-imports' { Assert-ChildImportInventory "
+        "$value.actual $value.expected 'fixture' }\n"
         "  default { throw 'unknown harness mode' }\n"
         "}\n"
         "Write-Output 'ok'\n",
@@ -187,15 +200,15 @@ def test_launcher_is_prepare_and_smoke_only() -> None:
     assert "$PSScriptRoot" not in source
     assert "$PSCommandPath" in source
     assert "Resolve-RepositoryRoot" in source
-    assert "$ExperimentId = 'atomic-e00-src-v3-launch6-20260725'" in source
-    assert "$SmokeBatteryId = 'atomic-e00-src-v3-launch6-smoke'" in source
-    assert "$FullBatteryId = 'atomic-e00-src-v3-launch6-full'" in source
+    assert "$ExperimentId = 'atomic-e00-src-v3-launch7-20260725'" in source
+    assert "$SmokeBatteryId = 'atomic-e00-src-v3-launch7-smoke'" in source
+    assert "$FullBatteryId = 'atomic-e00-src-v3-launch7-full'" in source
     assert (
-        "$SmokeSeed = 'atomic-e00-src-smoke-v3-launch6-20260725'"
+        "$SmokeSeed = 'atomic-e00-src-smoke-v3-launch7-20260725'"
         in source
     )
     assert (
-        "$FullSeed = 'atomic-e00-src-full-v3-launch6-20260725'"
+        "$FullSeed = 'atomic-e00-src-full-v3-launch7-20260725'"
         in source
     )
     assert "e00-src-v2" not in source
@@ -203,6 +216,7 @@ def test_launcher_is_prepare_and_smoke_only() -> None:
     assert "launch3" not in source.lower()
     assert "launch4" not in source.lower()
     assert "launch5" not in source.lower()
+    assert "launch6" not in source.lower()
     assert "Invoke-StrictPythonCli '06-smoke' $smokeArguments" in source
     assert source.count("'tools.atomic_mining.run_e00_source'") == 1
     assert (
@@ -241,7 +255,7 @@ def test_no_destructive_or_ambient_process_primitives() -> None:
 def test_captures_are_outside_the_sealed_design_and_roots_are_fresh() -> None:
     source = _source()
     assert (
-        "'F:\\Atomic-V3-E00\\e00-src-v3-launch6-captures'" in source
+        "'F:\\Atomic-V3-E00\\e00-src-v3-launch7-captures'" in source
     )
     assert "Assert-FreshDisjointRoots $targetRoots" in source
     assert (
@@ -589,6 +603,64 @@ def test_artifact_map_rejects_keyset_and_numeric_string_mutations(
             "fields differ" in refused.stderr
             or "must be non-empty" in refused.stderr
         )
+
+
+@pytest.mark.skipif(
+    POWERSHELL is None, reason="Windows PowerShell is required"
+)
+def test_child_import_inventory_accepts_empty_python_module_only_as_zero(
+    tmp_path: Path,
+) -> None:
+    empty_digest = hashlib.sha256(b"").hexdigest()
+    valid = [
+        {
+            "module_names": ["urllib"],
+            "path": (
+                r"C:\Python312\Lib\urllib\__init__.py"
+            ),
+            "sha256": empty_digest,
+            "size_bytes": 0,
+            "source": "python-installation",
+        }
+    ]
+    accepted = _run_contract_harness(
+        tmp_path,
+        mode="child-imports",
+        value={"actual": valid, "expected": valid},
+    )
+    assert accepted.returncode == 0, accepted.stderr
+
+    for bad_size in (-1, "0", False):
+        mutated = copy.deepcopy(valid)
+        mutated[0]["size_bytes"] = bad_size
+        refused = _run_contract_harness(
+            tmp_path,
+            mode="child-imports",
+            value={"actual": mutated, "expected": valid},
+        )
+        assert refused.returncode != 0
+        assert (
+            "must be a JSON integer" in refused.stderr
+            or "below its minimum" in refused.stderr
+        )
+
+    invalid_relations = []
+    zero_with_nonempty_digest = copy.deepcopy(valid)
+    zero_with_nonempty_digest[0]["sha256"] = hashlib.sha256(
+        b"not empty"
+    ).hexdigest()
+    invalid_relations.append(zero_with_nonempty_digest)
+    positive_with_empty_digest = copy.deepcopy(valid)
+    positive_with_empty_digest[0]["size_bytes"] = 1
+    invalid_relations.append(positive_with_empty_digest)
+    for invalid in invalid_relations:
+        refused = _run_contract_harness(
+            tmp_path,
+            mode="child-imports",
+            value={"actual": invalid, "expected": invalid},
+        )
+        assert refused.returncode != 0
+        assert "size/SHA-256 relation differs" in refused.stderr
 
 
 @pytest.mark.skipif(

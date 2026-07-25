@@ -142,8 +142,8 @@ from:
 
 - [`docs/atomic/e00-source-contract.md`](docs/atomic/e00-source-contract.md);
 - [`docs/atomic/e00-direct-uci-referee-design.md`](docs/atomic/e00-direct-uci-referee-design.md);
-- [`docs/atomic/e00-launch6-prepare-smoke-runbook.md`](docs/atomic/e00-launch6-prepare-smoke-runbook.md);
-- [`docs/atomic/e00-launch6-full-runbook.md`](docs/atomic/e00-launch6-full-runbook.md).
+- [`docs/atomic/e00-launch7-prepare-smoke-runbook.md`](docs/atomic/e00-launch7-prepare-smoke-runbook.md);
+- [`docs/atomic/e00-launch7-full-runbook.md`](docs/atomic/e00-launch7-full-runbook.md).
 
 The older commands in
 [`docs/atomic/evidence/mining-loop-v1/README.md`](docs/atomic/evidence/mining-loop-v1/README.md)

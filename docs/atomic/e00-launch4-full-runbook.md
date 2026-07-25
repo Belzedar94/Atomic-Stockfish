@@ -9,4 +9,4 @@ The Launch4 full root remains absent and must never be created. Do not execute,
 recover, collect, analyse, edit, delete or reuse any Launch4 identity or root.
 
 The active fresh-launch procedure is
-[`e00-launch6-full-runbook.md`](e00-launch6-full-runbook.md).
+[`e00-launch7-full-runbook.md`](e00-launch7-full-runbook.md).

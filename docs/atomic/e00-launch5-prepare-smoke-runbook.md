@@ -33,6 +33,6 @@ stale validator computed
 There was no engine, referee, verifier, process or scientific failure.
 
 The only active successor is
-[`e00-launch6-prepare-smoke-runbook.md`](e00-launch6-prepare-smoke-runbook.md).
+[`e00-launch7-prepare-smoke-runbook.md`](e00-launch7-prepare-smoke-runbook.md).
 The detailed chronology is preserved in
 [`evidence/mining-loop-v1/overnight-2026-07-25.md`](evidence/mining-loop-v1/overnight-2026-07-25.md).

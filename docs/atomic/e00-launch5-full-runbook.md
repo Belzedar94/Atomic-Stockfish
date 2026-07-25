@@ -10,4 +10,4 @@ smoke and its validator-only false negative are documented in
 
 The only active successor for a newly sealed and independently authorized
 full battery is
-[`e00-launch6-full-runbook.md`](e00-launch6-full-runbook.md).
+[`e00-launch7-full-runbook.md`](e00-launch7-full-runbook.md).
