@@ -57,14 +57,23 @@ class OptionsMap;
 
 namespace Search {
 
+// Tunable search parameters, registered as UCI options through the TUNE
+// mechanism in search.cpp. Defaults reproduce the previous hard-coded
+// constants, so the bench is unchanged unless an option is set.
+extern int AtomicMcpBase;
+extern int AtomicNmpBase;
+extern int AtomicNmpDepthDiv;
+
 // Fairy's move-count formula specialized with blast_on_capture=1 and walling=0.
-constexpr int atomic_move_count_pruning_threshold(bool improving, Depth depth) {
-    return (5 + depth * depth) / (3 - improving);
+inline int atomic_move_count_pruning_threshold(bool improving, Depth depth) {
+    return (AtomicMcpBase + depth * depth) / (3 - improving);
 }
 
 // Atomic threats make an orthodox null-move cutoff less trustworthy. Reduce
 // one ply less than modern Stockfish while preserving its depth scaling.
-constexpr Depth atomic_null_move_reduction(Depth depth) { return 6 + depth / 3; }
+inline Depth atomic_null_move_reduction(Depth depth) {
+    return AtomicNmpBase + depth / AtomicNmpDepthDiv;
+}
 
 // Orthodox main-search and qsearch capture futility price only the victim on
 // the destination square. The capturer's explosion keeps that bound
