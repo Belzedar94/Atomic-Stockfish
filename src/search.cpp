@@ -68,20 +68,20 @@ using namespace Search;
 // Tunable search parameters for the Atomic search-tuning campaign. Each one
 // replaces a former hard-coded constant (the default), so with defaults the
 // search is functionally unchanged. TUNE registers them as UCI spin options.
-int Search::AtomicMcpBase     = 5;
+int Search::AtomicMcpBase     = 7;
 int Search::AtomicNmpBase     = 6;
-int Search::AtomicNmpDepthDiv = 3;
+int Search::AtomicNmpDepthDiv = 4;
 
 namespace {
-int AtomicCaptFutBase    = 231;
-int AtomicCaptFutLmrMult = 232;
-int QsFutilityBase       = 335;
-int SingularDepthMin     = 6;
-int SingularMarginBase   = 60;
-int SingularMarginTtPv   = 70;
-int SingularMarginDiv    = 59;
-int LmrLogScale          = 2834;
-int LmrBaseOffset        = 1027;
+int AtomicCaptFutBase    = 227;
+int AtomicCaptFutLmrMult = 244;
+int QsFutilityBase       = 345;
+int SingularDepthMin     = 8;
+int SingularMarginBase   = 65;
+int SingularMarginTtPv   = 83;
+int SingularMarginDiv    = 48;
+int LmrLogScale          = 2736;
+int LmrBaseOffset        = 1049;
 }
 
 TUNE(SetRange(0, 20), AtomicMcpBase);
