@@ -131,8 +131,8 @@ int correction_value(const Worker& w, const Position& pos, const Stack* const ss
     const int   cntcv =
       m.is_ok()
           ? 8363
-            * ((*(ss - 2)->continuationCorrectionHistory)[pos.piece_on(m.to_sq())][m.to_sq()]
-               + (*(ss - 4)->continuationCorrectionHistory)[pos.piece_on(m.to_sq())][m.to_sq()])
+            * ((*(ss - 2)->continuationCorrectionHistory)[(ss - 1)->movedPiece][m.to_sq()]
+               + (*(ss - 4)->continuationCorrectionHistory)[(ss - 1)->movedPiece][m.to_sq()])
           : 64549;
 
     return 13345 * pcv + 9280 * micv + 11840 * (wnpcv + bnpcv) + cntcv;
@@ -162,7 +162,7 @@ void update_correction_history(const Position& pos,
     if (m.is_ok())
     {
         const Square to = m.to_sq();
-        const Piece  pc = pos.piece_on(to);
+        const Piece  pc = (ss - 1)->movedPiece;
         (*(ss - 2)->continuationCorrectionHistory)[pc][to] << bonus * 136 / 128;
         (*(ss - 4)->continuationCorrectionHistory)[pc][to] << bonus * 68 / 128;
     }
@@ -928,6 +928,7 @@ void Search::Worker::do_move(
     if (ss != nullptr)
     {
         ss->currentMove = move;
+        ss->movedPiece  = dirtyPiece.pc;
         ss->continuationHistory =
           &active_continuation_history()[ss->inCheck][capture][dirtyPiece.pc][move.to_sq()];
         ss->continuationCorrectionHistory =
@@ -938,6 +939,7 @@ void Search::Worker::do_move(
 void Search::Worker::do_null_move(Position& pos, StateInfo& st, Stack* const ss) {
     pos.do_null_move(st);
     ss->currentMove                   = Move::null();
+    ss->movedPiece                    = NO_PIECE;
     ss->continuationHistory           = &active_continuation_history()[0][0][NO_PIECE][0];
     ss->continuationCorrectionHistory = &continuationCorrectionHistory[NO_PIECE][0];
 }
@@ -1864,7 +1866,7 @@ moves_loop:  // When in check, search starts here
     {
         Piece capturedPiece = pos.captured_piece();
         assert(capturedPiece != NO_PIECE);
-        captureHistory[pos.piece_on(prevSq)][prevSq][type_of(capturedPiece)] << 901;
+        captureHistory[(ss - 1)->movedPiece][prevSq][type_of(capturedPiece)] << 901;
     }
 
     if (PvNode)
