@@ -1374,6 +1374,20 @@ void Position::undo_null_move() {
 }
 
 
+namespace {
+
+// Small single-phase positional component for SEE: losing a centralized
+// piece costs a bit more than its bare material value, losing an edge
+// piece a bit less. Historic atomic testing favored PSQT-aware SEE.
+inline int see_psqt(Piece pc, Square s) {
+    constexpr int Weight[PIECE_TYPE_NB] = {0, 4, 8, 6, 4, 4, 0, 0};
+    const int centrality = std::min(int(file_of(s)), 7 - int(file_of(s)))
+                         + std::min(int(rank_of(s)), 7 - int(rank_of(s)));
+    return (centrality - 3) * Weight[type_of(pc)];
+}
+
+}
+
 // Tests if the Atomic SEE (Static Exchange Evaluation) value of the move is
 // greater or equal to the given threshold. A capture ends the exchange by
 // exploding the capturing piece, the captured piece, and every adjacent
@@ -1425,7 +1439,8 @@ bool Position::see_ge(Move m, int threshold) const {
 
     while (blast)
     {
-        const Piece blastPiece = piece_on(pop_lsb(blast));
+        const Square blastSq    = pop_lsb(blast);
+        const Piece  blastPiece = piece_on(blastSq);
 
         if (type_of(blastPiece) == KING)
         {
@@ -1435,8 +1450,10 @@ bool Position::see_ge(Move m, int threshold) const {
                 explodesTheirKing = true;
         }
 
-        result += color_of(blastPiece) == us ? -int(AtomicCapturePieceValue[blastPiece])
-                                             : int(AtomicCapturePieceValue[blastPiece]);
+        const int pieceWorth =
+          int(AtomicCapturePieceValue[blastPiece]) + see_psqt(blastPiece, blastSq);
+
+        result += color_of(blastPiece) == us ? -pieceWorth : pieceWorth;
     }
 
     if (isCapture)
