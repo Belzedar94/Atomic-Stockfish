@@ -106,6 +106,20 @@ bool Search::atomic_capture_futility_eligible(const Position& pos, Move move) {
 
 namespace {
 
+// Our non-pawn material removed by this capture's explosion: the capturer
+// plus own non-pawn bycatch. Used to keep stalemate sacrifices searchable
+// even when the blast takes friends along with the capturer.
+Value atomic_own_blast_material(const Position& pos, Move move) {
+    const Color us   = pos.side_to_move();
+    Bitboard    zone = ((Attacks::attacks_bb<KING>(move.to_sq()) | square_bb(move.from_sq()))
+                     & pos.pieces(us))
+                    & ~pos.pieces(PAWN) & ~pos.pieces(KING);
+    Value v = VALUE_ZERO;
+    while (zone)
+        v += PieceValue[pos.piece_on(pop_lsb(zone))];
+    return v;
+}
+
 constexpr u64 NODES_LIMIT_OUTPUT = 10'000'000;
 
 constexpr int SEARCHEDLIST_CAPACITY = 32;
@@ -1481,10 +1495,12 @@ moves_loop:  // When in check, search starts here
                 }
 
                 // SEE based pruning for captures and checks
-                // Avoid pruning sacrifices of our last piece for stalemate
+                // Avoid pruning sacrifices for stalemate: the whole own
+                // blast (capturer plus bycatch) may empty our material.
                 int margin = 175 * depth + captHist * 34 / 1024;
                 if (!atomicWin
-                    && (alpha >= VALUE_DRAW || pos.non_pawn_material(us) != PieceValue[movedPiece])
+                    && (alpha >= VALUE_DRAW
+                        || pos.non_pawn_material(us) != atomic_own_blast_material(pos, move))
                     && !pos.see_ge(move, -margin))
                     continue;
             }
@@ -2099,8 +2115,12 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
             if (!capture)
                 continue;
 
-            // Do not search moves with bad enough SEE values
-            if (!pos.see_ge(move, -74))
+            // Do not search moves with bad enough SEE values, but keep
+            // stalemate sacrifices searchable (mirror of the main search)
+            if (!pos.see_ge(move, -74)
+                && (alpha >= VALUE_DRAW
+                    || pos.non_pawn_material(pos.side_to_move())
+                         != atomic_own_blast_material(pos, move)))
                 continue;
         }
 
