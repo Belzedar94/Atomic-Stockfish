@@ -134,6 +134,7 @@ struct Stack {
     CorrectionHistory<PieceTo>* continuationCorrectionHistory;
     int                         ply;
     Move                        currentMove;
+    Piece                       movedPiece;  // pre-blast: survives the explosion of currentMove
     Move                        excludedMove;
     Value                       staticEval;
     int                         statScore;
