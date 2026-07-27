@@ -1383,8 +1383,8 @@ bool Position::see_ge(Move m, int threshold) const {
 
     assert(m.is_ok());
 
-    // Only deal with normal moves, assume others pass a simple SEE
-    if (m.type_of() != NORMAL)
+    // Castling can neither win nor lose material in atomic
+    if (m.type_of() == CASTLING)
         return VALUE_ZERO >= threshold;
 
     const Square from = m.from_sq();
@@ -1396,7 +1396,11 @@ bool Position::see_ge(Move m, int threshold) const {
 
     const Color    us        = color_of(pc);
     const Bitboard fromTo    = from | to;
-    Bitboard       blast     = ((attacks_bb<KING>(to) & ~pieces(PAWN)) | fromTo) & pieces();
+    // En passant: the captured pawn sits behind the destination square. A
+    // capturing promotion explodes the pawn before it ever promotes, so it
+    // is scored exactly like a normal pawn capture.
+    const Square   capSq     = m.type_of() == EN_PASSANT ? to - pawn_push(us) : to;
+    Bitboard       blast     = ((attacks_bb<KING>(to) & ~pieces(PAWN)) | fromTo | capSq) & pieces();
     int            result    = 0;
     const bool     isCapture = capture(m);
 
@@ -1415,9 +1419,21 @@ bool Position::see_ge(Move m, int threshold) const {
         }
 
         if (minAttacker == VALUE_INFINITE)
+        {
+            // An unexplodable quiet promotion banks the material upgrade
+            if (m.type_of() == PROMOTION)
+                return int(AtomicCapturePieceValue[make_piece(us, m.promotion_type())])
+                         - int(AtomicCapturePieceValue[make_piece(us, PAWN)])
+                    >= threshold;
             return VALUE_ZERO >= threshold;
+        }
 
         result += minAttacker;
+
+        // A quiet promotion exposes the promoted piece, not the pawn
+        if (m.type_of() == PROMOTION)
+            result -= int(AtomicCapturePieceValue[make_piece(us, m.promotion_type())])
+                    - int(AtomicCapturePieceValue[make_piece(us, PAWN)]);
     }
 
     bool explodesOurKing   = false;
@@ -1452,12 +1468,19 @@ bool Position::see_ge(Move m, int threshold) const {
     {
         // The opponent can decline a quiet capture. Exploding both kings is
         // therefore neutral, while a capture exploding our king is decisive.
+        // Declining a quiet promotion still concedes the material upgrade.
+        const int declined =
+          m.type_of() == PROMOTION
+            ? int(AtomicCapturePieceValue[make_piece(us, m.promotion_type())])
+                - int(AtomicCapturePieceValue[make_piece(us, PAWN)])
+            : 0;
+
         if (explodesOurKing && !explodesTheirKing)
             result = -VALUE_MATE;
         else if (explodesTheirKing)
-            result = 0;
+            result = declined;
         else
-            result = std::min(result, 0);
+            result = std::min(result, declined);
     }
 
     return result >= threshold;
