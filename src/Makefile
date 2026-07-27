@@ -77,7 +77,7 @@ BINDIR = $(PREFIX)/bin
 PGOBENCH = printf 'setoption name Use NNUE value false\nbench\nquit\n' | $(RUN_PREFIX) ./$(EXE)
 
 ### Source and object files
-SRCS = attacks.cpp benchmark.cpp bitboard.cpp evaluate.cpp main.cpp \
+SRCS = attacks.cpp benchmark.cpp bitboard.cpp dfpn.cpp evaluate.cpp main.cpp \
 	misc.cpp movegen.cpp movepick.cpp position.cpp \
 	search.cpp thread.cpp timeman.cpp tt.cpp uci.cpp uci_move.cpp ucioption.cpp xboard.cpp tune.cpp syzygy/tbprobe.cpp \
 	api/atomic_notation.cpp api/atomic_outcome.cpp \
@@ -87,7 +87,7 @@ SRCS = attacks.cpp benchmark.cpp bitboard.cpp evaluate.cpp main.cpp \
 
 OTHER_SRCS = universal/entry_x86.cpp universal/entry_arm64.cpp universal/entry_riscv64.cpp universal/nnue_embed.cpp
 
-HEADERS = attacks.h benchmark.h bitboard.h evaluate.h misc.h movegen.h movepick.h history.h \
+HEADERS = attacks.h benchmark.h bitboard.h dfpn.h evaluate.h misc.h movegen.h movepick.h history.h \
 		api/atomic_fen.h api/atomic_notation.h api/atomic_outcome.h \
 		nnue/nnue_misc.h nnue/features/half_ka_v2_hm.h nnue/features/half_ka_v2_atomic.h nnue/features/full_threats.h \
 		nnue/layers/affine_transform.h nnue/layers/affine_transform_sparse_input.h \

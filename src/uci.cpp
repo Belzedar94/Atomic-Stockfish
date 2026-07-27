@@ -30,6 +30,7 @@
 #include <vector>
 
 #include "benchmark.h"
+#include "dfpn.h"
 #include "engine.h"
 #include "memory.h"
 #include "position.h"
@@ -153,6 +154,14 @@ void UCIEngine::loop() {
             benchmark(is);
         else if (token == "d")
             sync_cout << engine.visualize() << sync_endl;
+        // Exact AND/OR prover over this engine's own move generator. It shares
+        // nothing with the search: no evaluation, no NNUE, no shared TT.
+        else if (token == "solve")
+            DFPN::solve_command(is, std::cout);
+        else if (token == "solve_selftest")
+            DFPN::solve_selftest(std::cout);
+        else if (token == "solve_bench")
+            DFPN::solve_bench(is, std::cout);
         else if (token == "eval")
             engine.trace_eval();
         else if (token == "compiler")
