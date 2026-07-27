@@ -212,8 +212,25 @@ ExtMove* MovePicker::score(const MoveList<Type>& ml) {
         if constexpr (Type == CAPTURES)
         {
             const Piece capturedPiece = pos.piece_on(to);
-            m.value = (*captureHistory)[pc][to][type_of(capturedPiece)]
-                    + 7 * int(PieceValue[capturedPiece]);
+
+            // Order by the net material swing of the explosion: victim plus
+            // enemy bycatch, minus own bycatch and the capturer itself.
+            int blastVal = m.type_of() == EN_PASSANT ? int(PieceValue[PAWN])
+                                                     : int(PieceValue[capturedPiece]);
+
+            Bitboard ring = Attacks::attacks_bb<KING>(to) & ~pos.pieces(PAWN) & pos.pieces()
+                          & ~square_bb(m.from_sq()) & ~square_bb(to);
+            while (ring)
+            {
+                const Piece bp = pos.piece_on(pop_lsb(ring));
+                if (type_of(bp) == KING)
+                    blastVal += color_of(bp) == us ? -12000 : 12000;
+                else
+                    blastVal += color_of(bp) == us ? -int(PieceValue[bp]) : int(PieceValue[bp]);
+            }
+            blastVal -= int(PieceValue[pc]);
+
+            m.value = (*captureHistory)[pc][to][type_of(capturedPiece)] + 7 * blastVal;
         }
 
         else if constexpr (Type == QUIETS)
