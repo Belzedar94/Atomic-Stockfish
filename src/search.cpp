@@ -1593,6 +1593,17 @@ moves_loop:  // When in check, search starts here
                 extension = -2;
         }
 
+        // Check extension. Modern Stockfish dropped it because deep LMR pays
+        // for it better in orthodox chess. Atomic is a forcing-check variant:
+        // nearly every decisive line is a chain of checks with two or three
+        // legal evasions each, so an extended check does not widen the tree,
+        // it only makes the forced line deeper. MultiVariant-Stockfish kept
+        // the SF10 rule (search.cpp:1197-1199 of variant_sf_10) and that is
+        // the single mechanism behind its mate-hunting profile. The blast SEE
+        // guard keeps checks that simply hang the checker out of it.
+        else if (givesCheck && pos.see_ge(move, -75))
+            extension = 1;
+
         u64 nodeCount = rootNode ? u64(nodes) : 0;
 
         // Step 16. Make the move
