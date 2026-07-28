@@ -1909,7 +1909,7 @@ moves_loop:  // When in check, search starts here
 // See https://www.chessprogramming.org/Horizon_Effect
 // and https://www.chessprogramming.org/Quiescence_Search
 template<NodeType nodeType>
-Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta) {
+Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta, bool qsRoot) {
 
     static_assert(nodeType != Root);
     constexpr bool PvNode = nodeType == PV;
@@ -2047,9 +2047,11 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
     // legal and an explosion can remove the checking piece. Keep checkers()
     // constant-zero for move generation, but search every capture and quiet
     // whenever the separate Atomic check predicate forbids stand-pat.
+    // On the first quiescence ply we also emit a few quiet checks, the modern
+    // form of SF10's DEPTH_QS_CHECKS that MultiVariant-Stockfish still uses.
     const Depth movePickerDepth = ss->inCheck ? 1 : DEPTH_QS;
     MovePicker  mp(pos, ttData.move, movePickerDepth, &mainHistory, &lowPlyHistory, &captureHistory,
-                   contHist, &active_shared_history(), ss->ply);
+                   contHist, &active_shared_history(), ss->ply, qsRoot && !ss->inCheck);
 
     // Step 5. Loop through all pseudo-legal moves until no moves remain or a beta
     // cutoff occurs.
@@ -2095,8 +2097,9 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
                 }
             }
 
-            // Skip non-captures
-            if (!capture)
+            // Skip non-captures, except the quiet checks the move picker
+            // emits on the first quiescence ply.
+            if (!capture && !(qsRoot && !ss->inCheck && givesCheck))
                 continue;
 
             // Do not search moves with bad enough SEE values
@@ -2107,7 +2110,7 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
         // Step 7. Make and search the move
         do_move(pos, move, st, givesCheck, ss);
 
-        value = -qsearch<nodeType>(pos, ss + 1, -beta, -alpha);
+        value = -qsearch<nodeType>(pos, ss + 1, -beta, -alpha, false);
         undo_move(pos, move);
 
         assert(value > -VALUE_INFINITE && value < VALUE_INFINITE);

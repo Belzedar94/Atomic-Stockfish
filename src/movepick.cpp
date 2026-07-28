@@ -48,8 +48,14 @@ enum Stages {
     // generate qsearch moves
     QSEARCH_TT,
     QCAPTURE_INIT,
-    QCAPTURE
+    QCAPTURE,
+    QCHECK_INIT,
+    QCHECK
 };
+
+// Hard cap on quiet checks emitted at the first quiescence ply, so the worst
+// case of the new stage stays bounded.
+constexpr int MAX_QSEARCH_CHECKS = 4;
 
 #ifdef USE_AVX512
 // Load the Move, and the ExtMove value, into all lanes of 512-bit registers
@@ -153,7 +159,8 @@ MovePicker::MovePicker(const Position&              p,
                        const CapturePieceToHistory* cph,
                        const PieceToHistory**       ch,
                        const SharedHistories*       sh,
-                       int                          pl) :
+                       int                          pl,
+                       bool                         qsc) :
     pos(p),
     mainHistory(mh),
     lowPlyHistory(lph),
@@ -162,7 +169,8 @@ MovePicker::MovePicker(const Position&              p,
     sharedHistory(sh),
     ttMove(ttm),
     depth(d),
-    ply(pl) {
+    ply(pl),
+    qsChecks(qsc) {
 
     stage = (depth > 0 ? MAIN_TT : QSEARCH_TT) + !(ttm && pos.pseudo_legal(ttm));
 }
@@ -362,6 +370,40 @@ top:
         });
 
     case QCAPTURE :
+        if (select([]() { return true; }))
+            return *(cur - 1);
+
+        if (!qsChecks)
+            return Move::none();
+
+        ++stage;
+        [[fallthrough]];
+
+    case QCHECK_INIT : {
+        // Quiet checks at the first quiescence ply. Atomic mates are nets of
+        // forcing checks, so seeing them one ply earlier is worth a small
+        // bounded widening of the horizon node.
+        MoveList<QUIETS> ml(pos);
+
+        cur = endCur = moves;
+        for (Move move : ml)
+        {
+            if (endCur - cur >= MAX_QSEARCH_CHECKS)
+                break;
+
+            if (pos.gives_check(move) && pos.see_ge(move, -75))
+            {
+                *endCur       = move;
+                endCur->value = 0;
+                ++endCur;
+            }
+        }
+
+        ++stage;
+        [[fallthrough]];
+    }
+
+    case QCHECK :
         return select([]() { return true; });
 
     case PROBCUT :

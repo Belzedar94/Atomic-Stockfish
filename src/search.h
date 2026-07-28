@@ -427,9 +427,11 @@ class Worker {
     template<NodeType nodeType>
     Value search(Position& pos, Stack* ss, Value alpha, Value beta, Depth depth, bool cutNode);
 
-    // Quiescence search function, which is called by the main search
+    // Quiescence search function, which is called by the main search.
+    // qsRoot marks the first quiescence ply, the only one that also searches
+    // quiet checks (the modern analogue of SF10's DEPTH_QS_CHECKS).
     template<NodeType nodeType>
-    Value qsearch(Position& pos, Stack* ss, Value alpha, Value beta);
+    Value qsearch(Position& pos, Stack* ss, Value alpha, Value beta, bool qsRoot = true);
 
     int reduction(bool i, Depth d, int mn, int delta) const;
 
