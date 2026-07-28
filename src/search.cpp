@@ -1335,7 +1335,12 @@ Value Search::Worker::search(
     // Step 11. ProbCut
     // If we have a good enough capture (or queen promotion) and a reduced search
     // returns a value much above beta, we can (almost) safely prune the previous move.
-    probCutBeta = beta + 214 - 59 * improving;
+    // MultiVariant-Stockfish used a flat 200 for Atomic (search.cpp:180-215 and
+    // :1076 of variant_sf_10) rather than the improving-dependent chess margin.
+    // The improving heuristic reads the static evaluation trend, and in a
+    // variant where one capture can remove four pieces that trend carries much
+    // less information about how likely the capture is to hold.
+    probCutBeta = beta + 200;
     if (depth >= 3
         && !is_decisive(beta)
         // If value from transposition table is lower than probCutBeta, don't attempt
