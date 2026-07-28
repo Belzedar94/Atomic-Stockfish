@@ -212,8 +212,13 @@ ExtMove* MovePicker::score(const MoveList<Type>& ml) {
         if constexpr (Type == CAPTURES)
         {
             const Piece capturedPiece = pos.piece_on(to);
+
+            // The Atomic search contract already prices captures with
+            // AtomicCapturePieceValue inside see_ge(). Ordering kept using the
+            // orthodox table, so the move picker and the pruning right after it
+            // disagreed about what a piece is worth.
             m.value = (*captureHistory)[pc][to][type_of(capturedPiece)]
-                    + 7 * int(PieceValue[capturedPiece]);
+                    + 7 * int(AtomicCapturePieceValue[capturedPiece]);
         }
 
         else if constexpr (Type == QUIETS)

@@ -1474,7 +1474,8 @@ moves_loop:  // When in check, search starts here
                 {
                     Value futilityValue = ss->staticEval + AtomicCaptFutBase
                                         + AtomicCaptFutLmrMult * lmrDepth
-                                        + PieceValue[capturedPiece] + 131 * captHist / 1024;
+                                        + AtomicCapturePieceValue[capturedPiece]
+                                        + 131 * captHist / 1024;
 
                     if (futilityValue <= alpha)
                         continue;
@@ -2076,7 +2077,8 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
                 if (moveCount > 2)
                     continue;
 
-                Value futilityValue = futilityBase + PieceValue[pos.piece_on(move.to_sq())];
+                Value futilityValue =
+                  futilityBase + AtomicCapturePieceValue[pos.piece_on(move.to_sq())];
 
                 // If static eval + value of piece we are going to capture is
                 // much lower than alpha, we can prune this move.
