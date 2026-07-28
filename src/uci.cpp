@@ -170,6 +170,10 @@ void UCIEngine::loop() {
             Survive50::selftest(is, std::cout);
         else if (token == "survive50_bench")
             Survive50::bench(is, std::cout);
+        else if (token == "survive50_mine")
+            Survive50::mine_command(is, std::cout);
+        else if (token == "survive50_mine_selftest")
+            Survive50::mine_selftest(std::cout);
         else if (token == "eval")
             engine.trace_eval();
         else if (token == "compiler")

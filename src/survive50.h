@@ -82,6 +82,8 @@
 #include <string>
 #include <vector>
 
+#include "position.h"
+
 namespace Stockfish::Survive50 {
 
 // Plies of the fifty-move counter at which the defender may claim. Identical
@@ -108,6 +110,13 @@ constexpr int TAU_LOST = FIFTY_MOVE_PLIES + 1;
 constexpr const char* RULESET_ID          = "atomic-fide-claim-v1";
 constexpr const char* CERTIFICATE_FORMAT  = "atomic-survival-threshold-v1";
 constexpr const char* REPETITION_MODE     = "NO_REPETITION_SHORTCUTS";
+// Identity of the CLAIM AUTOMATON: terminal beats the counter, so a mate on
+// the hundredth reversible ply is a mate. Both verifiers refuse a certificate
+// that names a different one.
+constexpr const char* TERMINAL_PRECEDENCE_ID = "terminal-before-clock/1";
+// Identity of the CANONICALISER, which decides which positions are the same
+// position. Independent of the ruleset, but it moves keys, so it travels too.
+constexpr int CANONICAL_VERSION = 2;
 
 // ---------------------------------------------------------------------------
 // First-class results (oracle 5.1, doc 18 §6.1)
@@ -304,6 +313,53 @@ enum class Family : uint8_t {
 };
 
 Graph random_graph(uint64_t seed, Family family);
+
+// ---------------------------------------------------------------------------
+// Phase 4: mining a strategy out of real positions
+// ---------------------------------------------------------------------------
+
+struct MineLimits {
+    // Hard cap on base states in the mined region. Hitting it does not fail;
+    // it turns into closure defect, which is a number rather than a shrug.
+    uint64_t states = 20000;
+    // Movegen budget, in positions built.
+    uint64_t positions = 2000000;
+    // Black replies kept per state on the first pass. White is always
+    // exhaustive; Black is the search problem and starts narrow.
+    uint32_t blackWidth = 3;
+    // Refinement passes. Doc 18 §4 abandons a candidate after two.
+    int passes = 3;
+};
+
+struct MineReport {
+    ProofResult result          = ProofResult::Unknown;
+    bool        haveCertificate = false;
+    std::string certificate;
+
+    int    rootTau    = TAU_LOST;
+    int    entryClock = 0;
+    size_t states     = 0;  // states actually emitted
+    size_t edges      = 0;
+    size_t minedStates = 0;  // states explored, emitted or not
+
+    // Doc 18 §4: unresolved White edges over all legal White edges.
+    uint64_t    whiteEdges           = 0;
+    uint64_t    unresolvedWhiteEdges = 0;
+    double      closureDefect        = 0.0;
+    const char* gate                 = "closed";
+
+    uint64_t positionsBuilt = 0;
+    int64_t  elapsedMs      = 0;
+};
+
+MineReport mine(Position& root, const MineLimits& limits);
+
+// "survive50_mine <fen> [states N] [width K] [passes P] [positions N]
+//  [certfile PATH]"
+void mine_command(std::istringstream& is, std::ostream& out);
+
+// Mines known atomic fortresses and checks the certificates it writes.
+int mine_selftest(std::ostream& out);
 
 // ---------------------------------------------------------------------------
 // Commands
