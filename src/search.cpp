@@ -71,6 +71,7 @@ using namespace Search;
 int Search::AtomicMcpBase     = 7;
 int Search::AtomicNmpBase     = 6;
 int Search::AtomicNmpDepthDiv = 4;
+int Search::AtomicNmpEvalDiv  = 400;
 
 namespace {
 int AtomicCaptFutBase    = 227;
@@ -87,6 +88,7 @@ int LmrBaseOffset        = 1049;
 TUNE(SetRange(0, 20), AtomicMcpBase);
 TUNE(SetRange(1, 12), AtomicNmpBase);
 TUNE(SetRange(1, 8), AtomicNmpDepthDiv);
+TUNE(SetRange(100, 1200), AtomicNmpEvalDiv);
 TUNE(SetRange(0, 600), AtomicCaptFutBase, AtomicCaptFutLmrMult);
 TUNE(SetRange(0, 800), QsFutilityBase);
 TUNE(SetRange(2, 14), SingularDepthMin);
@@ -1296,7 +1298,7 @@ Value Search::Worker::search(
         assert((ss - 1)->currentMove != Move::null());
 
         // Atomic uses a shallower null-move reduction than orthodox chess.
-        Depth R = atomic_null_move_reduction(depth);
+        Depth R = atomic_null_move_reduction(depth, eval, beta);
         do_null_move(pos, st, ss);
 
         Value nullValue = -search<NonPV>(pos, ss + 1, -beta, -beta + 1, depth - R, false);

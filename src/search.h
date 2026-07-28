@@ -63,6 +63,7 @@ namespace Search {
 extern int AtomicMcpBase;
 extern int AtomicNmpBase;
 extern int AtomicNmpDepthDiv;
+extern int AtomicNmpEvalDiv;
 
 // Fairy's move-count formula specialized with blast_on_capture=1 and walling=0.
 inline int atomic_move_count_pruning_threshold(bool improving, Depth depth) {
@@ -71,8 +72,14 @@ inline int atomic_move_count_pruning_threshold(bool improving, Depth depth) {
 
 // Atomic threats make an orthodox null-move cutoff less trustworthy. Reduce
 // one ply less than modern Stockfish while preserving its depth scaling.
-inline Depth atomic_null_move_reduction(Depth depth) {
-    return AtomicNmpBase + depth / AtomicNmpDepthDiv;
+// MultiVariant-Stockfish additionally reduced further the further the static
+// evaluation sits above beta, but at half the chess rate: (eval - beta) / 400
+// instead of / 200, capped at three plies (search.cpp:1030-1033 of
+// variant_sf_10). Our gate admits eval below beta, where MV-SF's never did, so
+// the term is clamped at zero rather than allowed to shrink the reduction.
+inline Depth atomic_null_move_reduction(Depth depth, Value eval, Value beta) {
+    return AtomicNmpBase + depth / AtomicNmpDepthDiv
+         + std::clamp(int(eval - beta) / AtomicNmpEvalDiv, 0, 3);
 }
 
 // Orthodox main-search and qsearch capture futility price only the victim on
