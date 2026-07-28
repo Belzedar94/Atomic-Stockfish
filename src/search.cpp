@@ -1468,13 +1468,17 @@ moves_loop:  // When in check, search starts here
                 Piece capturedPiece = pos.piece_on(move.to_sq());
                 int   captHist = captureHistory[movedPiece][move.to_sq()][type_of(capturedPiece)];
 
-                // Futility pruning for captures
-                if (!atomicWin && !givesCheck && lmrDepth < 7
-                    && atomic_capture_futility_eligible(pos, move))
+                // Futility pruning for captures. Pricing the capture by the
+                // full blast balance instead of the victim alone makes the
+                // bound sound for captures with bycatch too, so they no longer
+                // have to be exempted from futility altogether.
+                if (!atomicWin && !givesCheck && lmrDepth < 7 && move.type_of() == NORMAL
+                    && pos.capture_stage(move))
                 {
                     Value futilityValue = ss->staticEval + AtomicCaptFutBase
                                         + AtomicCaptFutLmrMult * lmrDepth
-                                        + PieceValue[capturedPiece] + 131 * captHist / 1024;
+                                        + pos.atomic_blast_order_value(move)
+                                        + 131 * captHist / 1024;
 
                     if (futilityValue <= alpha)
                         continue;
@@ -2071,12 +2075,17 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
         {
             // Futility pruning and moveCount pruning
             if (!givesCheck && move.to_sq() != prevSq && !is_loss(futilityBase)
-                && move.type_of() != PROMOTION && atomic_capture_futility_eligible(pos, move))
+                && move.type_of() == NORMAL && pos.capture_stage(move))
             {
                 if (moveCount > 2)
                     continue;
 
-                Value futilityValue = futilityBase + PieceValue[pos.piece_on(move.to_sq())];
+                // MultiVariant-Stockfish priced this with the Atomic exchange
+                // value of the move, not with the victim on the destination
+                // square (search.cpp:1643-1645 of variant_sf_10). In Atomic the
+                // capturer dies and the blast takes bystanders with it, so the
+                // victim alone is not what the capture is worth.
+                Value futilityValue = futilityBase + pos.atomic_blast_order_value(move);
 
                 // If static eval + value of piece we are going to capture is
                 // much lower than alpha, we can prune this move.
