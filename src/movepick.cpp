@@ -189,9 +189,18 @@ ExtMove* MovePicker::score(const MoveList<Type>& ml) {
 
     [[maybe_unused]] Color us = pos.side_to_move();
 
+    // Every piece touching our own king is gunpowder: one enemy capture next
+    // to it takes the king with it. MultiVariant-Stockfish charged 100cp per
+    // occupied square of our own king ring (evaluate.cpp:1077 of
+    // variant_sf_10). Here it is only an ordering preference, no pruning.
+    [[maybe_unused]] Bitboard ourKingRing = 0;
+
     [[maybe_unused]] Bitboard threatByLesser[KING + 1];
     if constexpr (Type == QUIETS)
     {
+        if (pos.has_king(us))
+            ourKingRing = Attacks::attacks_bb<KING>(pos.square<KING>(us));
+
         threatByLesser[PAWN]   = 0;
         threatByLesser[KNIGHT] = threatByLesser[BISHOP] = pos.attacks_by<PAWN>(~us);
         threatByLesser[ROOK] =
@@ -237,6 +246,10 @@ ExtMove* MovePicker::score(const MoveList<Type>& ml) {
             // or bonus for escaping an attack by a lesser piece.
             int v = 20 * (bool(threatByLesser[pt] & from) - bool(threatByLesser[pt] & to));
             m.value += PieceValue[pt] * v;
+
+            // penalty for walking into our own king ring, where the piece
+            // becomes powder for the next enemy capture
+            m.value -= PieceValue[pt] * 20 / 8 * bool(ourKingRing & to);
 
 
             if (ply < LOW_PLY_HISTORY_SIZE)
