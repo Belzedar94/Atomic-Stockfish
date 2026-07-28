@@ -189,9 +189,20 @@ ExtMove* MovePicker::score(const MoveList<Type>& ml) {
 
     [[maybe_unused]] Color us = pos.side_to_move();
 
+    // Pieces glued to the enemy king. Attacking one of them threatens mate by
+    // explosion: MultiVariant-Stockfish scored that as IndirectKingAttack, 883
+    // danger units per attacked neighbour (evaluate.cpp:210-212 of
+    // variant_sf_10). It is the Atomic smell of a mate, and our network never
+    // exposes it to move ordering.
+    [[maybe_unused]] Bitboard indirectKingTargets = 0;
+
     [[maybe_unused]] Bitboard threatByLesser[KING + 1];
     if constexpr (Type == QUIETS)
     {
+        if (pos.has_king(~us))
+            indirectKingTargets =
+              pos.pieces(~us) & Attacks::attacks_bb<KING>(pos.square<KING>(~us));
+
         threatByLesser[PAWN]   = 0;
         threatByLesser[KNIGHT] = threatByLesser[BISHOP] = pos.attacks_by<PAWN>(~us);
         threatByLesser[ROOK] =
@@ -232,6 +243,13 @@ ExtMove* MovePicker::score(const MoveList<Type>& ml) {
 
             // bonus for checks
             m.value += ((pos.check_squares(pt) & to) && pos.see_ge(m, -75)) * 16384;
+
+            // bonus for threatening a piece next to the enemy king, the
+            // indirect mate threat of Atomic
+            m.value += (indirectKingTargets
+                        && (Attacks::attacks_bb(pc, to, pos.pieces() ^ from) & indirectKingTargets)
+                        && pos.see_ge(m, -75))
+                     * 8192;
 
             // penalty for moving to a square threatened by a lesser piece
             // or bonus for escaping an attack by a lesser piece.
