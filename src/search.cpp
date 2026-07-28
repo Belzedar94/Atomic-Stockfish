@@ -73,6 +73,13 @@ int Search::AtomicNmpBase     = 6;
 int Search::AtomicNmpDepthDiv = 4;
 
 namespace {
+// MultiVariant-Stockfish paid real SPSA to learn that Atomic needs a much
+// wider futility window than chess: FutilityMarginFactor 585 against 175, and
+// FutilityMarginParent {512, 400} against {256, 200}. Material swings by whole
+// clusters of pieces here, so "eval plus a chess-sized margin" is not a bound.
+// Expressed as a 64-based multiplier of the modern margins; 128 is the
+// doubling the audit prescribes as the first attempt.
+int AtomicFutilityScale  = 128;
 int AtomicCaptFutBase    = 227;
 int AtomicCaptFutLmrMult = 244;
 int QsFutilityBase       = 345;
@@ -87,6 +94,7 @@ int LmrBaseOffset        = 1049;
 TUNE(SetRange(0, 20), AtomicMcpBase);
 TUNE(SetRange(1, 12), AtomicNmpBase);
 TUNE(SetRange(1, 8), AtomicNmpDepthDiv);
+TUNE(SetRange(32, 320), AtomicFutilityScale);
 TUNE(SetRange(0, 600), AtomicCaptFutBase, AtomicCaptFutLmrMult);
 TUNE(SetRange(0, 800), QsFutilityBase);
 TUNE(SetRange(2, 14), SingularDepthMin);
@@ -1280,6 +1288,7 @@ Value Search::Worker::search(
     {
         Value futilityMult = std::min(40 + depth * 4, 80);
         futilityMult -= 20 * !ss->ttHit;
+        futilityMult = futilityMult * AtomicFutilityScale / 64;
 
         Value futilityMargin = futilityMult * depth
                              - (2934 * improving + 343 * opponentWorsening) * futilityMult / 1024
@@ -1504,8 +1513,10 @@ moves_loop:  // When in check, search starts here
                 // (*Scaler): Generally, lower divisors scale well
                 lmrDepth += history / lmrDivisor[dIndex];
 
-                Value futilityValue = ss->staticEval + 40 + 138 * !bestMove + 117 * lmrDepth
-                                    + 90 * (ss->staticEval > alpha);
+                Value futilityValue =
+                  ss->staticEval
+                  + (40 + 138 * !bestMove + 117 * lmrDepth + 90 * (ss->staticEval > alpha))
+                      * AtomicFutilityScale / 64;
 
                 // Futility pruning: parent node
                 // (*Scaler): Generally, more frequent futility pruning
