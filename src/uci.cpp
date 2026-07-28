@@ -31,6 +31,7 @@
 
 #include "benchmark.h"
 #include "dfpn.h"
+#include "survive50.h"
 #include "engine.h"
 #include "memory.h"
 #include "position.h"
@@ -162,6 +163,13 @@ void UCIEngine::loop() {
             DFPN::solve_selftest(std::cout);
         else if (token == "solve_bench")
             DFPN::solve_bench(is, std::cout);
+        // SURVIVE50: the dual question. Not "can White force a win" but "from
+        // which halfmove clock can Black refuse to lose one", which is the
+        // only shape a fortress refutation can take.
+        else if (token == "survive50_selftest")
+            Survive50::selftest(is, std::cout);
+        else if (token == "survive50_bench")
+            Survive50::bench(is, std::cout);
         else if (token == "eval")
             engine.trace_eval();
         else if (token == "compiler")
