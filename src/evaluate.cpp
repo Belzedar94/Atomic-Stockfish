@@ -31,6 +31,7 @@
 #include "nnue/nnue_dispatcher.h"
 #include "nnue/nnue_misc.h"
 #include "position.h"
+#include "syzygy/tbprobe.h"
 #include "types.h"
 #include "nnue/nnue_accumulator.h"
 
@@ -75,6 +76,57 @@ Value fix_frc(const Position& pos) {
     return pos.side_to_move() == WHITE ? Value(correction) : Value(-correction);
 }
 
+// Atomic endgame knowledge, used only when no Atomic tablebase is mounted.
+//
+// A lone king cannot be blown up - there is nothing next to it to capture - so
+// it can only be mated, and the Atomic king defends nothing because it can
+// never capture. A rook, a bishop, a knight or two knights therefore cannot
+// cover a single escape square between them: MultiVariant-Stockfish hard-coded
+// KRvK, KBvK, KNvK and KNNvK as draws (endgame.cpp:854-943 of variant_sf_10).
+// It also drew KQvK and KPvK whenever the kings are adjacent, since a king
+// glued to the other king is immune and the lone piece cannot break the grip.
+// Our network never learned any of this, and our 6-man Atomic tablebases
+// normally answer it, so this only fires for deployments without them.
+bool atomic_lone_king_draw(const Position& pos, Color strong) {
+
+    const Color weak = ~strong;
+
+    if (pos.count<ALL_PIECES>(weak) != 1)
+        return false;
+
+    const int pawns   = pos.count<PAWN>(strong);
+    const int knights = pos.count<KNIGHT>(strong);
+    const int bishops = pos.count<BISHOP>(strong);
+    const int rooks   = pos.count<ROOK>(strong);
+    const int queens  = pos.count<QUEEN>(strong);
+    const int pieces  = knights + bishops + rooks + queens;
+
+    // KRvK, KBvK, KNvK and KNNvK are dead draws.
+    if (pawns == 0 && ((pieces == 1 && queens == 0) || (knights == 2 && pieces == 2)))
+        return true;
+
+    // KQvK and KPvK are draws while the kings are locked together. The extra
+    // square of slack when the strong side is not to move is MV-SF's: the weak
+    // king still gets to close the distance.
+    if ((pawns == 0 && queens == 1 && pieces == 1) || (pawns == 1 && pieces == 0))
+        return distance(pos.square<KING>(strong), pos.square<KING>(weak))
+            <= (strong == pos.side_to_move() ? 1 : 2);
+
+    return false;
+}
+
+bool atomic_known_endgame_draw(const Position& pos) {
+
+    // With tablebases mounted they are the authority on these positions.
+    if (Tablebases::MaxCardinality >= 3)
+        return false;
+
+    if (popcount(pos.pieces()) > 4)
+        return false;
+
+    return atomic_lone_king_draw(pos, WHITE) || atomic_lone_king_draw(pos, BLACK);
+}
+
 Value damp_for_atomic_rule50(Value value, const Position& pos) {
     // Fairy Atomic uses nMoveRule=50, i.e. a draw at 100 reversible plies.
     // Imported or composed FENs may legally carry a larger halfmove clock.
@@ -115,6 +167,12 @@ Value Eval::evaluate(const Eval::NNUE::AnyNetwork& network,
         return VALUE_MATE;
 
     assert(!pos.checkers());
+
+    // Atomic endgames whose result is a rule, not a judgement, and which our
+    // tablebases answer when they are mounted. Pure is a raw data-generation
+    // mode and must keep returning the untouched network value.
+    if (mode != UseNNUEMode::Pure && atomic_known_endgame_draw(pos))
+        return VALUE_DRAW;
 
     // Modern Stockfish optimism belongs to its current orthodox net/search
     // calibration and must not leak into the legacy Atomic V1 contract.
