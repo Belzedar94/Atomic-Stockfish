@@ -150,7 +150,8 @@ class Position {
     bool  gives_check(Move m) const;
     bool  has_king(Color c) const;
     bool  is_atomic_terminal() const;
-    bool  atomic_in_check(Color c) const;
+    bool     atomic_in_check(Color c) const;
+    Bitboard atomic_checkers() const;
     bool  atomic_wins(Move m) const;
     bool  has_legal_quiet() const;
     bool  has_legal_move() const;

@@ -48,7 +48,12 @@ enum Stages {
     // generate qsearch moves
     QSEARCH_TT,
     QCAPTURE_INIT,
-    QCAPTURE
+    QCAPTURE,
+
+    // generate Atomic check evasions
+    EVASION_TT,
+    EVASION_INIT,
+    EVASION
 };
 
 #ifdef USE_AVX512
@@ -164,7 +169,13 @@ MovePicker::MovePicker(const Position&              p,
     depth(d),
     ply(pl) {
 
-    stage = (depth > 0 ? MAIN_TT : QSEARCH_TT) + !(ttm && pos.pseudo_legal(ttm));
+    // A node in check is a regime of its own: a handful of dedicated evasion
+    // candidates, not the capture/quiet staging of a quiet node.
+    const int base = pos.atomic_in_check(pos.side_to_move()) ? EVASION_TT
+                   : depth > 0                               ? MAIN_TT
+                                                             : QSEARCH_TT;
+
+    stage = base + !(ttm && pos.pseudo_legal(ttm));
 }
 
 // MovePicker constructor for ProbCut: we generate captures with Static Exchange
@@ -185,7 +196,7 @@ MovePicker::MovePicker(const Position& p, Move ttm, int th, const CapturePieceTo
 template<GenType Type>
 ExtMove* MovePicker::score(const MoveList<Type>& ml) {
 
-    static_assert(Type == CAPTURES || Type == QUIETS, "Wrong type");
+    static_assert(Type == CAPTURES || Type == QUIETS || Type == EVASIONS, "Wrong type");
 
     [[maybe_unused]] Color us = pos.side_to_move();
 
@@ -242,6 +253,18 @@ ExtMove* MovePicker::score(const MoveList<Type>& ml) {
             if (ply < LOW_PLY_HISTORY_SIZE)
                 m.value += 8 * (*lowPlyHistory)[ply][m.raw()] / (1 + ply);
         }
+
+        else if constexpr (Type == EVASIONS)
+        {
+            // MultiVariant-Stockfish's evasion order (movepick.cpp:144-153 of
+            // variant_sf_10): every capture ahead of every quiet, captures by
+            // victim minus mover, quiets by history.
+            if (pos.capture(m))
+                m.value = (1 << 28) + int(PieceValue[pos.piece_on(to)]) - int(type_of(pc));
+            else
+                m.value =
+                  (*mainHistory)[us][m.raw()] + (*continuationHistory[0])[pc][to];
+        }
     }
     return it;
 }
@@ -271,8 +294,23 @@ top:
     case MAIN_TT :
     case QSEARCH_TT :
     case PROBCUT_TT :
+    case EVASION_TT :
         ++stage;
         return ttMove;
+
+    case EVASION_INIT : {
+        MoveList<EVASIONS> ml(pos);
+
+        cur    = moves;
+        endCur = score<EVASIONS>(ml);
+
+        partial_insertion_sort(cur, endCur, std::numeric_limits<int>::min());
+        ++stage;
+        [[fallthrough]];
+    }
+
+    case EVASION :
+        return select([]() { return true; });
 
     case CAPTURE_INIT :
     case PROBCUT_INIT :

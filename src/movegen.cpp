@@ -248,6 +248,126 @@ Move* generate_all(const Position& pos, Move* moveList) {
     return moveList;
 }
 
+// Atomic check evasions. Orthodox EVASIONS cannot describe them: the checker
+// can be removed by exploding any of its neighbours rather than by capturing it,
+// the king may not capture at all, and a square attacked by a slider is still a
+// refuge if it sits next to the enemy king, whose capture would explode the
+// attacker too. MultiVariant-Stockfish generated exactly this small, almost
+// legal set (movegen.cpp:739-821 of variant_sf_10) instead of enumerating every
+// pseudo-legal move and filtering it. The result stays a superset of the legal
+// evasions - Position::legal() remains the authority - but a far smaller one.
+template<Color Us>
+Move* generate_atomic_evasions(const Position& pos, Move* moveList) {
+
+    constexpr Color     Them     = ~Us;
+    constexpr Direction Up       = pawn_push(Us);
+    constexpr Direction UpRight  = (Us == WHITE ? NORTH_EAST : SOUTH_WEST);
+    constexpr Direction UpLeft   = (Us == WHITE ? NORTH_WEST : SOUTH_EAST);
+    constexpr Bitboard  TRank7BB = (Us == WHITE ? Rank7BB : Rank2BB);
+    constexpr Bitboard  TRank3BB = (Us == WHITE ? Rank3BB : Rank6BB);
+
+    const Square   ksq          = pos.square<KING>(Us);
+    const Square   theirKsq     = pos.square<KING>(Them);
+    const Bitboard ourRing      = Attacks::attacks_bb<KING>(ksq);
+    const Bitboard theirRing    = Attacks::attacks_bb<KING>(theirKsq);
+    const Bitboard emptySquares = ~pos.pieces();
+    const Bitboard pawnsOn7     = pos.pieces(Us, PAWN) & TRank7BB;
+    const Bitboard pawnsNotOn7  = pos.pieces(Us, PAWN) & ~TRank7BB;
+
+    Bitboard checkers = pos.atomic_checkers();
+
+    assert(checkers);
+
+    // Captures whose blast removes every checker at once, or removes the enemy
+    // king. A checker dies if the blast covers its square, so any of its
+    // neighbours is a valid thing to capture. Never capture next to our own
+    // king: that is a self-explosion.
+    Bitboard target = pos.pieces(Them);
+    Bitboard b      = checkers;
+
+    while (b)
+    {
+        const Square s = pop_lsb(b);
+        target &= Attacks::attacks_bb<KING>(s) | s;
+    }
+
+    target |= theirRing | theirKsq;
+    target &= pos.pieces(Them) & ~ourRing;
+
+    moveList = splat_pawn_moves<UpRight>(moveList, shift<UpRight>(pawnsNotOn7) & target);
+    moveList = splat_pawn_moves<UpLeft>(moveList, shift<UpLeft>(pawnsNotOn7) & target);
+
+    Bitboard p1 = shift<UpRight>(pawnsOn7) & target;
+    Bitboard p2 = shift<UpLeft>(pawnsOn7) & target;
+
+    while (p1)
+        moveList = make_promotions<NON_EVASIONS, UpRight, true>(moveList, pop_lsb(p1));
+
+    while (p2)
+        moveList = make_promotions<NON_EVASIONS, UpLeft, true>(moveList, pop_lsb(p2));
+
+    moveList = generate_moves<Us, KNIGHT>(pos, moveList, target);
+    moveList = generate_moves<Us, BISHOP>(pos, moveList, target);
+    moveList = generate_moves<Us, ROOK>(pos, moveList, target);
+    moveList = generate_moves<Us, QUEEN>(pos, moveList, target);
+
+    // En passant. The blast is centred on the destination, so it can remove a
+    // checker or the enemy king just like any other capture; emit it once and
+    // let legality decide, unless it would explode our own king.
+    if (pos.ep_square() != SQ_NONE && !(ourRing & pos.ep_square()))
+    {
+        Bitboard ep = pawnsNotOn7 & Attacks::attacks_bb<PAWN>(pos.ep_square(), Them);
+
+        while (ep)
+            *moveList++ = Move::make<EN_PASSANT>(pop_lsb(ep), pos.ep_square());
+    }
+
+    // King steps. The king never captures in Atomic, so only empty squares, and
+    // a square covered by a checking slider is still safe when it sits next to
+    // the enemy king.
+    Bitboard sliderAttacks = 0;
+    Bitboard sliders       = checkers & ~pos.pieces(KNIGHT, PAWN);
+
+    while (sliders)
+    {
+        const Square checksq = pop_lsb(sliders);
+        sliderAttacks |=
+          Attacks::attacks_bb(type_of(pos.piece_on(checksq)), checksq, pos.pieces() ^ ksq);
+    }
+
+    moveList =
+      splat_moves(moveList, ksq, ourRing & emptySquares & ~(sliderAttacks & ~theirRing));
+
+    // Double check: nothing but a king move or one of the blasts above helps.
+    if (more_than_one(checkers))
+        return moveList;
+
+    // Blocking moves. Capturing the checker directly already came out above as
+    // a blast capture, so only the squares strictly in between are left.
+    const Bitboard between = Attacks::between_bb(ksq, lsb(checkers)) ^ lsb(checkers);
+
+    if (!between)
+        return moveList;
+
+    Bitboard b1 = shift<Up>(pawnsNotOn7) & emptySquares;
+    Bitboard b2 = shift<Up>(b1 & TRank3BB) & emptySquares;
+
+    moveList = splat_pawn_moves<Up>(moveList, b1 & between);
+    moveList = splat_pawn_moves<Up + Up>(moveList, b2 & between);
+
+    Bitboard b3 = shift<Up>(pawnsOn7) & emptySquares & between;
+
+    while (b3)
+        moveList = make_promotions<NON_EVASIONS, Up, false>(moveList, pop_lsb(b3));
+
+    moveList = generate_moves<Us, KNIGHT>(pos, moveList, between);
+    moveList = generate_moves<Us, BISHOP>(pos, moveList, between);
+    moveList = generate_moves<Us, ROOK>(pos, moveList, between);
+    moveList = generate_moves<Us, QUEEN>(pos, moveList, between);
+
+    return moveList;
+}
+
 }  // namespace
 
 
@@ -274,6 +394,14 @@ template Move* generate<CAPTURES>(const Position&, Move*);
 template Move* generate<QUIETS>(const Position&, Move*);
 template Move* generate<NON_EVASIONS>(const Position&, Move*);
 
+// generate<EVASIONS> generates the Atomic check evasion candidates
+template<>
+Move* generate<EVASIONS>(const Position& pos, Move* moveList) {
+
+    return pos.side_to_move() == WHITE ? generate_atomic_evasions<WHITE>(pos, moveList)
+                                       : generate_atomic_evasions<BLACK>(pos, moveList);
+}
+
 // generate<LEGAL> generates all the legal moves in the given position
 
 template<>
@@ -284,7 +412,8 @@ Move* generate<LEGAL>(const Position& pos, Move* moveList) {
 
     Move* cur = moveList;
 
-    moveList = generate<NON_EVASIONS>(pos, moveList);
+    moveList = pos.atomic_in_check(pos.side_to_move()) ? generate<EVASIONS>(pos, moveList)
+                                                       : generate<NON_EVASIONS>(pos, moveList);
     while (cur != moveList)
         if (!pos.legal(*cur))
             *cur = *(--moveList);

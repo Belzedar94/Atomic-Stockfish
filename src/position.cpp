@@ -740,6 +740,25 @@ bool Position::atomic_in_check(Color c) const {
     return bool(attackers_to(ourKing) & pieces(~c));
 }
 
+// The pieces actually giving check to the side to move, with Atomic semantics:
+// no checks at all when the kings are adjacent (mutual immunity) or when either
+// king is already gone. This is the set orthodox checkers() cannot represent,
+// which is why checkers() stays constant zero for move generation.
+Bitboard Position::atomic_checkers() const {
+
+    const Color c = sideToMove;
+
+    if (!has_king(c) || !has_king(~c))
+        return 0;
+
+    const Square ourKing = square<KING>(c);
+
+    if (attacks_bb<KING>(ourKing) & square<KING>(~c))
+        return 0;
+
+    return attackers_to(ourKing) & pieces(~c);
+}
+
 bool Position::atomic_wins(Move m) const {
 
     if (!capture(m) || !has_king(~sideToMove))
