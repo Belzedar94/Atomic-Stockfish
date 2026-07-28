@@ -1049,6 +1049,29 @@ int selftest(std::istringstream& is, std::ostream& out) {
         failures += bad ? 1 : 0;
     }
 
+    // ---- typed results (oracle 5.1, doc 18 §6.1) ----
+    //
+    // The distinction this pins is the one the proof database cannot recover
+    // from if it is ever blurred: surviving refutes the boolean objective
+    // WHITE_WIN and says nothing at all about BLACK_WIN.
+    {
+        int bad = 0;
+        bad += root_verdict(50, 50, true) != ProofResult::DisprovedWhiteWin;
+        bad += root_verdict(50, 99, false) != ProofResult::DisprovedWhiteWin;
+        bad += root_verdict(0, 0, true) != ProofResult::DisprovedWhiteWin;
+        bad += root_verdict(0, 0, true) == ProofResult::ProvenBlackWin;
+        // tau above the entry clock is only a White win when every successor
+        // of every state is accounted for. With one unresolved exit it means
+        // the certificate does not reach the root, which is not the same
+        // statement and must not be typed as one.
+        bad += root_verdict(51, 50, true) != ProofResult::ProvenWhiteWin;
+        bad += root_verdict(51, 50, false) != ProofResult::Unknown;
+        out << (bad ? "  FAIL  " : "  ok    ")
+            << "typed results: a survival is DISPROVED_WHITE_WIN, never "
+               "PROVEN_BLACK_WIN\n";
+        failures += bad ? 1 : 0;
+    }
+
     // ---- differential corpus ----
     const Family families[] = {Family::Dense, Family::Chain, Family::Ladder,
                                Family::Layered, Family::Sparse};
