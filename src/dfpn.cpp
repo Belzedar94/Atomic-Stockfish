@@ -121,14 +121,19 @@ class ProofTT {
         mask = power - 1;
     }
 
-    bool probe(Key key, uint64_t& pn, uint64_t& dn) const {
+    bool probe(Key key, uint64_t& pn, uint64_t& dn) {
+        ++probes;
         const TTEntry& e = table[key & mask];
         if (e.key != key)
             return false;
+        ++hits;
         pn = e.pn;
         dn = e.dn;
         return true;
     }
+
+    uint64_t probe_count() const { return probes; }
+    uint64_t hit_count() const { return hits; }
 
     void store(Key key, uint64_t pn, uint64_t dn) {
         TTEntry& e = table[key & mask];
@@ -140,6 +145,8 @@ class ProofTT {
    private:
     std::vector<TTEntry> table;
     size_t               mask = 0;
+    uint64_t             probes = 0;
+    uint64_t             hits = 0;
 };
 
 // What a node is, before any search happens.
@@ -164,11 +171,20 @@ class Solver {
         path.insert(pos.key());
 
         uint64_t pn = 1, dn = 1;
+        // Baseline for the stagnation indicator: what the root bound looked
+        // like before any search happened.
+        {
+            uint64_t basePn = 1, baseDn = 1;
+            lookup(pos, basePn, baseDn);
+            lastBound = saturating_add(std::min(basePn, INF),
+                                       std::min(baseDn, INF));
+        }
         mid(pos, INF, INF, 0, pn, dn);
 
         Result result;
         result.nodes = nodes;
         result.positions = positions;
+        result.telemetry = telemetry(pn, dn);
         result.rootPn = pn;
         result.rootDn = dn;
         result.elapsedMs = now_ms() - started;
@@ -185,6 +201,34 @@ class Solver {
     }
 
    private:
+    // ---- fortress telemetry (advisory only) ----
+
+    Telemetry telemetry(uint64_t rootPn, uint64_t rootDn) const {
+        Telemetry out;
+        const uint64_t probes = tt.probe_count();
+        if (probes)
+            out.ttHitRate = double(tt.hit_count()) / double(probes);
+        // Normalised over MOVES, not over nodes: a probe happens once per
+        // child, so dividing by expansions would let this exceed 1 and stop
+        // being a share of anything.
+        if (movesSeen)
+            out.quietSccShare = double(quietTranspositions) / double(movesSeen);
+        if (movesSeen)
+            out.resetRate = double(zeroingSeen) / double(movesSeen);
+        // Growth of the root bound over the last checkpoint. A bound that has
+        // barely moved while a million nodes went by is the signature of a
+        // search that is going round in circles rather than closing in.
+        const uint64_t bound = saturating_add(std::min(rootPn, INF),
+                                              std::min(rootDn, INF));
+        out.stagnation = lastBound ? double(bound) / double(lastBound) : 0.0;
+
+        out.score = (out.ttHitRate >= FORTRESS_TT_HIT)
+                  + (out.quietSccShare >= FORTRESS_QUIET_SCC)
+                  + (out.resetRate <= FORTRESS_RESET_MAX && movesSeen > 0)
+                  + (lastBound != 0 && out.stagnation < FORTRESS_STAGNATION_MAX);
+        return out;
+    }
+
     // ---- rules ----
 
     bool attacker_is_white() const { return goal == Goal::WhiteWin; }
@@ -281,6 +325,8 @@ class Solver {
         }
 
         const bool orNode = attacker_to_move(pos);
+        ++expansions;
+        movesSeen += moves.size();
 
         std::vector<uint64_t> childPn(moves.size(), 1);
         std::vector<uint64_t> childDn(moves.size(), 1);
@@ -289,8 +335,21 @@ class Solver {
         StateInfo st;
         for (size_t i = 0; i < moves.size(); ++i)
         {
+            const bool zeroing = pos.rule50_count() == 0;
             pos.do_move(moves[i], st);
             ++positions;
+            if (pos.rule50_count() == 0)
+                ++zeroingSeen;
+            else if (!zeroing)
+            {
+                // A quiet move landing on a position we have already scored is
+                // a step around a quiet cycle: the cheap stand-in for "how big
+                // is the quiet SCC" that doc 18 says an approximation suffices
+                // for.
+                uint64_t seenPn = 0, seenDn = 0;
+                if (tt.probe(pos.key(), seenPn, seenDn))
+                    ++quietTranspositions;
+            }
             const Key childKey = pos.key();
             if (path.count(childKey))
             {
@@ -604,6 +663,11 @@ class Solver {
     std::unordered_set<Key> path;
     uint64_t nodes = 0;
     uint64_t positions = 0;
+    uint64_t expansions = 0;
+    uint64_t movesSeen = 0;
+    uint64_t zeroingSeen = 0;
+    uint64_t quietTranspositions = 0;
+    uint64_t lastBound = 0;
     int64_t  deadline = 0;
     int      maxDepth = 512;
 
@@ -798,7 +862,12 @@ void solve_command(std::istringstream& is, std::ostream& out) {
         << (result.elapsedMs > 0 ? result.positions * 1000 / uint64_t(result.elapsedMs)
                                  : 0)
         << "\nsolve certificate " << (result.haveCertificate ? "yes" : "no")
-        << "\nsolve certnodes " << result.certificateNodes << std::endl;
+        << "\nsolve certnodes " << result.certificateNodes
+        << "\nsolve fortress_tt_hit " << result.telemetry.ttHitRate
+        << "\nsolve fortress_quiet_scc " << result.telemetry.quietSccShare
+        << "\nsolve fortress_reset_rate " << result.telemetry.resetRate
+        << "\nsolve fortress_stagnation " << result.telemetry.stagnation
+        << "\nsolve fortress_score " << result.telemetry.score << std::endl;
 
     if (result.haveCertificate)
     {

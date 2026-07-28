@@ -47,8 +47,26 @@ struct Limits {
     int      certificateDepth = 512;
 };
 
+// Fortress classifier telemetry (doc 18 §5).  Four cheap indicators that say
+// how much this position LOOKS like a drag-out fortress.  They are advisory:
+// they steer scheduling and they never, ever authorise a verdict.
+struct Telemetry {
+    double ttHitRate = 0.0;       // transposition hits / probes
+    double quietSccShare = 0.0;   // quiet transpositions / expansions
+    double resetRate = 0.0;       // zeroing moves / moves generated
+    double stagnation = 0.0;      // root pn+dn growth over the last stretch
+    int    score = 0;             // how many of the four fired (0..4)
+};
+
+// Thresholds straight from doc 18 §5. Three of four is the classifier.
+constexpr double FORTRESS_TT_HIT = 0.65;
+constexpr double FORTRESS_QUIET_SCC = 0.50;
+constexpr double FORTRESS_RESET_MAX = 0.05;
+constexpr double FORTRESS_STAGNATION_MAX = 2.0;
+
 struct Result {
     Outcome  outcome = Outcome::Unknown;
+    Telemetry telemetry;
     uint64_t rootPn = 1;
     uint64_t rootDn = 1;
     // ``nodes`` counts df-pn expansions; ``positions`` counts board positions
