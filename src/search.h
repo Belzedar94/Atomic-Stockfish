@@ -64,9 +64,24 @@ extern int AtomicMcpBase;
 extern int AtomicNmpBase;
 extern int AtomicNmpDepthDiv;
 
-// Fairy's move-count formula specialized with blast_on_capture=1 and walling=0.
+// Move-count pruning thresholds. We inherited Fairy's formula, divided by
+// three or two, which throws quiets away roughly thirty percent earlier than
+// MultiVariant-Stockfish did (search.cpp:325-348 of variant_sf_10, the SF10
+// FutilityMoveCounts: 2.4 + 0.74*d^1.78 when not improving, 5 + d^2 when
+// improving). The engine that finds the deep Atomic mates was the one pruning
+// quiets *later*, and in a mating net the quiet that closes the net is exactly
+// what a tight move count discards. Restore MV-SF's curve; the improving
+// branch keeps the SPSA-converged AtomicMcpBase in place of MV-SF's 5, since
+// it is the same base + d^2 shape.
+constexpr int AtomicMoveCountNotImproving[64] = {
+  2,   3,   4,   7,   11,  15,  20,  26,  32,  39,  46,  55,  64,  73,  83,  94,
+  105, 117, 129, 142, 155, 169, 183, 198, 214, 230, 246, 263, 281, 299, 317, 336,
+  355, 375, 396, 417, 438, 460, 482, 505, 528, 551, 576, 600, 625, 650, 676, 703,
+  729, 757, 784, 812, 841, 870, 899, 929, 959, 990, 1021, 1052, 1084, 1116, 1149, 1182};
+
 inline int atomic_move_count_pruning_threshold(bool improving, Depth depth) {
-    return (AtomicMcpBase + depth * depth) / (3 - improving);
+    const int d = std::clamp(int(depth), 0, 63);
+    return improving ? AtomicMcpBase + d * d : AtomicMoveCountNotImproving[d];
 }
 
 // Atomic threats make an orthodox null-move cutoff less trustworthy. Reduce
