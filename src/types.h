@@ -227,6 +227,10 @@ constexpr Value AtomicCapturePieceValue[PIECE_NB] = {
   VALUE_ZERO, 301, 702, 738, 1079, 1862, VALUE_ZERO, VALUE_ZERO,
   VALUE_ZERO, 301, 702, 738, 1079, 1862, VALUE_ZERO, VALUE_ZERO};
 
+// Ordering value of a capture that explodes the enemy king. It only has to
+// dominate every ordinary blast balance, not to be a real score.
+constexpr int ATOMIC_BLAST_ORDER_WIN = 32000;
+
 using Depth = int;
 
 // The following DEPTH_ constants are used for transposition table entries

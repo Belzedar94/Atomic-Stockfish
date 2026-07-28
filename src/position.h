@@ -171,6 +171,7 @@ class Position {
 
     // Static Exchange Evaluation
     bool see_ge(Move m, int threshold = 0) const;
+    int  atomic_blast_order_value(Move m) const;
 
     // Accessing hash keys
     Key key() const;

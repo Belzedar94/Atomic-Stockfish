@@ -213,7 +213,7 @@ ExtMove* MovePicker::score(const MoveList<Type>& ml) {
         {
             const Piece capturedPiece = pos.piece_on(to);
             m.value = (*captureHistory)[pc][to][type_of(capturedPiece)]
-                    + 7 * int(PieceValue[capturedPiece]);
+                    + 7 * pos.atomic_blast_order_value(m);
         }
 
         else if constexpr (Type == QUIETS)

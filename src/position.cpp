@@ -1463,6 +1463,46 @@ bool Position::see_ge(Move m, int threshold) const {
     return result >= threshold;
 }
 
+// Net material balance of the explosion produced by a move, expressed with the
+// Atomic capture values. Orthodox Most Valuable Victim ordering is blind to the
+// blast: it prices a queen capture that vaporizes our own rook and bishop the
+// same as a clean one, and prices a pawn capture that takes an enemy rook with
+// it as the cheapest move on the list. MultiVariant-Stockfish ordered captures
+// by the full Atomic exchange value instead; this helper is that quantity.
+// A capture that explodes the enemy king wins on the spot and is ranked above
+// everything else.
+int Position::atomic_blast_order_value(Move m) const {
+
+    assert(m.is_ok());
+
+    const Square to = m.to_sq();
+
+    // Promotions, en passant and castling keep the orthodox victim value: their
+    // blast geometry is either absent or not described by the destination ring.
+    if (m.type_of() != NORMAL)
+        return int(AtomicCapturePieceValue[piece_on(to)]);
+
+    if (atomic_wins(m))
+        return ATOMIC_BLAST_ORDER_WIN;
+
+    const Square   from   = m.from_sq();
+    const Color    us     = color_of(piece_on(from));
+    const Bitboard fromTo = from | to;
+    Bitboard       blast  = ((attacks_bb<KING>(to) & ~pieces(PAWN)) | fromTo) & pieces();
+
+    int result = 0;
+
+    while (blast)
+    {
+        const Piece blastPiece = piece_on(pop_lsb(blast));
+
+        result += color_of(blastPiece) == us ? -int(AtomicCapturePieceValue[blastPiece])
+                                             : int(AtomicCapturePieceValue[blastPiece]);
+    }
+
+    return result;
+}
+
 // Tests whether the position is drawn by 50-move rule
 // or by repetition. It does not detect stalemates.
 bool Position::is_draw(int ply) const {
