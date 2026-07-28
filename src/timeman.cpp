@@ -85,8 +85,14 @@ void TimeManagement::init(Search::LimitsType& limits,
     const i64       scaleFactor = useNodesTime ? npmsec : 1;
     const TimePoint scaledTime  = limits.time[us] / scaleFactor;
 
-    // Maximum move horizon
-    int mtg = limits.movestogo ? std::min(limits.movestogo, 50) : 50;
+    // Maximum move horizon. MultiVariant-Stockfish set MoveHorizon to 29 for
+    // Atomic against 50 for chess (timeman.cpp:35-70 of variant_sf_10): Atomic
+    // games are decided around move 25 to 30, so planning the clock fifty moves
+    // ahead reserves time for a phase that will never be played.
+    constexpr int AtomicMoveHorizon = 29;
+    constexpr int ChessMoveHorizon  = 50;
+
+    int mtg = limits.movestogo ? std::min(limits.movestogo, AtomicMoveHorizon) : AtomicMoveHorizon;
 
     // If less than one second, gradually reduce mtg
     if (scaledTime < 1000)
@@ -110,11 +116,17 @@ void TimeManagement::init(Search::LimitsType& limits,
         double optConstant  = std::min(0.0029869 + 0.00033554 * logTimeInSec, 0.004905);
         double maxConstant  = std::max(3.3744 + 3.0608 * logTimeInSec, 3.1441);
 
-        optScale = std::min(0.012112 + std::pow(ply + 3.22713, 0.46866) * optConstant,
+        // The ply curve was fitted to chess games. Advance it at the ratio of
+        // the two move horizons so that the Atomic clock reaches its
+        // chess-equivalent phase on time instead of saving for a fiftieth move
+        // that never arrives. This is the modern form of MoveHorizon 29.
+        const double horizonPly = ply * double(ChessMoveHorizon) / AtomicMoveHorizon;
+
+        optScale = std::min(0.012112 + std::pow(horizonPly + 3.22713, 0.46866) * optConstant,
                             0.19404 * limits.time[us] / timeLeft)
                  * originalTimeAdjust;
 
-        maxScale = std::min(6.873, maxConstant + ply / 12.352);
+        maxScale = std::min(6.873, maxConstant + horizonPly / 12.352);
     }
 
     // x moves in y seconds (+ z increment)
