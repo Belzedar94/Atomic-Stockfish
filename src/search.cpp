@@ -83,6 +83,12 @@ int AtomicFutilityScale  = 128;
 int AtomicCaptFutBase    = 227;
 int AtomicCaptFutLmrMult = 244;
 int QsFutilityBase       = 345;
+// Weight of the Atomic explosion delta in the two capture futility bounds,
+// as a 128-based multiplier. 128 prices the blast exactly as blast_see() reads
+// it; a lower value hedges against the bound being too tight, a higher one
+// leans on it harder.
+int AtomicCaptFutBlastScale = 128;
+int QsFutBlastScale         = 128;
 int SingularDepthMin     = 8;
 int SingularMarginBase   = 65;
 int SingularMarginTtPv   = 83;
@@ -97,6 +103,7 @@ TUNE(SetRange(1, 8), AtomicNmpDepthDiv);
 TUNE(SetRange(32, 320), AtomicFutilityScale);
 TUNE(SetRange(0, 600), AtomicCaptFutBase, AtomicCaptFutLmrMult);
 TUNE(SetRange(0, 800), QsFutilityBase);
+TUNE(SetRange(32, 320), AtomicCaptFutBlastScale, QsFutBlastScale);
 TUNE(SetRange(2, 14), SingularDepthMin);
 TUNE(SetRange(0, 250), SingularMarginBase, SingularMarginTtPv);
 TUNE(SetRange(16, 150), SingularMarginDiv);
@@ -1477,13 +1484,18 @@ moves_loop:  // When in check, search starts here
                 Piece capturedPiece = pos.piece_on(move.to_sq());
                 int   captHist = captureHistory[movedPiece][move.to_sq()][type_of(capturedPiece)];
 
-                // Futility pruning for captures
+                // Futility pruning for captures. In Atomic the optimistic bound
+                // is not the victim's value: the capturer detonates with it, so
+                // price the whole explosion delta instead. Eligibility already
+                // restricts this to NORMAL captures without non-pawn bycatch, so
+                // the delta here is pure material and can never be decisive.
                 if (!atomicWin && !givesCheck && lmrDepth < 7
                     && atomic_capture_futility_eligible(pos, move))
                 {
                     Value futilityValue = ss->staticEval + AtomicCaptFutBase
                                         + AtomicCaptFutLmrMult * lmrDepth
-                                        + PieceValue[capturedPiece] + 131 * captHist / 1024;
+                                        + AtomicCaptFutBlastScale * pos.blast_see(move) / 128
+                                        + 131 * captHist / 1024;
 
                     if (futilityValue <= alpha)
                         continue;
@@ -2087,10 +2099,11 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
                 if (moveCount > 2)
                     continue;
 
-                Value futilityValue = futilityBase + PieceValue[pos.piece_on(move.to_sq())];
+                Value futilityValue = futilityBase + QsFutBlastScale * pos.blast_see(move) / 128;
 
-                // If static eval + value of piece we are going to capture is
-                // much lower than alpha, we can prune this move.
+                // If static eval + the explosion delta of the capture is much
+                // lower than alpha, we can prune this move. Pricing only the
+                // victim ignores that the capturer dies with it.
                 if (futilityValue <= alpha)
                 {
                     bestValue = std::max(bestValue, futilityValue);
