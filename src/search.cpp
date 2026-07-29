@@ -1475,7 +1475,8 @@ moves_loop:  // When in check, search starts here
             if (capture || givesCheck)
             {
                 Piece capturedPiece = pos.piece_on(move.to_sq());
-                int   captHist = captureHistory[movedPiece][move.to_sq()][type_of(capturedPiece)];
+                int   captHist      = captureHistory[movedPiece][move.to_sq()]
+                                            [type_of(capturedPiece)][pos.blast_ring_bucket(move)];
 
                 // Futility pruning for captures
                 if (!atomicWin && !givesCheck && lmrDepth < 7
@@ -1604,6 +1605,11 @@ moves_loop:  // When in check, search starts here
                 extension = -2;
         }
 
+        // The reduction bookkeeping below runs after the move has been played, so
+        // the explosion ring has to be classified while the board still holds the
+        // pre-move position.
+        const int blastRingBucket = capture ? pos.blast_ring_bucket(move) : 0;
+
         u64 nodeCount = rootNode ? u64(nodes) : 0;
 
         // Step 16. Make the move
@@ -1639,7 +1645,8 @@ moves_loop:  // When in check, search starts here
 
         if (capture)
             ss->statScore = 809 * int(PieceValue[pos.captured_piece()]) / 128
-                          + captureHistory[movedPiece][move.to_sq()][type_of(pos.captured_piece())];
+                          + captureHistory[movedPiece][move.to_sq()][type_of(pos.captured_piece())]
+                                          [blastRingBucket];
         else
             ss->statScore = 2 * mainHistory[us][move.raw()]
                           + (*contHist[0])[movedPiece][move.to_sq()]
@@ -1875,7 +1882,13 @@ moves_loop:  // When in check, search starts here
     {
         Piece capturedPiece = pos.captured_piece();
         assert(capturedPiece != NO_PIECE);
-        captureHistory[pos.piece_on(prevSq)][prevSq][type_of(capturedPiece)] << 901;
+        // The ring of the previous move cannot be reconstructed from here: the
+        // board is already past its explosion, so the bystanders it consumed are
+        // gone. Bucket 0 is used, which costs nothing because this write is
+        // already inert in Atomic: the previous move was a capture, so its
+        // capturer detonated and piece_on(prevSq) is NO_PIECE, a plane no real
+        // capture ever reads.
+        captureHistory[pos.piece_on(prevSq)][prevSq][type_of(capturedPiece)][0] << 901;
     }
 
     if (PvNode)
@@ -2281,7 +2294,9 @@ void update_all_stats(const Position& pos,
     {
         // Increase stats for the best move in case it was a capture move
         capturedPiece = type_of(pos.piece_on(bestMove.to_sq()));
-        captureHistory[movedPiece][bestMove.to_sq()][capturedPiece] << bonus * 1366 / 1024;
+        captureHistory[movedPiece][bestMove.to_sq()][capturedPiece]
+                      [pos.blast_ring_bucket(bestMove)]
+          << bonus * 1366 / 1024;
     }
 
     // Extra penalty for a quiet early move that was not a TT move in
@@ -2294,7 +2309,8 @@ void update_all_stats(const Position& pos,
     {
         movedPiece    = pos.moved_piece(move);
         capturedPiece = type_of(pos.piece_on(move.to_sq()));
-        captureHistory[movedPiece][move.to_sq()][capturedPiece] << -malus * 1518 / 1024;
+        captureHistory[movedPiece][move.to_sq()][capturedPiece][pos.blast_ring_bucket(move)]
+          << -malus * 1518 / 1024;
     }
 }
 

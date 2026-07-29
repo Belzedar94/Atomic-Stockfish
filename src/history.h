@@ -128,8 +128,17 @@ using ButterflyHistory = Stats<i16, 7183, COLOR_NB, UINT_16_HISTORY_SIZE>;
 // to improve move ordering near the root
 using LowPlyHistory = Stats<i16, 7183, LOW_PLY_HISTORY_SIZE, UINT_16_HISTORY_SIZE>;
 
-// CapturePieceToHistory is addressed by a move's [piece][to][captured piece type]
-using CapturePieceToHistory = Stats<i16, 10692, PIECE_NB, SQUARE_NB, PIECE_TYPE_NB>;
+// CapturePieceToHistory is addressed by a move's
+// [piece][to][captured piece type][explosion ring bucket].
+//
+// The ring bucket is the Atomic dimension: in chess "knight takes bishop on e5"
+// is one statistic, but in Atomic the same three indices cover a clean trade and
+// a capture that also vaporizes three of our own pieces, which are opposite moves
+// sharing one counter. Bucketing by how much non-pawn collateral the destination
+// square carries separates them. Costs 8x the table, which is 128 KiB per thread
+// against 16 KiB, negligible next to the accumulator stacks.
+using CapturePieceToHistory =
+  Stats<i16, 10692, PIECE_NB, SQUARE_NB, PIECE_TYPE_NB, ATOMIC_BLAST_RING_BUCKET_NB>;
 
 // PieceToHistory is like ButterflyHistory but is addressed by a move's [piece][to]
 using PieceToHistory = AtomicStats<i16, 30000, PIECE_NB, SQUARE_NB>;

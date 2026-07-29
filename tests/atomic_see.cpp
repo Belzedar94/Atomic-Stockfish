@@ -17,6 +17,7 @@
 #include "attacks.h"
 #include "bitboard.h"
 #include "evaluate.h"
+#include "history.h"
 #include "movegen.h"
 #include "position.h"
 #include "search.h"
@@ -44,6 +45,12 @@ static_assert(sizeof(Eval::NNUE::FeatureSet::AddedIndexList)
               < sizeof(Eval::NNUE::FeatureSet::RemovedIndexList));
 static_assert(sizeof(Eval::NNUE::FeatureSet::RemovedIndexList)
               < sizeof(Eval::NNUE::FeatureSet::ActiveIndexList));
+
+// The explosion-ring dimension multiplies capture history by 8. Pin the resulting
+// per-thread footprint so a future widening cannot grow it unnoticed: 128 KiB,
+// against 16 KiB before the ring bucket.
+static_assert(ATOMIC_BLAST_RING_BUCKET_NB == 8);
+static_assert(sizeof(CapturePieceToHistory) == 128 * 1024);
 
 struct SeeCase {
     std::string_view name;
@@ -1032,10 +1039,30 @@ void check_blast_capture(Position&          pos,
     const Key           rootKey = pos.key();
     const Value         predicted = pos.blast_see(move);
 
+    const int predictedBucket = pos.blast_ring_bucket(move);
+
     StateInfo child{};
     pos.do_move(move, child);
     const BlastMaterial after = blast_material(pos);
+
+    // do_move() records every piece the explosion removes. The destination square
+    // always holds the capturer (or the promoted piece) and is always recorded, so
+    // everything else in the list is a ring bystander, and the ring never contains
+    // pawns. The bucket must therefore be the recorded count minus that one entry.
+    const StateInfo* childState = pos.state();
+    const int        expectedBucket =
+      std::min(int(childState->atomicBlastCount) - 1, ATOMIC_BLAST_RING_BUCKET_NB - 1);
+
     pos.undo_move(move);
+
+    if (predictedBucket != expectedBucket)
+    {
+        if (stats.failures < 20)
+            std::cerr << "FAIL blast_ring_bucket [" << label << "] fen=" << rootFen
+                      << " move=" << UCI::move(move, chess960) << " predicted=" << predictedBucket
+                      << " expected=" << expectedBucket << '\n';
+        ++stats.failures;
+    }
 
     Value expected;
     if (!after.hasKing[us])
@@ -1201,8 +1228,8 @@ bool expect_blast_see_matches_material() {
         ok = false;
     }
     else
-        std::cout << "PASS blast_see material parity nodes=" << stats.nodes
-                  << " captures=" << stats.captures << " (ep=" << stats.enPassant
+        std::cout << "PASS blast_see material parity and blast_ring_bucket parity nodes="
+                  << stats.nodes << " captures=" << stats.captures << " (ep=" << stats.enPassant
                   << " promotions=" << stats.promotions << ") quiets=" << stats.quiets << '\n';
 
     return ok;

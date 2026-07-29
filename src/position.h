@@ -172,6 +172,7 @@ class Position {
     // Static Exchange Evaluation
     Value blast_see(Move m) const;
     bool  see_ge(Move m, int threshold = 0) const;
+    int   blast_ring_bucket(Move m) const;
 
     // Accessing hash keys
     Key key() const;

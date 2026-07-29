@@ -227,6 +227,11 @@ constexpr Value AtomicCapturePieceValue[PIECE_NB] = {
   VALUE_ZERO, 301, 702, 738, 1079, 1862, VALUE_ZERO, VALUE_ZERO,
   VALUE_ZERO, 301, 702, 738, 1079, 1862, VALUE_ZERO, VALUE_ZERO};
 
+// Number of buckets describing how crowded the explosion ring of a capture is.
+// A destination square has at most eight neighbours, so bucket 7 means "seven or
+// eight non-pawn bystanders go up with it".
+constexpr int ATOMIC_BLAST_RING_BUCKET_NB = 8;
+
 using Depth = int;
 
 // The following DEPTH_ constants are used for transposition table entries

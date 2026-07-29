@@ -1494,6 +1494,25 @@ bool Position::see_ge(Move m, int threshold) const {
     return blast_see(m) >= threshold;
 }
 
+// Classifies how crowded the explosion ring of a move is: the number of non-pawn
+// bystanders that the blast would take with it, saturated at the last bucket.
+// Pawns are immune to the ring so they carry no information, the destination
+// square holds the capturer and the victim rather than a bystander, and the
+// square the mover vacates is empty by the time do_move() forms the ring.
+//
+// This is a history key, not a score: it says nothing about who owns the
+// bystanders, only how much collateral the square carries. Every read and write
+// of the ring dimension of captureHistory must go through this one definition.
+int Position::blast_ring_bucket(Move m) const {
+
+    assert(m.is_ok());
+
+    const Bitboard ring = attacks_bb<KING>(m.to_sq()) & pieces() & ~pieces(PAWN)
+                        & ~square_bb(m.from_sq());
+
+    return std::min(popcount(ring), ATOMIC_BLAST_RING_BUCKET_NB - 1);
+}
+
 // Tests whether the position is drawn by 50-move rule
 // or by repetition. It does not detect stalemates.
 bool Position::is_draw(int ply) const {

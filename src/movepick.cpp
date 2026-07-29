@@ -212,7 +212,7 @@ ExtMove* MovePicker::score(const MoveList<Type>& ml) {
         if constexpr (Type == CAPTURES)
         {
             const Piece capturedPiece = pos.piece_on(to);
-            m.value = (*captureHistory)[pc][to][type_of(capturedPiece)]
+            m.value = (*captureHistory)[pc][to][type_of(capturedPiece)][pos.blast_ring_bucket(m)]
                     + 7 * int(PieceValue[capturedPiece]);
         }
 
