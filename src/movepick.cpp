@@ -25,10 +25,24 @@
 #include "bitboard.h"
 #include "misc.h"
 #include "position.h"
+#include "tune.h"
 
 namespace Stockfish {
 
 namespace {
+
+// Weight of the orthodox threatened-by-lesser quiet term. ubdip item 2b: the
+// heuristic assumes that being attacked by a cheaper piece is bad because the
+// exchange loses material. In Atomic that inference does not hold. A pawn
+// attacking our queen may be unable to take it at all (the blast would catch its
+// own king), and when it can, the capture costs the attacker its own life plus
+// every non-pawn around the square, so "threatened by a lesser piece" carries
+// almost none of the meaning it has in chess. This branch is the elimination
+// test: the term is zeroed rather than deleted, so the SPRT measures whether the
+// heuristic is worth anything here at all.
+//
+// The orthodox weight was 20.
+int AtomicThreatByLesserMult = 0;
 
 enum Stages {
     // generate main search moves
@@ -139,6 +153,8 @@ void partial_insertion_sort(ExtMove* begin, ExtMove* end, int limit) {
 
 }  // namespace
 
+TUNE(SetRange(0, 40), AtomicThreatByLesserMult);
+
 
 // Constructors of the MovePicker class. As arguments, we pass information
 // to decide which class of moves to emit, to help sorting the (presumably)
@@ -235,7 +251,8 @@ ExtMove* MovePicker::score(const MoveList<Type>& ml) {
 
             // penalty for moving to a square threatened by a lesser piece
             // or bonus for escaping an attack by a lesser piece.
-            int v = 20 * (bool(threatByLesser[pt] & from) - bool(threatByLesser[pt] & to));
+            int v = AtomicThreatByLesserMult
+                  * (bool(threatByLesser[pt] & from) - bool(threatByLesser[pt] & to));
             m.value += PieceValue[pt] * v;
 
 
