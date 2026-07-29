@@ -25,10 +25,16 @@
 #include "bitboard.h"
 #include "misc.h"
 #include "position.h"
+#include "tune.h"
 
 namespace Stockfish {
 
 namespace {
+
+// Weight of the Atomic explosion delta in the capture ordering score. The
+// former hard-coded multiplier of the victim's orthodox value was 7, so 7 is
+// the neutral-scale starting point for the honest delta.
+int AtomicCaptureOrderMult = 7;
 
 enum Stages {
     // generate main search moves
@@ -139,6 +145,8 @@ void partial_insertion_sort(ExtMove* begin, ExtMove* end, int limit) {
 
 }  // namespace
 
+TUNE(SetRange(0, 24), AtomicCaptureOrderMult);
+
 
 // Constructors of the MovePicker class. As arguments, we pass information
 // to decide which class of moves to emit, to help sorting the (presumably)
@@ -211,9 +219,15 @@ ExtMove* MovePicker::score(const MoveList<Type>& ml) {
 
         if constexpr (Type == CAPTURES)
         {
+            // Most Valuable Victim is blind to the blast: it ranks a queen
+            // capture that vaporizes our own rook and bishop the same as a clean
+            // one, and ranks a pawn capture that takes an enemy rook with it as
+            // the cheapest move on the list. Order by the real explosion delta.
+            // A capture that catches the enemy king returns a decisive value and
+            // so sorts above everything else on its own.
             const Piece capturedPiece = pos.piece_on(to);
             m.value = (*captureHistory)[pc][to][type_of(capturedPiece)]
-                    + 7 * int(PieceValue[capturedPiece]);
+                    + AtomicCaptureOrderMult * int(pos.blast_see(m));
         }
 
         else if constexpr (Type == QUIETS)
