@@ -83,6 +83,17 @@ int AtomicFutilityScale  = 128;
 int AtomicCaptFutBase    = 227;
 int AtomicCaptFutLmrMult = 244;
 int QsFutilityBase       = 345;
+// Weight of the Atomic explosion delta in the capture branch of statScore, as a
+// 128-based multiplier. 809 was tuned against PieceValue[captured], a quantity
+// that is always positive and orthodox-scaled, so it is only a starting point
+// for the signed Atomic delta.
+int AtomicStatScoreBlastMult = 809;
+// The delta is decisive (+/-VALUE_MATE) when a capture catches a king, and
+// statScore feeds a linear reduction term of the same magnitude as capture
+// history (+/-10692). Saturate at a queen so one king-catching capture cannot
+// swamp the reduction; those moves are already handled by atomic_wins() and by
+// the extensions above.
+constexpr int AtomicStatScoreBlastCap = AtomicCapturePieceValue[W_QUEEN];
 int SingularDepthMin     = 8;
 int SingularMarginBase   = 65;
 int SingularMarginTtPv   = 83;
@@ -97,6 +108,7 @@ TUNE(SetRange(1, 8), AtomicNmpDepthDiv);
 TUNE(SetRange(32, 320), AtomicFutilityScale);
 TUNE(SetRange(0, 600), AtomicCaptFutBase, AtomicCaptFutLmrMult);
 TUNE(SetRange(0, 800), QsFutilityBase);
+TUNE(SetRange(0, 2000), AtomicStatScoreBlastMult);
 TUNE(SetRange(2, 14), SingularDepthMin);
 TUNE(SetRange(0, 250), SingularMarginBase, SingularMarginTtPv);
 TUNE(SetRange(16, 150), SingularMarginDiv);
@@ -1604,6 +1616,11 @@ moves_loop:  // When in check, search starts here
                 extension = -2;
         }
 
+        // The reduction bookkeeping below runs after the move has been played,
+        // so the Atomic explosion delta has to be read while the board still
+        // holds the pre-move position.
+        const int blastSee = capture ? int(pos.blast_see(move)) : 0;
+
         u64 nodeCount = rootNode ? u64(nodes) : 0;
 
         // Step 16. Make the move
@@ -1637,9 +1654,14 @@ moves_loop:  // When in check, search starts here
         else if (move == ttData.move)
             r = std::max(0, r - 2016);
 
+        // A capture is not worth the victim in Atomic, so a positive term for
+        // every capture is simply wrong: a losing blast has to reduce more, not
+        // less. Feed the signed explosion delta, saturated at a queen.
         if (capture)
-            ss->statScore = 809 * int(PieceValue[pos.captured_piece()]) / 128
-                          + captureHistory[movedPiece][move.to_sq()][type_of(pos.captured_piece())];
+            ss->statScore =
+              AtomicStatScoreBlastMult
+                * std::clamp(blastSee, -AtomicStatScoreBlastCap, AtomicStatScoreBlastCap) / 128
+              + captureHistory[movedPiece][move.to_sq()][type_of(pos.captured_piece())];
         else
             ss->statScore = 2 * mainHistory[us][move.raw()]
                           + (*contHist[0])[movedPiece][move.to_sq()]
