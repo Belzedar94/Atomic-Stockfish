@@ -25,10 +25,24 @@
 #include "bitboard.h"
 #include "misc.h"
 #include "position.h"
+#include "tune.h"
 
 namespace Stockfish {
 
 namespace {
+
+// Atomic charges a tempo for starting an exchange. In chess an even capture is
+// free: the opponent recaptures and the initiative is unchanged. In Atomic the
+// exchange simply ends, both pieces are gone and the mover has spent a move, so
+// an evenly balanced capture is a small loss rather than a neutral event. This
+// is ubdip item 9, the deduction MultiVariant-Stockfish never managed to land.
+//
+// Scale note. Captures are fully sorted (limit INT_MIN), so a constant charged
+// to every capture cannot reorder them; the term acts entirely through the
+// GOOD_CAPTURE partition, which splits on see_ge(*cur, -cur->value / 18). The
+// effective tempo charged against the exchange is therefore this constant over
+// 18, so the tuner needs room well past a nominal 30 to express a real tempo.
+int AtomicCaptureTempo = 30;
 
 enum Stages {
     // generate main search moves
@@ -139,6 +153,8 @@ void partial_insertion_sort(ExtMove* begin, ExtMove* end, int limit) {
 
 }  // namespace
 
+TUNE(SetRange(0, 1200), AtomicCaptureTempo);
+
 
 // Constructors of the MovePicker class. As arguments, we pass information
 // to decide which class of moves to emit, to help sorting the (presumably)
@@ -213,7 +229,7 @@ ExtMove* MovePicker::score(const MoveList<Type>& ml) {
         {
             const Piece capturedPiece = pos.piece_on(to);
             m.value = (*captureHistory)[pc][to][type_of(capturedPiece)]
-                    + 7 * int(PieceValue[capturedPiece]);
+                    + 7 * int(PieceValue[capturedPiece]) - AtomicCaptureTempo;
         }
 
         else if constexpr (Type == QUIETS)
