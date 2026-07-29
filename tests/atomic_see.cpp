@@ -91,17 +91,36 @@ bool expect_exact(const SeeCase& test) {
     return true;
 }
 
-bool expect_special_moves_are_neutral() {
+// En passant and capturing promotions used to leave see_ge() through the
+// non-NORMAL short-circuit and were scored as a flat zero. They now get their
+// real explosion delta. Castling and quiet promotions stay neutral: castling
+// never explodes, and a quiet promotion is the one move whose surviving piece
+// differs from the piece that left from_sq().
+bool expect_special_move_exchange_values() {
     struct SpecialCase {
         std::string_view name;
         std::string_view fen;
         Move             move;
+        int              expected;
     };
 
-    const std::array<SpecialCase, 3> tests = {{
-      {"en passant", "7k/8/8/3pP3/8/8/8/K7 w - d6 0 1", Move::make<EN_PASSANT>(SQ_E5, SQ_D6)},
-      {"promotion", "7k/P7/8/8/8/8/8/K7 w - - 0 1", Move::make<PROMOTION>(SQ_A7, SQ_A8, QUEEN)},
-      {"castling", "4k3/8/8/8/8/8/8/R3K2R w KQ - 0 1", Move::make<CASTLING>(SQ_E1, SQ_H1)},
+    const std::array<SpecialCase, 8> tests = {{
+      {"en passant tempo only", "7k/8/8/3pP3/8/8/8/K7 w - d6 0 1",
+       Move::make<EN_PASSANT>(SQ_E5, SQ_D6), -1},
+      {"en passant mixed bycatch", "7k/8/2N1b3/2ppP3/8/8/8/K7 w - d6 0 2",
+       Move::make<EN_PASSANT>(SQ_E5, SQ_D6), 35},
+      {"en passant explodes their king", "8/2k5/8/3pP3/8/8/8/K7 w - d6 0 1",
+       Move::make<EN_PASSANT>(SQ_E5, SQ_D6), VALUE_MATE},
+      {"capture promotion with bycatch", "k5br/6P1/8/8/8/8/8/K7 w - - 0 1",
+       Move::make<PROMOTION>(SQ_G7, SQ_H8, QUEEN), 1515},
+      {"capture promotion to knight is identical", "k5br/6P1/8/8/8/8/8/K7 w - - 0 1",
+       Move::make<PROMOTION>(SQ_G7, SQ_H8, KNIGHT), 1515},
+      {"capture promotion explodes their king", "6kr/6P1/8/8/8/8/8/K7 w - - 0 1",
+       Move::make<PROMOTION>(SQ_G7, SQ_H8, QUEEN), VALUE_MATE},
+      {"quiet promotion stays neutral", "7k/P7/8/8/8/8/8/K7 w - - 0 1",
+       Move::make<PROMOTION>(SQ_A7, SQ_A8, QUEEN), 0},
+      {"castling stays neutral", "4k3/8/8/8/8/8/8/R3K2R w KQ - 0 1",
+       Move::make<CASTLING>(SQ_E1, SQ_H1), 0},
     }};
 
     bool ok = true;
@@ -110,14 +129,23 @@ bool expect_special_moves_are_neutral() {
         Position  pos;
         StateInfo state{};
 
-        if (pos.set(std::string(test.fen), false, &state) || !pos.see_ge(test.move, 0)
-            || pos.see_ge(test.move, 1))
+        if (pos.set(std::string(test.fen), false, &state))
         {
-            std::cerr << "FAIL " << test.name << ": non-normal SEE must be exactly zero\n";
+            std::cerr << "FAIL " << test.name << ": invalid fixture FEN\n";
+            ok = false;
+            continue;
+        }
+
+        const int actual = int(pos.blast_see(test.move));
+        if (actual != test.expected || !pos.see_ge(test.move, test.expected)
+            || pos.see_ge(test.move, test.expected + 1))
+        {
+            std::cerr << "FAIL " << test.name << ": expected exact SEE " << test.expected
+                      << ", got " << actual << '\n';
             ok = false;
         }
         else
-            std::cout << "PASS " << test.name << " SEE=0\n";
+            std::cout << "PASS " << test.name << " SEE=" << actual << '\n';
     }
 
     return ok;
@@ -1252,7 +1280,7 @@ int main() {
     for (const auto& test : SeeCases)
         ok &= expect_exact(test);
 
-    ok &= expect_special_moves_are_neutral();
+    ok &= expect_special_move_exchange_values();
     ok &= expect_atomic_wins();
     ok &= expect_atomic_gives_check();
     ok &= expect_non_orthodox_atomic_evasions();
@@ -1276,7 +1304,7 @@ int main() {
         return 1;
 
     constexpr usize TestCount =
-      SeeCases.size() + 3 + 7 + 8 + 14 + 2 + 13 + 3 + 6 + 7 + 7 + 6 + 2 + 8 + 8 + 1 + 1;
+      SeeCases.size() + 8 + 7 + 8 + 14 + 2 + 13 + 3 + 6 + 7 + 7 + 6 + 2 + 8 + 8 + 1 + 1;
     std::cout << "Atomic C++ unit tests passed: " << TestCount << "/" << TestCount << '\n';
     return 0;
 }

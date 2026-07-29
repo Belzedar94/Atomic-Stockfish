@@ -1485,14 +1485,7 @@ Value Position::blast_see(Move m) const {
 
 // Tests if the Atomic SEE (Static Exchange Evaluation) value of the move is
 // greater or equal to the given threshold.
-bool Position::see_ge(Move m, int threshold) const {
-
-    // Only deal with normal moves, assume others pass a simple SEE
-    if (m.type_of() != NORMAL)
-        return VALUE_ZERO >= threshold;
-
-    return blast_see(m) >= threshold;
-}
+bool Position::see_ge(Move m, int threshold) const { return blast_see(m) >= threshold; }
 
 // Tests whether the position is drawn by 50-move rule
 // or by repetition. It does not detect stalemates.
