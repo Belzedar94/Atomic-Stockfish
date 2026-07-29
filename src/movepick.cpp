@@ -42,7 +42,7 @@ namespace {
 // GOOD_CAPTURE partition, which splits on see_ge(*cur, -cur->value / 18). The
 // effective tempo charged against the exchange is therefore this constant over
 // 18, so the tuner needs room well past a nominal 30 to express a real tempo.
-int AtomicCaptureTempo = 30;
+int AtomicCaptureTempo = 540;
 
 enum Stages {
     // generate main search moves
