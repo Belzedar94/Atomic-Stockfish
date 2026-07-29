@@ -982,6 +982,232 @@ bool expect_atomic_wide_cp_conversion() {
     return ok;
 }
 
+// Differential validation of Position::blast_see() against the material
+// bookkeeping that do_move()/undo_move() actually perform. The explosion delta
+// is the primitive every Atomic search heuristic should consume, so it has to
+// agree with the board to the last centipawn for NORMAL, EN_PASSANT and
+// capturing PROMOTION moves alike.
+struct BlastMaterial {
+    int  value[COLOR_NB];
+    bool hasKing[COLOR_NB];
+};
+
+BlastMaterial blast_material(const Position& pos) {
+    BlastMaterial material{};
+
+    for (Color c : {WHITE, BLACK})
+    {
+        for (PieceType pt = PAWN; pt <= QUEEN; ++pt)
+            material.value[c] +=
+              popcount(pos.pieces(c, pt)) * int(AtomicCapturePieceValue[make_piece(c, pt)]);
+
+        material.hasKing[c] = pos.has_king(c);
+    }
+
+    return material;
+}
+
+struct BlastDiffStats {
+    u64 nodes    = 0;
+    u64 captures = 0;
+    u64 quiets   = 0;
+    u64 enPassant = 0;
+    u64 promotions = 0;
+    u64 failures  = 0;
+};
+
+// Compares the predicted explosion delta of one capture with the material the
+// board really loses. Kings carry no material value, so they are compared
+// separately as a decisive outcome, mirroring blast_see()'s own precedence.
+void check_blast_capture(Position&          pos,
+                         Move               move,
+                         bool               chess960,
+                         const std::string& label,
+                         BlastDiffStats&    stats) {
+
+    const Color         us     = pos.side_to_move();
+    const Color         them   = ~us;
+    const BlastMaterial before = blast_material(pos);
+    const std::string   rootFen = pos.fen();
+    const Key           rootKey = pos.key();
+    const Value         predicted = pos.blast_see(move);
+
+    StateInfo child{};
+    pos.do_move(move, child);
+    const BlastMaterial after = blast_material(pos);
+    pos.undo_move(move);
+
+    Value expected;
+    if (!after.hasKing[us])
+        expected = -VALUE_MATE;
+    else if (!after.hasKing[them])
+        expected = VALUE_MATE;
+    else
+        // The trailing -1 is the tempo token blast_see() charges every capture:
+        // in Atomic the exchange stops here, so the mover has spent a move.
+        expected = Value((before.value[them] - after.value[them])
+                         - (before.value[us] - after.value[us]) - 1);
+
+    if (predicted != expected || pos.fen() != rootFen || pos.key() != rootKey)
+    {
+        if (stats.failures < 20)
+            std::cerr << "FAIL blast_see material parity [" << label << "] fen=" << rootFen
+                      << " move=" << UCI::move(move, chess960) << " predicted=" << predicted
+                      << " expected=" << expected << '\n';
+        ++stats.failures;
+    }
+
+    ++stats.captures;
+    if (move.type_of() == EN_PASSANT)
+        ++stats.enPassant;
+    else if (move.type_of() == PROMOTION)
+        ++stats.promotions;
+}
+
+void walk_blast_material(Position&          pos,
+                         int                depth,
+                         bool               chess960,
+                         const std::string& label,
+                         BlastDiffStats&    stats) {
+
+    if (pos.is_atomic_terminal())
+        return;
+
+    ++stats.nodes;
+
+    const MoveList<LEGAL> moves(pos);
+
+    for (Move move : moves)
+    {
+        if (pos.capture(move))
+            check_blast_capture(pos, move, chess960, label, stats);
+
+        // A quiet move can only ever lose material to an explosive recapture the
+        // opponent is free to decline, so its delta must never be positive.
+        else
+        {
+            ++stats.quiets;
+            if (pos.blast_see(move) > VALUE_ZERO)
+            {
+                if (stats.failures < 20)
+                    std::cerr << "FAIL blast_see quiet sign [" << label << "] fen=" << pos.fen()
+                              << " move=" << UCI::move(move, chess960)
+                              << " delta=" << pos.blast_see(move) << '\n';
+                ++stats.failures;
+            }
+        }
+    }
+
+    if (depth <= 1)
+        return;
+
+    StateInfo child{};
+    for (Move move : moves)
+    {
+        pos.do_move(move, child);
+        walk_blast_material(pos, depth - 1, chess960, label, stats);
+        pos.undo_move(move);
+    }
+}
+
+bool expect_blast_see_matches_material() {
+    struct Corpus {
+        std::string_view fen;
+        bool             chess960;
+        int              depth;
+    };
+
+    // The bench positions (the signature corpus), plus Atomic fixtures chosen to
+    // saturate en passant and capturing promotions, which a shallow walk from the
+    // start position would almost never reach.
+    const std::array<Corpus, 28> corpus = {{
+      // bench defaults
+      {"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", false, 4},
+      {"rn2kb1r/1pp1p2p/p2q1pp1/3P4/2P3b1/4PN2/PP3PPP/R2QKB1R b KQkq - 0 1", false, 3},
+      {"rn1qkb1r/p5pp/2p5/3p4/N3P3/5P2/PPP4P/R1BQK3 w Qkq - 0 1", false, 3},
+      {"r4b1r/2kb1N2/p2Bpnp1/8/2Pp3p/1P1PPP2/P5PP/R3K2R b KQ - 0 1", false, 3},
+      {"4K1R1/RR6/8/8/8/8/qqq3p1/7k b - - 0 1", false, 4},
+      {"7k/8/8/3pP3/8/8/8/K7 w - d6 0 1", false, 5},
+      {"6kr/6P1/8/8/8/8/8/K7 w - - 0 1", false, 5},
+      {"6rk/8/8/8/8/8/8/K5R1 w - - 0 1", false, 5},
+      {"5BBB/8/8/8/8/8/6k1/7K w - - 0 1", false, 4},
+      {"8/8/8/8/8/8/NkN5/1K6 w - - 0 1", false, 5},
+      {"bbqnnrkr/pppppppp/8/8/8/8/PPPPPPPP/BBQNNRKR w HFhf - 0 1", true, 4},
+      {"Rr2k1rR/3K4/3p4/8/8/8/7P/8 w kq - 0 1", true, 4},
+      {"1R4kr/4K3/8/8/8/8/8/8 b k - 0 1", true, 5},
+      // en passant with mixed-colour bycatch, with a king in the ring, and plain
+      {"7k/8/2N1b3/2ppP3/8/8/8/K7 w - d6 0 2", false, 3},
+      {"8/2k5/8/3pP3/8/8/8/K7 w - d6 0 1", false, 4},
+      {"7k/2n1n3/2n1n3/2npP3/8/8/8/K7 w - d6 0 2", false, 3},
+      {"8/8/8/R2pP2k/8/8/8/K7 w - d6 0 1", false, 4},
+      // En passant factories. Enemy pawns already stand on the rank a double
+      // push lands on, so almost every pawn move in the walk offers an en
+      // passant reply, for both colours. The second copy adds a knight beside
+      // the b3/b6 landing squares so the explosion has non-pawn bycatch too.
+      {"4k3/1p1p1p1p/8/P1P1P1P1/p1p1p1p1/8/1P1P1P1P/4K3 w - - 0 1", false, 4},
+      {"4k3/1p1p1p1p/n7/P1P1P1P1/p1p1p1p1/N7/1P1P1P1P/4K3 w - - 0 1", false, 4},
+      // capturing promotions: bycatch, maximum ring, king in the ring, both sides
+      {"k5br/6P1/8/8/8/8/8/K7 w - - 0 1", false, 4},
+      {"2nrn2k/2nnP3/8/8/8/8/8/K7 w - - 0 1", false, 3},
+      {"rn5k/2P5/8/8/8/8/8/K7 w - - 0 1", false, 4},
+      {"k4r2/4P1K1/8/8/8/8/8/8 w - - 0 1", false, 4},
+      {"7k/8/8/8/8/8/2p5/K1RN4 b - - 0 1", false, 4},
+      // dense explosive middlegames: ring bycatch of both colours everywhere
+      {"7k/8/8/2pBn3/3r4/2PQN3/8/K7 w - - 0 1", false, 4},
+      {"7k/8/8/2nnn3/2nrn3/2nnnN2/8/K7 w - - 0 1", false, 3},
+      {"r3k2r/pp1nbppp/2p1pn2/3pN3/3P1B2/2NBP3/PPP2PPP/R3K2R w KQkq - 0 1", false, 3},
+      {"8/2p2p2/1pPp1Pp1/1P1p1p2/2nRrB2/3QqN2/8/K6k w - - 0 1", false, 3},
+    }};
+
+    BlastDiffStats stats;
+    bool           ok = true;
+
+    for (const auto& fixture : corpus)
+    {
+        Position  pos;
+        StateInfo root{};
+
+        if (pos.set(std::string(fixture.fen), fixture.chess960, &root))
+        {
+            std::cerr << "FAIL blast_see material parity: invalid fixture " << fixture.fen << '\n';
+            ok = false;
+            continue;
+        }
+
+        const BlastMaterial material = blast_material(pos);
+        if (!material.hasKing[WHITE] || !material.hasKing[BLACK])
+        {
+            std::cerr << "FAIL blast_see material parity: fixture without both kings "
+                      << fixture.fen << '\n';
+            ok = false;
+            continue;
+        }
+
+        walk_blast_material(pos, fixture.depth, fixture.chess960, std::string(fixture.fen), stats);
+    }
+
+    if (stats.enPassant < 1000 || stats.promotions < 100 || stats.captures < 100000)
+    {
+        std::cerr << "FAIL blast_see material parity: corpus coverage too thin captures="
+                  << stats.captures << " ep=" << stats.enPassant
+                  << " promotions=" << stats.promotions << '\n';
+        ok = false;
+    }
+
+    if (stats.failures)
+    {
+        std::cerr << "FAIL blast_see material parity: " << stats.failures << " mismatches over "
+                  << stats.captures << " captures\n";
+        ok = false;
+    }
+    else
+        std::cout << "PASS blast_see material parity nodes=" << stats.nodes
+                  << " captures=" << stats.captures << " (ep=" << stats.enPassant
+                  << " promotions=" << stats.promotions << ") quiets=" << stats.quiets << '\n';
+
+    return ok;
+}
+
 bool expect_shared_search_history_baseline() {
     auto histories = std::make_unique<SharedHistories>(1);
     histories->clear_for_search(0, 1);
@@ -1043,13 +1269,14 @@ int main() {
     ok &= expect_atomic_capture_futility_eligibility();
     ok &= expect_atomic_nnue_wide_sum();
     ok &= expect_atomic_wide_cp_conversion();
+    ok &= expect_blast_see_matches_material();
     ok &= expect_shared_search_history_baseline();
 
     if (!ok)
         return 1;
 
     constexpr usize TestCount =
-      SeeCases.size() + 3 + 7 + 8 + 14 + 2 + 13 + 3 + 6 + 7 + 7 + 6 + 2 + 8 + 8 + 1;
+      SeeCases.size() + 3 + 7 + 8 + 14 + 2 + 13 + 3 + 6 + 7 + 7 + 6 + 2 + 8 + 8 + 1 + 1;
     std::cout << "Atomic C++ unit tests passed: " << TestCount << "/" << TestCount << '\n';
     return 0;
 }
