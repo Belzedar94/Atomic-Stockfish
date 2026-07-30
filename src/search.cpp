@@ -1286,12 +1286,17 @@ Value Search::Worker::search(
     if (!ss->ttPv && depth < 17 && eval >= beta && (!ttData.move || ttCapture) && !is_loss(beta)
         && !is_win(eval))
     {
-        Value futilityMult = std::min(40 + depth * 4, 80);
-        futilityMult -= 20 * !ss->ttHit;
-        futilityMult = futilityMult * AtomicFutilityScale / 64;
+        Value baseMult = std::min(40 + depth * 4, 80);
+        baseMult -= 20 * !ss->ttHit;
+        // The widening pass scaled futilityMult wholesale, which silently
+        // DOUBLED the improving/worsening discount along with the base margin
+        // - in improving nodes the widened window collapses right back.
+        // Decouple them: the base margin gets the atomic scale, the discount
+        // keeps its chess-tuned size.
+        Value futilityMult = baseMult * AtomicFutilityScale / 64;
 
         Value futilityMargin = futilityMult * depth
-                             - (2934 * improving + 343 * opponentWorsening) * futilityMult / 1024
+                             - (2934 * improving + 343 * opponentWorsening) * baseMult / 1024
                              + std::abs(correctionValue) / 182069;
 
         if (eval - futilityMargin >= beta)
