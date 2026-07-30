@@ -79,7 +79,13 @@ namespace {
 // clusters of pieces here, so "eval plus a chess-sized margin" is not a bound.
 // Expressed as a 64-based multiplier of the modern margins; 128 is the
 // doubling the audit prescribes as the first attempt.
-int AtomicFutilityScale  = 128;
+//
+// Second attempt, reading MV-SF's OWN learned numbers more carefully: the
+// ratios it paid for are ASYMMETRIC. Child factor 585/175 is 3.3x, parent
+// {512,400}/{256,200} is 2x. The first pass flattened both to 2x; here the
+// child margin moves to 3x (192/64) while the parent keeps its doubling.
+int AtomicFutilityScale      = 128;
+int AtomicFutilityScaleChild = 192;
 int AtomicCaptFutBase    = 227;
 int AtomicCaptFutLmrMult = 244;
 int QsFutilityBase       = 345;
@@ -95,6 +101,7 @@ TUNE(SetRange(0, 20), AtomicMcpBase);
 TUNE(SetRange(1, 12), AtomicNmpBase);
 TUNE(SetRange(1, 8), AtomicNmpDepthDiv);
 TUNE(SetRange(32, 320), AtomicFutilityScale);
+TUNE(SetRange(64, 384), AtomicFutilityScaleChild);
 TUNE(SetRange(0, 600), AtomicCaptFutBase, AtomicCaptFutLmrMult);
 TUNE(SetRange(0, 800), QsFutilityBase);
 TUNE(SetRange(2, 14), SingularDepthMin);
@@ -1288,7 +1295,7 @@ Value Search::Worker::search(
     {
         Value futilityMult = std::min(40 + depth * 4, 80);
         futilityMult -= 20 * !ss->ttHit;
-        futilityMult = futilityMult * AtomicFutilityScale / 64;
+        futilityMult = futilityMult * AtomicFutilityScaleChild / 64;
 
         Value futilityMargin = futilityMult * depth
                              - (2934 * improving + 343 * opponentWorsening) * futilityMult / 1024
