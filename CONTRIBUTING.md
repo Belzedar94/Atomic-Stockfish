@@ -1,96 +1,86 @@
-# Contributing to Stockfish
+# Contributing to Atomic-Stockfish
 
-Welcome to the Stockfish project! We are excited that you are interested in
-contributing. This document outlines the guidelines and steps to follow when
-making contributions to Stockfish.
+Thanks for your interest in the project. This page describes how a change gets
+from an idea to `main`.
 
-## Table of Contents
+## Proposing a patch
 
-- [Building Stockfish](#building-stockfish)
-- [Making Contributions](#making-contributions)
-  - [Reporting Issues](#reporting-issues)
-  - [Submitting Pull Requests](#submitting-pull-requests)
-- [Code Style](#code-style)
-- [Community and Communication](#community-and-communication)
-- [License](#license)
+- Branch off `main`. It is the default branch and the baseline every test runs
+  against.
+- Name the branch `UB<n>-<slug>` for search and evaluation work, or
+  `MV-R<n>-<slug>` for move-generation and rules work.
+- Keep one idea per branch. Independent branches are far easier to test and
+  review than a stack of changes that only makes sense as a whole, and a
+  single-idea diff gives a clean answer about whether that idea works.
+- Explain in the pull request what the change does and why you expect it to
+  help.
 
-## Building Stockfish
+## Building and testing locally
 
-In case you do not have a C++ compiler installed, you can follow the
-instructions from our wiki.
+Build the engine and run the C++ units and the move-generation gate against
+that fresh binary:
 
-- [Ubuntu][ubuntu-compiling-link]
-- [Windows][windows-compiling-link]
-- [macOS][macos-compiling-link]
-
-## Making Contributions
-
-### Reporting Issues
-
-If you find a bug, please open an issue on the
-[issue tracker][issue-tracker-link]. Be sure to include relevant information
-like your operating system, build environment, and a detailed description of the
-problem.
-
-_Please note that Stockfish's development is not focused on adding new features.
-Thus any issue regarding missing features will potentially be closed without
-further discussion._
-
-### Submitting Pull Requests
-
-- Functional changes need to be tested on fishtest. See
-  [Creating my First Test][creating-my-first-test] for more details.
-  The accompanying pull request should include a link to the test results and
-  the new bench.
-
-- Non-functional changes (e.g. refactoring, code style, documentation) do not
-  need to be tested on fishtest, unless they might impact performance.
-
-- Provide a clear and concise description of the changes in the pull request
-  description.
-
-_First time contributors should add their name to [AUTHORS](./AUTHORS)._
-
-_Stockfish's development is not focused on adding new features. Thus any pull
-request introducing new features will potentially be closed without further
-discussion._
-
-## Code Style
-
-Changes to Stockfish C++ code should respect our coding style defined by
-[.clang-format](.clang-format). You can format your changes by running
-`make format`. This requires clang-format version 20 to be installed on your system.
-
-## Navigate
-
-For experienced Git users who frequently use git blame, it is recommended to
-configure the blame.ignoreRevsFile setting.
-This setting is useful for excluding noisy formatting commits.
-
-```bash
-git config blame.ignoreRevsFile .git-blame-ignore-revs
+```sh
+cd src
+make -j build ARCH=x86-64-bmi2
+make -j atomic-unit-tests ARCH=x86-64-bmi2
+make -j atomic-api-tests ARCH=x86-64-bmi2
 ```
 
-## Community and Communication
+```sh
+tests/perft.sh src/atomic-stockfish
+tests/atomic.sh --protocol-only src/atomic-stockfish
+```
 
-- Join the [Stockfish discord][discord-link] to discuss ideas, issues, and
-  development.
-- Participate in the [Stockfish GitHub discussions][discussions-link] for
-  broader conversations.
+`x86-64-bmi2` assumes a CPU with BMI2/PEXT support; `make help` lists the other
+architecture targets. `tests/perft.sh` covers Atomic and Atomic960 move
+generation, explosions, Atomic check, en passant, promotions, castling rights
+and terminal results.
+
+If you touched the bindings, the README has the commands for the Python
+extension and for both JavaScript module formats. The full release-oriented
+runner is documented in
+[`docs/atomic/hito4-validation.md`](docs/atomic/hito4-validation.md).
+
+## Testing for strength
+
+Functional changes are measured with an SPRT on our OpenBench instance at
+<https://belzedar.duckdns.org>. Run the short time control first; if it passes,
+run the long one on the same branch.
+
+| Stage | Time control | SPRT bounds  |
+| ----- | ------------ | ------------ |
+| STC   | 8+0.08s      | [0.00, 3.00] |
+| LTC   | 40+0.4s      | [0.00, 2.50] |
+
+Link both tests in the pull request. Bench your change with the standard build
+and put the number in the commit message. Details on how a worker builds the
+engine and which network it uses are in
+[`docs/atomic/openbench.md`](docs/atomic/openbench.md).
+
+Non-functional changes — refactors, comments, documentation, build fixes — do
+not need a strength test. Say so in the pull request description.
+
+Rules fixes are a separate case. When a change makes the engine agree with the
+frozen Fairy-Stockfish reference, an A/B against a base that does not implement
+the rule cannot measure anything meaningful. Those changes are accepted on
+correctness evidence instead: the perft numbers, the parity run against the
+reference, and whatever else shows the new behaviour is the right one. Include
+that evidence in the pull request.
+
+## Pull requests
+
+- Open the pull request against `main`.
+- CI has to be green before it can be merged.
+- Once merged, `main` becomes the new baseline for every later test.
+
+## Code style
+
+C++ changes should follow the style in [`.clang-format`](.clang-format). Running
+`make format` from `src` applies it for you.
 
 ## License
 
-By contributing to Stockfish, you agree that your contributions will be licensed
-under the GNU General Public License v3.0. See [Copying.txt][copying-link] for
-more details.
-
-Thank you for contributing to Stockfish and helping us make it even better!
-
-[copying-link]:           https://github.com/official-stockfish/Stockfish/blob/master/Copying.txt
-[discord-link]:           https://discord.gg/GWDRS3kU6R
-[discussions-link]:       https://github.com/official-stockfish/Stockfish/discussions/new
-[creating-my-first-test]: https://github.com/official-stockfish/fishtest/wiki/Creating-my-first-test#create-your-test
-[issue-tracker-link]:     https://github.com/official-stockfish/Stockfish/issues
-[ubuntu-compiling-link]:  https://github.com/official-stockfish/Stockfish/wiki/Developers#user-content-installing-a-compiler-1
-[windows-compiling-link]: https://github.com/official-stockfish/Stockfish/wiki/Developers#user-content-installing-a-compiler
-[macos-compiling-link]:   https://github.com/official-stockfish/Stockfish/wiki/Developers#user-content-installing-a-compiler-2
+By contributing you agree that your contributions are licensed under the GNU
+General Public License v3.0, the same as the rest of the project. See
+[Copying.txt](Copying.txt).
