@@ -13,6 +13,34 @@ the frozen rules and playing-strength reference.
 > `SHA256SUMS`; NNUE networks and Atomic Syzygy files remain external and are not
 > silently downloaded.
 
+## Development
+
+Development happens on `main`. It is the default branch, and it is always the
+baseline that our [OpenBench instance](https://belzedar.duckdns.org) tests every
+patch against.
+
+A patch travels this path:
+
+1. Branch off `main`, named `UB<n>-<slug>` for search and evaluation work or
+   `MV-R<n>-<slug>` for move-generation and rules work. One idea per branch,
+   and branches are independent rather than stacked on each other.
+2. STC test on OpenBench: 8+0.08s, SPRT bounds [0.00, 3.00].
+3. If it passes, LTC test: 40+0.4s, SPRT bounds [0.00, 2.50].
+4. If that passes too, open a pull request against `main`.
+5. CI has to be green before the merge. Once merged, `main` is the new baseline
+   that every later patch is measured against.
+
+Rules fixes are the one exception to the Elo gate. When a change makes the
+engine agree with the frozen Fairy-Stockfish reference, a match against a base
+that does not implement the rule at all is not a meaningful measurement, so
+those changes land on correctness evidence instead: perft counts and parity
+runs against the reference.
+
+Releases are tags with attached binaries, produced by
+[`.github/workflows/atomic-release.yml`](.github/workflows/atomic-release.yml).
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the practical details.
+
 ## Scope
 
 The project deliberately supports one ruleset instead of Fairy-Stockfish's
