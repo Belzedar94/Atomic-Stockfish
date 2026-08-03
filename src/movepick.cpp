@@ -230,8 +230,13 @@ ExtMove* MovePicker::score(const MoveList<Type>& ml) {
             m.value += (*continuationHistory[3])[pc][to];
             m.value += (*continuationHistory[5])[pc][to];
 
-            // bonus for checks
-            m.value += ((pos.check_squares(pt) & to) && pos.see_ge(m, -75)) * 16384;
+            // Bonus for checks. `check_squares` is an orthodox-chess predicate
+            // and is wrong three ways in Atomic: the king entry is hard-coded
+            // empty, discovered checks are invisible, and it reports checks that
+            // mutual king adjacency makes impossible. Use the Atomic-correct
+            // `gives_check`, which the movecount-pruning retention path below
+            // already relies on.
+            m.value += (pos.gives_check(m) && pos.see_ge(m, -75)) * 16384;
 
             // penalty for moving to a square threatened by a lesser piece
             // or bonus for escaping an attack by a lesser piece.
