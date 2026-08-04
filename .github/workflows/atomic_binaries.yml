@@ -1,0 +1,180 @@
+name: Atomic binaries
+
+# Every merge to main leaves downloadable binaries: one artifact per build and
+# a rolling `latest-main` prerelease that is overwritten on each push. Separate
+# from atomic.yml (the correctness gate) and from atomic-release.yml (the
+# reproducible, tag-driven release).
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: atomic-binaries-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # The published Atomic V1 network. Bump these three together with
+  # EvalFileDefaultName in src/evaluate.h whenever the champion net changes.
+  ATOMIC_NET_TAG: v1.0
+  ATOMIC_NET_ASSET: atomic-run3b.nnue
+  ATOMIC_NET_SHA256: 99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f92a04a6
+
+jobs:
+  build:
+    name: ${{ matrix.os }} ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: ${{ matrix.shell }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            os: linux
+            arch: x86-64-bmi2
+            comp: gcc
+            shell: bash
+            ext: ""
+          - runner: ubuntu-latest
+            os: linux
+            arch: x86-64-avx2
+            comp: gcc
+            shell: bash
+            ext: ""
+          - runner: windows-latest
+            os: windows
+            arch: x86-64-bmi2
+            comp: mingw
+            shell: msys2 {0}
+            ext: ".exe"
+          - runner: windows-latest
+            os: windows
+            arch: x86-64-avx2
+            comp: mingw
+            shell: msys2 {0}
+            ext: ".exe"
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Set up MinGW
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@e9898307ac31d1a803454791be09ab9973336e1c # v2.31.1
+        with:
+          msystem: mingw64
+          path-type: inherit
+          install: mingw-w64-x86_64-gcc make
+
+      - name: Build identity
+        shell: bash
+        run: |
+          echo "SHA8=$(echo "$GITHUB_SHA" | cut -c1-8)" >> "$GITHUB_ENV"
+          echo "EXE_NAME=atomic-stockfish-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}" >> "$GITHUB_ENV"
+
+      # Atomic networks are external: `make net` is a no-op and the incbin path
+      # is off unless ATOMIC_NNUE_EMBEDDING is defined. This is the same
+      # mechanism the Makefile's `openbench` target uses — put the network in
+      # src/ under the canonical EvalFileDefaultName, then build with the
+      # embedding flag — so the binary runs with no companion file. The
+      # canonical name is read from evaluate.h rather than hardcoded, and the
+      # download is authenticated against the SHA-256 in the v1.0 release notes.
+      - name: Fetch and place the Atomic network
+        shell: bash
+        run: |
+          canon=$(sed -n 's/.*EvalFileDefaultName[[:space:]]*"\([^"]*\)".*/\1/p' src/evaluate.h | head -n 1)
+          test -n "$canon"
+          echo "Embedding $ATOMIC_NET_ASSET ($ATOMIC_NET_TAG) as $canon"
+          curl -sSfL --retry 3 -o "src/$canon" \
+            "https://github.com/$GITHUB_REPOSITORY/releases/download/$ATOMIC_NET_TAG/$ATOMIC_NET_ASSET"
+          echo "$ATOMIC_NET_SHA256  src/$canon" | sha256sum -c -
+
+      - name: Build
+        working-directory: src
+        run: |
+          make -j2 build ARCH=${{ matrix.arch }} COMP=${{ matrix.comp }} \
+            EXE="$EXE_NAME" EXTRACXXFLAGS=-DATOMIC_NNUE_EMBEDDING
+          strip "$EXE_NAME"
+
+      # bench reports through stderr and returns 0 even when the search never
+      # started, so the node count is the real gate; the verifier line proves
+      # the embedded network is the one being evaluated.
+      - name: Bench sanity
+        working-directory: src
+        run: |
+          ./"$EXE_NAME" bench 16 1 8 default depth > bench.log 2>&1
+          tail -n 12 bench.log
+          grep -q "NNUE evaluation using" bench.log
+          nodes=$(grep -oE 'Nodes searched[[:space:]]*:[[:space:]]*[0-9]+' bench.log | grep -oE '[0-9]+$' | tail -n 1)
+          test -n "$nodes"
+          test "$nodes" -gt 0
+
+      # The embedded network is most of the binary and does not compress, so
+      # zipping it only costs upload time.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: Atomic-Stockfish-${{ env.SHA8 }}-${{ matrix.os }}-${{ matrix.arch }}
+          path: src/${{ env.EXE_NAME }}
+          if-no-files-found: error
+          compression-level: 0
+
+  rolling-release:
+    name: Rolling latest-main prerelease
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: dist
+          merge-multiple: true
+
+      # The tag is moved by hand: an existing release keeps its own tag, so
+      # editing the release would leave latest-main pinned at the commit that
+      # first created it.
+      - name: Publish latest-main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sha8=$(echo "$GITHUB_SHA" | cut -c1-8)
+          built=$(date -u +'%Y-%m-%d %H:%M UTC')
+          ls -l dist
+
+          {
+            echo "Binaries built from \`main\`, refreshed on every merge."
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Commit | [\`$sha8\`](https://github.com/$GITHUB_REPOSITORY/commit/$GITHUB_SHA) |"
+            echo "| Built | $built |"
+            echo "| Network | \`$ATOMIC_NET_ASSET\` from [$ATOMIC_NET_TAG](https://github.com/$GITHUB_REPOSITORY/releases/tag/$ATOMIC_NET_TAG), embedded |"
+            echo
+            echo "Pick the binary matching your CPU: \`x86-64-bmi2\` for anything from"
+            echo "Haswell/Zen 3 onwards, \`x86-64-avx2\` as the safer fallback."
+            echo
+            echo "The network is inside the binary, so no companion file is needed."
+            echo "Atomic Syzygy tablebases are still optional and external."
+          } > notes.md
+
+          if gh release view latest-main --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/latest-main" \
+              -f sha="$GITHUB_SHA" -F force=true >/dev/null
+            gh release edit latest-main --repo "$GITHUB_REPOSITORY" \
+              --prerelease --title "Atomic-Stockfish dev ($sha8)" --notes-file notes.md
+          else
+            gh release create latest-main --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" --prerelease \
+              --title "Atomic-Stockfish dev ($sha8)" --notes-file notes.md
+          fi
+
+          gh release upload latest-main --repo "$GITHUB_REPOSITORY" dist/* --clobber
