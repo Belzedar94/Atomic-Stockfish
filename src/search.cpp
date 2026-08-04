@@ -45,6 +45,7 @@
 #include "thread.h"
 #include "timeman.h"
 #include "tt.h"
+#include "tune.h"
 #include "types.h"
 #include "uci_move.h"
 #include "ucioption.h"
@@ -63,6 +64,44 @@ void syzygy_extend_pv(const OptionsMap&            options,
                       Value&                       v);
 
 using namespace Search;
+
+// Tunable search parameters for the Atomic search-tuning campaign. Each one
+// replaces a former hard-coded constant (the default), so with defaults the
+// search is functionally unchanged. TUNE registers them as UCI spin options.
+int Search::AtomicMcpBase     = 7;
+int Search::AtomicNmpBase     = 6;
+int Search::AtomicNmpDepthDiv = 4;
+
+namespace {
+// MultiVariant-Stockfish paid real SPSA to learn that Atomic needs a much
+// wider futility window than chess: FutilityMarginFactor 585 against 175, and
+// FutilityMarginParent {512, 400} against {256, 200}. Material swings by whole
+// clusters of pieces here, so "eval plus a chess-sized margin" is not a bound.
+// Expressed as a 64-based multiplier of the modern margins; 128 is the
+// doubling the audit prescribes as the first attempt.
+int AtomicFutilityScale  = 128;
+int AtomicCaptFutBase    = 227;
+int AtomicCaptFutLmrMult = 244;
+int QsFutilityBase       = 345;
+int SingularDepthMin     = 8;
+int SingularMarginBase   = 65;
+int SingularMarginTtPv   = 83;
+int SingularMarginDiv    = 48;
+int LmrLogScale          = 2736;
+int LmrBaseOffset        = 1049;
+}
+
+TUNE(SetRange(0, 20), AtomicMcpBase);
+TUNE(SetRange(1, 12), AtomicNmpBase);
+TUNE(SetRange(1, 8), AtomicNmpDepthDiv);
+TUNE(SetRange(32, 320), AtomicFutilityScale);
+TUNE(SetRange(0, 600), AtomicCaptFutBase, AtomicCaptFutLmrMult);
+TUNE(SetRange(0, 800), QsFutilityBase);
+TUNE(SetRange(2, 14), SingularDepthMin);
+TUNE(SetRange(0, 250), SingularMarginBase, SingularMarginTtPv);
+TUNE(SetRange(16, 150), SingularMarginDiv);
+TUNE(SetRange(1000, 6000), LmrLogScale);
+TUNE(SetRange(0, 3000), LmrBaseOffset);
 
 bool Search::atomic_capture_futility_eligible(const Position& pos, Move move) {
     if (move.type_of() != NORMAL || !pos.capture_stage(move))
@@ -934,7 +973,7 @@ void Search::Worker::clear_for_new_game(SharedHistories& histories,
             h.fill(5);
 
     for (usize i = 1; i < reductions.size(); ++i)
-        reductions[i] = int(2834 / 128.0 * std::log(i));
+        reductions[i] = int(LmrLogScale / 128.0 * std::log(i));
 
     accumulator.rebind(network[numaAccessToken]);
 }
@@ -1249,6 +1288,7 @@ Value Search::Worker::search(
     {
         Value futilityMult = std::min(40 + depth * 4, 80);
         futilityMult -= 20 * !ss->ttHit;
+        futilityMult = futilityMult * AtomicFutilityScale / 64;
 
         Value futilityMargin = futilityMult * depth
                              - (2934 * improving + 343 * opponentWorsening) * futilityMult / 1024
@@ -1441,7 +1481,8 @@ moves_loop:  // When in check, search starts here
                 if (!atomicWin && !givesCheck && lmrDepth < 7
                     && atomic_capture_futility_eligible(pos, move))
                 {
-                    Value futilityValue = ss->staticEval + 231 + 232 * lmrDepth
+                    Value futilityValue = ss->staticEval + AtomicCaptFutBase
+                                        + AtomicCaptFutLmrMult * lmrDepth
                                         + PieceValue[capturedPiece] + 131 * captHist / 1024;
 
                     if (futilityValue <= alpha)
@@ -1472,8 +1513,10 @@ moves_loop:  // When in check, search starts here
                 // (*Scaler): Generally, lower divisors scale well
                 lmrDepth += history / lmrDivisor[dIndex];
 
-                Value futilityValue = ss->staticEval + 40 + 138 * !bestMove + 117 * lmrDepth
-                                    + 90 * (ss->staticEval > alpha);
+                Value futilityValue =
+                  ss->staticEval
+                  + (40 + 138 * !bestMove + 117 * lmrDepth + 90 * (ss->staticEval > alpha))
+                      * AtomicFutilityScale / 64;
 
                 // Futility pruning: parent node
                 // (*Scaler): Generally, more frequent futility pruning
@@ -1504,11 +1547,14 @@ moves_loop:  // When in check, search starts here
 
         // (*Scaler) Generally, higher singularBeta (i.e closer to ttValue)
         // and lower extension margins scale well.
-        if (!rootNode && move == ttData.move && !excludedMove && depth >= 6 + ss->ttPv
-            && is_valid(ttData.value) && !is_decisive(ttData.value) && (ttData.bound & BOUND_LOWER)
+        if (!rootNode && move == ttData.move && !excludedMove
+            && depth >= SingularDepthMin + ss->ttPv && is_valid(ttData.value)
+            && !is_decisive(ttData.value) && (ttData.bound & BOUND_LOWER)
             && ttData.depth >= depth - 3 && !is_shuffling(move, ss, pos))
         {
-            Value singularBeta  = ttData.value - (60 + 70 * (ss->ttPv && !PvNode)) * depth / 59;
+            Value singularBeta = ttData.value
+                               - (SingularMarginBase + SingularMarginTtPv * (ss->ttPv && !PvNode))
+                                   * depth / SingularMarginDiv;
             Depth singularDepth = newDepth / 2;
 
             ss->excludedMove = move;
@@ -1997,7 +2043,7 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
         if (bestValue > alpha)
             alpha = bestValue;
 
-        futilityBase = ss->staticEval + 335;
+        futilityBase = ss->staticEval + QsFutilityBase;
     }
 
     const PieceToHistory* contHist[] = {
@@ -2128,7 +2174,8 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
 
 int Search::Worker::reduction(bool i, Depth d, int mn, int delta) const {
     int reductionScale = reductions[d] * reductions[mn];
-    return reductionScale - delta * 617 / rootDelta + !i * reductionScale * 194 / 512 + 1027;
+    return reductionScale - delta * 617 / rootDelta + !i * reductionScale * 194 / 512
+         + LmrBaseOffset;
 }
 
 // elapsed() returns the time elapsed since the search started. If the
