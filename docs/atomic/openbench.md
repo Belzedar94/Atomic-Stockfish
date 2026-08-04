@@ -34,3 +34,14 @@ Atomic tablebases are worker-local artifacts. Start capable workers with
 only to workers that validate a complete `.atbw` set. Cutechess Atomic
 adjudication does not understand `.atbw`/`.atbz`, so Atomic tests must keep
 Syzygy adjudication disabled and use engine-side `SyzygyPath` probing only.
+
+An additive experimental datagen contract V2 consumes OpenBench v40's complete
+`syzygy`, `syzygy_manifest_sha256`, `syzygy_max`, `teacher_mode` field group.
+The worker is authoritative for inventory-file authentication; the engine pins
+the same official SHA, requires exactly loaded six-piece tables, derives the
+three fixed probe options and binds the claim plus native probe/hit counters to
+new manifest/attestation/bundle schemas. `producer_sha256` is supported as an
+orthogonal executable-artifact identity. Teacher mode is byte-exact `pure` or
+`true`. ADR 0007 fixes publicable production datagen to `pure`; `true` remains
+available only as an authenticated control. Implementing this capability does
+not launch or use OpenBench.

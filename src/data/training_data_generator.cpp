@@ -55,6 +55,7 @@
 #include "atomic_bin_v2.h"
 #include "atomic_bin_v2_manifest.h"
 #include "atomic_bin_v2_sink.h"
+#include "authenticated_datagen_v2.h"
 #include "atomic_v3_trajectory.h"
 #include "atomic_v3_private_staging.h"
 #include "engine.h"
@@ -67,6 +68,7 @@
 #include "sha256.h"
 #include "thread.h"
 #include "tt.h"
+#include "syzygy/tbprobe.h"
 
 namespace Stockfish::Data {
 namespace {
@@ -3076,7 +3078,9 @@ void print_error(std::string_view message) { sync_cout << "ERROR: " << message <
 
 }  // namespace
 
-bool generate_training_data(Engine& engine, std::istream& input) {
+bool generate_training_data_impl(Engine&                  engine,
+                                 std::istream&            input,
+                                 AtomicDatagenV2Manifest* authenticated) {
     GeneratorParams params;
     std::string     error;
     if (!parse_params(input, params, error))
@@ -3098,12 +3102,44 @@ bool generate_training_data(Engine& engine, std::istream& input) {
         }
     }
 
-    if (engine.options["Use NNUE"] != "pure")
+    const bool authenticatedV2 = authenticated != nullptr;
+    if (authenticatedV2 && params.dataFormat != DatasetFormat::ATOMIC_BIN_V2)
     {
-        print_error("generate_training_data requires Use NNUE=pure");
+        print_error("Authenticated teacher datagen V2 requires data_format atomic-bin-v2");
+        return false;
+    }
+    const bool validTeacherMode =
+      !authenticatedV2
+      || ((authenticated->teacherMode == AtomicPureTeacherMode
+           && authenticated->useNnue == "pure")
+          || (authenticated->teacherMode == AtomicTrueTeacherMode
+              && authenticated->useNnue == "true"));
+    if (!validTeacherMode)
+    {
+        print_error("Authenticated teacher_mode must be explicit and match Use NNUE");
+        return false;
+    }
+    const std::string expectedUseNnue = authenticatedV2 ? authenticated->useNnue : "pure";
+    if (std::string(engine.options["Use NNUE"]) != expectedUseNnue)
+    {
+        print_error(authenticatedV2
+                      ? "generate_training_data Use NNUE differs from its authenticated teacher mode"
+                      : "generate_training_data requires Use NNUE=pure");
         return false;
     }
     params.atomic960 = int(engine.options["UCI_Chess960"]) != 0;
+    if (authenticatedV2 && params.atomic960)
+    {
+        print_error("Authenticated teacher datagen V2 requires UCI_Chess960=false");
+        return false;
+    }
+#ifndef ATOMIC_DATA_GENERATOR_GIT_SHA
+    if (authenticatedV2)
+    {
+        print_error("Authenticated teacher datagen V2 requires a pinned producer commit");
+        return false;
+    }
+#endif
     if (params.dataFormat == DatasetFormat::LEGACY_ATOMIC_V1 && params.atomic960)
     {
         print_error("Legacy Atomic V1 cannot encode Atomic960; set UCI_Chess960=false");
@@ -3115,11 +3151,38 @@ bool generate_training_data(Engine& engine, std::istream& input) {
         print_error("Atomic BIN V2 thread count exceeds the manifest domain");
         return false;
     }
-    if (params.dataFormat == DatasetFormat::ATOMIC_BIN_V2
+    if (params.dataFormat == DatasetFormat::ATOMIC_BIN_V2 && !authenticatedV2
         && !std::string(engine.options["SyzygyPath"]).empty())
     {
         print_error("Atomic BIN V2 generation requires an empty SyzygyPath");
         return false;
+    }
+    if (authenticatedV2
+        && (std::string(engine.options["SyzygyPath"]).empty()
+            || int(engine.options["SyzygyProbeLimit"]) != AtomicTeacherSyzygyProbeLimit
+            || int(engine.options["SyzygyProbeDepth"]) != AtomicTeacherSyzygyProbeDepth
+            || !bool(engine.options["Syzygy50MoveRule"])
+            || Tablebases::MaxCardinality != AtomicTeacherSyzygyCardinality))
+    {
+        print_error("Authenticated teacher datagen V2 requires exact loaded Atomic 6-men Syzygy "
+                    "options");
+        return false;
+    }
+    if (authenticatedV2)
+    {
+        const auto lowerSha256 = [](std::string_view value) {
+            return value.size() == 64
+                && std::all_of(value.begin(), value.end(), [](unsigned char c) {
+                       return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+                   });
+        };
+        if (authenticated->inventorySha256 != AtomicTeacherSyzygyInventorySha256Hex
+            || (!authenticated->producerSha256.empty()
+                && !lowerSha256(authenticated->producerSha256)))
+        {
+            print_error("Authenticated teacher datagen V2 asset identities are invalid");
+            return false;
+        }
     }
 
     AuthenticatedFile networkMetadata;
@@ -3166,7 +3229,8 @@ bool generate_training_data(Engine& engine, std::istream& input) {
     std::filesystem::path              manifestPath;
     if (params.dataFormat == DatasetFormat::ATOMIC_BIN_V2)
     {
-        manifestPath = atomic_bin_v2_manifest_path(paths->front());
+        manifestPath = authenticatedV2 ? authenticated->manifestPath
+                                       : atomic_bin_v2_manifest_path(paths->front());
         preflightPaths.push_back(manifestPath);
     }
     if (!preflight_output_paths(preflightPaths, error))
@@ -3176,8 +3240,11 @@ bool generate_training_data(Engine& engine, std::istream& input) {
     }
     if (params.dataFormat == DatasetFormat::ATOMIC_BIN_V2)
     {
-        const DataResult publicationPreflight =
-          preflight_atomic_bin_v2_manifest_publication(manifestPath);
+        const DataResult publicationPreflight = authenticatedV2
+                                                ? preflight_authenticated_datagen_v2_output(
+                                                    manifestPath)
+                                                : preflight_atomic_bin_v2_manifest_publication(
+                                                    manifestPath);
         if (!publicationPreflight)
         {
             print_error(publicationPreflight.message);
@@ -3196,6 +3263,8 @@ bool generate_training_data(Engine& engine, std::istream& input) {
               << "INFO: count = " << params.count << '\n'
               << "INFO: output = " << paths->front().string() << std::endl;
 
+    if (authenticatedV2)
+        Tablebases::reset_probe_counters();
     Generator generator(params, engine.threads, engine.tt, std::move(*paths), std::move(openings),
                         resolvedSeed);
     if (!generator.run(error))
@@ -3204,8 +3273,95 @@ bool generate_training_data(Engine& engine, std::istream& input) {
         return false;
     }
 
+    const Tablebases::ProbeCounters tablebaseCounters =
+      authenticatedV2 ? Tablebases::probe_counters() : Tablebases::ProbeCounters{};
+
     if (params.dataFormat == DatasetFormat::ATOMIC_BIN_V2)
     {
+        if (authenticatedV2)
+        {
+            authenticated->engineCommit =
+#ifdef ATOMIC_DATA_GENERATOR_GIT_SHA
+              stringify(ATOMIC_DATA_GENERATOR_GIT_SHA);
+#else
+              "unknown";
+#endif
+            authenticated->engineVersion = engine_version_info();
+            authenticated->networkPath   = networkMetadata.path;
+            authenticated->networkSha256 = networkMetadata.sha256;
+            authenticated->bookIsFile    = bookIsFile;
+            if (bookIsFile)
+            {
+                authenticated->bookPath   = bookMetadata.path;
+                authenticated->bookSha256 = bookMetadata.sha256;
+            }
+            authenticated->resolvedSeed = resolvedSeed;
+            authenticated->threads      = u32(engine.threads.size());
+            authenticated->hashMb       = u64(int(engine.options["Hash"]));
+
+            auto& options            = authenticated->options;
+            options.searchDepthMin   = params.searchDepthMin;
+            options.searchDepthMax   = params.searchDepthMax;
+            options.nodes            = params.nodes;
+            options.requestedRecords = params.count;
+            options.recordsPerShard =
+              params.saveEvery == std::numeric_limits<u64>::max() ? params.count : params.saveEvery;
+            options.evalLimit                    = params.evalLimit;
+            options.evalDiffLimit                = params.evalDiffLimit;
+            options.randomMoveMinPly             = params.randomMoveMinPly;
+            options.randomMoveMaxPly             = params.randomMoveMaxPly;
+            options.randomMoveCount              = params.randomMoveCount;
+            options.randomMoveLikeApery          = params.randomMoveLikeApery;
+            options.randomMultiPv                = params.randomMultiPv;
+            options.randomMultiPvDiff            = params.randomMultiPvDiff;
+            options.randomMultiPvDepth           = params.randomMultiPvDepth;
+            options.writeMinPly                  = params.writeMinPly;
+            options.writeMaxPly                  = params.writeMaxPly;
+            options.keepDraws                    = params.keepDrawsManifest;
+            options.adjudicateDrawsByScore       = params.adjudicateDrawsByScore;
+            options.adjudicateInsufficient       = params.adjudicateInsufficient;
+            options.filterCaptures               = params.filterCaptures;
+            options.filterChecks                 = params.filterChecks;
+            options.filterPromotions             = params.filterPromotions;
+            options.randomFileName               = params.randomFileName;
+            options.setRecommendedUciOptionsSeen = params.setRecommendedUciOptionsSeen;
+
+            authenticated->records  = generator.records_written();
+            authenticated->draws    = generator.draws_written();
+            authenticated->tbProbes = tablebaseCounters.probes;
+            authenticated->tbHits   = tablebaseCounters.hits;
+            const auto& shards      = generator.atomic_bin_v2_shards();
+            if (shards.size() != 1)
+            {
+                error                    = "Authenticated teacher datagen V2 requires one shard";
+                const DataResult cleanup = generator.abort_output();
+                if (!cleanup)
+                    error += "; cleanup failed: " + cleanup.message;
+                print_error(error);
+                return false;
+            }
+            authenticated->shard =
+              {shards[0].path, shards[0].index, shards[0].records, shards[0].bytes,
+               shards[0].sha256};
+            if (DataResult published = write_atomic_datagen_v2_manifest(*authenticated);
+                !published)
+            {
+                error                    = published.message;
+                const DataResult cleanup = generator.abort_output();
+                if (!cleanup)
+                    error += "; cleanup failed: " + cleanup.message;
+                print_error(error);
+                return false;
+            }
+            std::cout << "INFO: manifest = " << manifestPath.string() << '\n'
+                      << "INFO: manifest_schema_sha256 = "
+                      << AtomicBinV2TeacherManifestSchemaSha256Hex << '\n'
+                      << "INFO: teacher_mode = " << authenticated->teacherMode << '\n'
+                      << "INFO: tb_probes = " << authenticated->tbProbes << '\n'
+                      << "INFO: tb_hits = " << authenticated->tbHits << '\n';
+        }
+        else
+        {
         AtomicBinV2Manifest manifest;
         manifest.manifestPath = manifestPath;
 #ifdef ATOMIC_DATA_GENERATOR_GIT_SHA
@@ -3272,12 +3428,23 @@ bool generate_training_data(Engine& engine, std::istream& input) {
         std::cout << "INFO: manifest = " << manifestPath.string() << '\n'
                   << "INFO: manifest_schema_sha256 = " << AtomicBinV2ManifestSchemaSha256Hex
                   << '\n';
+        }
     }
 
     std::cout << "INFO: generate_training_data finished.\n"
               << "INFO: records=" << generator.records_written()
               << " draws=" << generator.draws_written() << std::endl;
     return true;
+}
+
+bool generate_training_data(Engine& engine, std::istream& input) {
+    return generate_training_data_impl(engine, input, nullptr);
+}
+
+bool generate_authenticated_training_data_v2(Engine&                  engine,
+                                              std::istream&            input,
+                                              AtomicDatagenV2Manifest& manifest) {
+    return generate_training_data_impl(engine, input, &manifest);
 }
 
 bool generate_atomic_v3_chunk(Engine& engine, std::istream& input) {

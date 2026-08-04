@@ -150,6 +150,38 @@ The full Node UCI/NNUE WebAssembly build is documented in
 [`tests/wasm-engine/README.md`](tests/wasm-engine/README.md). Its generated
 `.mjs` launcher is the supported entrypoint; the generated runtime glue is not.
 
+## Atomic match-mining E00
+
+The experimental E00 source battery compares the current best V3 network
+directly with the authenticated legacy `run3b` champion. It is separate from
+the official 1B DATAGEN campaign and must not modify or consume that campaign's
+queue, workers or contracts.
+
+The result-bearing path uses direct UCI, a freshly built exact-source native
+Atomic referee and verifier, deterministic color-swapped schedules,
+create-new artifacts and a final commit receipt. Its frozen public wire is
+`atomic-e00-game-v3`, `atomic-e00-execution-receipt-v3`,
+`atomic-e00-engine-evidence-v3` and `atomic-e00-runtime-manifest-v2`; the
+deterministic schedule remains v1.
+
+No scientific E00 execution is authorized from an uncommitted worktree.
+After an independent zero-P0/P1 audit, use only the post-commit runbook linked
+from:
+
+- [`docs/atomic/e00-source-contract.md`](docs/atomic/e00-source-contract.md);
+- [`docs/atomic/e00-direct-uci-referee-design.md`](docs/atomic/e00-direct-uci-referee-design.md);
+- [`docs/atomic/e00-launch7-prepare-smoke-runbook.md`](docs/atomic/e00-launch7-prepare-smoke-runbook.md);
+- [`docs/atomic/e00-launch7-full-runbook.md`](docs/atomic/e00-launch7-full-runbook.md).
+
+The older commands in
+[`docs/atomic/evidence/mining-loop-v1/README.md`](docs/atomic/evidence/mining-loop-v1/README.md)
+are an immutable historical Launch1/Launch2 record, not an executable current
+runbook.
+
+The one-pair `Threads=1` smoke must be resource-gated, exit zero with byte-empty
+stderr and authenticate fully before the fixed 84-pair battery can start. The
+user-managed OpenBench worker remains stopped throughout this plan.
+
 ## Validation
 
 The release-oriented Hito 4 runner requires explicit native, Python,

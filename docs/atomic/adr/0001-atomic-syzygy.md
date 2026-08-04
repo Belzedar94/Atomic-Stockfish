@@ -120,3 +120,20 @@ not evidence that OpenBench passed the tests: every row has `passed=false` and
 fewer than 2,000 accepted games. No aggregate six-test Elo or `6/6 LOS` is
 claimed. The exact release tag must still pass the driver, production UCI and
 real-table enabled/disabled conformance gate.
+
+## Additive datagen integration (2026-07-19)
+
+ADR 0007 adds an opt-in authenticated datagen contract for six-piece Atomic
+tables. It does not change the table format and does not reinterpret Atomic BIN
+V2 manifest V1 or `ATOBNDL1`. The new contract binds an inventory SHA, exact
+probe options, loaded cardinality and native probe/hit counters in separately
+versioned manifest, attestation and bundle schemas.
+
+OpenBench v40 remains authoritative for rehashing the inventory file and
+validating runtime hardlinks/acquisition markers. Its four-field command passes
+only path, inventory SHA, required maximum and teacher mode; the engine pins the
+official SHA and does not claim receipt of an undisclosed inventory path.
+
+Teacher evaluation is explicit on the wire (`pure` or `true`) and remains an A/B
+decision. ADR 0007 fixes publicable production datagen to `pure` and retains
+`true` only as an authenticated control.

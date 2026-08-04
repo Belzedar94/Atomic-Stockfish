@@ -82,6 +82,27 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 UPPER_SHA256_RE = re.compile(r"^[0-9A-F]{64}$")
 INT_MAX = 2**31 - 1
 MASK64 = 2**64 - 1
+PINNED_ATOMIC_SYZYGY_INVENTORY_SHA256 = (
+    "3d4b7fd0ab387f4f60da2078f612c9e8890e6026f551aebe8631efc157788f23"
+)
+GOLDEN_V40_CANARY_COMMAND = (
+    'openbench_generate_training_data threads {THREADS} hash 512 network {NETWORK} '
+    'network_sha256 99DC67EABF26A64FAEECA3A88B4C38597A840B8D4A874B9F2CF658C6F92A04A6 '
+    'producer_sha256 {PRODUCER_SHA256} count {COUNT} seed {SEED} book {BOOK} '
+    'book_sha256 {BOOK_SHA256} out {OUT} depth 7 '
+    'nodes 0 eval_limit 10000 eval_diff_limit 32000 random_move_min_ply 1 '
+    'random_move_max_ply 20 random_move_count 8 random_move_like_apery 0 random_multi_pv 4 '
+    'random_multi_pv_diff 200 random_multi_pv_depth 6 write_min_ply 5 write_max_ply 400 '
+    'keep_draws 1 adjudicate_draws_by_score true '
+    'adjudicate_draws_by_insufficient_material true filter_captures true '
+    'filter_checks false filter_promotions true syzygy "{SYZYGY}" '
+    'syzygy_manifest_sha256 {SYZYGY_MANIFEST_SHA256} syzygy_max {SYZYGY_MAX} '
+    'teacher_mode {TEACHER_MODE} set_recommended_uci_options'
+)
+if hashlib.sha256(GOLDEN_V40_CANARY_COMMAND.encode()).hexdigest() != (
+    "ce7ce4c089828b26ddbb30a69bcbd71f25600d3dc8f41fb90b5afbad6118a936"
+):
+    raise AssertionError("OpenBench v40 golden canary command drift")
 
 START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 CASTLING_FEN = "r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1"
@@ -1022,6 +1043,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         book_fens = (START_FEN, CASTLING_FEN)
         multi_book = root / "multi-book.epd"
         multi_book.write_bytes(("\n".join(book_fens) + "\n").encode("utf-8"))
+        multi_book_file_sha256 = hashlib.sha256(multi_book.read_bytes()).hexdigest()
         multi_book_output_path = root / "multi-book.bin"
         multi_book_output = run_engine(
             generator,
@@ -1571,6 +1593,327 @@ def main(argv: Sequence[str] | None = None) -> int:
                             f"{rejected_output_path}"
                         )
 
+            # The exact OpenBench v40 canary command is frozen above. For this
+            # portable integration fixture only, replace its pinned campaign
+            # network SHA with the SHA of the synthetic compatible net. Every
+            # v40 field, order, and derived Syzygy option remains unchanged.
+            # An empty table directory must then reach the cardinality gate for
+            # both A/B teacher modes, fail before self-play, and retain no
+            # output. This is intentionally not a production tablebase run.
+            empty_tables = root / "empty-atomic-syzygy"
+            empty_tables.mkdir()
+            golden_network_sha = (
+                "99DC67EABF26A64FAEECA3A88B4C38597A840B8D4A874B9F2CF658C6F92A04A6"
+            )
+
+            def render_v40_canary(teacher_mode: str, bundle: Path) -> str:
+                rendered = GOLDEN_V40_CANARY_COMMAND.format(
+                    THREADS=1,
+                    NETWORK=bridge_net,
+                    PRODUCER_SHA256="d" * 64,
+                    COUNT=2,
+                    SEED=f"openbench-v40-{teacher_mode}",
+                    BOOK=multi_book,
+                    BOOK_SHA256=multi_book_file_sha256,
+                    OUT=bundle,
+                    SYZYGY=empty_tables,
+                    SYZYGY_MANIFEST_SHA256=PINNED_ATOMIC_SYZYGY_INVENTORY_SHA256,
+                    SYZYGY_MAX=6,
+                    TEACHER_MODE=teacher_mode,
+                )
+                return rendered.replace(golden_network_sha, net_sha256, 1)
+
+            def assert_no_v2_outputs(bundle: Path, label: str) -> None:
+                for output_path in (
+                    bundle,
+                    Path(str(bundle) + ".atbin"),
+                    Path(str(bundle) + ".atbin.manifest-v2.json"),
+                    Path(str(bundle) + ".attestation.json"),
+                ):
+                    if output_path.exists() or output_path.is_symlink():
+                        raise AssertionError(
+                            f"Contract V2 {label} rejection retained {output_path}"
+                        )
+
+            for teacher_mode in ("pure", "true"):
+                rejected_bundle = root / f"openbench-v2-{teacher_mode}.bin"
+                rejected_command = render_v40_canary(teacher_mode, rejected_bundle)
+                rejected_output = run_engine(
+                    generator, (rejected_command, "quit"), expect_success=False
+                )
+                if "OpenBench UCI option configuration was rejected" not in rejected_output:
+                    raise AssertionError(
+                        "Contract V2 did not fail at the 6-men cardinality gate:\n"
+                        + rejected_output
+                    )
+                if "generate_training_data finished" in rejected_output:
+                    raise AssertionError("Contract V2 cardinality rejection ran self-play")
+                for rejected_output_path in (
+                    rejected_bundle,
+                    Path(str(rejected_bundle) + ".atbin"),
+                    Path(str(rejected_bundle) + ".atbin.manifest-v2.json"),
+                    Path(str(rejected_bundle) + ".attestation.json"),
+                ):
+                    if rejected_output_path.exists() or rejected_output_path.is_symlink():
+                        raise AssertionError(
+                            "Contract V2 cardinality rejection retained an output: "
+                            f"{rejected_output_path}"
+                        )
+
+            # OpenBench v40's 100M startpos cohort renders this exact sentinel
+            # pair. It is an authenticated no-file declaration, not a hash.
+            startpos_bundle = root / "openbench-v2-startpos.bin"
+            startpos_command = render_v40_canary("pure", startpos_bundle).replace(
+                f"book {multi_book} book_sha256 {multi_book_file_sha256}",
+                "book NONE book_sha256 NONE",
+                1,
+            )
+            startpos_output = run_engine(
+                generator, (startpos_command, "quit"), expect_success=False
+            )
+            if "OpenBench UCI option configuration was rejected" not in startpos_output:
+                raise AssertionError(
+                    "Contract V2 startpos sentinel did not reach the six-man cardinality gate:\n"
+                    + startpos_output
+                )
+            assert_no_v2_outputs(startpos_bundle, "startpos cardinality")
+
+            for label, replacement, expected_error in (
+                (
+                    "startpos-real-sha",
+                    f"book NONE book_sha256 {multi_book_file_sha256}",
+                    "requires exact pair book NONE book_sha256 NONE",
+                ),
+                (
+                    "file-none-sha",
+                    f"book {multi_book} book_sha256 NONE",
+                    "requires a 64-hex book_sha256 for a file book",
+                ),
+                (
+                    "startpos-missing-sha",
+                    "book NONE",
+                    "requires exact sentinel book_sha256 NONE with book NONE",
+                ),
+            ):
+                sentinel_bundle = root / f"openbench-v2-bad-{label}.bin"
+                sentinel_command = render_v40_canary("pure", sentinel_bundle).replace(
+                    f"book {multi_book} book_sha256 {multi_book_file_sha256}",
+                    replacement,
+                    1,
+                )
+                sentinel_output = run_engine(
+                    generator, (sentinel_command, "quit"), expect_success=False
+                )
+                if expected_error not in sentinel_output:
+                    raise AssertionError(
+                        f"Contract V2 {label} rejection was ambiguous:\n{sentinel_output}"
+                    )
+                assert_no_v2_outputs(sentinel_bundle, label)
+
+            alias_bundle = root / "openbench-v2-alias.bin"
+            alias_command = render_v40_canary("true", alias_bundle).replace(
+                "teacher_mode true", "teacher_mode legacy-playing", 1
+            )
+            alias_output = run_engine(
+                generator, (alias_command, "quit"), expect_success=False
+            )
+            if "requires teacher_mode pure|true" not in alias_output:
+                raise AssertionError(
+                    "Contract V2 accepted or ambiguously rejected a teacher alias:\n"
+                    + alias_output
+                )
+            for alias_output_path in (
+                alias_bundle,
+                Path(str(alias_bundle) + ".atbin"),
+                Path(str(alias_bundle) + ".atbin.manifest-v2.json"),
+                Path(str(alias_bundle) + ".attestation.json"),
+            ):
+                if alias_output_path.exists() or alias_output_path.is_symlink():
+                    raise AssertionError(
+                        "Contract V2 teacher alias retained an output: "
+                        f"{alias_output_path}"
+                    )
+
+            for label, mutate, expected_error in (
+                (
+                    "inventory-sha",
+                    lambda command: command.replace(
+                        PINNED_ATOMIC_SYZYGY_INVENTORY_SHA256, "0" * 64, 1
+                    ),
+                    "pinned Atomic inventory SHA-256",
+                ),
+                (
+                    "syzygy-max",
+                    lambda command: command.replace("syzygy_max 6", "syzygy_max 5", 1),
+                    "syzygy_max 6",
+                ),
+                (
+                    "partial-group",
+                    lambda command: command.replace(" syzygy_max 6", "", 1),
+                    "requires syzygy, syzygy_manifest_sha256",
+                ),
+                (
+                    "producer-sha",
+                    lambda command: command.replace("producer_sha256 " + "d" * 64,
+                                                    "producer_sha256 invalid", 1),
+                    "producer_sha256 requires",
+                ),
+            ):
+                bad_bundle = root / f"openbench-v2-bad-{label}.bin"
+                bad_command = mutate(render_v40_canary("pure", bad_bundle))
+                bad_output = run_engine(
+                    generator, (bad_command, "quit"), expect_success=False
+                )
+                if expected_error not in bad_output:
+                    raise AssertionError(
+                        f"Contract V2 {label} rejection was ambiguous:\n{bad_output}"
+                    )
+                for bad_output_path in (
+                    bad_bundle,
+                    Path(str(bad_bundle) + ".atbin"),
+                    Path(str(bad_bundle) + ".atbin.manifest-v2.json"),
+                    Path(str(bad_bundle) + ".attestation.json"),
+                ):
+                    if bad_output_path.exists() or bad_output_path.is_symlink():
+                        raise AssertionError(
+                            f"Contract V2 {label} rejection retained {bad_output_path}"
+                        )
+
+            # V1 historically resolves repeated bridge options last-wins. V2
+            # must be unambiguous: reject every repeated core field, plus
+            # repeated forwarded generator fields, before any output exists.
+            duplicate_core_values = {
+                "threads": "1",
+                "hash": "512",
+                "network": str(bridge_net),
+                "network_sha256": net_sha256,
+                "count": "2",
+                "seed": "openbench-v40-pure",
+                "book": str(multi_book),
+                "book_sha256": multi_book_file_sha256,
+            }
+            for option, value in duplicate_core_values.items():
+                duplicate_bundle = root / f"openbench-v2-duplicate-{option}.bin"
+                duplicate_command = render_v40_canary("pure", duplicate_bundle)
+                needle = f"{option} {value}"
+                if needle not in duplicate_command:
+                    raise AssertionError(f"missing V2 duplicate fixture token: {needle}")
+                duplicate_command = duplicate_command.replace(
+                    needle, f"{needle} {needle}", 1
+                )
+                duplicate_output = run_engine(
+                    generator, (duplicate_command, "quit"), expect_success=False
+                )
+                if f"rejects duplicate option {option}" not in duplicate_output:
+                    raise AssertionError(
+                        f"Contract V2 duplicate {option} rejection was ambiguous:\n"
+                        f"{duplicate_output}"
+                    )
+                assert_no_v2_outputs(duplicate_bundle, f"duplicate {option}")
+
+            duplicate_out_bundle = root / "openbench-v2-duplicate-out.bin"
+            duplicate_out_command = render_v40_canary("pure", duplicate_out_bundle)
+            duplicate_out_command = duplicate_out_command.replace(
+                f"out {duplicate_out_bundle}",
+                f"out {duplicate_out_bundle} out {duplicate_out_bundle}",
+                1,
+            )
+            duplicate_out_output = run_engine(
+                generator, (duplicate_out_command, "quit"), expect_success=False
+            )
+            if "rejects duplicate option out" not in duplicate_out_output:
+                raise AssertionError(
+                    "Contract V2 duplicate out rejection was ambiguous:\n"
+                    + duplicate_out_output
+                )
+            assert_no_v2_outputs(duplicate_out_bundle, "duplicate out")
+
+            duplicate_depth_bundle = root / "openbench-v2-duplicate-depth.bin"
+            duplicate_depth_command = render_v40_canary("pure", duplicate_depth_bundle)
+            duplicate_depth_command = duplicate_depth_command.replace(
+                "depth 7", "depth 7 depth 7", 1
+            )
+            duplicate_depth_output = run_engine(
+                generator, (duplicate_depth_command, "quit"), expect_success=False
+            )
+            if "rejects duplicate option depth" not in duplicate_depth_output:
+                raise AssertionError(
+                    "Contract V2 duplicate depth rejection was ambiguous:\n"
+                    + duplicate_depth_output
+                )
+            assert_no_v2_outputs(duplicate_depth_bundle, "duplicate depth")
+
+            unsafe_seed_bundle = root / "openbench-v2-unsafe-seed.bin"
+            unsafe_seed_command = render_v40_canary("pure", unsafe_seed_bundle).replace(
+                "seed openbench-v40-pure", 'seed "openbench-v40-pure"', 1
+            )
+            unsafe_seed_output = run_engine(
+                generator, (unsafe_seed_command, "quit"), expect_success=False
+            )
+            if "requires option seed to be one unquoted token" not in unsafe_seed_output:
+                raise AssertionError(
+                    "Contract V2 quoted seed rejection was ambiguous:\n"
+                    + unsafe_seed_output
+                )
+            assert_no_v2_outputs(unsafe_seed_bundle, "quoted seed")
+
+            injected_seed_bundle = root / "openbench-v2-injected-seed.bin"
+            injected_seed_command = render_v40_canary(
+                "pure", injected_seed_bundle
+            ).replace(
+                "seed openbench-v40-pure", 'seed "injected depth 1"', 1
+            )
+            injected_seed_output = run_engine(
+                generator, (injected_seed_command, "quit"), expect_success=False
+            )
+            if "rejects duplicate option depth" not in injected_seed_output:
+                raise AssertionError(
+                    "Contract V2 quoted whitespace injection was not rejected before output:\n"
+                    + injected_seed_output
+                )
+            assert_no_v2_outputs(injected_seed_bundle, "quoted seed injection")
+
+            missing_book_sha_bundle = root / "openbench-v2-missing-book-sha.bin"
+            missing_book_sha_command = render_v40_canary(
+                "pure", missing_book_sha_bundle
+            ).replace(f" book_sha256 {multi_book_file_sha256}", "", 1)
+            missing_book_sha_output = run_engine(
+                generator, (missing_book_sha_command, "quit"), expect_success=False
+            )
+            if "requires book_sha256 for a file book" not in missing_book_sha_output:
+                raise AssertionError(
+                    "Contract V2 accepted a file book without an authenticated SHA:\n"
+                    + missing_book_sha_output
+                )
+            for missing_output_path in (
+                missing_book_sha_bundle,
+                Path(str(missing_book_sha_bundle) + ".atbin"),
+                Path(str(missing_book_sha_bundle) + ".atbin.manifest-v2.json"),
+                Path(str(missing_book_sha_bundle) + ".attestation.json"),
+            ):
+                if missing_output_path.exists() or missing_output_path.is_symlink():
+                    raise AssertionError(
+                        "Contract V2 unauthenticated book retained an output: "
+                        f"{missing_output_path}"
+                    )
+
+            protected_bundle = root / "openbench-v2-protected.bin"
+            protected_attestation = Path(str(protected_bundle) + ".attestation.json")
+            protected_attestation.write_bytes(b"owner-data")
+            protected_command = rejected_command.replace(
+                str(rejected_bundle), str(protected_bundle), 1
+            )
+            protected_output = run_engine(
+                generator, (protected_command, "quit"), expect_success=False
+            )
+            if "sidecar output already exists" not in protected_output:
+                raise AssertionError(
+                    "Contract V2 did not reject a pre-existing attestation:\n"
+                    + protected_output
+                )
+            if protected_attestation.read_bytes() != b"owner-data":
+                raise AssertionError("Contract V2 overwrote a foreign attestation")
+
             bridge_output = run_engine(
                 generator, (bridge_command, "quit"), expect_success=True
             )
@@ -1586,6 +1929,34 @@ def main(argv: Sequence[str] | None = None) -> int:
             ):
                 if sidecar.exists() or sidecar.is_symlink():
                     raise AssertionError(f"OpenBench bridge retained sidecar {sidecar}")
+
+            # Preserve the frozen V1 parser policy while V2 becomes stricter:
+            # valid repeated core fields still resolve last-wins in legacy mode.
+            legacy_duplicate_bundle = root / "openbench-v1-duplicate-threads.bin"
+            legacy_duplicate_command = bridge_command.replace(
+                "threads 1", "threads 2 threads 1", 1
+            ).replace(str(bridge_bundle), str(legacy_duplicate_bundle), 1)
+            legacy_duplicate_output = run_engine(
+                generator, (legacy_duplicate_command, "quit"), expect_success=True
+            )
+            if "openbench_generate_training_data finished" not in legacy_duplicate_output:
+                raise AssertionError(
+                    "Frozen V1 last-wins duplicate behavior changed:\n"
+                    + legacy_duplicate_output
+                )
+            if (
+                not legacy_duplicate_bundle.is_file()
+                or legacy_duplicate_bundle.read_bytes()[:8] != b"ATOBNDL1"
+            ):
+                raise AssertionError("V1 duplicate-core fixture did not publish ATOBNDL1")
+            for sidecar in (
+                Path(str(legacy_duplicate_bundle) + ".atbin"),
+                Path(str(legacy_duplicate_bundle) + ".atbin.manifest.json"),
+            ):
+                if sidecar.exists() or sidecar.is_symlink():
+                    raise AssertionError(
+                        f"V1 duplicate-core fixture retained sidecar {sidecar}"
+                    )
             validator = REPO_ROOT / "tools" / "validate_openbench_datagen_bundle.py"
             validated = subprocess.run(
                 [sys.executable, str(validator), str(bridge_bundle)],

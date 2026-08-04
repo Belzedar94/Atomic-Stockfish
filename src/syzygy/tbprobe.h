@@ -19,6 +19,7 @@
 #ifndef TBPROBE_H
 #define TBPROBE_H
 
+#include <cstdint>
 #include <functional>
 #include <string>
 #include <vector>
@@ -63,6 +64,17 @@ enum ProbeState {
 
 extern int MaxCardinality;
 
+struct ProbeCounters {
+    std::uint64_t probes = 0;
+    std::uint64_t hits   = 0;
+};
+
+// Dataset producers use an explicit reset/snapshot boundary to attest the
+// native WDL/DTZ probes performed while one authenticated shard is generated.
+// Counters are process-global and atomic because generator searches may run on
+// several worker threads. A hit is a probe whose final ProbeState is not FAIL.
+void          reset_probe_counters() noexcept;
+ProbeCounters probe_counters() noexcept;
 
 void     init(const std::string& paths);
 WDLScore probe_wdl(Position& pos, ProbeState* result);
