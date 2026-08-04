@@ -152,12 +152,17 @@ SEARCH_CASES = (
         expected_pv=("d2d4", "e4d3"),
         depth=1,
     ),
+    # The fixture exists to show that the Atomic null-move reduction is shallow
+    # enough to still search the tactical defense: the load-bearing assertion is
+    # that the engine picks g7g5 rather than the block-3 f7f6. The reply pinned
+    # after it is White's answer at this depth, and spsa90 moved it from d2d4 to
+    # d2d3 by taking AtomicNmpDepthDiv from 3 to 4.
     SearchCase(
         name="Atomic null-move reduction searches the tactical defense",
         fen="rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2",
         searchmove="g7g5",
         expected_mate=None,
-        expected_pv=("g7g5", "d2d4"),
+        expected_pv=("g7g5", "d2d3"),
         depth=14,
         force_searchmove=False,
         nnue_true_bestmove="f8b4",
