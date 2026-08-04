@@ -365,10 +365,15 @@ def run(engine: Path, timeout: float, eval_file: Path | None = None) -> None:
         if xb.fen().split()[1] != "b":
             raise AssertionError("ponderhit sequence did not commit exactly three plies")
 
+        # The fixture needs a real background ponder to miss, so the search has
+        # to come back with a ponder move. Depth 2 used to return a two-ply PV
+        # here; with the spsa90 constants the depth-2 PV in this position is a
+        # single move, which leaves nothing to ponder on. Depth 3 is the depth
+        # the autonomous-ponder check above already relies on.
         def start_live_ponder() -> str:
             xb.send("new")
             xb.send("hard")
-            xb.send("sd 2")
+            xb.send("sd 3")
             xb.send("usermove e2e4")
             _, engine_output = xb.expect_move()
             if any("Illegal move" in line for line in engine_output):
