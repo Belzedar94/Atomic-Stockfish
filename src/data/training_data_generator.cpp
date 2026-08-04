@@ -3110,8 +3110,7 @@ bool generate_training_data_impl(Engine&                  engine,
     }
     const bool validTeacherMode =
       !authenticatedV2
-      || ((authenticated->teacherMode == AtomicPureTeacherMode
-           && authenticated->useNnue == "pure")
+      || ((authenticated->teacherMode == AtomicPureTeacherMode && authenticated->useNnue == "pure")
           || (authenticated->teacherMode == AtomicTrueTeacherMode
               && authenticated->useNnue == "true"));
     if (!validTeacherMode)
@@ -3122,9 +3121,10 @@ bool generate_training_data_impl(Engine&                  engine,
     const std::string expectedUseNnue = authenticatedV2 ? authenticated->useNnue : "pure";
     if (std::string(engine.options["Use NNUE"]) != expectedUseNnue)
     {
-        print_error(authenticatedV2
-                      ? "generate_training_data Use NNUE differs from its authenticated teacher mode"
-                      : "generate_training_data requires Use NNUE=pure");
+        print_error(
+          authenticatedV2
+            ? "generate_training_data Use NNUE differs from its authenticated teacher mode"
+            : "generate_training_data requires Use NNUE=pure");
         return false;
     }
     params.atomic960 = int(engine.options["UCI_Chess960"]) != 0;
@@ -3240,11 +3240,9 @@ bool generate_training_data_impl(Engine&                  engine,
     }
     if (params.dataFormat == DatasetFormat::ATOMIC_BIN_V2)
     {
-        const DataResult publicationPreflight = authenticatedV2
-                                                ? preflight_authenticated_datagen_v2_output(
-                                                    manifestPath)
-                                                : preflight_atomic_bin_v2_manifest_publication(
-                                                    manifestPath);
+        const DataResult publicationPreflight =
+          authenticatedV2 ? preflight_authenticated_datagen_v2_output(manifestPath)
+                          : preflight_atomic_bin_v2_manifest_publication(manifestPath);
         if (!publicationPreflight)
         {
             print_error(publicationPreflight.message);
@@ -3340,11 +3338,9 @@ bool generate_training_data_impl(Engine&                  engine,
                 print_error(error);
                 return false;
             }
-            authenticated->shard =
-              {shards[0].path, shards[0].index, shards[0].records, shards[0].bytes,
-               shards[0].sha256};
-            if (DataResult published = write_atomic_datagen_v2_manifest(*authenticated);
-                !published)
+            authenticated->shard = {shards[0].path, shards[0].index, shards[0].records,
+                                    shards[0].bytes, shards[0].sha256};
+            if (DataResult published = write_atomic_datagen_v2_manifest(*authenticated); !published)
             {
                 error                    = published.message;
                 const DataResult cleanup = generator.abort_output();
@@ -3362,8 +3358,8 @@ bool generate_training_data_impl(Engine&                  engine,
         }
         else
         {
-        AtomicBinV2Manifest manifest;
-        manifest.manifestPath = manifestPath;
+            AtomicBinV2Manifest manifest;
+            manifest.manifestPath = manifestPath;
 #ifdef ATOMIC_DATA_GENERATOR_GIT_SHA
         manifest.engineCommit = stringify(ATOMIC_DATA_GENERATOR_GIT_SHA);
 #else
@@ -3442,8 +3438,8 @@ bool generate_training_data(Engine& engine, std::istream& input) {
 }
 
 bool generate_authenticated_training_data_v2(Engine&                  engine,
-                                              std::istream&            input,
-                                              AtomicDatagenV2Manifest& manifest) {
+                                             std::istream&            input,
+                                             AtomicDatagenV2Manifest& manifest) {
     return generate_training_data_impl(engine, input, &manifest);
 }
 

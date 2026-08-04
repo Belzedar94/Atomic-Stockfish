@@ -78,26 +78,24 @@ struct AtomicDatagenV2Attestation {
     u64                   tbHits   = 0;
 };
 
-std::filesystem::path
-atomic_datagen_v2_manifest_path(const std::filesystem::path& firstShard);
-std::filesystem::path
-atomic_datagen_v2_attestation_path(const std::filesystem::path& bundlePath);
+std::filesystem::path atomic_datagen_v2_manifest_path(const std::filesystem::path& firstShard);
+std::filesystem::path atomic_datagen_v2_attestation_path(const std::filesystem::path& bundlePath);
 
 // Cheap destination check used before self-play. Final writers repeat this
 // with an OS exclusive-create primitive, so a race can never replace output.
 DataResult preflight_authenticated_datagen_v2_output(const std::filesystem::path& path);
 
 DataResult render_atomic_datagen_v2_manifest(const AtomicDatagenV2Manifest& manifest,
-                                             std::string&                    json);
+                                             std::string&                   json);
 DataResult write_atomic_datagen_v2_manifest(const AtomicDatagenV2Manifest& manifest);
 
 DataResult render_atomic_datagen_v2_attestation(const AtomicDatagenV2Attestation& attestation,
-                                                std::string&                       json);
+                                                std::string&                      json);
 DataResult write_atomic_datagen_v2_attestation(const AtomicDatagenV2Attestation& attestation);
 
 // ATOBNDL2 contains manifest V2, attestation V1, and one Atomic BIN V2 shard.
 // All sources are re-hashed while copying and the output uses exclusive create.
-DataResult write_openbench_datagen_bundle_v2(const std::filesystem::path& output,
+DataResult write_openbench_datagen_bundle_v2(const std::filesystem::path&      output,
                                              const AtomicDatagenV2Attestation& attestation);
 
 }  // namespace Stockfish::Data

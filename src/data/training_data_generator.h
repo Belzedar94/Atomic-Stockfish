@@ -81,8 +81,8 @@ bool generate_training_data(Engine& engine, std::istream& input);
 // teacherMode/useNnue pair. The generator fills the remaining authenticated
 // metadata and publishes only the new manifest V2 contract.
 bool generate_authenticated_training_data_v2(Engine&                  engine,
-                                              std::istream&            input,
-                                              AtomicDatagenV2Manifest& manifest);
+                                             std::istream&            input,
+                                             AtomicDatagenV2Manifest& manifest);
 
 // Additive AtomicNNUEV3 producer. Unlike the historical command it buffers a
 // complete game, partitions by a label-free trajectory hash, and publishes a

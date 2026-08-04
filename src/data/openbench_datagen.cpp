@@ -69,9 +69,9 @@ struct BridgeParams {
     bool        syzygyPathSeen = false;
     std::string syzygyManifestSha256;
     bool        syzygyManifestSha256Seen = false;
-    int         syzygyMax = 0;
-    bool        syzygyMaxSeen = false;
-    bool        contractV2 = false;
+    int         syzygyMax                = 0;
+    bool        syzygyMaxSeen            = false;
+    bool        contractV2               = false;
     std::string generatorOptions;
 };
 
@@ -96,8 +96,8 @@ bool read_quoted_path(std::istream&    input,
     input.get();
     if (std::getline(input, value, '"') && !input.eof())
         return true;
-    error = "Missing closing quote for openbench_generate_training_data option "
-          + std::string(name);
+    error =
+      "Missing closing quote for openbench_generate_training_data option " + std::string(name);
     return false;
 }
 
@@ -214,7 +214,7 @@ bool parse_bridge_params(std::istream& input, BridgeParams& params, std::string&
     std::set<std::string> seenSerializedOptions;
     std::string           duplicateSerializedOption;
     std::string           unsafeSerializedOption;
-    const auto note_serialized_option = [&](std::string_view name) {
+    const auto            note_serialized_option = [&](std::string_view name) {
         if (!seenSerializedOptions.emplace(name).second && duplicateSerializedOption.empty())
             duplicateSerializedOption = name;
     };
@@ -814,11 +814,11 @@ bool openbench_generate_training_data(Engine& engine, std::istream& input) {
         }
     }
 
-    const auto shard      = std::filesystem::path(output.string() + ".atbin");
-    const auto manifest   = contractV2 ? atomic_datagen_v2_manifest_path(shard)
-                                       : atomic_bin_v2_manifest_path(shard);
-    const auto attestation = contractV2 ? atomic_datagen_v2_attestation_path(output)
-                                        : std::filesystem::path{};
+    const auto shard = std::filesystem::path(output.string() + ".atbin");
+    const auto manifest =
+      contractV2 ? atomic_datagen_v2_manifest_path(shard) : atomic_bin_v2_manifest_path(shard);
+    const auto attestation =
+      contractV2 ? atomic_datagen_v2_attestation_path(output) : std::filesystem::path{};
     std::unique_ptr<GeneratedSidecars> sidecars =
       contractV2 ? std::make_unique<GeneratedSidecars>(shard, manifest, attestation)
                  : std::make_unique<GeneratedSidecars>(shard, manifest);
@@ -890,10 +890,9 @@ bool openbench_generate_training_data(Engine& engine, std::istream& input) {
         authenticatedV2.teacherMode     = params.teacherMode;
         authenticatedV2.useNnue         = useNnue;
     }
-    const bool generated = contractV2
-                           ? generate_authenticated_training_data_v2(engine, generatorInput,
-                                                                     authenticatedV2)
-                           : generate_training_data(engine, generatorInput);
+    const bool generated =
+      contractV2 ? generate_authenticated_training_data_v2(engine, generatorInput, authenticatedV2)
+                 : generate_training_data(engine, generatorInput);
     if (!generated)
         return false;
     if (!sidecars->take_primary_ownership(error))
@@ -950,8 +949,7 @@ bool openbench_generate_training_data(Engine& engine, std::istream& input) {
         proof.records         = authenticatedV2.records;
         proof.tbProbes        = authenticatedV2.tbProbes;
         proof.tbHits          = authenticatedV2.tbHits;
-        if (DataResult hashed = sha256_file(manifest, proof.manifestSha256,
-                                            proof.manifestBytes);
+        if (DataResult hashed = sha256_file(manifest, proof.manifestSha256, proof.manifestBytes);
             !hashed)
         {
             print_error(hashed.message);

@@ -45,14 +45,14 @@
 namespace Stockfish::Data {
 namespace {
 
-constexpr std::array<unsigned char, 8> BundleMagic = {'A', 'T', 'O', 'B', 'N', 'D', 'L', '2'};
-constexpr u16   BundleVersion      = 2;
-constexpr u16   BundleHeaderBytes  = 384;
-constexpr u32   BundleEndianMarker = 0x01020304U;
-constexpr u32   BundleEntryCount   = 3;
-constexpr u64   BundleAlignment    = 64;
-constexpr usize CopyBufferSize     = 1024 * 1024;
-constexpr int   MaximumGeneratedPly = 4096;
+constexpr std::array<unsigned char, 8> BundleMagic       = {'A', 'T', 'O', 'B', 'N', 'D', 'L', '2'};
+constexpr u16                          BundleVersion     = 2;
+constexpr u16                          BundleHeaderBytes = 384;
+constexpr u32                          BundleEndianMarker  = 0x01020304U;
+constexpr u32                          BundleEntryCount    = 3;
+constexpr u64                          BundleAlignment     = 64;
+constexpr usize                        CopyBufferSize      = 1024 * 1024;
+constexpr int                          MaximumGeneratedPly = 4096;
 
 static_assert(BundleHeaderBytes % BundleAlignment == 0);
 
@@ -120,8 +120,8 @@ std::string basename(const std::filesystem::path& path) {
     const std::wstring wide = path.filename().wstring();
     if (wide.empty())
         return {};
-    const int needed = ::WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, wide.data(), int(wide.size()),
-                                             nullptr, 0, nullptr, nullptr);
+    const int needed = ::WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, wide.data(),
+                                             int(wide.size()), nullptr, 0, nullptr, nullptr);
     if (needed <= 0)
         return {};
     std::string value(std::size_t(needed), '\0');
@@ -136,7 +136,7 @@ std::string basename(const std::filesystem::path& path) {
 }
 
 bool valid_basename(const std::filesystem::path& path, std::string_view suffix = {}) {
-    const std::string name = basename(path);
+    const std::string          name      = basename(path);
     constexpr std::string_view Forbidden = "/\\:<>\"|?*";
     return !name.empty() && name != "." && name != ".." && valid_utf8(name)
         && name.find('\0') == std::string::npos
@@ -150,13 +150,27 @@ void quote(std::string& output, std::string_view value) {
     for (unsigned char c : value)
         switch (c)
         {
-        case '"' : output += "\\\""; break;
-        case '\\' : output += "\\\\"; break;
-        case '\b' : output += "\\b"; break;
-        case '\f' : output += "\\f"; break;
-        case '\n' : output += "\\n"; break;
-        case '\r' : output += "\\r"; break;
-        case '\t' : output += "\\t"; break;
+        case '"' :
+            output += "\\\"";
+            break;
+        case '\\' :
+            output += "\\\\";
+            break;
+        case '\b' :
+            output += "\\b";
+            break;
+        case '\f' :
+            output += "\\f";
+            break;
+        case '\n' :
+            output += "\\n";
+            break;
+        case '\r' :
+            output += "\\r";
+            break;
+        case '\t' :
+            output += "\\t";
+            break;
         default :
             if (c < 0x20)
             {
@@ -170,7 +184,9 @@ void quote(std::string& output, std::string_view value) {
     output.push_back('"');
 }
 
-void string_field(std::string& output, std::string_view name, std::string_view value,
+void string_field(std::string&     output,
+                  std::string_view name,
+                  std::string_view value,
                   std::string_view separator = ",") {
     quote(output, name);
     output.push_back(':');
@@ -178,7 +194,9 @@ void string_field(std::string& output, std::string_view name, std::string_view v
     output += separator;
 }
 
-void integer_field(std::string& output, std::string_view name, long long value,
+void integer_field(std::string&     output,
+                   std::string_view name,
+                   long long        value,
                    std::string_view separator = ",") {
     quote(output, name);
     output.push_back(':');
@@ -186,14 +204,18 @@ void integer_field(std::string& output, std::string_view name, long long value,
     output += separator;
 }
 
-void uint_string_field(std::string& output, std::string_view name, u64 value,
+void uint_string_field(std::string&     output,
+                       std::string_view name,
+                       u64              value,
                        std::string_view separator = ",") {
     quote(output, name);
     output += ":\"" + std::to_string(value) + "\"";
     output += separator;
 }
 
-void bool_field(std::string& output, std::string_view name, bool value,
+void bool_field(std::string&     output,
+                std::string_view name,
+                bool             value,
                 std::string_view separator = ",") {
     quote(output, name);
     output.push_back(':');
@@ -266,8 +288,7 @@ DataResult validate_manifest(const AtomicDatagenV2Manifest& manifest) {
     double      keepDrawsEffective = 0.0;
     std::string keepDrawsCanonical;
     if (DataResult keepDraws = normalize_atomic_keep_draws(manifest.options.keepDraws,
-                                                           keepDrawsEffective,
-                                                           keepDrawsCanonical);
+                                                           keepDrawsEffective, keepDrawsCanonical);
         !keepDraws || keepDrawsCanonical != manifest.options.keepDraws)
         return invalid("Authenticated datagen V2 keep_draws is not canonical");
     const auto& options = manifest.options;
@@ -277,16 +298,15 @@ DataResult validate_manifest(const AtomicDatagenV2Manifest& manifest) {
         || options.writeMinPly < 0 || options.writeMaxPly <= options.writeMinPly
         || options.writeMaxPly > MaximumGeneratedPly || options.randomMoveMinPly < -1
         || options.randomMoveMaxPly < 0 || options.randomMoveMaxPly > MaximumGeneratedPly
-        || (options.randomMoveMinPly != -1
-            && options.randomMoveMaxPly < options.randomMoveMinPly)
+        || (options.randomMoveMinPly != -1 && options.randomMoveMaxPly < options.randomMoveMinPly)
         || options.randomMoveCount < 0 || options.randomMoveCount > MaximumGeneratedPly
         || options.randomMoveLikeApery < 0 || options.randomMultiPv < 0
         || options.randomMultiPv > MAX_MOVES || options.randomMultiPvDiff < 0
         || options.randomMultiPvDepth < options.searchDepthMax
         || options.randomMultiPvDepth >= MAX_PLY)
         return invalid("Authenticated datagen V2 generation options are outside producer domains");
-    if (options.requestedRecords != manifest.records
-        || options.recordsPerShard != manifest.records || options.randomFileName)
+    if (options.requestedRecords != manifest.records || options.recordsPerShard != manifest.records
+        || options.randomFileName)
         return invalid("Authenticated datagen V2 generator options are not canonical");
     u64 expectedShardBytes = 0;
     if (DataResult size = atomic_bin_v2_file_size(manifest.shard.records, expectedShardBytes);
@@ -302,7 +322,8 @@ DataResult validate_manifest(const AtomicDatagenV2Manifest& manifest) {
 
 class ExclusiveFile {
    public:
-    explicit ExclusiveFile(std::filesystem::path path_) : path(std::move(path_)) {}
+    explicit ExclusiveFile(std::filesystem::path path_) :
+        path(std::move(path_)) {}
     ExclusiveFile(const ExclusiveFile&)            = delete;
     ExclusiveFile& operator=(const ExclusiveFile&) = delete;
     ~ExclusiveFile() { abort(); }
@@ -314,11 +335,11 @@ class ExclusiveFile {
         if (handle == INVALID_HANDLE_VALUE)
         {
             const auto error = ::GetLastError();
-            return DataResult::failure(
-              error == ERROR_FILE_EXISTS || error == ERROR_ALREADY_EXISTS ? DataError::OUTPUT_EXISTS
-                                                                          : DataError::OPEN_FAILED,
-              "Cannot create authenticated datagen output exclusively: "
-                + std::system_category().message(int(error)));
+            return DataResult::failure(error == ERROR_FILE_EXISTS || error == ERROR_ALREADY_EXISTS
+                                         ? DataError::OUTPUT_EXISTS
+                                         : DataError::OPEN_FAILED,
+                                       "Cannot create authenticated datagen output exclusively: "
+                                         + std::system_category().message(int(error)));
         }
 #else
         int flags = O_WRONLY | O_CREAT | O_EXCL;
@@ -356,10 +377,10 @@ class ExclusiveFile {
 #ifdef _WIN32
             DWORD written = 0;
             if (!::WriteFile(handle, cursor, DWORD(block), &written, nullptr) || written != block)
-                return DataResult::failure(DataError::WRITE_FAILED,
-                                           "Cannot write authenticated datagen output: "
-                                             + std::system_category().message(
-                                               int(::GetLastError())));
+                return DataResult::failure(
+                  DataError::WRITE_FAILED,
+                  "Cannot write authenticated datagen output: "
+                    + std::system_category().message(int(::GetLastError())));
 #else
             ssize_t written;
             do
@@ -446,8 +467,10 @@ bool decode_sha256(std::string_view hex, unsigned char* output) {
     if (hex.size() != 64)
         return false;
     const auto nibble = [](unsigned char c) -> int {
-        if (c >= '0' && c <= '9') return c - '0';
-        if (c >= 'a' && c <= 'f') return 10 + c - 'a';
+        if (c >= '0' && c <= '9')
+            return c - '0';
+        if (c >= 'a' && c <= 'f')
+            return 10 + c - 'a';
         return -1;
     };
     for (std::size_t i = 0; i < 32; ++i)
@@ -463,19 +486,21 @@ bool decode_sha256(std::string_view hex, unsigned char* output) {
 
 template<typename UInt>
 void store_little_endian(std::array<unsigned char, BundleHeaderBytes>& header,
-                         std::size_t offset, UInt value) {
+                         std::size_t                                   offset,
+                         UInt                                          value) {
     static_assert(std::is_unsigned_v<UInt>);
     for (std::size_t i = 0; i < sizeof(UInt); ++i)
         header[offset + i] = static_cast<unsigned char>(value >> (8 * i));
 }
 
-DataResult copy_authenticated(ExclusiveFile& output, const std::filesystem::path& source,
-                              u64 expectedBytes, std::string_view expectedSha256) {
+DataResult copy_authenticated(ExclusiveFile&               output,
+                              const std::filesystem::path& source,
+                              u64                          expectedBytes,
+                              std::string_view             expectedSha256) {
 #ifdef _WIN32
-    const HANDLE input = ::CreateFileW(source.c_str(), GENERIC_READ,
-                                       FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-                                       nullptr, OPEN_EXISTING,
-                                       FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
+    const HANDLE input = ::CreateFileW(
+      source.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+      OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
     if (input == INVALID_HANDLE_VALUE)
         return DataResult::failure(DataError::OPEN_FAILED,
                                    "Cannot open authenticated bundle source: "
@@ -534,8 +559,8 @@ DataResult copy_authenticated(ExclusiveFile& output, const std::filesystem::path
     }
     unsigned char extra = 0;
 #ifdef _WIN32
-    DWORD extraRead = 0;
-    const bool grew = ::ReadFile(input, &extra, 1, &extraRead, nullptr) && extraRead != 0;
+    DWORD      extraRead = 0;
+    const bool grew      = ::ReadFile(input, &extra, 1, &extraRead, nullptr) && extraRead != 0;
     ::CloseHandle(input);
 #else
     ssize_t extraRead;
@@ -565,15 +590,13 @@ DataResult zero_padding(ExclusiveFile& output, u64 bytes) {
 
 }  // namespace
 
-std::filesystem::path
-atomic_datagen_v2_manifest_path(const std::filesystem::path& firstShard) {
+std::filesystem::path atomic_datagen_v2_manifest_path(const std::filesystem::path& firstShard) {
     std::filesystem::path path = firstShard;
     path += ".manifest-v2.json";
     return path;
 }
 
-std::filesystem::path
-atomic_datagen_v2_attestation_path(const std::filesystem::path& bundlePath) {
+std::filesystem::path atomic_datagen_v2_attestation_path(const std::filesystem::path& bundlePath) {
     std::filesystem::path path = bundlePath;
     path += ".attestation.json";
     return path;
@@ -599,7 +622,7 @@ DataResult preflight_authenticated_datagen_v2_output(const std::filesystem::path
 }
 
 DataResult render_atomic_datagen_v2_manifest(const AtomicDatagenV2Manifest& manifest,
-                                             std::string& json) {
+                                             std::string&                   json) {
     json.clear();
     if (DataResult valid = validate_manifest(manifest); !valid)
         return valid;
@@ -678,17 +701,16 @@ DataResult write_atomic_datagen_v2_manifest(const AtomicDatagenV2Manifest& manif
 }
 
 DataResult render_atomic_datagen_v2_attestation(const AtomicDatagenV2Attestation& value,
-                                                std::string& json) {
+                                                std::string&                      json) {
     json.clear();
     if (!valid_basename(value.attestationPath, ".attestation.json")
         || !valid_basename(value.manifestPath, ".manifest-v2.json")
         || !valid_basename(value.shardPath, ".atbin") || value.manifestBytes == 0
-        || value.shardBytes == 0
-        || !is_lower_hex(value.manifestSha256, 64) || !is_lower_hex(value.shardSha256, 64)
+        || value.shardBytes == 0 || !is_lower_hex(value.manifestSha256, 64)
+        || !is_lower_hex(value.shardSha256, 64)
         || value.inventorySha256 != AtomicTeacherSyzygyInventorySha256Hex
         || (!value.producerSha256.empty() && !is_lower_hex(value.producerSha256, 64))
-        || value.records == 0
-        || value.tbHits > value.tbProbes)
+        || value.records == 0 || value.tbHits > value.tbProbes)
         return invalid("Authenticated datagen V2 attestation metadata is invalid");
     if (!((value.teacherMode == AtomicPureTeacherMode && value.useNnue == "pure")
           || (value.teacherMode == AtomicTrueTeacherMode && value.useNnue == "true")))
@@ -739,7 +761,8 @@ DataResult write_atomic_datagen_v2_attestation(const AtomicDatagenV2Attestation&
     if (DataResult rendered = render_atomic_datagen_v2_attestation(value, json); !rendered)
         return rendered;
     for (const auto& source : std::array{
-           std::tuple{value.manifestPath, value.manifestBytes, std::string_view(value.manifestSha256)},
+           std::tuple{value.manifestPath, value.manifestBytes,
+                      std::string_view(value.manifestSha256)},
            std::tuple{value.shardPath, value.shardBytes, std::string_view(value.shardSha256)}})
     {
         std::string sha;
@@ -752,7 +775,7 @@ DataResult write_atomic_datagen_v2_attestation(const AtomicDatagenV2Attestation&
     return write_json_exclusive(value.attestationPath, json);
 }
 
-DataResult write_openbench_datagen_bundle_v2(const std::filesystem::path& outputPath,
+DataResult write_openbench_datagen_bundle_v2(const std::filesystem::path&      outputPath,
                                              const AtomicDatagenV2Attestation& value) {
     std::string attestationSha;
     u64         attestationBytes = 0;
@@ -771,8 +794,7 @@ DataResult write_openbench_datagen_bundle_v2(const std::filesystem::path& output
         return invalid("Authenticated datagen V2 shard changed before bundling");
     if (value.shardBytes < AtomicBinV2HeaderSize
         || (value.shardBytes - AtomicBinV2HeaderSize) % AtomicBinV2RecordSize != 0
-        || (value.shardBytes - AtomicBinV2HeaderSize) / AtomicBinV2RecordSize
-             != value.records)
+        || (value.shardBytes - AtomicBinV2HeaderSize) / AtomicBinV2RecordSize != value.records)
         return invalid("Authenticated datagen V2 shard size does not match its record count");
 
     const u64 manifestOffset = BundleHeaderBytes;
@@ -780,8 +802,8 @@ DataResult write_openbench_datagen_bundle_v2(const std::filesystem::path& output
       (manifestOffset + value.manifestBytes + BundleAlignment - 1) & ~(BundleAlignment - 1);
     const u64 payloadOffset =
       (attestationOffset + attestationBytes + BundleAlignment - 1) & ~(BundleAlignment - 1);
-    if (payloadOffset < attestationOffset || payloadOffset > std::numeric_limits<u64>::max()
-                                                       - value.shardBytes)
+    if (payloadOffset < attestationOffset
+        || payloadOffset > std::numeric_limits<u64>::max() - value.shardBytes)
         return DataResult::failure(DataError::RECORD_COUNT_OUT_OF_RANGE,
                                    "Authenticated datagen V2 bundle extent overflows u64");
 
@@ -817,24 +839,24 @@ DataResult write_openbench_datagen_bundle_v2(const std::filesystem::path& output
         return opened;
     if (DataResult written = output.write(header.data(), header.size()); !written)
         return written;
-    if (DataResult copied = copy_authenticated(output, value.manifestPath, value.manifestBytes,
-                                               value.manifestSha256);
+    if (DataResult copied =
+          copy_authenticated(output, value.manifestPath, value.manifestBytes, value.manifestSha256);
         !copied)
         return copied;
-    if (DataResult padded = zero_padding(
-          output, attestationOffset - manifestOffset - value.manifestBytes);
+    if (DataResult padded =
+          zero_padding(output, attestationOffset - manifestOffset - value.manifestBytes);
         !padded)
         return padded;
-    if (DataResult copied = copy_authenticated(output, value.attestationPath, attestationBytes,
-                                               attestationSha);
+    if (DataResult copied =
+          copy_authenticated(output, value.attestationPath, attestationBytes, attestationSha);
         !copied)
         return copied;
-    if (DataResult padded = zero_padding(
-          output, payloadOffset - attestationOffset - attestationBytes);
+    if (DataResult padded =
+          zero_padding(output, payloadOffset - attestationOffset - attestationBytes);
         !padded)
         return padded;
-    if (DataResult copied = copy_authenticated(output, value.shardPath, value.shardBytes,
-                                               value.shardSha256);
+    if (DataResult copied =
+          copy_authenticated(output, value.shardPath, value.shardBytes, value.shardSha256);
         !copied)
         return copied;
     return output.finish();

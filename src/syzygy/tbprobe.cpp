@@ -121,7 +121,8 @@ std::atomic<std::uint64_t> ProbeHits{0};
 
 class ProbeCounterScope {
    public:
-    explicit ProbeCounterScope(Stockfish::Tablebases::ProbeState* state_) : state(state_) {
+    explicit ProbeCounterScope(Stockfish::Tablebases::ProbeState* state_) :
+        state(state_) {
         ProbeAttempts.fetch_add(1, std::memory_order_relaxed);
     }
     ~ProbeCounterScope() {
