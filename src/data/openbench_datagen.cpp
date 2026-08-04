@@ -856,14 +856,18 @@ bool openbench_generate_training_data(Engine& engine, std::istream& input) {
     const std::string useNnue = params.teacherMode == AtomicTrueTeacherMode ? "true" : "pure";
     set_option(engine, "Use NNUE", contractV2 ? useNnue : "pure");
 
+    // "Use NNUE" is a combo, so it has to be read back through the combo
+    // comparison. Option::operator std::string() asserts on a "string" option
+    // and aborts an assertion-enabled build inside this readback.
+    const std::string expectedUseNnue = contractV2 ? useNnue : std::string("pure");
+
     if (int(engine.get_options()["Threads"]) != params.threads
         || int(engine.get_options()["Hash"]) != params.hashMb
         || int(engine.get_options()["UCI_Chess960"]) != 0
         || (contractV2 ? std::string(engine.get_options()["SyzygyPath"]) != params.syzygyPath
                        : !std::string(engine.get_options()["SyzygyPath"]).empty())
         || std::string(engine.get_options()["EvalFile"]) != params.network
-        || std::string(engine.get_options()["Use NNUE"])
-             != (contractV2 ? useNnue : std::string("pure"))
+        || engine.get_options()["Use NNUE"] != expectedUseNnue.c_str()
         || (contractV2
             && (int(engine.get_options()["SyzygyProbeLimit"]) != AtomicTeacherSyzygyProbeLimit
                 || int(engine.get_options()["SyzygyProbeDepth"]) != AtomicTeacherSyzygyProbeDepth
