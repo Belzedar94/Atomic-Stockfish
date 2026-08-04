@@ -3119,7 +3119,10 @@ bool generate_training_data_impl(Engine&                  engine,
         return false;
     }
     const std::string expectedUseNnue = authenticatedV2 ? authenticated->useNnue : "pure";
-    if (std::string(engine.options["Use NNUE"]) != expectedUseNnue)
+    // "Use NNUE" is a combo, so it has to be read through the combo comparison.
+    // Option::operator std::string() asserts on a "string" option and aborts an
+    // assertion-enabled build before the generator ever starts.
+    if (engine.options["Use NNUE"] != expectedUseNnue.c_str())
     {
         print_error(
           authenticatedV2
