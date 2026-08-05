@@ -27,6 +27,28 @@ namespace Stockfish {
 
 class Position;
 
+// R-A. Spins of the Atomic MovePicker. Each stage of the rework is its own UCI
+// spin and every one of them reproduces the classical order at 0, so the whole
+// package can be gated stage by stage against a bit-identical bench.
+//
+// AtomicMpRing        stage 2: ring threats as a stage of their own.
+//                     0 = off, 1 = threatening quiets, 2 = also boosts the
+//                     threatening captures inside the capture stage.
+// AtomicMpBlastOrder  stage 3: 0 = MVV proxy, 1 = blast_see, 2 = blast_see
+//                     relative to the investment.
+// AtomicMpCheckPred   stage 5: 1 = gives_check() instead of check_squares(),
+//                     which is blind to king checks and discovered checks.
+// AtomicMpTempo       stage 6: 1 = the equal blasts move behind the quiets.
+// AtomicMpEpFix       en passant stops being scored with an empty square.
+extern int AtomicMpRing;
+extern int AtomicMpRingBonus;
+extern int AtomicMpBlastOrder;
+extern int AtomicMpBlastScale;
+extern int AtomicMpCheckPred;
+extern int AtomicMpTempo;
+extern int AtomicCaptureTempo;
+extern int AtomicMpEpFix;
+
 // The MovePicker class is used to pick one pseudo-legal move at a time from the
 // current position. The most important method is next_move(), which emits one
 // new pseudo-legal move on every call, until there are no moves left, when
@@ -51,11 +73,20 @@ class MovePicker {
     Move next_move();
     void skip_quiet_moves();
 
+#ifdef MP_AUDIT
+    // Emission rank (1-based) and emitting stage of the last move returned.
+    int  last_rank() const { return emitted; }
+    int  last_stage() const { return emitStage; }
+    bool audit_ring(Move m) const { return ringTargets && ring_threat(m); }
+#endif
+
    private:
     template<typename Pred>
     Move select(Pred);
     template<GenType T>
     ExtMove* score(const MoveList<T>&);
+    bool     ring_threat(Move m) const;
+    void     init_ring_targets();
 
     const Position&              pos;
     const ButterflyHistory*      mainHistory;
@@ -65,13 +96,20 @@ class MovePicker {
     const SharedHistories*       sharedHistory;
     Move                         ttMove;
     ExtMove *                    cur, *endCur, *endBadCaptures, *endCaptures, *endGenerated;
+    ExtMove *                    endRingQuiets = nullptr, *endEqualCaptures = nullptr;
+    Bitboard                     ringTargets = 0;
     int                          stage;
     int                          threshold;
     Depth                        depth;
     int                          ply;
     bool                         skipQuiets      = false;
     bool                         quietChecksOnly = false;
-    ExtMove                      moves[MAX_MOVES];
+    bool                         quietsDone      = false;
+#ifdef MP_AUDIT
+    int emitted   = 0;
+    int emitStage = 0;
+#endif
+    ExtMove moves[MAX_MOVES];
 };
 
 }  // namespace Stockfish

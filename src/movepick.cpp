@@ -22,11 +22,46 @@
 #include <limits>
 #include <utility>
 
+#include "attacks.h"
 #include "bitboard.h"
 #include "misc.h"
 #include "position.h"
+#include "tune.h"
+
+#ifdef MP_AUDIT
+    #include "mpaudit.h"
+#endif
 
 namespace Stockfish {
+
+// R-A spins. Every default reproduces the classical MovePicker exactly.
+int AtomicMpRing       = 0;
+int AtomicMpRingBonus  = 8192;
+int AtomicMpBlastOrder = 0;
+int AtomicMpBlastScale = 7;
+int AtomicMpCheckPred  = 0;
+int AtomicMpTempo      = 0;
+int AtomicCaptureTempo = 160;
+int AtomicMpEpFix      = 0;
+
+// R-C spins, consumed inside Position but owned by the same package.
+int AtomicSeeExt       = 0;
+int AtomicSeeThrPolicy = 0;
+int AtomicBlastPawn7   = 250;
+int AtomicBlastPawn6   = 80;
+
+TUNE(SetRange(0, 2), AtomicMpRing);
+TUNE(SetRange(0, 32768), AtomicMpRingBonus);
+TUNE(SetRange(0, 2), AtomicMpBlastOrder);
+TUNE(SetRange(1, 24), AtomicMpBlastScale);
+TUNE(SetRange(0, 1), AtomicMpCheckPred);
+TUNE(SetRange(0, 1), AtomicMpTempo);
+TUNE(SetRange(0, 600), AtomicCaptureTempo);
+TUNE(SetRange(0, 1), AtomicMpEpFix);
+TUNE(SetRange(0, 1), AtomicSeeExt);
+TUNE(SetRange(0, 1), AtomicSeeThrPolicy);
+TUNE(SetRange(0, 900), AtomicBlastPawn7);
+TUNE(SetRange(0, 900), AtomicBlastPawn6);
 
 namespace {
 
@@ -34,9 +69,12 @@ enum Stages {
     // generate main search moves
     MAIN_TT,
     CAPTURE_INIT,
+    RING_INIT,
+    RING_THREAT,
     GOOD_CAPTURE,
     QUIET_INIT,
     GOOD_QUIET,
+    EQUAL_CAPTURE,
     BAD_CAPTURE,
     BAD_QUIET,
 
@@ -212,8 +250,24 @@ ExtMove* MovePicker::score(const MoveList<Type>& ml) {
         if constexpr (Type == CAPTURES)
         {
             const Piece capturedPiece = pos.piece_on(to);
-            m.value = (*captureHistory)[pc][to][type_of(capturedPiece)]
-                    + 7 * int(PieceValue[capturedPiece]);
+
+            // Stage 3. The MVV proxy prices a blast by its victim alone, which
+            // in Atomic is the one piece the move is guaranteed NOT to keep.
+            // Level 1 replaces it by the signed delta, level 2 by the delta
+            // measured against what the move invests.
+            int material = AtomicMpBlastOrder == 0 ? 7 * int(PieceValue[capturedPiece])
+                         : AtomicMpBlastOrder == 1 ? AtomicMpBlastScale * int(pos.blast_see(m))
+                                                   : AtomicMpBlastScale * int(pos.blast_see_rel(m));
+
+            // En passant lands on an EMPTY square, so the base scores its
+            // victim as PieceValue[NO_PIECE] and files the whole class last.
+            if (AtomicMpEpFix && AtomicMpBlastOrder == 0 && m.type_of() == EN_PASSANT)
+                material = 7 * int(PieceValue[make_piece(~us, PAWN)]);
+
+            m.value = (*captureHistory)[pc][to][type_of(capturedPiece)] + material;
+
+            if (AtomicMpRing == 2 && ringTargets && ring_threat(m))
+                m.value += AtomicMpRingBonus;
         }
 
         else if constexpr (Type == QUIETS)
@@ -230,8 +284,12 @@ ExtMove* MovePicker::score(const MoveList<Type>& ml) {
             m.value += (*continuationHistory[3])[pc][to];
             m.value += (*continuationHistory[5])[pc][to];
 
-            // bonus for checks
-            m.value += ((pos.check_squares(pt) & to) && pos.see_ge(m, -75)) * 16384;
+            // bonus for checks. Stage 5: check_squares() is blind to king
+            // checks and to discovered checks, and fires falsely when the kings
+            // are adjacent -- the retention site already uses gives_check().
+            const bool givesCheck =
+              AtomicMpCheckPred ? pos.gives_check(m) : bool(pos.check_squares(pt) & to);
+            m.value += (givesCheck && pos.see_ge(m, -75)) * 16384;
 
             // penalty for moving to a square threatened by a lesser piece
             // or bonus for escaping an attack by a lesser piece.
@@ -246,6 +304,66 @@ ExtMove* MovePicker::score(const MoveList<Type>& ml) {
     return it;
 }
 
+// Stage 2. A blast centred on a square destroys every non-pawn around it, so
+// the way to kill a king is to capture one of its neighbours. A move threatens
+// the enemy ring when, from its destination, the moved piece attacks a piece
+// standing next to the enemy king that we were not already attacking, and that
+// capture would be legal for us -- our own king must stay outside that blast,
+// which is exactly what connected kings deny (physics 3).
+//
+// This is the vector the classical stages cannot see at all: the lethal move
+// captures nothing, so it is scored as an ordinary quiet.
+bool MovePicker::ring_threat(Move m) const {
+
+    const Square from = m.from_sq();
+    const Square to   = m.to_sq();
+    Piece        pc   = pos.moved_piece(m);
+
+    // Kings cannot capture in Atomic, so a king can never carry the threat.
+    if (type_of(pc) == KING)
+        return false;
+
+    if (m.type_of() == PROMOTION)
+        pc = make_piece(color_of(pc), m.promotion_type());
+
+    const Bitboard occ = (pos.pieces() ^ from) | to;
+
+    return Attacks::attacks_bb(pc, to, occ) & ringTargets;
+}
+
+void MovePicker::init_ring_targets() {
+
+    ringTargets = 0;
+
+#ifndef MP_AUDIT
+    if (!AtomicMpRing)
+        return;
+#endif
+
+    if (depth <= 0)
+        return;
+
+    const Color  us      = pos.side_to_move();
+    const Square ksqThem = pos.square<KING>(~us);
+    const Square ksqUs   = pos.square<KING>(us);
+
+    // Neighbours of the enemy king that we may legally detonate: enemy pieces
+    // (the king itself cannot be captured) that do not sit in our own ring.
+    Bitboard targets = Attacks::attacks_bb<KING>(ksqThem) & pos.pieces(~us) & ~pos.pieces(~us, KING)
+                     & ~Attacks::attacks_bb<KING>(ksqUs) & ~square_bb(ksqUs);
+
+    // Only threats the move CREATES are interesting; a target we already attack
+    // is a threat the opponent is already answering.
+    const Bitboard ours = pos.pieces(us) & ~pos.pieces(us, KING);
+
+    while (targets)
+    {
+        const Square t = pop_lsb(targets);
+        if (!(pos.attackers_to(t) & ours))
+            ringTargets |= square_bb(t);
+    }
+}
+
 // Returns the next move satisfying a predicate function.
 // This never returns the TT move, as it was emitted before.
 template<typename Pred>
@@ -253,7 +371,14 @@ Move MovePicker::select(Pred filter) {
 
     for (; cur < endCur; ++cur)
         if (*cur != ttMove && filter())
+        {
+#ifdef MP_AUDIT
+            ++emitted;
+            emitStage = stage;
+            MpAudit::stage_emit(stage);
+#endif
             return *cur++;
+        }
 
     return Move::none();
 }
@@ -271,12 +396,20 @@ top:
     case MAIN_TT :
     case QSEARCH_TT :
     case PROBCUT_TT :
+#ifdef MP_AUDIT
+        ++emitted;
+        emitStage = stage;
+        MpAudit::stage_emit(stage);
+#endif
         ++stage;
         return ttMove;
 
     case CAPTURE_INIT :
     case PROBCUT_INIT :
     case QCAPTURE_INIT : {
+        if (stage == CAPTURE_INIT)
+            init_ring_targets();
+
         MoveList<CAPTURES> ml(pos);
 
         cur = endBadCaptures = moves;
@@ -287,8 +420,64 @@ top:
         goto top;
     }
 
+    case RING_INIT : {
+        endRingQuiets = endCaptures;
+
+        // With the stage off, or with no fresh target next to the enemy king,
+        // fall straight into the classical capture stage. cur and endCur are
+        // still exactly what CAPTURE_INIT left behind.
+        if (!AtomicMpRing || !ringTargets)
+        {
+            stage = GOOD_CAPTURE;
+            goto top;
+        }
+
+        MoveList<QUIETS> ml(pos);
+
+        cur          = endCaptures;
+        endGenerated = score<QUIETS>(ml);
+        quietsDone   = true;
+
+        ExtMove* w = endCaptures;
+        for (ExtMove* p = endCaptures; p < endGenerated; ++p)
+            if (ring_threat(*p))
+                std::swap(*w++, *p);
+        endRingQuiets = w;
+
+        partial_insertion_sort(endCaptures, endRingQuiets, std::numeric_limits<int>::min());
+        partial_insertion_sort(endRingQuiets, endGenerated, -3560 * depth);
+
+        cur    = endCaptures;
+        endCur = endRingQuiets;
+        ++stage;
+        [[fallthrough]];
+    }
+
+    case RING_THREAT :
+        if (select([]() { return true; }))
+            return *(cur - 1);
+
+        // Prepare the pointers to loop over the captures
+        cur    = moves;
+        endCur = endCaptures;
+
+        ++stage;
+        [[fallthrough]];
+
     case GOOD_CAPTURE :
         if (select([&]() {
+                // Stage 6 frontier. An equal blast wins nothing and spends the
+                // turn: without a recapture it just settles the board. Send it
+                // behind the quiets instead of ahead of them.
+                if (AtomicMpTempo && pos.capture(*cur))
+                {
+                    const int v = int(pos.blast_see(*cur));
+                    if (v >= -AtomicCaptureTempo - 1 && v <= AtomicCaptureTempo)
+                    {
+                        std::swap(*endBadCaptures++, *cur);
+                        return false;
+                    }
+                }
                 if (pos.see_ge(*cur, -cur->value / 18))
                     return true;
                 std::swap(*endBadCaptures++, *cur);
@@ -300,6 +489,14 @@ top:
         [[fallthrough]];
 
     case QUIET_INIT : {
+        if (quietsDone)
+        {
+            cur    = endRingQuiets;
+            endCur = endGenerated;
+            ++stage;
+            goto top;
+        }
+
         MoveList<QUIETS> ml(pos);
 
         if (skipQuiets)
@@ -336,7 +533,33 @@ top:
             return *(cur - 1);
 
         // Prepare the pointers to loop over the bad captures
-        cur    = moves;
+        cur              = moves;
+        endCur           = endBadCaptures;
+        endEqualCaptures = moves;
+
+        // Stage 6. Split the demoted captures: the equal blasts run first, the
+        // losing ones keep the tail.
+        if (AtomicMpTempo)
+        {
+            for (ExtMove* p = moves; p < endBadCaptures; ++p)
+            {
+                const int v = int(pos.blast_see(*p));
+                if (pos.capture(*p) && v >= -AtomicCaptureTempo - 1 && v <= AtomicCaptureTempo)
+                    std::swap(*endEqualCaptures++, *p);
+            }
+            partial_insertion_sort(moves, endEqualCaptures, std::numeric_limits<int>::min());
+            endCur = endEqualCaptures;
+        }
+
+        ++stage;
+        [[fallthrough]];
+
+    case EQUAL_CAPTURE :
+        if (AtomicMpTempo && select([]() { return true; }))
+            return *(cur - 1);
+
+        // Prepare the pointers to loop over the losing blasts
+        cur    = endEqualCaptures;
         endCur = endBadCaptures;
 
         ++stage;
@@ -347,7 +570,7 @@ top:
             return *(cur - 1);
 
         // Prepare the pointers to loop over quiets again
-        cur    = endCaptures;
+        cur    = quietsDone ? endRingQuiets : endCaptures;
         endCur = endGenerated;
 
         ++stage;
