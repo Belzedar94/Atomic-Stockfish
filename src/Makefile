@@ -78,7 +78,7 @@ PGOBENCH = printf 'setoption name Use NNUE value false\nbench\nquit\n' | $(RUN_P
 
 ### Source and object files
 SRCS = atomic_init.cpp attacks.cpp benchmark.cpp bitboard.cpp evaluate.cpp main.cpp \
-	misc.cpp movegen.cpp movepick.cpp position.cpp \
+	misc.cpp movegen.cpp movepick.cpp mpaudit.cpp position.cpp \
 	search.cpp thread.cpp timeman.cpp tt.cpp uci.cpp uci_move.cpp ucioption.cpp xboard.cpp tune.cpp syzygy/tbprobe.cpp \
 	api/atomic_notation.cpp api/atomic_outcome.cpp \
 	nnue/nnue_accumulator.cpp nnue/nnue_misc.cpp nnue/nnue_dispatcher.cpp nnue/network.cpp \

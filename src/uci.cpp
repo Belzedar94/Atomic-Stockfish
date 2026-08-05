@@ -40,6 +40,10 @@
 #include "position.h"
 #include "score.h"
 #include "search.h"
+#include "seeaudit_inc.h"
+#ifdef MP_AUDIT
+    #include "mpaudit.h"
+#endif
 #include "types.h"
 #include "uci_move.h"
 #include "ucioption.h"
@@ -88,6 +92,149 @@ void UCIEngine::init_search_update_listeners() {
     engine.set_on_bestmove([](const auto& bm, const auto& p) { on_bestmove(bm, p); });
     engine.set_on_verify_network([](const auto& s) { print_info_string(s); });
 }
+
+
+namespace {
+
+const std::vector<std::string>& see_audit_roots() {
+    static const std::vector<std::string> roots = {
+      "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "rn2kb1r/1pp1p2p/p2q1pp1/3P4/2P3b1/4PN2/PP3PPP/R2QKB1R b KQkq - 0 1",
+      "rn1qkb1r/p5pp/2p5/3p4/N3P3/5P2/PPP4P/R1BQK3 w Qkq - 0 1",
+      "r4b1r/2kb1N2/p2Bpnp1/8/2Pp3p/1P1PPP2/P5PP/R3K2R b KQ - 0 1",
+      "4K1R1/RR6/8/8/8/8/qqq3p1/7k b - - 0 1",
+      "7k/8/8/3pP3/8/8/8/K7 w - d6 0 1",
+      "6kr/6P1/8/8/8/8/8/K7 w - - 0 1",
+      "5BBB/8/8/8/8/8/6k1/7K w - - 0 1",
+      "8/8/8/8/8/8/NkN5/1K6 w - - 0 1",
+      // en passant with a loaded ring
+      "rnbqkbnr/pp1ppppp/8/2pP4/8/8/PPP1PPPP/RNBQKBNR w KQkq c6 0 3",
+      "r1bqkb1r/pp1ppppp/2n2n2/2pP4/8/5N2/PPP1PPPP/RNBQKB1R w KQkq c6 0 5",
+      "8/8/1n1n4/2pP4/8/8/8/K3k3 w - c6 0 1",
+      "8/8/1r1q4/2pP4/2B5/8/8/K3k3 w - c6 0 1",
+      // en passant near connected kings
+      "8/8/8/2pP4/2Kk4/8/8/8 w - c6 0 1",
+      "8/8/2n5/2pP4/3Kk3/8/8/8 w - c6 0 1",
+      // capturing promotions, empty and loaded rings
+      "n1n5/1P6/8/8/8/8/8/K3k3 w - - 0 1",
+      "rn6/1P6/8/8/8/8/8/K3k3 w - - 0 1",
+      "r1bqkbnr/pPpppppp/8/8/8/8/P1PPPPPP/RNBQKBNR w KQkq - 0 1",
+      "1n1r2k1/PPP2ppp/8/8/8/8/1ppp2PP/1N1R2K1 w - - 0 1",
+      "n1n5/1P6/2R5/8/8/8/8/K3k3 w - - 0 1",
+      // midgames with loaded rings
+      "r1bq1rk1/pppp1ppp/2n2n2/2b1p3/2B1P3/2N2N2/PPPP1PPP/R1BQ1RK1 w - - 0 1",
+      "r2q1rk1/pp2ppbp/2np1np1/2p5/2P1P3/2NP1N2/PP2BPPP/R1BQ1RK1 w - - 0 1",
+      // connected kings, loaded board
+      "8/2p2p2/2Pq1n2/3kK3/2N2R2/2P2P2/8/8 w - - 0 1",
+      "8/8/3nq3/3kK3/3RB3/8/8/8 w - - 0 1",
+      "8/pp3pp1/2n1b3/3kK3/3NB3/PP3PP1/8/8 w - - 0 1",
+    };
+    return roots;
+}
+
+// Audit-only: walk positions and compare pre-UB0 see_ge() verdicts against UB1.
+void run_see_audit(std::istringstream& is) {
+    using namespace SeeAudit;
+
+    int      dfsDepth = 4, walks = 400, plies = 220;
+    unsigned seed = 20260805u;
+    is >> dfsDepth >> walks >> plies >> seed;
+    if (!seed)
+        seed = 20260805u;
+
+    const auto& roots = see_audit_roots();
+
+    Acc  a;
+    auto exCap = size_t(400);
+
+    // Phase 1: exhaustive DFS from every root.
+    for (const auto& fen : roots)
+    {
+        Position              pos;
+        std::deque<StateInfo> st(1);
+        if (pos.set(fen, false, &st.back()))
+        {
+            std::printf("skip (bad fen): %s\n", fen.c_str());
+            continue;
+        }
+        dfs(pos, dfsDepth, st, a, exCap);
+    }
+    std::printf("phase1 (dfs depth %d) done: %lld positions\n", dfsDepth, a.positions);
+
+    // Phase 2: random playouts for deep/rare material (promotions, late EP).
+    PRNG rng(seed);
+    for (const auto& fen : roots)
+        for (int w = 0; w < walks; w++)
+        {
+            Position              pos;
+            std::deque<StateInfo> st(1);
+            if (pos.set(fen, false, &st.back()))
+                continue;
+            for (int p = 0; p < plies; p++)
+            {
+                if (pos.count<KING>(WHITE) != 1 || pos.count<KING>(BLACK) != 1)
+                    break;
+                MoveList<LEGAL> ml(pos);
+                if (!ml.size())
+                    break;
+                audit_pos(pos, a, exCap);
+                Move m = *(ml.begin() + (rng.rand<uint64_t>() % ml.size()));
+                st.emplace_back();
+                pos.do_move(m, st.back());
+            }
+        }
+
+    report(a);
+}
+
+// Audit-only: check blast_see() against the material bookkeeping of do_move().
+void run_see_material(std::istringstream& is) {
+    using namespace SeeAudit;
+
+    int      dfsDepth = 4, walks = 300, plies = 240;
+    unsigned seed = 20260805u;
+    is >> dfsDepth >> walks >> plies >> seed;
+    if (!seed)
+        seed = 20260805u;
+
+    MatAcc a;
+    auto   exCap = size_t(60);
+
+    for (const auto& fen : see_audit_roots())
+    {
+        Position              pos;
+        std::deque<StateInfo> st(1);
+        if (pos.set(fen, false, &st.back()))
+            continue;
+        material_dfs(pos, dfsDepth, st, a, exCap);
+    }
+
+    PRNG rng(seed);
+    for (const auto& fen : see_audit_roots())
+        for (int w = 0; w < walks; w++)
+        {
+            Position              pos;
+            std::deque<StateInfo> st(1);
+            if (pos.set(fen, false, &st.back()))
+                continue;
+            for (int p = 0; p < plies; p++)
+            {
+                if (pos.count<KING>(WHITE) != 1 || pos.count<KING>(BLACK) != 1)
+                    break;
+                MoveList<LEGAL> ml(pos);
+                if (!ml.size())
+                    break;
+                material_pos(pos, st, a, exCap);
+                Move m = *(ml.begin() + (rng.rand<uint64_t>() % ml.size()));
+                st.emplace_back();
+                pos.do_move(m, st.back());
+            }
+        }
+
+    material_report(a);
+}
+
+}  // namespace
 
 void UCIEngine::loop() {
     set_console_utf8();
@@ -182,6 +329,36 @@ void UCIEngine::loop() {
             sync_cout << engine.visualize() << sync_endl;
         else if (token == "eval")
             engine.trace_eval();
+        else if (token == "seeaudit")
+            run_see_audit(is);
+        else if (token == "seematerial")
+            run_see_material(is);
+        else if (token == "seefen")
+        {
+            std::string           fen, w;
+            while (is >> w)
+                fen += (fen.empty() ? "" : " ") + w;
+            Position              pos;
+            std::deque<StateInfo> st(1);
+            if (pos.set(fen, false, &st.back()))
+                sync_cout << "bad fen" << sync_endl;
+            else
+                SeeAudit::explain_fen(pos, st);
+        }
+        else if (token == "mpstats")
+        {
+#ifdef MP_AUDIT
+            MpAudit::report();
+#else
+            sync_cout << "build without -DMP_AUDIT" << sync_endl;
+#endif
+        }
+        else if (token == "mpreset")
+        {
+#ifdef MP_AUDIT
+            MpAudit::reset();
+#endif
+        }
         else if (token == "compiler")
             sync_cout << compiler_info() << sync_endl;
         else if (token == "export_net")

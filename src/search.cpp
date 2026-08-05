@@ -39,6 +39,9 @@
 #include "misc.h"
 #include "movegen.h"
 #include "movepick.h"
+#ifdef MP_AUDIT
+    #include "mpaudit.h"
+#endif
 #include "nnue/nnue_dispatcher.h"
 #include "position.h"
 #include "syzygy/tbprobe.h"
@@ -1410,11 +1413,22 @@ moves_loop:  // When in check, search starts here
 
     int moveCount = 0;
 
+#ifdef MP_AUDIT
+    int  mpRank = 0, mpStage = 0, auditBestRank = 0, auditBestStage = 0;
+    Move auditBestMove = Move::none();
+    bool auditCutoff   = false;
+#endif
+
     // Step 13. Loop through all pseudo-legal moves until no moves remain
     // or a beta cutoff occurs.
     while ((move = mp.next_move()) != Move::none())
     {
         assert(move.is_ok());
+
+#ifdef MP_AUDIT
+        mpRank  = mp.last_rank();
+        mpStage = mp.last_stage();
+#endif
 
         if (move == excludedMove)
             continue;
@@ -1790,6 +1804,12 @@ moves_loop:  // When in check, search starts here
             {
                 bestMove = move;
 
+#ifdef MP_AUDIT
+                auditBestRank  = mpRank;
+                auditBestStage = mpStage;
+                auditBestMove  = move;
+#endif
+
                 if (PvNode && !rootNode)  // Update pv even in fail-high case
                     ss->pv->update(move, (ss + 1)->pv);
 
@@ -1797,6 +1817,9 @@ moves_loop:  // When in check, search starts here
                 {
                     // (*Scaler) Infrequent and small updates scale well
                     ss->cutoffCnt += (extension < 2) || PvNode;
+#ifdef MP_AUDIT
+                    auditCutoff = true;
+#endif
                     assert(value >= beta);  // Fail high
                     break;
                 }
@@ -1820,6 +1843,25 @@ moves_loop:  // When in check, search starts here
                 quietsSearched.push_back(move);
         }
     }
+
+#ifdef MP_AUDIT
+    if (auditBestRank && auditBestMove)
+    {
+        int cls = MpAudit::CLS_QUIET;
+        if (auditBestMove.type_of() == EN_PASSANT)
+            cls = MpAudit::CLS_EP;
+        else if (auditBestMove.type_of() == PROMOTION)
+            cls = MpAudit::CLS_PROMO;
+        else if (pos.capture(auditBestMove))
+            cls = MpAudit::CLS_CAPTURE;
+        else if (mp.audit_ring(auditBestMove))
+            cls = MpAudit::CLS_RING_QUIET;
+        else if (pos.gives_check(auditBestMove))
+            cls = MpAudit::CLS_CHECK_QUIET;
+
+        MpAudit::record_best(auditBestStage, auditBestRank, cls, auditCutoff);
+    }
+#endif
 
     // Step 21. Check for mate and stalemate
     // All legal moves have been searched and if there are no legal moves, it
