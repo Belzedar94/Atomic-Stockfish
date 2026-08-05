@@ -37,6 +37,11 @@ namespace Stockfish {
 class TranspositionTable;
 struct SharedHistories;
 
+// Surcharge applied by blast_see_rel() to a pawn that leaves the 7th or the 6th
+// rank, registered as UCI options through the TUNE mechanism in movepick.cpp.
+extern int AtomicBlastPawn7;
+extern int AtomicBlastPawn6;
+
 // StateInfo struct stores information needed to restore a Position object to
 // its previous state when we retract a move. Whenever a move is made on the
 // board (by calling Position::do_move), a StateInfo object must be passed.
@@ -170,7 +175,9 @@ class Position {
     void undo_null_move();
 
     // Static Exchange Evaluation
-    bool see_ge(Move m, int threshold = 0) const;
+    Value blast_see(Move m) const;
+    Value blast_see_rel(Move m) const;
+    bool  see_ge(Move m, int threshold = 0) const;
 
     // Accessing hash keys
     Key key() const;

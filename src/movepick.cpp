@@ -25,8 +25,21 @@
 #include "bitboard.h"
 #include "misc.h"
 #include "position.h"
+#include "tune.h"
 
 namespace Stockfish {
+
+// Scale of the blast delta against the capture history, and the surcharge that
+// blast_see_rel() applies to a pawn spent from the 7th or the 6th rank. The
+// scale keeps the units of the term it replaces (the MVV proxy multiplied the
+// victim by 7).
+int AtomicMpBlastScale = 7;
+int AtomicBlastPawn7   = 250;
+int AtomicBlastPawn6   = 80;
+
+TUNE(SetRange(1, 24), AtomicMpBlastScale);
+TUNE(SetRange(0, 900), AtomicBlastPawn7);
+TUNE(SetRange(0, 900), AtomicBlastPawn6);
 
 namespace {
 
@@ -212,8 +225,14 @@ ExtMove* MovePicker::score(const MoveList<Type>& ml) {
         if constexpr (Type == CAPTURES)
         {
             const Piece capturedPiece = pos.piece_on(to);
+
+            // The MVV proxy prices a blast by its victim alone, which in Atomic
+            // is the one piece the move is guaranteed NOT to keep: the capturer
+            // dies with it, and so does every non-pawn around the square. Price
+            // the capture by the delta it really leaves on the board, measured
+            // against what it invests.
             m.value = (*captureHistory)[pc][to][type_of(capturedPiece)]
-                    + 7 * int(PieceValue[capturedPiece]);
+                    + AtomicMpBlastScale * int(pos.blast_see_rel(m));
         }
 
         else if constexpr (Type == QUIETS)

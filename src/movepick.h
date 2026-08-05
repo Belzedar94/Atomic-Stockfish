@@ -27,6 +27,10 @@ namespace Stockfish {
 
 class Position;
 
+// Scale of the blast delta in the capture ordering, registered as a UCI option
+// through the TUNE mechanism in movepick.cpp.
+extern int AtomicMpBlastScale;
+
 // The MovePicker class is used to pick one pseudo-legal move at a time from the
 // current position. The most important method is next_move(), which emits one
 // new pseudo-legal move on every call, until there are no moves left, when
