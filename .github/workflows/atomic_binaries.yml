@@ -1,8 +1,8 @@
 name: Atomic binaries
 
 # Every merge to main leaves downloadable binaries: one artifact per build and
-# a rolling `latest-main` prerelease that is overwritten on each push. Separate
-# from atomic.yml (the correctness gate) and from atomic-release.yml (the
+# a rolling prerelease that is overwritten on each push. Separate from
+# atomic.yml (the correctness gate) and from atomic-release.yml (the
 # reproducible, tag-driven release).
 
 on:
@@ -24,6 +24,11 @@ env:
   ATOMIC_NET_TAG: v1.0
   ATOMIC_NET_ASSET: atomic-run3b.nnue
   ATOMIC_NET_SHA256: 99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f92a04a6
+  # Tag of the rolling prerelease. Not `latest-main`: that name was published
+  # once while the repository had immutable releases enabled, and GitHub keeps
+  # such a tag name reserved forever — deleting the release does not free it,
+  # every later create fails with "tag_name was used by an immutable release".
+  ROLLING_TAG: rolling-main
 
 jobs:
   build:
@@ -96,6 +101,7 @@ jobs:
           curl -sSfL --retry 3 -o "src/$canon" \
             "https://github.com/$GITHUB_REPOSITORY/releases/download/$ATOMIC_NET_TAG/$ATOMIC_NET_ASSET"
           echo "$ATOMIC_NET_SHA256  src/$canon" | sha256sum -c -
+          echo "CANON_NET=$canon" >> "$GITHUB_ENV"
 
       - name: Build
         working-directory: src
@@ -103,13 +109,28 @@ jobs:
           make -j2 build ARCH=${{ matrix.arch }} COMP=${{ matrix.comp }} \
             EXE="$EXE_NAME" EXTRACXXFLAGS=-DATOMIC_NNUE_EMBEDDING
           strip "$EXE_NAME"
+          # The network is ~45 MiB and the engine itself a couple of MiB, so a
+          # binary smaller than the network it is supposed to carry never got
+          # the incbin blob, whatever the compiler reported.
+          test "$(wc -c < "$EXE_NAME")" -gt "$(wc -c < "$CANON_NET")"
 
+      # Benching inside src/ proves nothing about embedding: the network placed
+      # above sits next to the binary, so the engine loads it off disk and the
+      # run succeeds either way — which is how a build with no network inside it
+      # could ship as one that had. Bench from a directory holding no .nnue at
+      # all; then a completed search can only come from the embedded copy.
+      #
       # bench reports through stderr and returns 0 even when the search never
       # started, so the node count is the real gate; the verifier line proves
       # the embedded network is the one being evaluated.
-      - name: Bench sanity
+      - name: Bench with no network on disk
         working-directory: src
         run: |
+          rm -rf ../embedcheck
+          mkdir ../embedcheck
+          cp "$EXE_NAME" ../embedcheck/
+          cd ../embedcheck
+          test -z "$(ls *.nnue 2>/dev/null)"
           ./"$EXE_NAME" bench 16 1 8 default depth > bench.log 2>&1
           tail -n 12 bench.log
           grep -q "NNUE evaluation using" bench.log
@@ -127,7 +148,7 @@ jobs:
           compression-level: 0
 
   rolling-release:
-    name: Rolling latest-main prerelease
+    name: Rolling main prerelease
     needs: build
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
@@ -139,16 +160,27 @@ jobs:
           path: dist
           merge-multiple: true
 
-      # The tag is moved by hand: an existing release keeps its own tag, so
-      # editing the release would leave latest-main pinned at the commit that
-      # first created it.
-      - name: Publish latest-main
+      # Assets are attached before the release is published, never after. A
+      # release that is published first and filled in afterwards is visible —
+      # and linkable — while still empty, and if the upload then fails the notes
+      # keep advertising binaries that are not there.
+      - name: Publish the rolling prerelease
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           sha8=$(echo "$GITHUB_SHA" | cut -c1-8)
           built=$(date -u +'%Y-%m-%d %H:%M UTC')
           ls -l dist
+
+          # A rolling tag and immutable releases are mutually exclusive: the
+          # first immutable publish reserves the tag name permanently, so the
+          # next merge can neither move it nor replace the release. Stop here
+          # instead of burning the name.
+          immutable=$(gh api "repos/$GITHUB_REPOSITORY/immutable-releases" --jq .enabled 2>/dev/null || echo unknown)
+          if [ "$immutable" = "true" ]; then
+            echo "::error::Immutable releases are enabled: $ROLLING_TAG cannot be republished. Disable them for this repository, or move this job to per-commit tags."
+            exit 1
+          fi
 
           {
             echo "Binaries built from \`main\`, refreshed on every merge."
@@ -162,19 +194,27 @@ jobs:
             echo "Pick the binary matching your CPU: \`x86-64-bmi2\` for anything from"
             echo "Haswell/Zen 3 onwards, \`x86-64-avx2\` as the safer fallback."
             echo
-            echo "The network is inside the binary, so no companion file is needed."
+            echo "The network is inside the binary, so no companion file is needed:"
+            echo "every build here is benched from a directory with no \`.nnue\` in it."
             echo "Atomic Syzygy tablebases are still optional and external."
           } > notes.md
 
-          if gh release view latest-main --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh api -X PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/latest-main" \
-              -f sha="$GITHUB_SHA" -F force=true >/dev/null
-            gh release edit latest-main --repo "$GITHUB_REPOSITORY" \
-              --prerelease --title "Atomic-Stockfish dev ($sha8)" --notes-file notes.md
-          else
-            gh release create latest-main --repo "$GITHUB_REPOSITORY" \
-              --target "$GITHUB_SHA" --prerelease \
-              --title "Atomic-Stockfish dev ($sha8)" --notes-file notes.md
-          fi
+          # Rebuilt from scratch on every run. An existing release keeps its own
+          # tag, so editing it in place would leave the tag pinned at the commit
+          # that first created it.
+          gh release delete "$ROLLING_TAG" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
+          gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/tags/$ROLLING_TAG" >/dev/null 2>&1 || true
 
-          gh release upload latest-main --repo "$GITHUB_REPOSITORY" dist/* --clobber
+          gh release create "$ROLLING_TAG" --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" --prerelease --draft \
+            --title "Atomic-Stockfish dev ($sha8)" --notes-file notes.md
+          gh release upload "$ROLLING_TAG" --repo "$GITHUB_REPOSITORY" dist/*
+          gh release edit "$ROLLING_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease
+
+          # Notes that promise binaries must not outlive the binaries, so the
+          # published asset list is the gate, not the exit code of the upload.
+          gh release view "$ROLLING_TAG" --repo "$GITHUB_REPOSITORY" \
+            --json assets --jq '.assets[].name' | sort > published.txt
+          (cd dist && ls) | sort > expected.txt
+          diff expected.txt published.txt
+          echo "Published $(wc -l < published.txt) assets on $ROLLING_TAG."
