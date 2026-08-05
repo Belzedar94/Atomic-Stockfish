@@ -23,6 +23,7 @@
 #include <cassert>
 #include <cctype>
 #include <cstddef>
+#include <cstdlib>
 #include <cstring>
 #include <initializer_list>
 #include <iomanip>
@@ -1374,18 +1375,31 @@ void Position::undo_null_move() {
 }
 
 
-// Tests if the Atomic SEE (Static Exchange Evaluation) value of the move is
-// greater or equal to the given threshold. A capture ends the exchange by
-// exploding the capturing piece, the captured piece, and every adjacent
-// non-pawn. For quiet moves, the opponent may choose whether to make the
-// explosive capture, so only a negative result is relevant.
-bool Position::see_ge(Move m, int threshold) const {
+// Returns the signed Atomic exchange value of the move from the point of view
+// of the side to move. A capture ends the exchange by exploding the capturing
+// piece, the captured piece and every adjacent non-pawn, so there is no
+// recapture chain to walk and a single blast delta is the whole story. For
+// quiet moves the opponent may choose whether to make the explosive capture,
+// so only a negative result is relevant.
+//
+// The bookkeeping mirrors do_move(): the explosion is centred on to_sq() and
+// pawns are immune unless they are themselves the capturer or the captured
+// piece. Exploding a king overrides the material count.
+//
+// Castling never captures and never explodes. A quiet promotion is the one move
+// whose surviving piece differs from the piece that left from_sq(), which the
+// blast bookkeeping cannot express; both keep the neutral answer of a simple
+// SEE. A capturing promotion needs no correction: the promoted piece is always
+// inside its own blast, so the mover's real loss is the pawn it spent.
+Value Position::blast_see(Move m) const {
 
     assert(m.is_ok());
 
-    // Only deal with normal moves, assume others pass a simple SEE
-    if (m.type_of() != NORMAL)
-        return VALUE_ZERO >= threshold;
+    const MoveType mt        = m.type_of();
+    const bool     isCapture = capture(m);
+
+    if (mt == CASTLING || (mt == PROMOTION && !isCapture))
+        return VALUE_ZERO;
 
     const Square from = m.from_sq();
     const Square to   = m.to_sq();
@@ -1394,11 +1408,17 @@ bool Position::see_ge(Move m, int threshold) const {
     assert(pc != NO_PIECE);
     assert(color_of(pc) == sideToMove);
 
-    const Color    us        = color_of(pc);
-    const Bitboard fromTo    = from | to;
-    Bitboard       blast     = ((attacks_bb<KING>(to) & ~pieces(PAWN)) | fromTo) & pieces();
-    int            result    = 0;
-    const bool     isCapture = capture(m);
+    const Color    us     = color_of(pc);
+    const Bitboard fromTo = from | to;
+    Bitboard       blast  = ((attacks_bb<KING>(to) & ~pieces(PAWN)) | fromTo) & pieces();
+    int            result = 0;
+
+    // En passant captures the pawn behind the landing square, and do_move()
+    // removes it before forming the ring. The landing square is empty before
+    // the move, so the blast loop below only charges our own pawn, and the ring
+    // never sees either pawn because pawns are immune. Add the victim here.
+    if (mt == EN_PASSANT)
+        result += int(AtomicCapturePieceValue[make_piece(~us, PAWN)]);
 
     // A quiet move may be captured explosively. Use the least valuable legal
     // non-king attacker; an attacker inside the blast has no material cost.
@@ -1415,7 +1435,7 @@ bool Position::see_ge(Move m, int threshold) const {
         }
 
         if (minAttacker == VALUE_INFINITE)
-            return VALUE_ZERO >= threshold;
+            return VALUE_ZERO;
 
         result += minAttacker;
     }
@@ -1460,7 +1480,74 @@ bool Position::see_ge(Move m, int threshold) const {
             result = std::min(result, 0);
     }
 
-    return result >= threshold;
+    return Value(result);
+}
+
+// R-A stage 3 does not want the raw delta but the delta measured against what
+// the move actually INVESTS. blast_see() charges the spent capturer at
+// AtomicCapturePieceValue, so a passed pawn on the 7th is spent as if it were
+// any pawn (301) while the piece it would have promoted to is worth nothing --
+// it dies inside its own blast. Surcharge the investment instead of pretending
+// the two pawns are the same pawn.
+Value Position::blast_see_rel(Move m) const {
+
+    const int v = int(blast_see(m));
+
+    if (std::abs(v) >= VALUE_MATE)
+        return Value(v);
+
+    const Piece pc = piece_on(m.from_sq());
+
+    if (pc != NO_PIECE && type_of(pc) == PAWN)
+    {
+        const Rank r = relative_rank(color_of(pc), m.from_sq());
+        if (r == RANK_7)
+            return Value(v - AtomicBlastPawn7);
+        if (r == RANK_6)
+            return Value(v - AtomicBlastPawn6);
+    }
+
+    return Value(v);
+}
+
+// Tests if the Atomic SEE (Static Exchange Evaluation) value of the move is
+// greater or equal to the given threshold.
+//
+// With AtomicSeeExt at 0 the non-NORMAL short-circuit of the base engine is
+// kept verbatim, so every verdict is unchanged. Lifting it is the R-C policy
+// spin: en passant and capturing promotions stop answering a flat zero and
+// start answering their real material delta. AtomicSeeThrPolicy decides the
+// conflict the T131 autopsy uncovered -- above a positive threshold the base
+// always failed those classes, which handed the decision to a capture history
+// that had already learned they are bad.
+bool Position::see_ge(Move m, int threshold) const {
+
+    assert(m.is_ok());
+
+    const MoveType mt = m.type_of();
+
+    if (mt != NORMAL)
+    {
+        if (!AtomicSeeExt || mt == CASTLING || (mt == PROMOTION && !capture(m)))
+            return VALUE_ZERO >= threshold;
+
+        if (AtomicSeeThrPolicy == 1 && threshold > 0)
+            return false;
+    }
+
+    return blast_see(m) >= threshold;
+}
+
+// Audit-only: the pre-rework body, kept so the seeaudit harness can diff
+// verdicts without needing a second binary. Never called by the search.
+bool Position::see_ge_legacy(Move m, int threshold) const {
+
+    assert(m.is_ok());
+
+    if (m.type_of() != NORMAL)
+        return VALUE_ZERO >= threshold;
+
+    return blast_see(m) >= threshold;
 }
 
 // Tests whether the position is drawn by 50-move rule

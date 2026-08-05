@@ -37,6 +37,24 @@ namespace Stockfish {
 class TranspositionTable;
 struct SharedHistories;
 
+// R-A / R-C. Spins of the Atomic MovePicker rework, registered as UCI options
+// through the TUNE mechanism in movepick.cpp. Every one of them reproduces the
+// classical behaviour at 0, so the bench with defaults is bit-identical to the
+// base engine.
+//
+// AtomicSeeExt        0 = base: a non-NORMAL move leaves see_ge() as a flat
+//                         zero. 1 = en passant and capturing promotions get
+//                         their real explosion delta (the R-C extension, which
+//                         is a change of POLICY and never rides along).
+// AtomicSeeThrPolicy  Resolves the material-vs-history conflict that killed
+//                     T131. 0 = material always answers; 1 = above a positive
+//                     threshold the extended classes keep failing, so the
+//                     capture history keeps the vote it had already learned.
+extern int AtomicSeeExt;
+extern int AtomicSeeThrPolicy;
+extern int AtomicBlastPawn7;
+extern int AtomicBlastPawn6;
+
 // StateInfo struct stores information needed to restore a Position object to
 // its previous state when we retract a move. Whenever a move is made on the
 // board (by calling Position::do_move), a StateInfo object must be passed.
@@ -170,7 +188,12 @@ class Position {
     void undo_null_move();
 
     // Static Exchange Evaluation
-    bool see_ge(Move m, int threshold = 0) const;
+    Value blast_see(Move m) const;
+    Value blast_see_rel(Move m) const;
+    bool  see_ge(Move m, int threshold = 0) const;
+    // Audit-only: verbatim copy of the pre-rework see_ge() body, used by the
+    // seeaudit verdict-parity harness. Never referenced by the search.
+    bool see_ge_legacy(Move m, int threshold = 0) const;
 
     // Accessing hash keys
     Key key() const;
