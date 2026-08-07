@@ -61,6 +61,27 @@ engine and which network it uses are in
 Non-functional changes — refactors, comments, documentation, build fixes — do
 not need a strength test. Say so in the pull request description.
 
+### SPSA campaigns
+
+The tunable search parameters are compile-time constants in every normal build,
+so they are absent from the UCI option list and the compiler can fold them into
+the search. A campaign turns them back into spin options with an explicit
+switch:
+
+```sh
+cd src
+make -j build ARCH=x86-64-bmi2 tune=yes
+```
+
+That build prints the SPSA input block on startup and advertises the parameters
+as UCI options; a default build does neither, and `tests/atomic.sh
+--protocol-only` fails if it does. Both builds read the same declarations in
+`search.h` and `search.cpp`, so there is no second list of values to update when
+a campaign lands — the winning numbers are written straight into the
+declarations. Never use `tune=yes` for a release build or an SPRT candidate: the
+parameters stop being constants and the measurement is no longer the engine you
+intend to ship.
+
 Rules fixes are a separate case. When a change makes the engine agree with the
 frozen Fairy-Stockfish reference, an A/B against a base that does not implement
 the rule cannot measure anything meaningful. Those changes are accepted on

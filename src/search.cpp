@@ -65,13 +65,10 @@ void syzygy_extend_pv(const OptionsMap&            options,
 
 using namespace Search;
 
-// Tunable search parameters for the Atomic search-tuning campaign. Each one
-// replaces a former hard-coded constant (the default), so with defaults the
-// search is functionally unchanged. TUNE registers them as UCI spin options.
-int Search::AtomicMcpBase     = 7;
-int Search::AtomicNmpBase     = 6;
-int Search::AtomicNmpDepthDiv = 4;
-
+// Search parameters carried by the Atomic SPSA campaigns. AtomicMcpBase,
+// AtomicNmpBase and AtomicNmpDepthDiv live in search.h because the inline
+// helpers there read them; the rest are private to this file. All of them are
+// compile-time constants unless ATOMIC_TUNE_SEARCH is defined. See tune.h.
 namespace {
 // MultiVariant-Stockfish paid real SPSA to learn that Atomic needs a much
 // wider futility window than chess: FutilityMarginFactor 585 against 175, and
@@ -79,18 +76,23 @@ namespace {
 // clusters of pieces here, so "eval plus a chess-sized margin" is not a bound.
 // Expressed as a 64-based multiplier of the modern margins; 128 is the
 // doubling the audit prescribes as the first attempt.
-int AtomicFutilityScale  = 128;
-int AtomicCaptFutBase    = 227;
-int AtomicCaptFutLmrMult = 244;
-int QsFutilityBase       = 345;
-int SingularDepthMin     = 8;
-int SingularMarginBase   = 65;
-int SingularMarginTtPv   = 83;
-int SingularMarginDiv    = 48;
-int LmrLogScale          = 2736;
-int LmrBaseOffset        = 1049;
+TUNABLE_INT AtomicFutilityScale  = 128;
+TUNABLE_INT AtomicCaptFutBase    = 227;
+TUNABLE_INT AtomicCaptFutLmrMult = 244;
+TUNABLE_INT QsFutilityBase       = 345;
+TUNABLE_INT SingularDepthMin     = 8;
+TUNABLE_INT SingularMarginBase   = 65;
+TUNABLE_INT SingularMarginTtPv   = 83;
+TUNABLE_INT SingularMarginDiv    = 48;
+TUNABLE_INT LmrLogScale          = 2736;
+TUNABLE_INT LmrBaseOffset        = 1049;
 }
 
+// A default build must not advertise these as UCI options: they are part of the
+// search, not of the engine's public contract, and every one of them is a value
+// a campaign already paid for. `make tune=yes` re-registers them, reading the
+// same declarations above, so a campaign never has to restate a number.
+#ifdef ATOMIC_TUNE_SEARCH
 TUNE(SetRange(0, 20), AtomicMcpBase);
 TUNE(SetRange(1, 12), AtomicNmpBase);
 TUNE(SetRange(1, 8), AtomicNmpDepthDiv);
@@ -102,6 +104,7 @@ TUNE(SetRange(0, 250), SingularMarginBase, SingularMarginTtPv);
 TUNE(SetRange(16, 150), SingularMarginDiv);
 TUNE(SetRange(1000, 6000), LmrLogScale);
 TUNE(SetRange(0, 3000), LmrBaseOffset);
+#endif
 
 bool Search::atomic_capture_futility_eligible(const Position& pos, Move move) {
     if (move.type_of() != NORMAL || !pos.capture_stage(move))

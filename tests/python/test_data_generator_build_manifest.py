@@ -114,16 +114,18 @@ def test_private_v3_histories_use_the_canonical_worker_baseline() -> None:
     assert "void Search::Worker::clear_training_game(SharedHistories& privateHistories)" in search
     assert "clear_for_new_game(privateHistories, 0, 1);" in search
     # The LMR log scale stopped being a literal when the search constants became
-    # UCI-tunable for the SPSA campaign. The reset formula is pinned through the
+    # tunable for the SPSA campaign. The reset formula is pinned through the
     # tunable and the converged spsa90 default is pinned next to it, so the pair
-    # still nails the exact number the generator bakes in.
+    # still nails the exact number the generator bakes in. TUNABLE_INT is the
+    # storage class from tune.h: a constant here, a UCI spin option only under
+    # `make tune=yes`, and the same 2736 either way.
     for local_reset in (
         "mainHistory.fill(-5);",
         "captureHistory.fill(-699);",
         "ttMoveHistory = 0;",
         "h.fill(5);",
         "reductions[i] = int(LmrLogScale / 128.0 * std::log(i));",
-        "int LmrLogScale          = 2736;",
+        "TUNABLE_INT LmrLogScale          = 2736;",
         "accumulator.rebind(network[numaAccessToken]);",
         "lowPlyHistory.fill(100);",
     ):

@@ -61,6 +61,30 @@ grep -Fxq 'option name SyzygyProbeLimit type spin default 6 min 0 max 6' <<<"$pr
 grep -Fxq 'uciok' <<<"$protocol_output" || fail "missing uciok"
 grep -Fxq 'readyok' <<<"$protocol_output" || fail "missing readyok"
 
+# The advertised option list is a closed world, not a list of things that merely
+# have to be present. Every check above answers "is X still there?", which is
+# why a build that quietly grew thirteen extra search options went unnoticed for
+# nineteen commits until a user read the list. Compare the whole set instead.
+options_fixture="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/fixtures/uci_options.txt"
+[[ -f "$options_fixture" ]] || fail "missing UCI option fixture: $options_fixture"
+
+advertised_options="$(grep '^option name ' <<<"$protocol_output" \
+    | sed -e 's/^option name //' -e 's/ type .*$//' | tr -d '\r' | LC_ALL=C sort)"
+expected_options="$(tr -d '\r' <"$options_fixture" | grep -v '^$' | LC_ALL=C sort)"
+if [[ "$advertised_options" != "$expected_options" ]]; then
+    echo "Atomic test failed: advertised UCI options do not match tests/fixtures/uci_options.txt" >&2
+    echo "  '<' = recorded but missing, '>' = advertised but not recorded" >&2
+    diff <(printf '%s\n' "$expected_options") <(printf '%s\n' "$advertised_options") >&2 || true
+    exit 1
+fi
+
+# A tuning build (`make tune=yes`) also dumps the SPSA input block on stdout
+# before uciok, which is how this leak became visible in the first place. A
+# release build must never do that.
+if grep -Eq '^[A-Za-z_][A-Za-z0-9_]*,-?[0-9]+,-?[0-9]+,-?[0-9]+,' <<<"$protocol_output"; then
+    fail "engine printed an SPSA parameter block; this build must not define ATOMIC_TUNE_SEARCH"
+fi
+
 terminal_eval_output="$({
     printf 'setoption name Use NNUE value false\n'
     printf 'position fen 8/8/8/8/8/8/8/K7 b - - 0 1\n'
