@@ -367,6 +367,12 @@ VPATH = api:syzygy:nnue:nnue/features:nnue/atomic_v2:nnue/atomic_v3
 # ----------------------------------------------------------------------------
 #
 # debug = yes/no      --- -DNDEBUG           --- Enable/Disable debug mode
+# tune = yes/no       --- -DATOMIC_TUNE_SEARCH
+#                     --- ( yes )            --- Expose the tunable search
+#                                                parameters as UCI spin options
+#                                                for an SPSA campaign. Never for
+#                                                a release or an SPRT candidate:
+#                                                they stop being constants.
 # sanitize = none/<sanitizer> ... (-fsanitize )
 #                     --- ( undefined )      --- enable undefined behavior checks
 #                     --- ( thread    )      --- enable threading error checks
@@ -437,6 +443,7 @@ endif
 
 optimize = yes
 debug = no
+tune = no
 sanitize = none
 bits = 64
 prefetch = no
@@ -980,6 +987,14 @@ ifeq ($(debug),no)
 else
 	CXXFLAGS += -g
 	CXXFLAGS += -D_GLIBCXX_ASSERTIONS -D_GLIBCXX_DEBUG
+endif
+
+### 3.2.1b SPSA tuning build
+# Off by default: the search parameters stay compile-time constants, so they are
+# absent from the UCI option list and the compiler can fold them. Turning this
+# on is a deliberate act for a tuning campaign only.
+ifeq ($(tune),yes)
+	CXXFLAGS += -DATOMIC_TUNE_SEARCH
 endif
 
 ### 3.2.2 Debugging with undefined behavior sanitizers
@@ -1693,6 +1708,7 @@ config-sanity:
 	@echo ""
 	@echo "Config:" && \
 	echo "debug: '$(debug)'" && \
+	echo "tune: '$(tune)'" && \
 	echo "sanitize: '$(sanitize)'" && \
 	echo "optimize: '$(optimize)'" && \
 	echo "arch: '$(arch)'" && \
@@ -1731,6 +1747,7 @@ config-sanity:
 	echo "Testing config sanity. If this fails, try 'make help' ..." && \
 	echo "" && \
 	(test "$(debug)" = "yes" || test "$(debug)" = "no") && \
+	(test "$(tune)" = "yes" || test "$(tune)" = "no") && \
 	(test "$(optimize)" = "yes" || test "$(optimize)" = "no") && \
 	(test "$(SUPPORTED_ARCH)" = "true") && \
 	(test "$(arch)" = "any" || test "$(arch)" = "x86_64" || test "$(arch)" = "i386" || \

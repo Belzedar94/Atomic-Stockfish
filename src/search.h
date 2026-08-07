@@ -40,6 +40,7 @@
 #include "score.h"
 #include "syzygy/tbprobe.h"
 #include "timeman.h"
+#include "tune.h"
 #include "types.h"
 
 namespace Stockfish {
@@ -57,12 +58,13 @@ class OptionsMap;
 
 namespace Search {
 
-// Tunable search parameters, registered as UCI options through the TUNE
-// mechanism in search.cpp. Defaults reproduce the previous hard-coded
-// constants, so the bench is unchanged unless an option is set.
-extern int AtomicMcpBase;
-extern int AtomicNmpBase;
-extern int AtomicNmpDepthDiv;
+// Search parameters carried by the Atomic SPSA campaigns. These are the tuned
+// values the fleet paid for; they are compile-time constants here and are not
+// exposed as UCI options. A `make tune=yes` build turns them back into mutable
+// variables that search.cpp registers with TUNE. See tune.h for the mechanism.
+TUNABLE_INT AtomicMcpBase     = 7;
+TUNABLE_INT AtomicNmpBase     = 6;
+TUNABLE_INT AtomicNmpDepthDiv = 4;
 
 // Fairy's move-count formula specialized with blast_on_capture=1 and walling=0.
 inline int atomic_move_count_pruning_threshold(bool improving, Depth depth) {

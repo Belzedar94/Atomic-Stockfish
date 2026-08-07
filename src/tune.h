@@ -176,6 +176,25 @@ constexpr void tune_check_args(Args&&...) {
     static_assert((!std::is_fundamental_v<Args> && ...), "TUNE macro arguments wrong");
 }
 
+// Storage class for the search parameters an SPSA campaign wants to move.
+//
+// A normal build compiles them as compile-time constants: they never reach the
+// UCI option map, so the engine's public option list stays the release list,
+// and the optimizer is free to fold them into the search. `make tune=yes`
+// defines ATOMIC_TUNE_SEARCH, which turns the very same declarations into
+// mutable variables, so the TUNE() registrations guarded by that macro can
+// expose them as spin options again.
+//
+// The point of routing both builds through one macro is that every value is
+// written exactly once, at the declaration. A tuning build and a release build
+// read the same literal and therefore cannot drift apart: there is no second
+// list of numbers to forget to update after a campaign lands.
+#ifdef ATOMIC_TUNE_SEARCH
+    #define TUNABLE_INT inline int
+#else
+    #define TUNABLE_INT inline constexpr int
+#endif
+
 // Some macro magic :-) we define a dummy int variable that the compiler initializes calling Tune::add()
 #define STRINGIFY(x) #x
 #define UNIQUE2(x, y) x##y
