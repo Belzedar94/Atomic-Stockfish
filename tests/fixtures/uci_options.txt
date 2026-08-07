@@ -1,0 +1,19 @@
+Debug Log File
+NumaPolicy
+Threads
+Hash
+Clear Hash
+Ponder
+MultiPV
+Skill Level
+Move Overhead
+nodestime
+UCI_Chess960
+UCI_Variant
+VariantPath
+SyzygyPath
+SyzygyProbeDepth
+Syzygy50MoveRule
+SyzygyProbeLimit
+Use NNUE
+EvalFile
