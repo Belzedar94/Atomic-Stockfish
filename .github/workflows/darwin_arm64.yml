@@ -1,0 +1,68 @@
+name: Darwin arm64 prebuilt
+
+# One-off builder for the AtomicDB worker prebuilt manifest: the fleet
+# distributes engine main@1adc5239 with the run3b network embedded, and this
+# branch adds the darwin-arm64 flavor of exactly that pairing for Apple
+# Silicon contributors.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  ATOMIC_NET_TAG: v1.0
+  ATOMIC_NET_ASSET: atomic-run3b.nnue
+  ATOMIC_NET_SHA256: 99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f92a04a6
+
+jobs:
+  build:
+    name: darwin apple-silicon
+    runs-on: macos-14
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Build identity
+        run: |
+          echo "EXE_NAME=Atomic-Stockfish-darwin-arm64" >> "$GITHUB_ENV"
+
+      - name: Fetch and place the Atomic network
+        run: |
+          canon=$(sed -n 's/.*EvalFileDefaultName[[:space:]]*"\([^"]*\)".*/\1/p' src/evaluate.h | head -n 1)
+          test -n "$canon"
+          echo "Embedding $ATOMIC_NET_ASSET ($ATOMIC_NET_TAG) as $canon"
+          curl -sSfL --retry 3 -o "src/$canon" \
+            "https://github.com/$GITHUB_REPOSITORY/releases/download/$ATOMIC_NET_TAG/$ATOMIC_NET_ASSET"
+          echo "$ATOMIC_NET_SHA256  src/$canon" | shasum -a 256 -c -
+          echo "CANON_NET=$canon" >> "$GITHUB_ENV"
+
+      - name: Build
+        working-directory: src
+        run: |
+          make -j3 build ARCH=apple-silicon COMP=clang \
+            EXE="$EXE_NAME" EXTRACXXFLAGS=-DATOMIC_NNUE_EMBEDDING
+          strip "$EXE_NAME"
+          test "$(wc -c < "$EXE_NAME")" -gt "$(wc -c < "$CANON_NET")"
+
+      - name: Bench with no network on disk
+        working-directory: src
+        run: |
+          rm -rf ../embedcheck
+          mkdir ../embedcheck
+          cp "$EXE_NAME" ../embedcheck/
+          cd ../embedcheck
+          ./"$EXE_NAME" bench 2>&1 | tee bench.log
+          grep -Eq "Nodes searched *: *[1-9]" bench.log
+
+      - name: Checksum
+        working-directory: src
+        run: shasum -a 256 "$EXE_NAME"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: Atomic-Stockfish-darwin-arm64
+          path: src/Atomic-Stockfish-darwin-arm64
