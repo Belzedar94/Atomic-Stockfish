@@ -286,7 +286,20 @@ class Solver {
 
     // ---- df-pn ----
 
-    void mid(Position& pos, uint64_t thpn, uint64_t thdn, int depth,
+    // Returns true when the value handed back is BRANCH-LOCAL: derived, here
+    // or through a child, from a repetition on the current path.
+    //
+    // The repetition guard below has always declared that such a fact must
+    // never reach the table, and the aggregate carried it there anyway. A
+    // repeating child contributes dn = 0, its parent inherits that through
+    // ``aggregate``, and ``store`` then publishes a refutation that is only
+    // true while those particular ancestors are on the board. Read back on a
+    // branch where the repetition does not exist, it refutes a line that wins,
+    // and the root comes back UNKNOWN with budget to spare.
+    //
+    // A tainted value is still correct for the path that produced it, so it is
+    // used here and simply not published.
+    bool mid(Position& pos, uint64_t thpn, uint64_t thdn, int depth,
              uint64_t& pn, uint64_t& dn) {
 
         // One movegen for the whole node: classification, budgeting and the
@@ -305,13 +318,13 @@ class Solver {
         {
             pn = 0;
             dn = INF;
-            return;
+            return false;
         }
         if (kind == NodeKind::GoalDenied)
         {
             pn = INF;
             dn = 0;
-            return;
+            return false;
         }
 
         ++nodes;
@@ -321,7 +334,7 @@ class Solver {
             // anything else here is how solvers invent proofs.
             pn = 1;
             dn = 1;
-            return;
+            return false;
         }
 
         const bool orNode = attacker_to_move(pos);
@@ -331,6 +344,7 @@ class Solver {
         std::vector<uint64_t> childPn(moves.size(), 1);
         std::vector<uint64_t> childDn(moves.size(), 1);
         std::vector<bool>     repeats(moves.size(), false);
+        bool                  tainted = false;
 
         StateInfo st;
         for (size_t i = 0; i < moves.size(); ++i)
@@ -356,6 +370,7 @@ class Solver {
                 // so for the attacker the branch is dead; the fact is
                 // branch-local and must never reach the TT.
                 repeats[i] = true;
+                tainted    = true;
                 childPn[i] = INF;
                 childDn[i] = 0;
             }
@@ -394,14 +409,18 @@ class Solver {
             const Key childRep = pos.repetition_key();
             path.insert(childRep);
             uint64_t p = childPn[best], d = childDn[best];
-            mid(pos, childThPn, childThDn, depth + 1, p, d);
-            store(childKey, p, d);
+            if (mid(pos, childThPn, childThDn, depth + 1, p, d))
+                tainted = true;
+            else
+                store(childKey, p, d);
             path.erase(childRep);
             pos.undo_move(moves[best]);
             childPn[best] = p;
             childDn[best] = d;
         }
-        store(pos.key(), pn, dn);
+        if (!tainted)
+            store(pos.key(), pn, dn);
+        return tainted;
     }
 
     void lookup(Position& pos, uint64_t& pn, uint64_t& dn) {
