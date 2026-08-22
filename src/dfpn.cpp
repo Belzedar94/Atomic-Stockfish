@@ -41,9 +41,11 @@
       the defender reaches FIFTY_MOVE_PLIES before the goal is a failed
       branch for the attacker.
 
-  Because a proved/disproved verdict is never read back out of the TT, a
-  collision or an overwrite cannot manufacture a proof. It can only make the
-  solver redo work.
+  Because the SEARCH never reads a proved/disproved verdict back out of the
+  TT, a collision or an overwrite cannot manufacture a proof. It can only make
+  the solver redo work. The certificate pass does read those verdicts, purely
+  to decide which move to try first, and it re-derives every node it writes
+  regardless of what the table said.
 
   THE CERTIFICATE
   ---------------
@@ -524,6 +526,32 @@ class Solver {
 
     void store(Key key, uint64_t pn, uint64_t dn) { tt.store(key, pn, dn); }
 
+    // Move-ordering hint for the certificate extractor, and for nothing else.
+    //
+    // ``lookup`` deliberately throws away a stored zero, because a verdict out
+    // of the table is not evidence. That is right for the search, and it is
+    // what left the extractor blind: a child the search had PROVED came back
+    // scored by its branching factor, exactly like a child nobody had ever
+    // looked at, so the winning move sorted at random among its siblings and
+    // the extractor brute-forced the position all over again.
+    //
+    // Here the zero is handed back, because the extractor uses it only to
+    // decide which move to try FIRST. Every node it writes is still re-derived
+    // and re-checked by ``emit_node``, so a stale or wrong hint costs a wasted
+    // descent and can never put an unproved line into a certificate. Only the
+    // proof side is surfaced: a stored disproof is not used to skip a move,
+    // since that would be the extractor trusting the table to prune.
+    void order_hint(Position& pos, uint64_t& pn, uint64_t& dn) {
+        uint64_t storedPn = 0, storedDn = 0;
+        if (tt.probe(pos.key(), storedPn, storedDn) && storedPn == 0)
+        {
+            pn = 0;
+            dn = storedDn;
+            return;
+        }
+        lookup(pos, pn, dn);
+    }
+
     // ---- certificate ----
 
     void emit(Position& pos, Result& result) {
@@ -591,7 +619,7 @@ class Solver {
                 if (path.count(pos.repetition_key()))
                     p = INF;
                 else
-                    lookup(pos, p, d);
+                    order_hint(pos, p, d);
                 pos.undo_move(moves[i]);
                 order.emplace_back(p, i);
             }
