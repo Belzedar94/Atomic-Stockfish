@@ -176,6 +176,7 @@ class Position {
 
     // Accessing hash keys
     Key key() const;
+    Key repetition_key() const;
     Key prefetch_key(Move m) const;
     Key material_key() const;
     Key pawn_key() const;
@@ -334,6 +335,13 @@ inline Bitboard Position::pinners(Color c) const { return st->pinners[c]; }
 inline Bitboard Position::check_squares(PieceType pt) const { return st->checkSquares[pt]; }
 
 inline Key Position::key() const { return adjust_key50(st->key); }
+
+// The board key WITHOUT the fifty-move distinguisher that key() folds in.
+// Repetition is a property of the board, not of the clock: adjust_key50()
+// buckets the counter into the key, so two identical positions separated by
+// enough reversible moves hash differently and a repetition set built on
+// key() cannot see them. Use this for repetition, key() for the hash table.
+inline Key Position::repetition_key() const { return st->key; }
 
 template<bool AfterMove>
 inline Key Position::adjust_key50(Key k) const {

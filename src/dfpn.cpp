@@ -168,7 +168,7 @@ class Solver {
     Result run(Position& pos) {
         const int64_t started = now_ms();
         path.clear();
-        path.insert(pos.key());
+        path.insert(pos.repetition_key());
 
         uint64_t pn = 1, dn = 1;
         // Baseline for the stagnation indicator: what the root bound looked
@@ -350,8 +350,7 @@ class Solver {
                 if (tt.probe(pos.key(), seenPn, seenDn))
                     ++quietTranspositions;
             }
-            const Key childKey = pos.key();
-            if (path.count(childKey))
+            if (path.count(pos.repetition_key()))
             {
                 // A repetition on THIS branch. The defender can hold the draw,
                 // so for the attacker the branch is dead; the fact is
@@ -392,11 +391,12 @@ class Solver {
             pos.do_move(moves[best], st);
             ++positions;
             const Key childKey = pos.key();
-            path.insert(childKey);
+            const Key childRep = pos.repetition_key();
+            path.insert(childRep);
             uint64_t p = childPn[best], d = childDn[best];
             mid(pos, childThPn, childThDn, depth + 1, p, d);
             store(childKey, p, d);
-            path.erase(childKey);
+            path.erase(childRep);
             pos.undo_move(moves[best]);
             childPn[best] = p;
             childDn[best] = d;
@@ -532,7 +532,7 @@ class Solver {
         certBudget = limits.certificateNodes ? limits.certificateNodes * 8 : 0;
         certVisited = 0;
         path.clear();
-        path.insert(pos.key());
+        path.insert(pos.repetition_key());
         if (!emit_node(pos, 0))
             return;
 
@@ -588,7 +588,7 @@ class Solver {
             {
                 pos.do_move(moves[i], st);
                 uint64_t p = 1, d = 1;
-                if (path.count(pos.key()))
+                if (path.count(pos.repetition_key()))
                     p = INF;
                 else
                     lookup(pos, p, d);
@@ -606,7 +606,7 @@ class Solver {
                 certLines.push_back(std::string("O ") + UCI::move(moves[index], pos.is_chess960()));
                 ++certNodes;
                 pos.do_move(moves[index], st);
-                const Key childKey = pos.key();
+                const Key childKey = pos.repetition_key();
                 const bool fresh = path.insert(childKey).second;
                 const bool ok = fresh && emit_node(pos, depth + 1);
                 if (fresh)
@@ -632,7 +632,7 @@ class Solver {
         for (const Move& m : moves)
         {
             pos.do_move(m, st);
-            const Key childKey = pos.key();
+            const Key childKey = pos.repetition_key();
             const bool fresh = path.insert(childKey).second;
             const bool ok = fresh && emit_node(pos, depth + 1);
             if (fresh)
