@@ -408,17 +408,24 @@ class Solver {
             const Key childKey = pos.key();
             const Key childRep = pos.repetition_key();
             path.insert(childRep);
-            uint64_t p = childPn[best], d = childDn[best];
-            if (mid(pos, childThPn, childThDn, depth + 1, p, d))
+            uint64_t   p = childPn[best], d = childDn[best];
+            const bool childTainted =
+              mid(pos, childThPn, childThDn, depth + 1, p, d);
+            if (childTainted)
                 tainted = true;
-            else
+            if (!childTainted || p == 0)
                 store(childKey, p, d);
             path.erase(childRep);
             pos.undo_move(moves[best]);
             childPn[best] = p;
             childDn[best] = d;
         }
-        if (!tainted)
+        // A repetition can taint a refutation but never a proof. A repeating
+        // child scores pn = INF, and INF is neither the minimum at an OR node
+        // nor part of a zero sum at an AND node, so pn == 0 cannot have come
+        // from one. Publishing that zero is safe on any branch, and the
+        // extractor needs it to find the move the search already proved.
+        if (!tainted || pn == 0)
             store(pos.key(), pn, dn);
         return tainted;
     }
