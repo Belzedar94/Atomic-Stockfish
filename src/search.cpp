@@ -76,7 +76,13 @@ namespace {
 // clusters of pieces here, so "eval plus a chess-sized margin" is not a bound.
 // Expressed as a 64-based multiplier of the modern margins; 128 is the
 // doubling the audit prescribes as the first attempt.
+// Atomic tactics detonate at SHALLOW depth: a piece left next to a cluster is
+// refuted in two plies, not in eight. A flat doubling under-protects exactly
+// the depths where the eval is least trustworthy, so the child margin gets an
+// extra-wide low-depth tier on top of the doubling.
 TUNABLE_INT AtomicFutilityScale  = 128;
+TUNABLE_INT AtomicFutilityScaleShallow = 160;
+TUNABLE_INT AtomicFutilityShallowDepth = 4;
 TUNABLE_INT AtomicCaptFutBase    = 227;
 TUNABLE_INT AtomicCaptFutLmrMult = 244;
 TUNABLE_INT QsFutilityBase       = 345;
@@ -97,6 +103,8 @@ TUNE(SetRange(0, 20), AtomicMcpBase);
 TUNE(SetRange(1, 12), AtomicNmpBase);
 TUNE(SetRange(1, 8), AtomicNmpDepthDiv);
 TUNE(SetRange(32, 320), AtomicFutilityScale);
+TUNE(SetRange(64, 384), AtomicFutilityScaleShallow);
+TUNE(SetRange(1, 10), AtomicFutilityShallowDepth);
 TUNE(SetRange(0, 600), AtomicCaptFutBase, AtomicCaptFutLmrMult);
 TUNE(SetRange(0, 800), QsFutilityBase);
 TUNE(SetRange(2, 14), SingularDepthMin);
@@ -1291,7 +1299,10 @@ Value Search::Worker::search(
     {
         Value futilityMult = std::min(40 + depth * 4, 80);
         futilityMult -= 20 * !ss->ttHit;
-        futilityMult = futilityMult * AtomicFutilityScale / 64;
+        futilityMult = futilityMult
+                     * (depth <= AtomicFutilityShallowDepth ? AtomicFutilityScaleShallow
+                                                            : AtomicFutilityScale)
+                     / 64;
 
         Value futilityMargin = futilityMult * depth
                              - (2934 * improving + 343 * opponentWorsening) * futilityMult / 1024
