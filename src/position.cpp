@@ -751,6 +751,32 @@ bool Position::atomic_wins(Move m) const {
     return blastCenter == theirKing || bool(attacks_bb<KING>(blastCenter) & theirKing);
 }
 
+// Tests whether the side to move is under a "blast check": an enemy capture on
+// a square next to our king detonates the king and ends the game at once, so
+// any friendly piece adjacent to our king that an enemy non-king piece attacks
+// is a mate threat. The enemy king cannot deliver it, and neither can a capture
+// whose blast would take the enemy king down with ours.
+bool Position::under_blast_threat() const {
+
+    const Color us = sideToMove;
+
+    if (!has_king(us) || !has_king(~us))
+        return false;
+
+    const Square   theirKing = square<KING>(~us);
+    const Bitboard capturers = pieces(~us) ^ theirKing;
+    Bitboard       ring      = attacks_bb<KING>(square<KING>(us)) & pieces(us);
+
+    while (ring)
+    {
+        const Square s = pop_lsb(ring);
+        if ((attackers_to(s) & capturers) && !(attacks_bb<KING>(s) & theirKing))
+            return true;
+    }
+
+    return false;
+}
+
 
 // Takes a random move and tests whether the move is
 // pseudo-legal. It is used to validate moves from TT that can be corrupted
