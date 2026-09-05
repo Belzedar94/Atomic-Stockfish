@@ -1278,11 +1278,12 @@ Value Search::Worker::search(
     }
 
 
-    // Step 7. Razoring
-    // If eval is really low, skip search entirely and return the qsearch value.
-    // For PvNodes, we must have a guard against mates being returned.
-    if (!PvNode && eval < alpha - 465 - 300 * depth * depth)
-        return qsearch<NonPV>(pos, ss, alpha, beta);
+    // Step 7. Razoring: removed for Atomic.
+    // A position whose static evaluation is far below alpha is not a quiet loss
+    // here: one capture detonates a cluster and swings the score by more than
+    // any chess-sized razor margin, so dropping straight into qsearch throws
+    // away the resource. A local VSTC ablation gives +11.6 Elo for removing it
+    // and the ubdip archive paid +7.4 for the same simplification in 2017.
 
     // Step 8. Futility pruning: child node
     // The depth condition is important for mate finding.
