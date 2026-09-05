@@ -77,8 +77,6 @@ namespace {
 // Expressed as a 64-based multiplier of the modern margins; 128 is the
 // doubling the audit prescribes as the first attempt.
 TUNABLE_INT AtomicFutilityScale  = 128;
-TUNABLE_INT AtomicCaptFutBase    = 227;
-TUNABLE_INT AtomicCaptFutLmrMult = 244;
 TUNABLE_INT QsFutilityBase       = 345;
 TUNABLE_INT SingularDepthMin     = 8;
 TUNABLE_INT SingularMarginBase   = 65;
@@ -97,7 +95,6 @@ TUNE(SetRange(0, 20), AtomicMcpBase);
 TUNE(SetRange(1, 12), AtomicNmpBase);
 TUNE(SetRange(1, 8), AtomicNmpDepthDiv);
 TUNE(SetRange(32, 320), AtomicFutilityScale);
-TUNE(SetRange(0, 600), AtomicCaptFutBase, AtomicCaptFutLmrMult);
 TUNE(SetRange(0, 800), QsFutilityBase);
 TUNE(SetRange(2, 14), SingularDepthMin);
 TUNE(SetRange(0, 250), SingularMarginBase, SingularMarginTtPv);
@@ -1480,17 +1477,10 @@ moves_loop:  // When in check, search starts here
                 Piece capturedPiece = pos.piece_on(move.to_sq());
                 int   captHist = captureHistory[movedPiece][move.to_sq()][type_of(capturedPiece)];
 
-                // Futility pruning for captures
-                if (!atomicWin && !givesCheck && lmrDepth < 7
-                    && atomic_capture_futility_eligible(pos, move))
-                {
-                    Value futilityValue = ss->staticEval + AtomicCaptFutBase
-                                        + AtomicCaptFutLmrMult * lmrDepth
-                                        + PieceValue[capturedPiece] + 131 * captHist / 1024;
-
-                    if (futilityValue <= alpha)
-                        continue;
-                }
+                // Futility pruning for captures: removed for Atomic. Even the
+                // guarded form (a normal capture with no non-pawn bycatch) is
+                // an eval-plus-victim bound, and the explosion-aware SEE test
+                // right below already refuses the captures that lose material.
 
                 // SEE based pruning for captures and checks
                 // Avoid pruning sacrifices of our last piece for stalemate
