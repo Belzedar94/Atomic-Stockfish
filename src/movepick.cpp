@@ -212,8 +212,18 @@ ExtMove* MovePicker::score(const MoveList<Type>& ml) {
         if constexpr (Type == CAPTURES)
         {
             const Piece capturedPiece = pos.piece_on(to);
-            m.value = (*captureHistory)[pc][to][type_of(capturedPiece)]
-                    + 7 * int(PieceValue[capturedPiece]);
+
+            // Most Valuable Victim is not the victim alone in Atomic: the blast
+            // also removes every enemy non-pawn adjacent to the landing square.
+            // The collateral enters at half weight because it is not certain
+            // material - the opponent often gets to move the bystander away.
+            int      victims = int(PieceValue[capturedPiece]);
+            Bitboard collateral =
+              Attacks::attacks_bb<KING>(to) & pos.pieces(~us) & ~pos.pieces(PAWN);
+            while (collateral)
+                victims += int(PieceValue[pos.piece_on(pop_lsb(collateral))]) / 2;
+
+            m.value = (*captureHistory)[pc][to][type_of(capturedPiece)] + 7 * victims;
         }
 
         else if constexpr (Type == QUIETS)
