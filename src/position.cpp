@@ -751,6 +751,38 @@ bool Position::atomic_wins(Move m) const {
     return blastCenter == theirKing || bool(attacks_bb<KING>(blastCenter) & theirKing);
 }
 
+// Tests whether a quiet move creates an Atomic "blast check": after it, one of
+// our captures would land next to the enemy king and detonate it. This is the
+// mate threat that mirrors gives_check(), and bulk quiet pruning must keep it.
+// The capture must stay legal for us, so a target adjacent to our own king does
+// not count: that explosion would take our king down as well.
+bool Position::creates_blast_threat(Move m) const {
+
+    if (m.type_of() != NORMAL || capture(m) || !has_king(sideToMove) || !has_king(~sideToMove))
+        return false;
+
+    const Color  us   = sideToMove;
+    const Square from = m.from_sq();
+    const Square to   = m.to_sq();
+    const Piece  pc   = piece_on(from);
+
+    const Bitboard targets = attacks_bb<KING>(square<KING>(~us)) & pieces(~us);
+
+    if (!targets)
+        return false;
+
+    const Square   ourKing  = type_of(pc) == KING ? to : square<KING>(us);
+    const Bitboard occupied = (pieces() ^ from) | to;
+
+    Bitboard hit = attacks_bb(pc, to, occupied) & targets;
+
+    while (hit)
+        if (!(attacks_bb<KING>(pop_lsb(hit)) & ourKing))
+            return true;
+
+    return false;
+}
+
 
 // Takes a random move and tests whether the move is
 // pseudo-legal. It is used to validate moves from TT that can be corrupted

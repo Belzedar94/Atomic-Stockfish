@@ -310,7 +310,7 @@ top:
             quietChecksOnly = true;
             endGenerated    = cur;
             for (Move move : ml)
-                if (pos.gives_check(move))
+                if (pos.gives_check(move) || pos.creates_blast_threat(move))
                 {
                     *endGenerated       = move;
                     endGenerated->value = 0;
@@ -331,7 +331,9 @@ top:
     case GOOD_QUIET :
         if (select([&]() {
                 return quietChecksOnly
-                    || (cur->value > goodQuietThreshold && (!skipQuiets || pos.gives_check(*cur)));
+                    || (cur->value > goodQuietThreshold
+                        && (!skipQuiets || pos.gives_check(*cur)
+                            || pos.creates_blast_threat(*cur)));
             }))
             return *(cur - 1);
 
@@ -358,7 +360,8 @@ top:
             return Move::none();
 
         return select([&]() {
-            return cur->value <= goodQuietThreshold && (!skipQuiets || pos.gives_check(*cur));
+            return cur->value <= goodQuietThreshold
+                && (!skipQuiets || pos.gives_check(*cur) || pos.creates_blast_threat(*cur));
         });
 
     case QCAPTURE :

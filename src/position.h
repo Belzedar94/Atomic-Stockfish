@@ -152,6 +152,7 @@ class Position {
     bool  is_atomic_terminal() const;
     bool  atomic_in_check(Color c) const;
     bool  atomic_wins(Move m) const;
+    bool  creates_blast_threat(Move m) const;
     bool  has_legal_quiet() const;
     bool  has_legal_move() const;
     Piece moved_piece(Move m) const;
