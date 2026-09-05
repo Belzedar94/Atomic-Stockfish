@@ -1401,6 +1401,13 @@ ifneq ($(SUPPORTED_ARCH), true)
 endif
 
 
+### Cap the parallelism of the recursive sub-make: OpenBench workers invoke
+### `make -j` with no job limit, and one cc1plus per hardware thread runs a
+### many-core machine out of memory on the largest translation units. Defaults
+### to min(nproc, 8); override with BUILD_JOBS=<n> or OPENBENCH_BUILD_JOBS=<n>.
+BUILD_JOBS_NPROC := $(shell nproc 2>/dev/null || sysctl -n hw.logicalcpu 2>/dev/null || echo $(NUMBER_OF_PROCESSORS))
+BUILD_JOBS ?= $(or $(OPENBENCH_BUILD_JOBS),$(firstword $(filter 1 2 3 4 5 6 7,$(BUILD_JOBS_NPROC)) 8))
+
 .PHONY: help analyze build profile-build data-generator data-generator-tests data-tools data-tools-tests atomic-data-tools-json-tests atomic-unit-tests atomic-api-tests atomic-syzygy-driver atomic-nnue-incremental-tests atomic-v2-test-fixture atomic-v2-backend-core-tests atomic-v2-incremental-tests atomic-v3-hm-oracle-tests atomic-v3-capture-pair-tests atomic-v3-king-blast-ep-tests atomic-v3-blast-ring-tests atomic-v3-full-refresh-tests atomic-v3-numeric-tests atomic-v3-wire-test-fixture atomic-v3-wire-tests atomic-v3-scalar-tests atomic-v3-incremental-tests atomic-v3-incremental-stress-tests atomic-v3-incremental-simd-kernel-tests atomic-v3-incremental-simd-tests atomic-v3-incremental-simd-stress-tests atomic-v3-incremental-simd-benchmark atomic-v3-simd-tests legacy-atomic-v1-tests atomic-bin-v2-tests atomic-bin-v2-sink-tests atomic-bin-v2-manifest-tests atomic-bin-v2-manifest-reader-tests atomic-bin-v2-reader-tests atomic-v3-trajectory-tests atomic-v3-private-staging-tests macos-lipo strip install clean net \
 	objclean profileclean config-sanity \
 	icx-profile-use icx-profile-make \
@@ -1413,12 +1420,12 @@ analyze: config-sanity objclean
 
 ifeq ($(UNIVERSAL_BUILD),false)
 build: config-sanity
-	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) all
+	$(MAKE) -j$(BUILD_JOBS) ARCH=$(ARCH) COMP=$(COMP) all
 
 profile-build: config-sanity objclean profileclean
 	@echo ""
 	@echo "Step 1/4. Building instrumented executable ..."
-	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) $(profile_make)
+	$(MAKE) -j$(BUILD_JOBS) ARCH=$(ARCH) COMP=$(COMP) $(profile_make)
 	@echo ""
 	@echo "Step 2/4. Running benchmark for pgo-build ..."
 	$(PGOBENCH) > PGOBENCH.out 2>&1
@@ -1426,7 +1433,7 @@ profile-build: config-sanity objclean profileclean
 	@echo ""
 	@echo "Step 3/4. Building optimized executable ..."
 	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) objclean
-	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) $(profile_use)
+	$(MAKE) -j$(BUILD_JOBS) ARCH=$(ARCH) COMP=$(COMP) $(profile_use)
 	@echo ""
 	@echo "Step 4/4. Deleting profile data ..."
 	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) profileclean
@@ -2322,7 +2329,7 @@ else
 	@test -f "$(EVALFILE)" || { echo "ERROR: OpenBench EVALFILE does not exist: $(EVALFILE)" >&2; exit 2; }
 	@cp "$(EVALFILE)" "$(OPENBENCH_NET).tmp"
 	@mv "$(OPENBENCH_NET).tmp" "$(OPENBENCH_NET)"
-	+$(MAKE) data-generator EXE=atomic-openbench-playing-unused \
+	+$(MAKE) -j$(BUILD_JOBS) data-generator EXE=atomic-openbench-playing-unused \
 		ATOMIC_DATA_GENERATOR_EXE="$(EXE)" CXX="$(CXX)" \
 		ARCH=x86-64-bmi2 COMP=$(OPENBENCH_COMP) \
 		EXTRACXXFLAGS='$(EXTRACXXFLAGS) -DATOMIC_NNUE_EMBEDDING'
