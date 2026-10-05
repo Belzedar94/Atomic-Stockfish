@@ -87,8 +87,20 @@ class FeatureTransformer {
         {
             const auto& source = accumulator.accumulation[perspectives[p]];
             const auto  offset = p * HalfDimensions;
+#if defined(USE_SSE2)
+            static_assert(HalfDimensions % 16 == 0);
+            // packus saturates to 0..255, the unsigned min then clips to 127: clamp(x, 0, 127).
+            const __m128i limit = _mm_set1_epi8(127);
+            const auto*   in    = reinterpret_cast<const __m128i*>(source.data());
+            auto*         out   = reinterpret_cast<__m128i*>(output + offset);
+            for (IndexType j = 0; j < HalfDimensions / 16; ++j)
+                _mm_storeu_si128(&out[j], _mm_min_epu8(_mm_packus_epi16(_mm_load_si128(&in[2 * j]),
+                                                                        _mm_load_si128(&in[2 * j + 1])),
+                                                       limit));
+#else
             for (IndexType i = 0; i < HalfDimensions; ++i)
                 output[offset + i] = static_cast<OutputType>(std::clamp<int>(source[i], 0, 127));
+#endif
         }
 
         return psqt;
