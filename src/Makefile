@@ -72,9 +72,13 @@ endif
 PREFIX = /usr/local
 BINDIR = $(PREFIX)/bin
 
-### Built-in benchmark for PGO builds. The Atomic NNUE is external, so profile
-### generation explicitly uses the self-contained classical evaluator.
-PGOBENCH = printf 'setoption name Use NNUE value false\nbench\nquit\n' | $(RUN_PREFIX) ./$(EXE)
+### Built-in benchmark for PGO builds: one engine process, two benches. The
+### first runs with the default Use NNUE=true, so the NNUE code is profiled when
+### a network is embedded or found under its default name. The Atomic NNUE is
+### external, so there may be none: that bench then reports "Bench aborted" and
+### the engine reads on. The second bench uses the self-contained classical
+### evaluator and always runs, so a build without a network profiles as before.
+PGOBENCH = printf 'bench\nsetoption name Use NNUE value false\nbench\nquit\n' | $(RUN_PREFIX) ./$(EXE)
 
 ### Source and object files
 SRCS = atomic_init.cpp attacks.cpp benchmark.cpp bitboard.cpp evaluate.cpp main.cpp \

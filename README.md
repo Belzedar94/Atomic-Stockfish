@@ -96,6 +96,12 @@ make -j build ARCH=x86-64-bmi2
 The resulting executable is `atomic-stockfish` (or
 `atomic-stockfish.exe` on Windows).
 
+`make -j profile-build ARCH=x86-64-bmi2` adds profile-guided optimization. Its
+profiling run covers the NNUE code only when it can load a network, so place
+the network in `src` under its default name first; to embed it as well, GCC and
+MinGW builds need `EXTRAPROFILEFLAGS=-DATOMIC_NNUE_EMBEDDING`, because
+`profile-build` replaces `EXTRACXXFLAGS` in its sub-builds.
+
 ## Training-data generator
 
 The playing binary deliberately excludes data-generation commands. Build the
