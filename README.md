@@ -100,7 +100,9 @@ The resulting executable is `atomic-stockfish` (or
 profiling run covers the NNUE code only when it can load a network, so place
 the network in `src` under its default name first; to embed it as well, GCC and
 MinGW builds need `EXTRAPROFILEFLAGS=-DATOMIC_NNUE_EMBEDDING`, because
-`profile-build` replaces `EXTRACXXFLAGS` in its sub-builds.
+`profile-build` replaces `EXTRACXXFLAGS` in its sub-builds. Without a network
+the build still completes, but it ends with a warning: with NNUE on, that
+binary is much slower than a plain `make build`.
 
 ## Training-data generator
 

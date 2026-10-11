@@ -80,6 +80,17 @@ BINDIR = $(PREFIX)/bin
 ### evaluator and always runs, so a build without a network profiles as before.
 PGOBENCH = printf 'bench\nsetoption name Use NNUE value false\nbench\nquit\n' | $(RUN_PREFIX) ./$(EXE)
 
+### A profile-build whose first bench found no network still completes, but its
+### NNUE code was never profiled. Say so at the end of the build, on stderr.
+PGO_NETWORK_CHECK = \
+	@if grep -q 'Bench aborted: NNUE verification failed' PGOBENCH.out 2>/dev/null; then \
+		echo "" >&2; \
+		echo "WARNING: the profiling run found no NNUE network, so the NNUE code was not" >&2; \
+		echo "profiled. With NNUE on, this binary will be much slower than a plain" >&2; \
+		echo "'make build'. Put the network in src/ under its default name (see README)," >&2; \
+		echo "or embed it, and run profile-build again." >&2; \
+	fi
+
 ### Source and object files
 SRCS = atomic_init.cpp attacks.cpp benchmark.cpp bitboard.cpp evaluate.cpp main.cpp \
 	misc.cpp movegen.cpp movepick.cpp position.cpp \
@@ -1440,6 +1451,7 @@ profile-build: config-sanity objclean profileclean
 	$(MAKE) -j$(BUILD_JOBS) ARCH=$(ARCH) COMP=$(COMP) $(profile_use)
 	@echo ""
 	@echo "Step 4/4. Deleting profile data ..."
+	$(PGO_NETWORK_CHECK)
 	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) profileclean
 endif
 
@@ -1510,6 +1522,7 @@ else
 	@echo "Step 4/4. Extracting LTO-optimized relocatable object ..."
 	cp "$(basename $(EXE))$(LTO_OBJ_SUFFIX)" stockfish.o
 endif
+	$(PGO_NETWORK_CHECK)
 
 universal-object-nopgo: objclean universalclean
 	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) ENV_LDFLAGS='$(SAVE_TEMPS) $(NNUE_EMBED_OBJ)' all
