@@ -1564,19 +1564,13 @@ moves_loop:  // When in check, search starts here
             value = search<NonPV>(pos, ss, singularBeta - 1, singularBeta, singularDepth, cutNode);
             ss->excludedMove = Move::none();
 
+            // A singular ttMove is not extended. Decisive Atomic lines are chains
+            // of only moves, so one to three extra plies at every singular node
+            // turn the main line into a spike that spends the budget every
+            // alternative needs. The singular search itself stays: the multi-cut
+            // and the negative extensions below still use its result.
             if (value < singularBeta)
-            {
-                int corrValAdj   = std::abs(correctionValue) / 194822;
-                int doubleMargin = -3 + 201 * PvNode - 157 * !ttCapture - corrValAdj
-                                 - 1081 * ttMoveHistory / 117824 - (ss->ply > rootDepth) * 41;
-                int tripleMargin = 72 + 306 * PvNode - 188 * !ttCapture + 84 * ss->ttPv - corrValAdj
-                                 - (ss->ply > rootDepth) * 45;
-
-                extension =
-                  1 + (value < singularBeta - doubleMargin) + (value < singularBeta - tripleMargin);
-
-                depth++;
-            }
+                extension = 0;
 
             // Multi-cut pruning
             // Our ttMove is assumed to fail high based on the bound of the TT entry,
