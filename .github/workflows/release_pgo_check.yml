@@ -1,0 +1,105 @@
+name: Release binaries, plain against profile-guided
+
+# Compares the artifacts of two runs of "Atomic binaries" built from the same
+# engine source: the plain `make build` ones that main publishes today, and
+# the `make profile-build` ones of the ci/release-profile-build branch. For each
+# of the four published binaries: bench signatures, identical output on a
+# worker-like UCI session, and speed over alternating runs on one runner.
+# Nothing is built or published here.
+
+on:
+  push:
+    branches:
+      - ci/release-pgo-check
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  OLD_RUN: "38370405785"   # Atomic binaries, main@b77320b0, plain build (what rolling-main holds)
+  OLD_SHA8: b77320b0
+  NEW_RUN: "38404177785"   # Atomic binaries, ci/release-profile-build@a846529e, profile-build
+  NEW_SHA8: a846529e
+  EXPECT_NNUE: "518466"
+  EXPECT_CLASSICAL: "1011501"
+  BENCH_DEPTH: "18"
+  ROUNDS: "10"
+  TB_URL: https://belzedar.duckdns.org/atomicdb/engines/syzygy-345
+
+jobs:
+  compare:
+    name: ${{ matrix.os }} ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            os: linux
+            arch: x86-64-bmi2
+            ext: ""
+          - runner: ubuntu-latest
+            os: linux
+            arch: x86-64-avx2
+            ext: ""
+          - runner: windows-latest
+            os: windows
+            arch: x86-64-bmi2
+            ext: ".exe"
+          - runner: windows-latest
+            os: windows
+            arch: x86-64-avx2
+            ext: ".exe"
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Download both artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          exe="atomic-stockfish-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}"
+          gh run download "$OLD_RUN" -R "$GITHUB_REPOSITORY" -D old \
+            -n "Atomic-Stockfish-$OLD_SHA8-${{ matrix.os }}-${{ matrix.arch }}"
+          gh run download "$NEW_RUN" -R "$GITHUB_REPOSITORY" -D new \
+            -n "Atomic-Stockfish-$NEW_SHA8-${{ matrix.os }}-${{ matrix.arch }}"
+          chmod +x "old/$exe" "new/$exe"
+          mkdir -p run out tb
+          sha256sum "old/$exe" "new/$exe" | tee out/sha256.txt
+          ls -l "old/$exe" "new/$exe"
+          echo "EXE=$exe" >> "$GITHUB_ENV"
+          python3 ci/fetch_tb.py "$TB_URL" tb || python ci/fetch_tb.py "$TB_URL" tb
+
+      - name: Host
+        run: |
+          if [ "$RUNNER_OS" = Windows ]; then
+            powershell -NoProfile -Command "(Get-CimInstance Win32_Processor).Name"
+          else
+            lscpu | grep -E 'Model name'
+          fi
+
+      # The run directory holds no .nnue: both binaries carry the network.
+      - name: Identity and speed, plain against profile-guided
+        run: |
+          py=python3; command -v python3 >/dev/null 2>&1 || py=python
+          tb="$PWD/tb"; md="$GITHUB_STEP_SUMMARY"
+          if [ "$RUNNER_OS" = Windows ]; then tb="$(cygpath -m "$tb")"; py=python; fi
+          "$py" ci/engine_check.py --title "${{ matrix.os }} ${{ matrix.arch }}: published (plain) against profile-build" \
+            --bin "plain=old/$EXE" --bin "pgo=new/$EXE" \
+            --cwd run --expect-nnue "$EXPECT_NNUE" --expect-classical "$EXPECT_CLASSICAL" \
+            --depth "$BENCH_DEPTH" --rounds "$ROUNDS" --syzygy "$tb" \
+            --json out/check.json --md "$md" | tee out/check.log
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: release-pgo-check-${{ matrix.os }}-${{ matrix.arch }}
+          path: out/
+          if-no-files-found: error
