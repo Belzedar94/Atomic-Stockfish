@@ -1572,10 +1572,18 @@ moves_loop:  // When in check, search starts here
                 int tripleMargin = 72 + 306 * PvNode - 188 * !ttCapture + 84 * ss->ttPv - corrValAdj
                                  - (ss->ply > rootDepth) * 45;
 
-                extension =
-                  1 + (value < singularBeta - doubleMargin) + (value < singularBeta - tripleMargin);
+                // No extension once this node is decided: its own TT value is beyond
+                // 1500 centipawns either way. Decisive Atomic lines are chains of only
+                // moves, and extending each of them spends on one line the nodes that
+                // close the proof. Open nodes keep the extension, which is worth
+                // strength there.
+                if (std::abs(ttData.value) * 100 / PawnValue <= 1500)
+                {
+                    extension = 1 + (value < singularBeta - doubleMargin)
+                              + (value < singularBeta - tripleMargin);
 
-                depth++;
+                    depth++;
+                }
             }
 
             // Multi-cut pruning
