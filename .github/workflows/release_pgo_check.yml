@@ -103,3 +103,94 @@ jobs:
           name: release-pgo-check-${{ matrix.os }}-${{ matrix.arch }}
           path: out/
           if-no-files-found: error
+
+  # A second look at the AtomicDB worker engines staged from run 38400518878 of
+  # "AtomicDB worker engines (PGO)": the exact files (sha256 pinned below) against
+  # the binaries served today, on whatever hardware this run is given.
+  staged:
+    name: staged worker engine, ${{ matrix.os }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            os: linux
+            artifact: worker-engine-linux
+            new: Atomic-Stockfish-linux-x86_64-pgo
+            new_sha: 56213d364dbe2a597f81b627591de1f615541661d137b4519ce8610b77ad1d5d
+            served: Atomic-Stockfish-linux-x86_64
+            served_sha: 2990a6f47cb67e8e98aabaed525150ff899e733756988364c512a6d17787123f
+            needs_net: "yes"
+          - runner: windows-latest
+            os: windows
+            artifact: worker-engine-windows-gcc-15.2.0-8
+            new: Atomic-Stockfish-win-x86_64-pgo.exe
+            new_sha: d12981a008fdf22a4a7f57f8613cf8e59e0fd2520637aaa6781f39a88a8191f1
+            served: Atomic-Stockfish-win-x86_64.exe
+            served_sha: 88a5c04e8ac111109c73749473343dd7ccf823361a23417b616978562cf78ed4
+            needs_net: "no"
+          - runner: macos-14
+            os: macos
+            artifact: worker-engine-macos
+            new: Atomic-Stockfish-darwin-arm64-pgo
+            new_sha: 3d902959e257c39dd15bef6b5dde502c2eb9f7e755744fccdce536e4c0895752
+            served: Atomic-Stockfish-darwin-arm64
+            served_sha: d2d2037696f63cd9210e8f8fd68e72c7c8d190aa316562e99ff4ef1beebd276a
+            needs_net: "no"
+    env:
+      WORKER_RUN: "38400518878"
+      SERVED_URL: https://belzedar.duckdns.org/atomicdb/engines
+      NET_NAME: atomic_run3b_e202_l05.nnue
+      NET_SHA256: 99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f92a04a6
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Staged file, served file, network, tablebases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sum() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1"; else shasum -a 256 "$1"; fi | cut -d' ' -f1; }
+          py=python3; if [ "$RUNNER_OS" = Windows ]; then py=python; fi
+          mkdir -p run out tb served
+          gh run download "$WORKER_RUN" -R "$GITHUB_REPOSITORY" -n "${{ matrix.artifact }}" -D staged
+          test "$(sum "staged/${{ matrix.new }}")" = "${{ matrix.new_sha }}"
+          curl -sSfL --retry 3 -o "served/${{ matrix.served }}" "$SERVED_URL/${{ matrix.served }}"
+          test "$(sum "served/${{ matrix.served }}")" = "${{ matrix.served_sha }}"
+          chmod +x "staged/${{ matrix.new }}" "served/${{ matrix.served }}"
+          if [ "${{ matrix.needs_net }}" = yes ]; then
+            curl -sSfL --retry 3 -o "run/$NET_NAME"               "https://github.com/$GITHUB_REPOSITORY/releases/download/v1.0/atomic-run3b.nnue"
+            test "$(sum "run/$NET_NAME")" = "$NET_SHA256"
+          fi
+          "$py" ci/fetch_tb.py "$SERVED_URL/syzygy-345" tb
+
+      - name: Host
+        run: |
+          case "$RUNNER_OS" in
+            Windows) powershell -NoProfile -Command "(Get-CimInstance Win32_Processor).Name" ;;
+            macOS) sysctl -n machdep.cpu.brand_string ;;
+            *) lscpu | grep -E 'Model name' ;;
+          esac
+
+      - name: Identity and speed, served against staged
+        run: |
+          py=python3; tb="$PWD/tb"
+          if [ "$RUNNER_OS" = Windows ]; then tb="$(cygpath -m "$tb")"; py=python; fi
+          "$py" ci/engine_check.py --title "staged worker engine, ${{ matrix.os }}" \
+            --bin "served=served/${{ matrix.served }}" --bin "staged=staged/${{ matrix.new }}" \
+            --cwd run --expect-nnue 338376 --expect-classical 825643 \
+            --depth "$BENCH_DEPTH" --rounds 12 --syzygy "$tb" \
+            --json out/check.json --md "$GITHUB_STEP_SUMMARY" | tee out/check.log
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: staged-check-${{ matrix.os }}
+          path: out/
+          if-no-files-found: error
