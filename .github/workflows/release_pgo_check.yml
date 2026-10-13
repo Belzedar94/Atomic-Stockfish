@@ -188,6 +188,20 @@ jobs:
             --depth "$BENCH_DEPTH" --rounds 12 --syzygy "$tb" \
             --json out/check.json --md "$GITHUB_STEP_SUMMARY" | tee out/check.log
 
+      # Workers run the engine with several threads; the profile was recorded with one.
+      - name: Speed with every core of the runner, served against staged
+        run: |
+          py=python3; if [ "$RUNNER_OS" = Windows ]; then py=python; fi
+          case "$RUNNER_OS" in
+            macOS) n=$(sysctl -n hw.ncpu) ;;
+            Windows) n=$NUMBER_OF_PROCESSORS ;;
+            *) n=$(nproc) ;;
+          esac
+          "$py" ci/smp_nps.py --old "served/${{ matrix.served }}" --new "staged/${{ matrix.new }}" --cwd run \
+            --threads "$n" --depth 20 --rounds 8 --md "$GITHUB_STEP_SUMMARY" | tee out/smp.log
+          "$py" ci/smp_nps.py --old "served/${{ matrix.served }}" --new "staged/${{ matrix.new }}" --cwd run \
+            --threads 2 --depth 19 --rounds 8 --md "$GITHUB_STEP_SUMMARY" | tee -a out/smp.log
+
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
