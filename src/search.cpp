@@ -1285,9 +1285,11 @@ Value Search::Worker::search(
         return qsearch<NonPV>(pos, ss, alpha, beta);
 
     // Step 8. Futility pruning: child node
-    // The depth condition is important for mate finding.
+    // The depth condition is important for mate finding. A blast check is a
+    // check: the static evaluation is not an upper bound on a position whose
+    // every continuation can be answered by detonating our king.
     if (!ss->ttPv && depth < 17 && eval >= beta && (!ttData.move || ttCapture) && !is_loss(beta)
-        && !is_win(eval))
+        && !is_win(eval) && !pos.under_blast_threat())
     {
         Value futilityMult = std::min(40 + depth * 4, 80);
         futilityMult -= 20 * !ss->ttHit;
