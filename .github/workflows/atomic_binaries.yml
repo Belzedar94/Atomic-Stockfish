@@ -103,11 +103,25 @@ jobs:
           echo "$ATOMIC_NET_SHA256  src/$canon" | sha256sum -c -
           echo "CANON_NET=$canon" >> "$GITHUB_ENV"
 
+      # Profile-guided. The instrumented build plays the bench with the network
+      # placed above, with NNUE and then with the classical evaluation, and the
+      # final build is optimised for what that run executed. profile-build
+      # replaces EXTRACXXFLAGS in its sub-builds, so the embedding flag travels
+      # in EXTRAPROFILEFLAGS.
       - name: Build
         working-directory: src
         run: |
-          make -j2 build ARCH=${{ matrix.arch }} COMP=${{ matrix.comp }} \
-            EXE="$EXE_NAME" EXTRACXXFLAGS=-DATOMIC_NNUE_EMBEDDING
+          set -o pipefail
+          log="$(mktemp)"
+          make -j2 profile-build ARCH=${{ matrix.arch }} COMP=${{ matrix.comp }} \
+            EXE="$EXE_NAME" EXTRAPROFILEFLAGS=-DATOMIC_NNUE_EMBEDDING 2>&1 | tee "$log"
+          # If the profiling bench finds no network, profile-build still exits 0
+          # and only warns, and what it leaves is far slower with NNUE than a
+          # plain build. Never publish that one.
+          if grep -q "the profiling run found no NNUE network" "$log"; then
+            echo "::error::profile-build did not profile the NNUE evaluation"
+            exit 1
+          fi
           strip "$EXE_NAME"
           # The network is ~45 MiB and the engine itself a couple of MiB, so a
           # binary smaller than the network it is supposed to carry never got

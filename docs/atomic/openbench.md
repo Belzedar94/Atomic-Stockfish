@@ -7,9 +7,17 @@ Atomic-Stockfish is a public-source OpenBench engine. A worker builds it from
 make -j EXE=<output> CXX=<compiler> EVALFILE=<absolute-network-path>
 ```
 
-When `EVALFILE` is present, the default Make goal selects `x86-64-bmi2` and the
-host compiler family (`mingw` on Windows, `gcc` elsewhere), while forwarding
-the worker's `EXE` and `CXX` unchanged. Without `EVALFILE`, ordinary developer
+When `EVALFILE` is present, the default Make goal runs `profile-build` for the
+worker's own processor (`ARCH=native`) with the host compiler family (`mingw`
+on Windows, `gcc` elsewhere), while forwarding the worker's `EXE` and `CXX`
+unchanged. The bench must not depend on the architecture, so OpenBench's bench
+check before every test still compares the same number on every machine; a
+build whose SIMD path disagrees stops there instead of playing games.
+
+Both engines of a test are built from their own sources, so a dev and a base
+from opposite sides of the commit that introduced the profiled build would be
+built differently, one profiled and one not, about 8% apart in speed. Bases
+must come from that commit or later. Without `EVALFILE`, ordinary developer
 invocations keep the upstream `help` default. OpenBench first authenticates the
 SHA-addressed network; the shim copies it to the canonical short name inside
 the worker's ephemeral checkout and embeds it in the executable. The resulting

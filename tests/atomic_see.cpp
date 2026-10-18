@@ -491,13 +491,13 @@ bool expect_nnue_index_list_bounds() {
 
     constexpr std::array<IndexListCase, 6> tests = {{
       {"maximum capture", "7k/8/8/2nnn3/2nrn3/2nnnN2/8/K7 w - - 0 1", "f3d4", false,
-       DirtyPiece::MAX_ATOMIC_BLAST_PIECES, 11, 1, 2},
-      {"maximum en passant", "7k/2n1n3/2n1n3/2npP3/8/8/8/K7 w - d6 0 2", "e5d6", false, 6, 8, 1, 2},
-      {"maximum capture promotion", "2nrn2k/2nnP3/8/8/8/8/8/K7 w - - 0 1", "e7d8q", false, 5, 7, 1,
+       DirtyPiece::MAX_ATOMIC_BLAST_PIECES, 10, 0, 2},
+      {"maximum en passant", "7k/2n1n3/2n1n3/2npP3/8/8/8/K7 w - d6 0 2", "e5d6", false, 6, 7, 0, 2},
+      {"maximum capture promotion", "2nrn2k/2nnP3/8/8/8/8/8/K7 w - - 0 1", "e7d8q", false, 5, 6, 0,
        2},
       {"castling", "4k3/8/8/8/8/8/8/R3K2R w KQ - 0 1", "e1g1", false, 0, 2, 2, 4},
       {"Atomic960 castling", "7k/8/8/8/8/8/8/1RK5 w Q - 0 1", "c1b1", true, 0, 2, 2, 3},
-      {"terminal king capture", "7k/7R/8/8/8/8/8/K7 w - - 0 1", "h7h8", false, 1, 3, 1, 1},
+      {"terminal king capture", "7k/7R/8/8/8/8/8/K7 w - - 0 1", "h7h8", false, 1, 2, 0, 1},
     }};
 
     bool ok = true;

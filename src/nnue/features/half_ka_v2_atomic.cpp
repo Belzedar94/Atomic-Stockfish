@@ -90,17 +90,27 @@ void HalfKAv2Atomic::append_changed_indices(Color             perspective,
     assert(ksq != SQ_NONE);
 
     removed.push_back(make_index(perspective, diff.from, diff.pc, ksq));
-    if (diff.to != SQ_NONE)
-        added.push_back(make_index(perspective, diff.to, diff.pc, ksq));
 
     if (diff.remove_sq != SQ_NONE)
         removed.push_back(make_index(perspective, diff.remove_sq, diff.remove_pc, ksq));
 
+    if (diff.atomicBlast.size())
+    {
+        // A capture: the capturing (or promoted) piece explodes on the square it
+        // arrives at, so adding its feature and removing it again cancel. The
+        // accumulator sums wrap (int16/int32), so skipping both is bit-exact.
+        const Square arrival = diff.to != SQ_NONE ? diff.to : diff.add_sq;
+        for (const auto& blasted : diff.atomicBlast)
+            if (blasted.square != arrival)
+                removed.push_back(make_index(perspective, blasted.square, blasted.pc, ksq));
+        return;
+    }
+
+    if (diff.to != SQ_NONE)
+        added.push_back(make_index(perspective, diff.to, diff.pc, ksq));
+
     if (diff.add_sq != SQ_NONE)
         added.push_back(make_index(perspective, diff.add_sq, diff.add_pc, ksq));
-
-    for (const auto& blasted : diff.atomicBlast)
-        removed.push_back(make_index(perspective, blasted.square, blasted.pc, ksq));
 }
 
 bool HalfKAv2Atomic::requires_refresh(const DiffType& diff, Color perspective) {
