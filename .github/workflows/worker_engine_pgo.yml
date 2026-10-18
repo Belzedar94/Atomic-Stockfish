@@ -1,13 +1,14 @@
 name: AtomicDB worker engines (PGO)
 
 # Builds the engine the AtomicDB workers download, profile-guided, for the three
-# platforms of the worker manifest, and checks each result against the binary
-# that is served today: same bench signatures, same output on a worker-like UCI
-# session, and speed measured back to back on the same runner.
+# platforms of the worker manifest. Each profile-guided binary must search exactly
+# like a plain build of the same commit (same bench signatures, same output on a
+# worker-like UCI session), and both are timed back to back on the same runner.
+# The served binary comes from an older commit, so it is only used to compare
+# what the binaries need from the system, not their output.
 #
-# The engine source is not on this branch. It is checked out by SHA from
-# worker-engine-1adc5239-pgo (main@1adc5239 plus the src/Makefile part of PR #59),
-# so changing this workflow never changes what is built.
+# The engine source is not on this branch. It is checked out by SHA (ENGINE_SHA,
+# a main commit), so changing this workflow never changes what is built.
 #
 # Nothing is published from here: the binaries are workflow artifacts only.
 
@@ -25,15 +26,15 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  ENGINE_SHA: 4e3363167ee03f17b7529463b76905cbe8a6a171
+  ENGINE_SHA: 1311e3cfa1a2401532dd0cb89da06439561cb65f
   BASE_SHA: 1adc5239500a684824b178b19be4266f6e249cc8
   ATOMIC_NET_TAG: v1.0
   ATOMIC_NET_ASSET: atomic-run3b.nnue
   ATOMIC_NET_SHA256: 99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f92a04a6
   NET_NAME: atomic_run3b_e202_l05.nnue
   SERVED_URL: https://belzedar.duckdns.org/atomicdb/engines
-  EXPECT_NNUE: "338376"
-  EXPECT_CLASSICAL: "825643"
+  EXPECT_NNUE: "450539"
+  EXPECT_CLASSICAL: "657485"
   BENCH_DEPTH: "18"
   ROUNDS: "10"
 
@@ -136,10 +137,10 @@ jobs:
           readelf -n "out/$NEW_FILE" | grep -E "ISA|Build ID" || true
           readelf -p .comment "out/$NEW_FILE" | grep GCC
 
-      - name: Identity and speed against the served binary
+      - name: Identity of the plain and profile-guided builds, and their speed
         run: |
           python3 ci/engine_check.py --title "linux $ARCH on $(lscpu | sed -n 's/^Model name: *//p' | head -n 1)" \
-            --bin "served=served/$SERVED_FILE" --bin "plain=out/plain" --bin "pgo=out/$NEW_FILE" \
+            --bin "plain=out/plain" --bin "pgo=out/$NEW_FILE" \
             --cwd run --expect-nnue "$EXPECT_NNUE" --expect-classical "$EXPECT_CLASSICAL" \
             --depth "$BENCH_DEPTH" --rounds "$ROUNDS" --syzygy "$PWD/tb" \
             --json out/check.json --md "$GITHUB_STEP_SUMMARY" | tee out/check.log
@@ -261,12 +262,12 @@ jobs:
 
       # The run directory holds no .nnue: a completed NNUE bench can only come from
       # the embedded network.
-      - name: Identity and speed against the served binary
+      - name: Identity of the plain and profile-guided builds, and their speed
         run: |
           set -eo pipefail
           test -z "$(ls run/*.nnue 2>/dev/null)"
           python ci/engine_check.py --title "windows $ARCH, ${{ matrix.toolchain }}" \
-            --bin "served=served/$SERVED_FILE" --bin "plain=out/plain.exe" --bin "pgo=out/$NEW_FILE" \
+            --bin "plain=out/plain.exe" --bin "pgo=out/$NEW_FILE" \
             --cwd run --expect-nnue "$EXPECT_NNUE" --expect-classical "$EXPECT_CLASSICAL" \
             --depth "$BENCH_DEPTH" --rounds "$ROUNDS" --syzygy "$(cygpath -m "$PWD/tb")" \
             --json out/check.json --md "$(cygpath -m "$GITHUB_STEP_SUMMARY")" | tee out/check.log
@@ -377,11 +378,11 @@ jobs:
           test "$(wc -c < "$NEW_FILE")" -gt "$(wc -c < "$NET_NAME")"
           cp "$NEW_FILE" "../../out/$NEW_FILE"
 
-      - name: Identity and speed against the served binary
+      - name: Identity of the plain and profile-guided builds, and their speed
         run: |
           test -z "$(ls run/*.nnue 2>/dev/null)"
           python3 ci/engine_check.py --title "macos $ARCH on $(sysctl -n machdep.cpu.brand_string)" \
-            --bin "served=served/$SERVED_FILE" --bin "plain=out/plain" --bin "pgo=out/$NEW_FILE" \
+            --bin "plain=out/plain" --bin "pgo=out/$NEW_FILE" \
             --cwd run --expect-nnue "$EXPECT_NNUE" --expect-classical "$EXPECT_CLASSICAL" \
             --depth "$BENCH_DEPTH" --rounds "$ROUNDS" --syzygy "$PWD/tb" \
             --json out/check.json --md "$GITHUB_STEP_SUMMARY" | tee out/check.log
