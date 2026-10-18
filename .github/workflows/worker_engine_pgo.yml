@@ -66,6 +66,19 @@ jobs:
           path: base
           persist-credentials: false
 
+      - name: Name the build after its commit
+        # main carries the release number 1.0.3; a worker engine built from a later
+        # commit must say which one, so it is built as a dev build, which prints
+        # dev-<date>-<sha>. Only the version string changes, not the search.
+        shell: python
+        run: |
+          import pathlib, re
+          p = pathlib.Path('engine/src/atomic_version.h')
+          text, n = re.subn(r'AtomicVersionString = "[^"]*"', 'AtomicVersionString = "dev"', p.read_text())
+          assert n == 1, n
+          p.write_text(text)
+          print('engine/src/atomic_version.h: version string set to dev')
+
       - name: Toolchain and host
         run: |
           g++ --version | head -n 1
@@ -214,6 +227,19 @@ jobs:
             "$MSYS2_REPO/mingw-w64-x86_64-winpthreads-13.0.0.r271.g937a01534-1-any.pkg.tar.zst" \
             "$MSYS2_REPO/mingw-w64-x86_64-libwinpthread-13.0.0.r271.g937a01534-1-any.pkg.tar.zst"
 
+      - name: Name the build after its commit
+        # main carries the release number 1.0.3; a worker engine built from a later
+        # commit must say which one, so it is built as a dev build, which prints
+        # dev-<date>-<sha>. Only the version string changes, not the search.
+        shell: python
+        run: |
+          import pathlib, re
+          p = pathlib.Path('engine/src/atomic_version.h')
+          text, n = re.subn(r'AtomicVersionString = "[^"]*"', 'AtomicVersionString = "dev"', p.read_text())
+          assert n == 1, n
+          p.write_text(text)
+          print('engine/src/atomic_version.h: version string set to dev')
+
       - name: Toolchain and host
         run: |
           set -eo pipefail
@@ -313,6 +339,19 @@ jobs:
           ref: ${{ env.OLD_SHA }}
           path: old
           persist-credentials: false
+
+      - name: Name the build after its commit
+        # main carries the release number 1.0.3; a worker engine built from a later
+        # commit must say which one, so it is built as a dev build, which prints
+        # dev-<date>-<sha>. Only the version string changes, not the search.
+        shell: python
+        run: |
+          import pathlib, re
+          p = pathlib.Path('engine/src/atomic_version.h')
+          text, n = re.subn(r'AtomicVersionString = "[^"]*"', 'AtomicVersionString = "dev"', p.read_text())
+          assert n == 1, n
+          p.write_text(text)
+          print('engine/src/atomic_version.h: version string set to dev')
 
       - name: Toolchain and host
         run: |
