@@ -1,0 +1,182 @@
+name: Clang against GCC, profile-guided
+
+# One measurement asked for on Discord: is a profile-guided Clang build of the
+# engine faster than the profile-guided GCC build the Linux and Windows workers
+# download? Both are built from the same commit on the same runner, then
+# ci/engine_check.py checks that they search exactly the same nodes and times
+# them back to back in alternating rounds. Nothing is published; the binaries
+# and the reports are artifacts.
+
+on:
+  push:
+    branches:
+      - ci/clang-vs-gcc-pgo
+
+permissions:
+  contents: read
+
+concurrency:
+  group: clang-vs-gcc-pgo
+  cancel-in-progress: true
+
+env:
+  ENGINE_SHA: 3a80e2a2b4fcf2ae0b165e0268a291e225a05fba
+  ATOMIC_NET_TAG: v1.0
+  ATOMIC_NET_ASSET: atomic-run3b.nnue
+  ATOMIC_NET_SHA256: 99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f92a04a6
+  NET_NAME: atomic_run3b_e202_l05.nnue
+  EXPECT_NNUE: "450539"
+  EXPECT_CLASSICAL: "657485"
+  BENCH_DEPTH: "20"
+  ROUNDS: "12"
+
+jobs:
+  linux:
+    name: linux x86-64-avx2, gcc against clang
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    env:
+      ARCH: x86-64-avx2
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ env.ENGINE_SHA }}
+          path: engine
+          persist-credentials: false
+
+      - name: Toolchains and host
+        run: |
+          g++ --version | head -n 1
+          clang++ --version | head -n 1
+          if ! command -v llvm-profdata > /dev/null; then
+            p=$(ls /usr/bin/llvm-profdata-* 2>/dev/null | sort -V | tail -n 1)
+            test -n "$p"
+            sudo ln -sf "$p" /usr/local/bin/llvm-profdata
+          fi
+          llvm-profdata --version | head -n 2
+          lscpu | grep -E 'Model name|^CPU\(s\)'
+          git -C engine log -1 --format='engine: %H %s'
+
+      - name: Network
+        run: |
+          mkdir -p run out
+          curl -sSfL --retry 3 -o "run/$NET_NAME" \
+            "https://github.com/$GITHUB_REPOSITORY/releases/download/$ATOMIC_NET_TAG/$ATOMIC_NET_ASSET"
+          echo "$ATOMIC_NET_SHA256  run/$NET_NAME" | sha256sum -c -
+          cp "run/$NET_NAME" "engine/src/$NET_NAME"
+
+      - name: GCC profile-guided build
+        working-directory: engine/src
+        run: |
+          make -j4 profile-build ARCH=$ARCH COMP=gcc EXE=gcc-pgo > ../../out/build-gcc.log 2>&1 || { tail -n 60 ../../out/build-gcc.log; exit 1; }
+          grep -E "Nodes searched|WARNING" ../../out/build-gcc.log || true
+          cp gcc-pgo ../../out/gcc-pgo
+          make clean > /dev/null 2>&1
+
+      - name: Clang profile-guided build
+        working-directory: engine/src
+        run: |
+          make -j4 profile-build ARCH=$ARCH COMP=clang EXE=clang-pgo > ../../out/build-clang.log 2>&1 || { tail -n 60 ../../out/build-clang.log; exit 1; }
+          grep -E "Nodes searched|WARNING" ../../out/build-clang.log || true
+          cp clang-pgo ../../out/clang-pgo
+
+      - name: Identity and speed
+        run: |
+          python3 ci/engine_check.py --title "linux $ARCH on $(lscpu | sed -n 's/^Model name: *//p' | head -n 1)" \
+            --bin "gcc=out/gcc-pgo" --bin "clang=out/clang-pgo" \
+            --cwd run --expect-nnue "$EXPECT_NNUE" --expect-classical "$EXPECT_CLASSICAL" \
+            --depth "$BENCH_DEPTH" --rounds "$ROUNDS" --skip-session \
+            --json out/check.json --md "$GITHUB_STEP_SUMMARY" | tee out/check.log
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: clang-vs-gcc-linux
+          path: out/
+
+  windows:
+    name: windows x86-64-bmi2, gcc against clang (MSYS2)
+    runs-on: windows-latest
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: msys2 {0}
+    env:
+      ARCH: x86-64-bmi2
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ env.ENGINE_SHA }}
+          path: engine
+          persist-credentials: false
+
+      - name: Set up MSYS2 with both toolchains
+        uses: msys2/setup-msys2@e9898307ac31d1a803454791be09ab9973336e1c # v2.31.1
+        with:
+          msystem: mingw64
+          path-type: inherit
+          install: >-
+            make
+            mingw-w64-x86_64-gcc
+            mingw-w64-clang-x86_64-clang
+            mingw-w64-clang-x86_64-llvm
+
+      - name: Toolchains and host
+        run: |
+          g++ --version | head -n 1
+          /clang64/bin/clang++ --version | head -n 1
+          /clang64/bin/llvm-profdata --version | head -n 2
+          python --version
+          git -C engine log -1 --format='engine: %H %s'
+
+      - name: Network
+        run: |
+          mkdir -p run out
+          curl -sSfL --retry 3 -o "out/$NET_NAME" \
+            "https://github.com/$GITHUB_REPOSITORY/releases/download/$ATOMIC_NET_TAG/$ATOMIC_NET_ASSET"
+          echo "$ATOMIC_NET_SHA256  out/$NET_NAME" | sha256sum -c -
+          mv "out/$NET_NAME" "engine/src/$NET_NAME"
+
+      - name: GCC profile-guided build
+        working-directory: engine/src
+        run: |
+          make -j4 profile-build ARCH=$ARCH COMP=mingw EXE=gcc-pgo.exe EXTRAPROFILEFLAGS=-DATOMIC_NNUE_EMBEDDING > ../../out/build-gcc.log 2>&1 || { tail -n 60 ../../out/build-gcc.log; exit 1; }
+          grep -E "Nodes searched|WARNING" ../../out/build-gcc.log || true
+          cp gcc-pgo.exe ../../out/gcc-pgo.exe
+          make clean > /dev/null 2>&1
+
+      - name: Clang profile-guided build
+        working-directory: engine/src
+        run: |
+          export PATH="/clang64/bin:$PATH"
+          CXXFLAGS=-DATOMIC_NNUE_EMBEDDING make -j4 profile-build ARCH=$ARCH COMP=clang EXE=clang-pgo.exe > ../../out/build-clang.log 2>&1 || { tail -n 60 ../../out/build-clang.log; exit 1; }
+          grep -E "Nodes searched|WARNING" ../../out/build-clang.log || true
+          cp clang-pgo.exe ../../out/clang-pgo.exe
+          objdump -p ../../out/clang-pgo.exe | grep "DLL Name" | tee ../../out/clang.dlls
+          objdump -p ../../out/gcc-pgo.exe | grep "DLL Name" | tee ../../out/gcc.dlls
+
+      - name: Identity and speed
+        run: |
+          set -eo pipefail
+          test -z "$(ls run/*.nnue 2>/dev/null)"
+          export PATH="$PATH:/clang64/bin"
+          python ci/engine_check.py --title "windows $ARCH, MSYS2 gcc against clang" \
+            --bin "gcc=out/gcc-pgo.exe" --bin "clang=out/clang-pgo.exe" \
+            --cwd run --expect-nnue "$EXPECT_NNUE" --expect-classical "$EXPECT_CLASSICAL" \
+            --depth "$BENCH_DEPTH" --rounds "$ROUNDS" --skip-session \
+            --json out/check.json --md "$(cygpath -m "$GITHUB_STEP_SUMMARY")" | tee out/check.log
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: clang-vs-gcc-windows
+          path: out/
