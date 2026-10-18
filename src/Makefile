@@ -2328,9 +2328,9 @@ else
 	@test -f "$(EVALFILE)" || { echo "ERROR: OpenBench EVALFILE does not exist: $(EVALFILE)" >&2; exit 2; }
 	@cp "$(EVALFILE)" "$(OPENBENCH_NET).tmp"
 	@mv "$(OPENBENCH_NET).tmp" "$(OPENBENCH_NET)"
-	+$(MAKE) build EXE="$(EXE)" CXX="$(CXX)" \
-		ARCH=x86-64-bmi2 COMP=$(OPENBENCH_COMP) \
-		EXTRACXXFLAGS='$(EXTRACXXFLAGS) -DATOMIC_NNUE_EMBEDDING'
+	+$(MAKE) profile-build EXE="$(EXE)" CXX="$(CXX)" \
+		ARCH=native COMP=$(OPENBENCH_COMP) \
+		EXTRAPROFILEFLAGS='$(EXTRACXXFLAGS) -DATOMIC_NNUE_EMBEDDING'
 endif
 
 # Distributed generation needs the isolated generator, not the playing-engine
