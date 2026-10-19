@@ -24,6 +24,7 @@
 #include <cstdint>
 #include <iostream>
 
+#include "../../bitboard.h"
 #include "../../memory.h"
 #include "../nnue_common.h"
 #include "../simd.h"
@@ -269,6 +270,53 @@ class AffineTransform {
                 acc[k] = vec_set_32(0);
 
             IndexType i = 0;
+    #if defined(USE_SSSE3)
+            if constexpr (InputDimensions >= 256 && NumChunks % 4 == 0)
+            {
+                // Sparse input: clipped-ReLU outputs of the feature transformer are mostly zero
+                // (about 70% of the 4-byte chunks). Collect the non-zero chunks without branches,
+                // then accumulate only those; the sums are bit-identical to the dense loop.
+                struct Lut {
+                    alignas(16) u16 idx[16][8];
+                    constexpr Lut() :
+                        idx{} {
+                        for (int m = 0; m < 16; ++m)
+                        {
+                            int k = 0;
+                            for (int b = 0; b < 4; ++b)
+                                if (m & (1 << b))
+                                    idx[m][k++] = u16(b);
+                        }
+                    }
+                };
+                static constexpr Lut lut{};
+                alignas(16) u16      nnz[NumChunks + 8];
+                IndexType            count = 0;
+                const __m128i        zero  = _mm_setzero_si128();
+                for (IndexType c = 0; c < NumChunks; c += 4)
+                {
+                    const __m128i v =
+                      _mm_loadu_si128(reinterpret_cast<const __m128i*>(input + c * 4));
+                    const int m =
+                      ~_mm_movemask_ps(_mm_castsi128_ps(_mm_cmpeq_epi32(v, zero))) & 0xF;
+                    const __m128i ix =
+                      _mm_add_epi16(_mm_loadl_epi64(reinterpret_cast<const __m128i*>(lut.idx[m])),
+                                    _mm_set1_epi16(short(c)));
+                    _mm_storel_epi64(reinterpret_cast<__m128i*>(nnz + count), ix);
+                    count += IndexType(popcount(m));
+                }
+                for (IndexType j = 0; j < count; ++j)
+                {
+                    const IndexType c   = nnz[j];
+                    const vec_t     in0 = vec_set_32(load_as<i32>(input + c * sizeof(i32)));
+                    const auto      col0 =
+                      reinterpret_cast<const vec_t*>(&weights[c * OutputDimensions * 4]);
+                    for (IndexType k = 0; k < NumAccums; ++k)
+                        vec_add_dpbusd_32(acc[k], in0, col0[k]);
+                }
+                i = NumChunks;
+            }
+    #endif
     #if defined(USE_VNNI)
             for (; i < NumChunks; i += 2)
             {
