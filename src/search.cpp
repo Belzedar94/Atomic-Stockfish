@@ -2006,8 +2006,11 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
     }
 
     // Step 4. Static evaluation of the position
-    Value unadjustedStaticEval = VALUE_NONE;
-    if (ss->inCheck)
+    // A blast check is a check: the opponent ends the game next move, so there
+    // is no standing pat on the static evaluation and no capture-only search.
+    const bool blastCheck       = !ss->inCheck && pos.under_blast_threat();
+    Value      unadjustedStaticEval = VALUE_NONE;
+    if (ss->inCheck || blastCheck)
         bestValue = futilityBase = -VALUE_INFINITE;
     else
     {
@@ -2071,7 +2074,7 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
     // legal and an explosion can remove the checking piece. Keep checkers()
     // constant-zero for move generation, but search every capture and quiet
     // whenever the separate Atomic check predicate forbids stand-pat.
-    const Depth movePickerDepth = ss->inCheck ? 1 : DEPTH_QS;
+    const Depth movePickerDepth = ss->inCheck || blastCheck ? 1 : DEPTH_QS;
     MovePicker  mp(pos, ttData.move, movePickerDepth, &mainHistory, &lowPlyHistory, &captureHistory,
                    contHist, &active_shared_history(), ss->ply);
 
