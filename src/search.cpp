@@ -656,6 +656,9 @@ bool Search::Worker::iterative_deepening() {
             alpha     = std::max(avg - delta, -VALUE_INFINITE);
             beta      = std::min(avg + delta, VALUE_INFINITE);
 
+            // Do not tune these values. They are not intended for playing strength.
+            seekMate = std::abs(rootMoves[pvIdx].score) >= 750 + 220000 / (rootDepth * rootDepth);
+
             // Adjust optimism based on root move's averageScore
             optimism[us]  = 137 * avg / (std::abs(avg) + 81);
             optimism[~us] = -optimism[us];
@@ -1006,11 +1009,6 @@ Value Search::Worker::search(
     constexpr bool rootNode = nodeType == Root;
     const bool     allNode  = !(PvNode || cutNode);
 
-    assert(rootDepth);
-    // Do not tune these values. They are not intended for playing strength.
-    const bool seekMate =
-      std::abs(rootMoves[pvIdx].score) >= 750 + 220000 / (rootDepth * rootDepth);
-
     // Dive into quiescence search when the depth reaches zero
     if (depth <= 0)
         return qsearch<PvNode ? PV : NonPV>(pos, ss, alpha, beta);
@@ -1316,6 +1314,7 @@ Value Search::Worker::search(
 
         // Atomic uses a shallower null-move reduction than orthodox chess.
         Depth R = atomic_null_move_reduction(depth);
+        R -= seekMate * R / 2;
         do_null_move(pos, st, ss);
 
         Value nullValue = -search<NonPV>(pos, ss + 1, -beta, -beta + 1, depth - R, false);
@@ -1405,7 +1404,7 @@ moves_loop:  // When in check, search starts here
     // Step 12. A small Probcut idea
     probCutBeta = beta + 428;
     if ((ttData.bound & BOUND_LOWER) && ttData.depth >= depth - 4 && ttData.value >= probCutBeta
-        && !is_decisive(beta) && is_valid(ttData.value) && !is_decisive(ttData.value))
+        && !is_decisive(beta) && is_valid(ttData.value) && !is_decisive(ttData.value) && !seekMate)
         return probCutBeta;
 
     const PieceToHistory* contHist[] = {
@@ -1669,6 +1668,10 @@ moves_loop:  // When in check, search starts here
         // Scale up reductions for expected ALL nodes
         if (allNode)
             r += r * 272 / (256 * depth + 285);
+
+        // When seeking a mate, reduce non-checking moves more and checking moves less
+        if (seekMate && r > 0)
+            r += (givesCheck ? -r : r) / 4;
 
         // Step 17. Late moves reduction / extension (LMR)
         if (depth >= 2 && moveCount > 1)
