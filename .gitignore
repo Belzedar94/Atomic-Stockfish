@@ -7,6 +7,7 @@ src/universal/network_dump.inc
 .build_sha.txt
 .build_full_sha.txt
 .build_date.txt
+.build_version.txt
 
 # Built binary
 src/stockfish*

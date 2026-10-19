@@ -58,12 +58,6 @@ for path in "${required_files[@]}"; do
     [[ -f "$path" && ! -L "$path" ]] || die "missing regular release input: $path"
 done
 
-declared_version=$(
-    sed -n 's/.*AtomicVersionString = "\([^"]*\)".*/\1/p' src/atomic_version.h
-)
-[[ -n "$declared_version" && "$declared_version" == "$version" ]] \
-    || die "requested version $version differs from atomic_version.h ($declared_version)"
-
 require_command make
 require_command install
 require_command find
@@ -94,7 +88,7 @@ if [[ "$platform" == linux ]]; then
     tar --version | head -n 1 | grep -Fq 'GNU tar' \
         || die "Linux release packaging requires GNU tar"
 
-    make -C src -j2 ARCH="$architecture" COMP=gcc \
+    make -C src -j2 ARCH="$architecture" COMP=gcc ATOMIC_VERSION="$version" \
         GIT_SHA= GIT_SHA_FULL= GIT_DATE= build
     engine=src/atomic-stockfish
     extension=tar.xz
@@ -110,7 +104,7 @@ else
         die "Windows ZIP epoch must be representable on or after 1980-01-01"
     fi
 
-    make -C src -j2 ARCH="$architecture" COMP=mingw COMPCXX="$CXX" \
+    make -C src -j2 ARCH="$architecture" COMP=mingw COMPCXX="$CXX" ATOMIC_VERSION="$version" \
         GIT_SHA= GIT_SHA_FULL= GIT_DATE= build
     engine=src/atomic-stockfish.exe
     extension=zip

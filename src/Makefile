@@ -1202,14 +1202,31 @@ ifeq ($(syzygy),no)
 	CXXFLAGS += -DNO_TABLEBASES
 endif
 
+### 3.8.0 Release version
+### A release build passes its version, e.g. ATOMIC_VERSION=1.0.4, and reports
+### exactly that. Any other build is a development build and reports
+### dev-YYYYMMDD-<sha> from the git info below (see atomic_version.h).
+ATOMIC_RELEASE := $(strip $(ATOMIC_VERSION))
+ifneq ($(ATOMIC_RELEASE),)
+ifeq ($(shell printf '%s\n' '$(ATOMIC_RELEASE)' | grep -Ex '(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)'),)
+$(error ATOMIC_VERSION must be MAJOR.MINOR.PATCH, got '$(ATOMIC_VERSION)')
+endif
+endif
+
 ### 3.8.1 Try to include git info for versioning and avoid recompiles if nothing changes
 BUILD_SHA_FILE  := .build_sha.txt
 BUILD_FULL_SHA_FILE := .build_full_sha.txt
 BUILD_DATE_FILE := .build_date.txt
+BUILD_VERSION_FILE := .build_version.txt
 GIT_SHA         := $(shell git rev-parse HEAD 2>/dev/null | cut -c 1-8 || true)
 GIT_SHA_FULL    ?= $(shell if git rev-parse --is-inside-work-tree >/dev/null 2>&1 \
 	&& [ -z "$$(git status --porcelain --untracked-files=normal 2>/dev/null)" ]; then \
 	git rev-parse HEAD 2>/dev/null; fi)
+### Source archives have no .git. OpenBench still names the commit it built
+### with GIT_SHA_FULL, so a development build can report that commit.
+ifeq ($(GIT_SHA),)
+GIT_SHA         := $(shell printf '%s\n' '$(GIT_SHA_FULL)' | grep -Eix '[0-9a-f]{40}' | cut -c 1-8 | tr 'A-F' 'a-f')
+endif
 GIT_DATE        := $(shell git show -s --date=format:%Y%m%d --format=%cd HEAD 2>/dev/null || true)
 COMPILER_DATE   := $(shell date +%Y%m%d 2>/dev/null)
 
@@ -1226,6 +1243,7 @@ ifneq ($(filter $(MAKECMDGOALS),help strip install clean net objclean profilecle
 _ := $(call cache_file_contents,$(BUILD_SHA_FILE),$(GIT_SHA))
 _ := $(call cache_file_contents,$(BUILD_FULL_SHA_FILE),$(GIT_SHA_FULL))
 _ := $(call cache_file_contents,$(BUILD_DATE_FILE),$(BUILD_DATE))
+_ := $(call cache_file_contents,$(BUILD_VERSION_FILE),$(ATOMIC_RELEASE))
 endif
 
 ### 3.8.2 Try to include architecture
@@ -1397,6 +1415,11 @@ help:
 	echo "icx                     > Intel oneAPI DPC++/C++ Compiler" && \
 	echo "ndk                     > Google NDK to cross-compile for Android" && \
 	echo "" && \
+	echo "Version:" && \
+	echo "" && \
+	echo "ATOMIC_VERSION=x.y.z    > release build named Atomic-Stockfish x.y.z" && \
+	echo "(not set)               > development build named dev-YYYYMMDD-<commit>" && \
+	echo "" && \
 	echo "Simple examples. If you don't know what to do, you likely want to run one of: " && \
 	echo "" && \
 	echo "make -j profile-build ARCH=native         # a fast compile for local use" && \
@@ -1547,7 +1570,7 @@ clean: objclean profileclean universalclean
 
 # clean binaries and objects
 objclean:
-	@rm -f stockfish stockfish.exe atomic-stockfish atomic-stockfish.exe atomic-stockfish.js atomic-stockfish-data-generator atomic-stockfish-data-generator.exe atomic-stockfish-data-tools atomic-stockfish-data-tools.exe atomic-stockfish-data-tools.* atomic-data-tools-json-tests atomic-data-tools-json-tests.exe atomic-data-tools-json-tests.bin atomic-data-tools-json-tests.* atomic-unit-tests atomic-unit-tests.exe atomic-unit-tests.bin atomic-api-tests atomic-api-tests.exe atomic-api-tests.bin atomic-syzygy-driver* atomic-nnue-incremental-tests atomic-nnue-incremental-tests.exe atomic-nnue-incremental-tests.bin atomic-v2-backend-core-tests atomic-v2-backend-core-tests.exe atomic-v2-backend-core-tests.bin atomic-v2-backend-core-tests.* atomic-v2-incremental-tests atomic-v2-incremental-tests.exe atomic-v2-incremental-tests.bin atomic-v2-incremental-tests.* atomic-v3-hm-oracle-tests atomic-v3-hm-oracle-tests.exe atomic-v3-hm-oracle-tests.bin atomic-v3-hm-oracle-tests.* atomic-v3-capture-pair-tests atomic-v3-capture-pair-tests.exe atomic-v3-capture-pair-tests.bin atomic-v3-capture-pair-tests.* atomic-v3-king-blast-ep-tests atomic-v3-king-blast-ep-tests.exe atomic-v3-king-blast-ep-tests.bin atomic-v3-king-blast-ep-tests.* atomic-v3-blast-ring-tests atomic-v3-blast-ring-tests.exe atomic-v3-blast-ring-tests.bin atomic-v3-blast-ring-tests.* atomic-v3-full-refresh-tests atomic-v3-full-refresh-tests.exe atomic-v3-full-refresh-tests.bin atomic-v3-full-refresh-tests.* atomic-v3-numeric-tests atomic-v3-numeric-tests.exe atomic-v3-numeric-tests.bin atomic-v3-numeric-tests.* atomic-v3-wire-tests atomic-v3-wire-tests.exe atomic-v3-wire-tests.bin atomic-v3-wire-tests.* atomic-v3-scalar-tests atomic-v3-scalar-tests.exe atomic-v3-scalar-tests.bin atomic-v3-scalar-tests.* atomic-v3-incremental-tests atomic-v3-incremental-tests.exe atomic-v3-incremental-tests.bin atomic-v3-incremental-tests.* atomic-v3-incremental-stress-tests atomic-v3-incremental-stress-tests.exe atomic-v3-incremental-stress-tests.bin atomic-v3-incremental-stress-tests.* atomic-v3-incremental-simd-kernel-tests atomic-v3-incremental-simd-kernel-tests.exe atomic-v3-incremental-simd-kernel-tests.bin atomic-v3-incremental-simd-kernel-tests.* atomic-v3-incremental-simd-benchmark atomic-v3-incremental-simd-benchmark.exe atomic-v3-incremental-simd-benchmark.bin atomic-v3-incremental-simd-benchmark.* atomic-v3-simd-tests atomic-v3-simd-tests.exe atomic-v3-simd-tests.bin atomic-v3-simd-tests.* atomic-v3-trajectory-tests atomic-v3-trajectory-tests.exe atomic-v3-trajectory-tests.bin atomic-v3-trajectory-tests.* atomic-v3-private-staging-tests atomic-v3-private-staging-tests.exe atomic-v3-private-staging-tests.bin atomic-v3-private-staging-tests.* legacy-atomic-v1-tests legacy-atomic-v1-tests.exe legacy-atomic-v1-tests.bin atomic-bin-v2-tests atomic-bin-v2-tests.exe atomic-bin-v2-tests.bin atomic-bin-v2-tests.* atomic-bin-v2-sink-tests atomic-bin-v2-sink-tests.exe atomic-bin-v2-sink-tests.bin atomic-bin-v2-sink-tests.* atomic-bin-v2-manifest-tests atomic-bin-v2-manifest-tests.exe atomic-bin-v2-manifest-tests.bin atomic-bin-v2-manifest-tests.* atomic-bin-v2-manifest-reader-tests atomic-bin-v2-manifest-reader-tests.exe atomic-bin-v2-manifest-reader-tests.bin atomic-bin-v2-manifest-reader-tests.* atomic-bin-v2-reader-tests atomic-bin-v2-reader-tests.exe atomic-bin-v2-reader-tests.bin atomic-bin-v2-reader-tests.* *.o ./api/*.o ./syzygy/*.o ./nnue/*.o ./nnue/features/*.o $(BUILD_SHA_FILE) $(BUILD_FULL_SHA_FILE) $(BUILD_DATE_FILE)
+	@rm -f stockfish stockfish.exe atomic-stockfish atomic-stockfish.exe atomic-stockfish.js atomic-stockfish-data-generator atomic-stockfish-data-generator.exe atomic-stockfish-data-tools atomic-stockfish-data-tools.exe atomic-stockfish-data-tools.* atomic-data-tools-json-tests atomic-data-tools-json-tests.exe atomic-data-tools-json-tests.bin atomic-data-tools-json-tests.* atomic-unit-tests atomic-unit-tests.exe atomic-unit-tests.bin atomic-api-tests atomic-api-tests.exe atomic-api-tests.bin atomic-syzygy-driver* atomic-nnue-incremental-tests atomic-nnue-incremental-tests.exe atomic-nnue-incremental-tests.bin atomic-v2-backend-core-tests atomic-v2-backend-core-tests.exe atomic-v2-backend-core-tests.bin atomic-v2-backend-core-tests.* atomic-v2-incremental-tests atomic-v2-incremental-tests.exe atomic-v2-incremental-tests.bin atomic-v2-incremental-tests.* atomic-v3-hm-oracle-tests atomic-v3-hm-oracle-tests.exe atomic-v3-hm-oracle-tests.bin atomic-v3-hm-oracle-tests.* atomic-v3-capture-pair-tests atomic-v3-capture-pair-tests.exe atomic-v3-capture-pair-tests.bin atomic-v3-capture-pair-tests.* atomic-v3-king-blast-ep-tests atomic-v3-king-blast-ep-tests.exe atomic-v3-king-blast-ep-tests.bin atomic-v3-king-blast-ep-tests.* atomic-v3-blast-ring-tests atomic-v3-blast-ring-tests.exe atomic-v3-blast-ring-tests.bin atomic-v3-blast-ring-tests.* atomic-v3-full-refresh-tests atomic-v3-full-refresh-tests.exe atomic-v3-full-refresh-tests.bin atomic-v3-full-refresh-tests.* atomic-v3-numeric-tests atomic-v3-numeric-tests.exe atomic-v3-numeric-tests.bin atomic-v3-numeric-tests.* atomic-v3-wire-tests atomic-v3-wire-tests.exe atomic-v3-wire-tests.bin atomic-v3-wire-tests.* atomic-v3-scalar-tests atomic-v3-scalar-tests.exe atomic-v3-scalar-tests.bin atomic-v3-scalar-tests.* atomic-v3-incremental-tests atomic-v3-incremental-tests.exe atomic-v3-incremental-tests.bin atomic-v3-incremental-tests.* atomic-v3-incremental-stress-tests atomic-v3-incremental-stress-tests.exe atomic-v3-incremental-stress-tests.bin atomic-v3-incremental-stress-tests.* atomic-v3-incremental-simd-kernel-tests atomic-v3-incremental-simd-kernel-tests.exe atomic-v3-incremental-simd-kernel-tests.bin atomic-v3-incremental-simd-kernel-tests.* atomic-v3-incremental-simd-benchmark atomic-v3-incremental-simd-benchmark.exe atomic-v3-incremental-simd-benchmark.bin atomic-v3-incremental-simd-benchmark.* atomic-v3-simd-tests atomic-v3-simd-tests.exe atomic-v3-simd-tests.bin atomic-v3-simd-tests.* atomic-v3-trajectory-tests atomic-v3-trajectory-tests.exe atomic-v3-trajectory-tests.bin atomic-v3-trajectory-tests.* atomic-v3-private-staging-tests atomic-v3-private-staging-tests.exe atomic-v3-private-staging-tests.bin atomic-v3-private-staging-tests.* legacy-atomic-v1-tests legacy-atomic-v1-tests.exe legacy-atomic-v1-tests.bin atomic-bin-v2-tests atomic-bin-v2-tests.exe atomic-bin-v2-tests.bin atomic-bin-v2-tests.* atomic-bin-v2-sink-tests atomic-bin-v2-sink-tests.exe atomic-bin-v2-sink-tests.bin atomic-bin-v2-sink-tests.* atomic-bin-v2-manifest-tests atomic-bin-v2-manifest-tests.exe atomic-bin-v2-manifest-tests.bin atomic-bin-v2-manifest-tests.* atomic-bin-v2-manifest-reader-tests atomic-bin-v2-manifest-reader-tests.exe atomic-bin-v2-manifest-reader-tests.bin atomic-bin-v2-manifest-reader-tests.* atomic-bin-v2-reader-tests atomic-bin-v2-reader-tests.exe atomic-bin-v2-reader-tests.bin atomic-bin-v2-reader-tests.* *.o ./api/*.o ./syzygy/*.o ./nnue/*.o ./nnue/features/*.o $(BUILD_SHA_FILE) $(BUILD_FULL_SHA_FILE) $(BUILD_DATE_FILE) $(BUILD_VERSION_FILE)
 
 # clean auxiliary profiling files
 profileclean:
@@ -2066,8 +2089,8 @@ atomic_data_generator_%.o: data/%.cpp $(HEADERS) $(ATOMIC_DATA_GENERATOR_HEADERS
 %.o: %.cpp
 	$(strip $(CXX) $(CPPFLAGS) $(CXXFLAGS)) -c -o $@ $<
 
-misc.o: misc.cpp atomic_version.h $(BUILD_SHA_FILE) $(BUILD_DATE_FILE)
-	$(strip $(CXX) $(CPPFLAGS) $(CXXFLAGS) $(if $(GIT_SHA),-DGIT_SHA=$(GIT_SHA)) $(if $(GIT_DATE),-DGIT_DATE=$(GIT_DATE))) -c -o $@ $<
+misc.o: misc.cpp atomic_version.h $(BUILD_SHA_FILE) $(BUILD_DATE_FILE) $(BUILD_VERSION_FILE)
+	$(strip $(CXX) $(CPPFLAGS) $(CXXFLAGS) $(if $(ATOMIC_RELEASE),-DATOMIC_VERSION=$(ATOMIC_RELEASE)) $(if $(GIT_SHA),-DGIT_SHA=$(GIT_SHA)) $(if $(GIT_DATE),-DGIT_DATE=$(GIT_DATE))) -c -o $@ $<
 
 clang-profile-make:
 	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) \

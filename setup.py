@@ -1,28 +1,79 @@
 from __future__ import annotations
 
+from email.parser import HeaderParser
+import os
 import platform
+import re
+import subprocess
 from pathlib import Path
+from typing import Optional
 
 from setuptools import Extension, setup
 from setuptools.command.build_ext import build_ext
 
 
 ROOT = Path(__file__).parent
+RELEASE_VERSION = re.compile(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\Z")
+DEV_VERSION = re.compile(r"0\.0\.0\.dev([0-9]{8})\+g([0-9a-f]{8})\Z")
 
 
-def release_version() -> str:
-    header = (ROOT / "src" / "atomic_version.h").read_text(encoding="utf-8")
-    components = []
-    for name in ("Major", "Minor", "Patch"):
-        marker = f"AtomicVersion{name} = "
-        line = next((line for line in header.splitlines() if marker in line), None)
-        if line is None:
-            raise RuntimeError(f"missing {marker.strip()} in atomic_version.h")
-        value = line.split(marker, 1)[1].split(";", 1)[0].strip()
-        if not value.isascii() or not value.isdecimal():
-            raise RuntimeError(f"invalid AtomicVersion{name} in atomic_version.h")
-        components.append(value)
-    return ".".join(components)
+def git(*arguments: str) -> Optional[str]:
+    """Return the output of a git command run in this checkout, if it succeeds."""
+    try:
+        completed = subprocess.run(
+            ["git", "-C", str(ROOT), *arguments],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return None
+    return completed.stdout.strip() if completed.returncode == 0 else None
+
+
+def build_version() -> tuple[str, list[tuple[str, str]]]:
+    """Return the package version and the macros that name this build.
+
+    Release builds set ATOMIC_VERSION=MAJOR.MINOR.PATCH. An sdist keeps the
+    version it was made with in PKG-INFO, so wheels built from it report the
+    same one. Any other build is a development build and names its commit, as
+    the native Makefile does (see src/atomic_version.h).
+    """
+    requested = os.environ.get("ATOMIC_VERSION", "")
+    if requested and RELEASE_VERSION.match(requested) is None:
+        raise RuntimeError(f"ATOMIC_VERSION must be MAJOR.MINOR.PATCH, got {requested!r}")
+
+    pkg_info = ROOT / "PKG-INFO"
+    if pkg_info.is_file():
+        recorded = HeaderParser().parsestr(pkg_info.read_text(encoding="utf-8"))["Version"]
+        if not recorded:
+            raise RuntimeError("PKG-INFO does not record a Version")
+        if requested and requested != recorded:
+            raise RuntimeError(f"ATOMIC_VERSION={requested} differs from this sdist ({recorded})")
+        if RELEASE_VERSION.match(recorded):
+            return recorded, [("ATOMIC_VERSION", recorded)]
+        development = DEV_VERSION.match(recorded)
+        if development is None:
+            return recorded, []
+        return recorded, [("GIT_DATE", development[1]), ("GIT_SHA", development[2])]
+
+    if requested:
+        return requested, [("ATOMIC_VERSION", requested)]
+
+    # Only this repository's own commit names the build, not an enclosing one.
+    sha = git("rev-parse", "HEAD") if git("rev-parse", "--show-cdup") == "" else None
+    date = git("show", "-s", "--date=format:%Y%m%d", "--format=%cd", "HEAD") if sha else None
+    if (
+        sha is None
+        or date is None
+        or re.fullmatch(r"[0-9a-f]{40}", sha) is None
+        or re.fullmatch(r"[0-9]{8}", date) is None
+    ):
+        return "0.0.0.dev0", []
+    return f"0.0.0.dev{date}+g{sha[:8]}", [("GIT_DATE", date), ("GIT_SHA", sha[:8])]
+
+
+VERSION, VERSION_MACROS = build_version()
 
 
 class BuildExtWithStub(build_ext):
@@ -96,6 +147,7 @@ define_macros = [
     ("NO_TABLEBASES", "1"),
     ("NO_PREFETCH", "1"),
     ("NNUE_EMBEDDING_OFF", "1"),
+    *VERSION_MACROS,
 ]
 if platform.architecture()[0] == "64bit" and not platform.python_compiler().startswith("MSC"):
     define_macros.append(("IS_64BIT", "1"))
@@ -118,7 +170,7 @@ pyffish = Extension(
 
 setup(
     name="atomic-pyffish",
-    version=release_version(),
+    version=VERSION,
     description="Stable-ABI Python rules binding for Atomic-Stockfish",
     long_description=(ROOT / "README.md").read_text(encoding="utf-8"),
     long_description_content_type="text/markdown",

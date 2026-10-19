@@ -68,6 +68,7 @@ def test_complete_wasm_builder_passes_and_records_the_frozen_epoch(
     calls: list[tuple[list[str], dict[str, str]]] = []
 
     monkeypatch.setenv("SOURCE_DATE_EPOCH", "1777777777")
+    monkeypatch.setenv("ATOMIC_VERSION", "1.2.3")
     monkeypatch.setattr(BUILDER, "parse_sources", lambda: [source])
 
     def fake_run(command, *, check, env, capture_output=False, text=False):
@@ -87,5 +88,37 @@ def test_complete_wasm_builder_passes_and_records_the_frozen_epoch(
 
     assert len(calls) == 2
     assert all(env["SOURCE_DATE_EPOCH"] == "1777777777" for _, env in calls)
+    assert "-DATOMIC_VERSION=1.2.3" in calls[0][0]
     manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["sourceDateEpoch"] == 1777777777
+
+
+def test_wasm_builder_names_release_and_development_builds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    assert BUILDER.version_defines({"ATOMIC_VERSION": "1.2.3"}) == [
+        "-DATOMIC_VERSION=1.2.3"
+    ]
+
+    answers = {
+        ("rev-parse", "--show-cdup"): "",
+        ("rev-parse", "HEAD"): "0123456789abcdef0123456789abcdef01234567",
+        ("show", "-s", "--date=format:%Y%m%d", "--format=%cd", "HEAD"): "20261019",
+    }
+    monkeypatch.setattr(BUILDER, "git_output", lambda *arguments: answers.get(arguments))
+    assert BUILDER.version_defines({}) == ["-DGIT_SHA=01234567", "-DGIT_DATE=20261019"]
+
+    # A source tree inside another repository must not take that one's commit.
+    answers[("rev-parse", "--show-cdup")] = "../"
+    assert BUILDER.version_defines({}) == []
+
+    monkeypatch.setattr(BUILDER, "git_output", lambda *arguments: None)
+    assert BUILDER.version_defines({}) == []
+
+
+@pytest.mark.parametrize(
+    "value", ["1.0", "01.0.3", "1.0.3-rc1", "v1.0.3", " 1.0.3", "1.0.3\n", "١.0.3"]
+)
+def test_wasm_builder_rejects_malformed_release_versions(value: str) -> None:
+    with pytest.raises(ValueError, match="MAJOR.MINOR.PATCH"):
+        BUILDER.version_defines({"ATOMIC_VERSION": value})

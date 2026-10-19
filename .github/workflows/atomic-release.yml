@@ -67,6 +67,9 @@ jobs:
         run: |
           set -euo pipefail
           unset PYTHONHOME PYTHONPATH
+          # The source tree carries no release number; every build in this
+          # workflow receives RELEASE_VERSION as ATOMIC_VERSION.
+          export ATOMIC_VERSION="$RELEASE_VERSION"
           test "$(python -I setup.py --version)" = "$RELEASE_VERSION"
           python -I setup.py build_ext --inplace
           python -I scripts/run_atomic_release_contract_tests.py
@@ -187,6 +190,7 @@ jobs:
           Get-ChildItem Env: | Where-Object Name -Like 'CIBW_*' |
             ForEach-Object { Remove-Item -LiteralPath "Env:$($_.Name)" }
           $env:PYTHONHASHSEED = '0'
+          $env:ATOMIC_VERSION = $env:RELEASE_VERSION
           $env:CIBW_BUILD = 'cp39-*'
           $env:CIBW_ARCHS = 'AMD64'
           $env:CIBW_ENVIRONMENT = "SOURCE_DATE_EPOCH=$env:SOURCE_DATE_EPOCH PYTHONHASHSEED=0"
@@ -838,10 +842,11 @@ jobs:
           module = Path(pyffish.__file__).resolve()
           workspace = Path(os.environ["GITHUB_WORKSPACE"]).resolve()
           assert not module.is_relative_to(workspace), module
-          assert pyffish.version() == (1, 0, 3)
+          release = os.environ["RELEASE_VERSION"]
+          assert pyffish.version() == tuple(int(part) for part in release.split("."))
           assert pyffish.variants() == ["atomic"]
           assert pyffish.perft("atomic", pyffish.start_fen("atomic"), 1) == 20
-          assert pyffish.info().startswith("Atomic-Stockfish 1.0.3 ")
+          assert pyffish.info().startswith("Atomic-Stockfish " + release + " ")
           PY
 
   board-wasm:
@@ -1025,7 +1030,7 @@ jobs:
                 --workdir "/src/$extracted" \
                 "$EMSCRIPTEN_IMAGE" node ./atomic-stockfish-nnue-node.mjs
           )
-          grep -F 'id name Atomic-Stockfish 1.0.3' <<<"$smoke_output"
+          grep -Fx "id name Atomic-Stockfish $RELEASE_VERSION" <<<"$smoke_output"
           grep -Fx 'uciok' <<<"$smoke_output"
           grep -Fx 'readyok' <<<"$smoke_output"
           grep -Fx 'Nodes searched: 20' <<<"$smoke_output"
