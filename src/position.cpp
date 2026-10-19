@@ -430,6 +430,7 @@ Position::set(const string& fenStr, bool isChess960, StateInfo* si) {
     chess960 = isChess960;
     set_state();
     st->atomicOpponentInCheck = atomic_in_check(~sideToMove);
+    st->stmInCheck            = atomic_in_check(sideToMove);
 
     assert(pos_is_ok());
 
@@ -609,6 +610,7 @@ string Position::fen() const {
 void Position::update_slider_blockers(Color c) const {
 
     st->blockersForKing[c] = 0;
+    st->kingRays[c]        = 0;
 
     if (!has_king(c))
         return;
@@ -624,7 +626,11 @@ void Position::update_slider_blockers(Color c) const {
     while (snipers)
     {
         Square   sniperSq = pop_lsb(snipers);
-        Bitboard b        = between_bb(ksq, sniperSq) & occupancy;
+        Bitboard ray      = between_bb(ksq, sniperSq);
+        Bitboard b        = ray & occupancy;
+
+        // Every square whose removal can open a slider line onto the king
+        st->kingRays[c] |= ray;
 
         if (b && !more_than_one(b))
             st->blockersForKing[c] |= b;
@@ -693,12 +699,13 @@ bool Position::legal(Move m) const {
         return !(attackers_to(kto, occupied) & pieces(them) & occupied);
     }
 
-    Bitboard occupied = (pieces() ^ from) | to;
+    Bitboard   occupied  = (pieces() ^ from) | to;
+    const bool isCapture = capture(m);
 
     if (m.type_of() == EN_PASSANT)
         occupied ^= to - pawn_push(us);
 
-    if (capture(m))
+    if (isCapture)
     {
         // The capturing piece and the captured piece always disappear. Pawns
         // on adjacent squares are immune; every adjacent non-pawn explodes.
@@ -722,6 +729,28 @@ bool Position::legal(Move m) const {
     // king would explode the attacker as well.
     if (attacks_bb<KING>(ourKing) & theirKing)
         return true;
+
+    // Our king stays where it is and nothing attacks it now (the kings are apart,
+    // so the Atomic check flag is the plain attack test). Their pieces do not
+    // move, so only a slider line opened by a vacated square can reach the king:
+    // a quiet move opens one only by leaving a pin line, a capture only by
+    // removing a square on a line between our king and one of their sliders.
+    if (type_of(pc) != KING && !st->stmInCheck)
+    {
+        if (!isCapture)
+        {
+            const bool ok = !(blockers_for_king(us) & from) || (between_bb(ourKing, from) & to)
+                         || (between_bb(ourKing, to) & from);
+            assert(ok == !(attackers_to(ourKing, occupied) & pieces(them) & occupied));
+            return ok;
+        }
+
+        if (!(pieces() & ~occupied & st->kingRays[us]))
+        {
+            assert(!(attackers_to(ourKing, occupied) & pieces(them) & occupied));
+            return true;
+        }
+    }
 
     return !(attackers_to(ourKing, occupied) & pieces(them) & occupied);
 }
@@ -916,6 +945,16 @@ bool Position::gives_check(Move m) const {
     if (attacks_bb<KING>(ourKing) & theirKing)
         return false;
 
+    // After a capture only pieces that did not move remain, and none of them
+    // attacked their king (the kings were apart before as well). Only a slider
+    // line opened by the move or the blast can give check then.
+    if (checker == NO_PIECE && m.type_of() != CASTLING && !st->atomicOpponentInCheck
+        && !(pieces() & ~occupied & st->kingRays[them]))
+    {
+        assert(!(attackers_to(theirKing, occupied) & pieces(us) & occupied & ~vacated));
+        return false;
+    }
+
     // Existing pieces can give a discovered check after the move or blast.
     // Mask the moved origins explicitly because Chess960 can reoccupy one of
     // those squares with the other castling piece.
@@ -937,7 +976,7 @@ bool Position::gives_check(Move m) const {
 // will be prefetched, and likewise for shared history.
 void Position::do_move(Move                      m,
                        StateInfo&                newSt,
-                       [[maybe_unused]] bool     givesCheck,
+                       bool                      givesCheck,
                        DirtyPiece&               dp,
                        const TranspositionTable* tt      = nullptr,
                        const SharedHistories*    history = nullptr) {
@@ -955,6 +994,7 @@ void Position::do_move(Move                      m,
     st                        = &newSt;
     st->atomicBlastCount      = 0;
     st->atomicOpponentInCheck = false;
+    st->stmInCheck            = givesCheck;
 
     // Increment ply counters. In particular, rule50 will be reset to zero later on
     // in case of a capture or a pawn move.
@@ -1385,6 +1425,7 @@ void Position::do_null_move(StateInfo& newSt) {
     set_check_info();
 
     st->repetition = 0;
+    st->stmInCheck = atomic_in_check(sideToMove);
 
     assert(pos_is_ok());
 }

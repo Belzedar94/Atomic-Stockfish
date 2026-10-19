@@ -70,11 +70,13 @@ struct StateInfo {
     Key                                                   key;
     StateInfo*                                            previous;
     Bitboard                                              blockersForKing[COLOR_NB];
+    Bitboard                                              kingRays[COLOR_NB];
     std::array<Bitboard, CHECK_SQUARE_NB>                 checkSquares;
     Piece                                                 capturedPiece;
     std::array<AtomicBlastPiece, MAX_ATOMIC_BLAST_PIECES> atomicBlast;
     u8                                                    atomicBlastCount;
     int                                                   repetition;
+    bool                                                  stmInCheck;
 };
 
 
@@ -151,6 +153,7 @@ class Position {
     bool  has_king(Color c) const;
     bool  is_atomic_terminal() const;
     bool  atomic_in_check(Color c) const;
+    bool  stm_in_check() const;
     bool  atomic_wins(Move m) const;
     bool  under_blast_threat() const;
     bool  has_legal_quiet() const;
@@ -317,6 +320,9 @@ inline Bitboard Position::attacks_by(Color c) const {
 inline Bitboard Position::checkers() const { return 0; }
 
 inline Bitboard Position::blockers_for_king(Color c) const { return st->blockersForKing[c]; }
+
+// atomic_in_check(side_to_move()), kept in the state: do_move receives it as givesCheck
+inline bool Position::stm_in_check() const { return st->stmInCheck; }
 
 inline Bitboard Position::check_squares(PieceType pt) const {
     assert(pt >= PAWN && pt <= KING);
