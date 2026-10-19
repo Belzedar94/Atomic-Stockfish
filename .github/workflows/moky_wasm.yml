@@ -1,0 +1,113 @@
+name: NNUE speed-up pull requests, WASM three-backend gate
+
+# The "Node UCI three-backend NNUE WASM" job of Atomic CI aborts with
+# Aborted(OOM) on pull request #70 (twice), right after the four-thread Legacy V1
+# search, where main passes. This runs exactly that job, several times, on main
+# and on main with each pull request merged (and all three together), to see
+# whether a pull request causes it. Nothing is published.
+
+on:
+  push:
+    branches:
+      - ci/moky-wasm-1019
+
+permissions:
+  contents: read
+
+concurrency:
+  group: moky-wasm-1019
+  cancel-in-progress: true
+
+env:
+  MAIN_SHA: bfc828f6c73733f254491d0845a3c406f1f41f90
+  PR67_SHA: 422c4850b7c3811ed2e940971ae34387ab36200f
+  PR68_SHA: b3f41cfbeaf7362cdb385e698f319b5c45baf2f9
+  PR70_SHA: f6bf56071a4e27744a8f4ba0c8a6ebc8866a01fe
+  TREE_MAIN: ba06b4315819899fca63d8a0226277d6bcb19560
+  TREE_PR67: b945b86b9b270c26502de13df783633bf31f257d
+  TREE_PR68: 58913ebfe28ee8a2c8127d156dde999ac3313356
+  TREE_PR70: 58d75dc86eb610397b1f0b30441bcfdc6272afe4
+  TREE_ALL: 2402353772278fa0166339edae15ba20f67c65d5
+  ATOMIC_SYNTHETIC_NNUE_SHA256: 9CF054CA00B82AB53A34473DE52D1104AEDDAA19B2E7B24091B5E613AF485985
+  ATOMIC_SYNTHETIC_V2_NNUE_SHA256: 4DEB05CFF79B5D5EBA51C560F64ED24224671C188B6C5DB27521033E587C87C6
+  ATOMIC_SYNTHETIC_V3_NNUE_SHA256: 00E46223822D06D7927E884EEC10739BA19EF8DD82A6E262F627D361658080C2
+
+jobs:
+  wasm:
+    name: WASM gate, ${{ matrix.variant }} attempt ${{ matrix.attempt }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [main, pr67, pr68, pr70, all3]
+        attempt: [1, 2, 3]
+    defaults:
+      run:
+        shell: bash
+        working-directory: engine
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ env.MAIN_SHA }}
+          path: engine
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Merge the pull request(s) into main
+        env:
+          VARIANT: ${{ matrix.variant }}
+          GIT_AUTHOR_NAME: ci
+          GIT_AUTHOR_EMAIL: ci@invalid
+          GIT_COMMITTER_NAME: ci
+          GIT_COMMITTER_EMAIL: ci@invalid
+          GIT_AUTHOR_DATE: 2026-10-19T00:00:00Z
+          GIT_COMMITTER_DATE: 2026-10-19T00:00:00Z
+        run: |
+          set -euo pipefail
+          git fetch --quiet --no-tags origin refs/pull/67/head refs/pull/68/head refs/pull/70/head
+          case "$VARIANT" in
+            main) heads=""; tree=$TREE_MAIN ;;
+            pr67) heads=$PR67_SHA; tree=$TREE_PR67 ;;
+            pr68) heads=$PR68_SHA; tree=$TREE_PR68 ;;
+            pr70) heads=$PR70_SHA; tree=$TREE_PR70 ;;
+            all3) heads="$PR67_SHA $PR68_SHA $PR70_SHA"; tree=$TREE_ALL ;;
+          esac
+          for sha in $heads; do
+            git merge --quiet --no-ff --no-edit -m "Merge ${sha:0:8} into ${MAIN_SHA:0:8} (measurement only)" "$sha"
+          done
+          test "$(git rev-parse 'HEAD^{tree}')" = "$tree"
+          git log -1 --format="$VARIANT: %H tree %T"
+
+      - name: Build complete pthread NNUE WASM
+        run: >-
+          docker run --rm
+          --volume "$PWD:/src"
+          --workdir /src
+          emscripten/emsdk:4.0.10@sha256:90b757eb11fa9a0e3ce4d2d9f76d932a56018e4accc37b5a28b2783751e60eb7
+          python3 tests/wasm-engine/build.py
+          --out-dir build/wasm-engine-ci
+
+      - name: Create authenticated V1, V2 and V3 fixtures
+        run: |
+          python3 tests/create_synthetic_zero_nnue.py --output "$RUNNER_TEMP/atomic-zero.nnue"
+          python3 tests/create_synthetic_atomic_v2_nnue.py --output "$RUNNER_TEMP/atomic-v2.nnue"
+          python3 tests/create_synthetic_atomic_v3_nnue.py --output "$RUNNER_TEMP/atomic-v3.nnue"
+
+      - name: Full Legacy V1 UCI, perft and interactive pthread gate
+        run: |
+          node tests/wasm-engine/run-engine-tests.mjs \
+            --engine build/wasm-engine-ci/atomic-stockfish-nnue-node.mjs \
+            --net "$RUNNER_TEMP/atomic-zero.nnue" \
+            --expected-net-sha256 "$ATOMIC_SYNTHETIC_NNUE_SHA256"
+
+      - name: Three-backend reload, export, rollback and memory gate
+        run: |
+          node tests/wasm-engine/run-dual-backend-tests.mjs \
+            --engine build/wasm-engine-ci/atomic-stockfish-nnue-node.mjs \
+            --legacy-net "$RUNNER_TEMP/atomic-zero.nnue" \
+            --legacy-sha256 "$ATOMIC_SYNTHETIC_NNUE_SHA256" \
+            --v2-net "$RUNNER_TEMP/atomic-v2.nnue" \
+            --v2-sha256 "$ATOMIC_SYNTHETIC_V2_NNUE_SHA256" \
+            --v3-net "$RUNNER_TEMP/atomic-v3.nnue" \
+            --v3-sha256 "$ATOMIC_SYNTHETIC_V3_NNUE_SHA256"
