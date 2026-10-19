@@ -28,6 +28,9 @@ SOURCE_LIST = re.compile(
 )
 SINGLE_QUOTED = re.compile(r"'([^']+)'")
 SOURCE_DATE_EPOCH_PATTERN = re.compile(r"(?:0|[1-9][0-9]*)\Z")
+RELEASE_VERSION_PATTERN = re.compile(
+    r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\Z"
+)
 
 
 def parse_sources() -> list[Path]:
@@ -64,6 +67,47 @@ def normalized_source_date_epoch(environment: dict[str, str]) -> str:
             "SOURCE_DATE_EPOCH must be zero or a canonical positive decimal integer"
         )
     return value
+
+
+def git_output(*arguments: str) -> str | None:
+    """Return the output of a git command run in this checkout, if it succeeds."""
+
+    try:
+        completed = subprocess.run(
+            ["git", "-C", str(REPO_ROOT), *arguments],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        return None
+    return completed.stdout.strip() if completed.returncode == 0 else None
+
+
+def version_defines(environment: dict[str, str]) -> list[str]:
+    """Name the build the way the native Makefile does (see src/atomic_version.h).
+
+    Release builds set ATOMIC_VERSION=MAJOR.MINOR.PATCH; any other build is a
+    development build named after its commit.
+    """
+
+    release = environment.get("ATOMIC_VERSION", "")
+    if release:
+        if RELEASE_VERSION_PATTERN.fullmatch(release) is None:
+            raise ValueError("ATOMIC_VERSION must be MAJOR.MINOR.PATCH")
+        return [f"-DATOMIC_VERSION={release}"]
+
+    # Only this repository's own commit names the build, not an enclosing one.
+    if git_output("rev-parse", "--show-cdup") != "":
+        return []
+    defines = []
+    sha = git_output("rev-parse", "HEAD")
+    if sha is not None and re.fullmatch(r"[0-9a-f]{40}", sha):
+        defines.append(f"-DGIT_SHA={sha[:8]}")
+    date = git_output("show", "-s", "--date=format:%Y%m%d", "--format=%cd", "HEAD")
+    if date is not None and re.fullmatch(r"[0-9]{8}", date):
+        defines.append(f"-DGIT_DATE={date}")
+    return defines
 
 
 def build(out_dir: Path, compiler: str, debug: bool) -> None:
@@ -124,6 +168,7 @@ def build(out_dir: Path, compiler: str, debug: bool) -> None:
     environment = os.environ.copy()
     source_date_epoch = normalized_source_date_epoch(environment)
     environment["SOURCE_DATE_EPOCH"] = source_date_epoch
+    flags.extend(version_defines(environment))
     command = [compiler, *flags, *(str(source) for source in sources), "-o", str(output_js)]
     print(f"Building complete Atomic-Stockfish NNUE WASM in {out_dir}", flush=True)
     subprocess.run(command, check=True, env=environment)

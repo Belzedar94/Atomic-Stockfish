@@ -136,7 +136,8 @@ class Logger {
 //      or
 //      Atomic-Stockfish dev-YYYYMMDD-nogit
 //
-// For releases (non-dev builds) we only include the version number:
+// For releases (built with ATOMIC_VERSION, see atomic_version.h)
+// we only include the version number:
 //      Atomic-Stockfish version
 std::string engine_version_info() {
     std::stringstream ss;

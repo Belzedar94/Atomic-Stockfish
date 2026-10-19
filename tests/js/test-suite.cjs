@@ -6,6 +6,20 @@ const fixtures = JSON.parse(
   fs.readFileSync(path.join(__dirname, '..', 'bindings', 'atomic-fixtures.json'), 'utf8'),
 ).fixtures;
 
+// The package metadata and the engine name the same build. A release recipe
+// stamps its version into both; any other build is named after its commit.
+const packageVersion = JSON.parse(
+  fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'),
+).version;
+
+function assertBuildIdentity(info) {
+  if (/^\d+\.\d+\.\d+$/.test(packageVersion)) {
+    assert.equal(info, `Atomic-Stockfish ${packageVersion} JS/WASM`);
+  } else {
+    assert.match(info, /^Atomic-Stockfish dev-\d{8}-(?:[0-9a-f]{8}|nogit) JS\/WASM$/);
+  }
+}
+
 function words(value) {
   if (!value) return [];
   return value.trim().split(/\s+/).sort();
@@ -244,7 +258,7 @@ function testPgn(ffish) {
 }
 
 function testContractsAndLifetime(ffish) {
-  assert.equal(ffish.info(), "Atomic-Stockfish 1.0.3 JS/WASM");
+  assertBuildIdentity(ffish.info());
   assert.equal(ffish.variants(), 'atomic');
   assert.equal(ffish.startingFen('atomic'), fixtures.find((f) => f.id === 'contract.start-fen').expected);
   assert.equal(ffish.capturesToHand('atomic'), false);

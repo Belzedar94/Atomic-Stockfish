@@ -37,11 +37,6 @@ for path in AUTHORS CITATION.cff Copying.txt README.md MANIFEST.in \
     [ -f "$path" ] && [ ! -L "$path" ] || die "missing regular release input: $path"
 done
 
-declared_version=$(sed -n \
-    's/.*AtomicVersionString = "\([^"]*\)".*/\1/p' src/atomic_version.h)
-[ "$declared_version" = "$version" ] || \
-    die "requested version differs from atomic_version.h"
-
 export SOURCE_DATE_EPOCH=$epoch
 export PYTHONHASHSEED=0
 export PYTHONNOUSERSITE=1
@@ -81,7 +76,10 @@ else
         --force-reinstall --no-deps --only-binary=:all: --require-hashes \
         --target "$dependencies" \
         -r tests/release-build-requirements.txt
-    PYTHONPATH="$dependencies" python3 setup.py sdist --dist-dir "$raw_dist"
+    # The sdist records the release version in PKG-INFO, and setup.py builds
+    # every wheel made from it as that release.
+    ATOMIC_VERSION="$version" PYTHONPATH="$dependencies" \
+        python3 setup.py sdist --dist-dir "$raw_dist"
     set -- "$raw_dist"/atomic_pyffish-*.tar.gz
     [ "$#" -eq 1 ] && [ -f "$1" ] || die "setuptools produced an invalid sdist set"
     asset="$release_dir/atomic_pyffish-$version.tar.gz"

@@ -104,6 +104,18 @@ MinGW builds need `EXTRAPROFILEFLAGS=-DATOMIC_NNUE_EMBEDDING`, because
 the build still completes, but it ends with a warning: with NNUE on, that
 binary is much slower than a plain `make build`.
 
+Every build names itself in `id name`, the same way upstream Stockfish does. A
+development build reports `Atomic-Stockfish dev-YYYYMMDD-<commit>`, with the
+commit date and short SHA taken from git. Without git it falls back to the
+compile date and `nogit`, or to the commit that OpenBench passes as
+`GIT_SHA_FULL`. The source tree carries no release number: a release build
+passes it, for example `make -j build ARCH=x86-64-bmi2 ATOMIC_VERSION=1.0.4`,
+and reports `Atomic-Stockfish 1.0.4`. The release workflow passes its
+`RELEASE_VERSION` to every asset it builds this way; a release rebuilt from its
+source archive needs the same `ATOMIC_VERSION`. `setup.py` and the WebAssembly
+builds read `ATOMIC_VERSION` from the environment, and the bindings report the
+same name as the engine.
+
 ## Training-data generator
 
 The playing binary deliberately excludes data-generation commands. Build the

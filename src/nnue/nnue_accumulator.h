@@ -41,14 +41,30 @@ struct alignas(CacheLineSize) Accumulator {
     std::array<bool, COLOR_NB>                                          computed = {};
 };
 
-// Kept as an API-compatible placeholder. Legacy Atomic V1 initially uses a
-// direct refresh instead of modern king-square Finny caches.
+// King-square refresh cache: for every own-king square and perspective it keeps the
+// accumulator of the last position refreshed there together with the piece placement
+// of that position, so a refresh only applies the pieces that differ. The result is
+// the same integer sum as a refresh from scratch.
 struct AccumulatorCaches {
-    template<typename Network>
-    explicit AccumulatorCaches(const Network&) {}
+    struct alignas(CacheLineSize) Entry {
+        std::array<i16, TransformedFeatureDimensions> accumulation;
+        std::array<i32, PSQTBuckets>                  psqtAccumulation;
+        std::array<Bitboard, PIECE_NB>                byPiece;
+    };
 
     template<typename Network>
-    void clear(const Network&) {}
+    explicit AccumulatorCaches(const Network& network) {
+        clear(network);
+    }
+
+    template<typename Network>
+    void clear(const Network& network) {
+        init(network.featureTransformer);
+    }
+
+    void init(const FeatureTransformer& featureTransformer);
+
+    std::array<std::array<Entry, COLOR_NB>, SQUARE_NB> entries;
 };
 
 struct AccumulatorState: public Accumulator {
@@ -74,7 +90,14 @@ class AccumulatorStack {
 
     void evaluate_side(Color                     perspective,
                        const Position&           pos,
-                       const FeatureTransformer& featureTransformer) noexcept;
+                       const FeatureTransformer& featureTransformer,
+                       AccumulatorCaches&        cache) noexcept;
+
+    void refresh_cached(Color                     perspective,
+                        const Position&           pos,
+                        const FeatureTransformer& featureTransformer,
+                        AccumulatorCaches&        cache,
+                        AccumulatorState&         target) noexcept;
 
     void refresh(Color                     perspective,
                  const Position&           pos,

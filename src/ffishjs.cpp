@@ -27,7 +27,7 @@
 #include "api/atomic_board.h"
 #include "api/atomic_notation.h"
 #include "api/atomic_outcome.h"
-#include "atomic_version.h"
+#include "misc.h"
 #include "position.h"
 #include "uci_move.h"
 
@@ -229,9 +229,7 @@ class JsBoard final {
     Board board;
 };
 
-std::string info() {
-    return "Atomic-Stockfish " + std::string(Stockfish::AtomicVersionString) + " JS/WASM";
-}
+std::string info() { return Stockfish::engine_version_info() + " JS/WASM"; }
 std::string variants() { return "atomic"; }
 int         debug_live_boards() { return LiveBoards; }
 double      wasm_heap_bytes() { return static_cast<double>(emscripten_get_heap_size()); }

@@ -54,12 +54,6 @@ require_command xz
 tar --version | head -n 1 | grep -Fq 'GNU tar' \
     || die "UCI WASM release packaging requires GNU tar"
 
-declared_version=$(
-    sed -n 's/.*AtomicVersionString = "\([^"]*\)".*/\1/p' src/atomic_version.h
-)
-[[ -n "$declared_version" && "$declared_version" == "$version" ]] \
-    || die "requested version $version differs from atomic_version.h ($declared_version)"
-
 [[ ! -e build ]] || die "build/ already exists; use a clean release root"
 
 export SOURCE_DATE_EPOCH=$source_date_epoch
@@ -78,7 +72,7 @@ stage_root="$stage_parent/$release_root"
 release_dir=build/release
 asset_path="$release_dir/$release_root.tar.xz"
 
-python3 tests/wasm-engine/build.py --out-dir "$runtime_dir"
+ATOMIC_VERSION="$version" python3 tests/wasm-engine/build.py --out-dir "$runtime_dir"
 
 mkdir -p "$stage_root" "$release_dir"
 unexpected_runtime=$(find "$runtime_dir" -mindepth 1 -maxdepth 1 ! -type f -print -quit)
