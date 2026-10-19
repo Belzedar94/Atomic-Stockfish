@@ -212,8 +212,17 @@ ExtMove* MovePicker::score(const MoveList<Type>& ml) {
         if constexpr (Type == CAPTURES)
         {
             const Piece capturedPiece = pos.piece_on(to);
-            m.value = (*captureHistory)[pc][to][type_of(capturedPiece)]
-                    + 7 * int(PieceValue[capturedPiece]);
+
+            // Most Valuable Victim is not the victim alone in Atomic: the blast
+            // also removes every enemy non-pawn adjacent to the landing square,
+            // so a pawn capture next to their queen is a queen capture.
+            int      victims    = int(PieceValue[capturedPiece]);
+            Bitboard collateral =
+              Attacks::attacks_bb<KING>(to) & pos.pieces(~us) & ~pos.pieces(PAWN);
+            while (collateral)
+                victims += int(PieceValue[pos.piece_on(pop_lsb(collateral))]);
+
+            m.value = (*captureHistory)[pc][to][type_of(capturedPiece)] + 7 * victims;
         }
 
         else if constexpr (Type == QUIETS)
