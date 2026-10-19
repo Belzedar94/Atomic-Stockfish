@@ -1005,6 +1005,7 @@ Value Search::Worker::search(
     constexpr bool PvNode   = nodeType != NonPV;
     constexpr bool rootNode = nodeType == Root;
     const bool     allNode  = !(PvNode || cutNode);
+    const bool     seekMate = rootDepth >= 16 && std::abs(rootMoves[pvIdx].score) >= 2000;
 
     // Dive into quiescence search when the depth reaches zero
     if (depth <= 0)
@@ -1288,8 +1289,8 @@ Value Search::Worker::search(
     // The depth condition is important for mate finding. A blast check is a
     // check: the static evaluation is not an upper bound on a position whose
     // every continuation can be answered by detonating our king.
-    if (!ss->ttPv && depth < 17 && eval >= beta && (!ttData.move || ttCapture) && !is_loss(beta)
-        && !is_win(eval) && !pos.under_blast_threat())
+    if (!ss->ttPv && depth < (seekMate ? 6 : 19) && eval >= beta && (!ttData.move || ttCapture)
+        && !is_loss(beta) && !is_win(eval) && !pos.under_blast_threat())
     {
         Value futilityMult = std::min(40 + depth * 4, 80);
         futilityMult -= 20 * !ss->ttHit;
@@ -1555,7 +1556,7 @@ moves_loop:  // When in check, search starts here
         if (!rootNode && move == ttData.move && !excludedMove
             && depth >= SingularDepthMin + ss->ttPv && is_valid(ttData.value)
             && !is_decisive(ttData.value) && (ttData.bound & BOUND_LOWER)
-            && ttData.depth >= depth - 3 && !is_shuffling(move, ss, pos))
+            && ttData.depth >= depth - 3 && !is_shuffling(move, ss, pos) && !seekMate)
         {
             Value singularBeta = ttData.value
                                - (SingularMarginBase + SingularMarginTtPv * (ss->ttPv && !PvNode))
