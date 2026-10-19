@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from email.parser import HeaderParser
 import subprocess
 import sys
 import tempfile
@@ -48,6 +49,13 @@ def main() -> int:
 
     with zipfile.ZipFile(wheel) as archive:
         members = set(archive.namelist())
+        metadata_files = [name for name in members if name.endswith(".dist-info/METADATA")]
+        if len(metadata_files) != 1:
+            fail("wheel does not contain exactly one METADATA file")
+        metadata = HeaderParser().parsestr(archive.read(metadata_files[0]).decode("utf-8"))
+    version = metadata["Version"]
+    if not version:
+        fail("wheel METADATA does not record a Version")
 
     if "pyffish.pyi" not in members:
         fail("wheel does not contain top-level pyffish.pyi")
@@ -91,8 +99,11 @@ def main() -> int:
         if not installed_extensions:
             fail("installed extension is not adjacent to pyffish.pyi")
 
-        probe = """
+        # The engine inside the wheel names the same build as the wheel: the
+        # release it was made for, or the commit of a development build.
+        probe = r"""
 import pathlib
+import re
 import sys
 
 sys.path.insert(0, sys.argv[1])
@@ -100,14 +111,27 @@ import pyffish
 
 root = pathlib.Path(sys.argv[1]).resolve()
 assert pathlib.Path(pyffish.__file__).resolve().parent == root
-assert pyffish.version() == (1, 0, 3)
+version = sys.argv[2]
+release = re.fullmatch(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)", version)
+development = re.fullmatch(r"0\.0\.0\.dev([0-9]{8})\+g([0-9a-f]{8})", version)
+if release:
+    assert pyffish.version() == tuple(int(part) for part in release.groups())
+    assert pyffish.info().startswith("Atomic-Stockfish " + version + " ")
+else:
+    assert pyffish.version() == (0, 0, 0)
+    name = (
+        re.escape("dev-%s-%s" % development.groups())
+        if development
+        else r"dev-[0-9]{8}-(?:[0-9a-f]{8}|nogit)"
+    )
+    assert re.match("Atomic-Stockfish " + name + " ", pyffish.info()), pyffish.info()
 assert pyffish.variants() == ["atomic"]
 assert pyffish.validate_fen(
     "7k/8/8/8/8/8/8/K7 w - - not-a-number 1", "atomic"
 ) == pyffish.FEN_INVALID_HALF_MOVE_COUNTER
 """
         subprocess.run(
-            [sys.executable, "-I", "-c", probe, str(target)],
+            [sys.executable, "-I", "-c", probe, str(target), version],
             cwd=target,
             check=True,
         )

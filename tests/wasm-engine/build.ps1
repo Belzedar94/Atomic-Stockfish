@@ -138,6 +138,46 @@ if ($Debug) {
     )
 }
 
+# Name the build the way the native Makefile does (see src/atomic_version.h):
+# release builds set ATOMIC_VERSION=MAJOR.MINOR.PATCH, and any other build is a
+# development build named after its commit.
+function Get-GitValue([string[]]$Arguments) {
+    $git = Get-Command git -ErrorAction SilentlyContinue
+    if ($null -eq $git) {
+        return $null
+    }
+    $previousPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $value = & $git.Source -C $repoRoot @Arguments 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            return $null
+        }
+        return ([string]$value).Trim()
+    } catch {
+        return $null
+    } finally {
+        $ErrorActionPreference = $previousPreference
+    }
+}
+
+if (-not [string]::IsNullOrEmpty($env:ATOMIC_VERSION)) {
+    if ($env:ATOMIC_VERSION -cnotmatch '\A(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\z') {
+        throw 'ATOMIC_VERSION must be MAJOR.MINOR.PATCH'
+    }
+    $flags += "-DATOMIC_VERSION=$env:ATOMIC_VERSION"
+} elseif ((Get-GitValue @('rev-parse', '--show-cdup')) -eq '') {
+    # Only this repository's own commit names the build, not an enclosing one.
+    $sha = Get-GitValue @('rev-parse', 'HEAD')
+    if ($sha -cmatch '\A[0-9a-f]{40}\z') {
+        $flags += "-DGIT_SHA=$($sha.Substring(0, 8))"
+    }
+    $date = Get-GitValue @('show', '-s', '--date=format:%Y%m%d', '--format=%cd', 'HEAD')
+    if ($date -cmatch '\A[0-9]{8}\z') {
+        $flags += "-DGIT_DATE=$date"
+    }
+}
+
 Write-Host "Building Atomic-Stockfish Node UCI/NNUE WebAssembly in $OutDir"
 & $empp.Source @flags @sources '-o' $outputJs
 if ($LASTEXITCODE -ne 0) {
