@@ -51,17 +51,6 @@ require_command node
 require_command npm
 require_command install
 
-declared_version=$(
-    sed -n 's/.*AtomicVersionString = "\([^"]*\)".*/\1/p' src/atomic_version.h
-)
-[[ -n "$declared_version" && "$declared_version" == "$version" ]] \
-    || die "requested version $version differs from atomic_version.h ($declared_version)"
-
-package_version=$(node -e \
-    "const p=require('./tests/js/package.json'); process.stdout.write(String(p.version));")
-[[ "$package_version" == "$version" ]] \
-    || die "requested version $version differs from package.json ($package_version)"
-
 [[ ! -e build ]] || die "build/ already exists; use a clean release root"
 [[ ! -e tests/js/dist ]] || die "tests/js/dist already exists; use a clean release root"
 for generated_metadata in tests/js/AUTHORS tests/js/CITATION.cff tests/js/LICENSE; do
@@ -83,9 +72,23 @@ umask 022
 unset CXXFLAGS CPPFLAGS LDFLAGS EMCC_CFLAGS EMCC_DEBUG
 unset MAKEFLAGS MFLAGS NODE_OPTIONS TAR_OPTIONS GZIP
 
+# The source tree carries no release number. Stamp it into the package
+# metadata of this release root, and build the engine with it below.
+node -e '
+const fs = require("fs");
+const file = "tests/js/package.json";
+const metadata = JSON.parse(fs.readFileSync(file, "utf8"));
+metadata.version = process.argv[1];
+fs.writeFileSync(file, JSON.stringify(metadata, null, 2) + "\n");
+' "$version"
+package_version=$(node -e \
+    "const p=require('./tests/js/package.json'); process.stdout.write(String(p.version));")
+[[ "$package_version" == "$version" ]] \
+    || die "could not stamp version $version into package.json ($package_version)"
+
 # The explicit clean goal makes this recipe the complete Board build boundary.
 make -C src -f Makefile_js clean
-make -C src -f Makefile_js all
+make -C src -f Makefile_js ATOMIC_VERSION="$version" all
 
 expected_dist=(
     tests/js/dist/cjs/ffish.js
