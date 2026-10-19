@@ -1,0 +1,327 @@
+name: NNUE speed-up pull requests, profile-guided
+
+# Measures three NNUE speed-up pull requests against main@bfc828f6: #67 (refresh
+# cache by king square), #68 (sparse first layer) and #70 (SSE2 clamp of the
+# feature transformer output), each merged into main on its own and all three
+# together. ci/build_variants.sh builds the five variants one after the other on
+# one runner with `make profile-build` (GCC, as OpenBench and the AtomicDB
+# workers build). ci/engine_check.py then requires every variant to search
+# exactly the nodes main searches (bench signatures, a worker-like UCI session,
+# every timed bench) and times them in alternating rounds. The same binaries are
+# timed on several runners of each kind, and ci/pool_checks.py pools the
+# per-round ratios. Nothing is published: binaries and reports are artifacts.
+
+on:
+  push:
+    branches:
+      - ci/moky-speedups-1019
+
+permissions:
+  contents: read
+
+concurrency:
+  group: moky-speedups-1019
+  cancel-in-progress: true
+
+env:
+  MAIN_SHA: bfc828f6c73733f254491d0845a3c406f1f41f90
+  PR67_SHA: 422c4850b7c3811ed2e940971ae34387ab36200f
+  PR68_SHA: b3f41cfbeaf7362cdb385e698f319b5c45baf2f9
+  PR70_SHA: f6bf56071a4e27744a8f4ba0c8a6ebc8866a01fe
+  # Trees of main and of main with the pull request(s) merged: the build stops if
+  # a variant is anything else.
+  TREE_MAIN: ba06b4315819899fca63d8a0226277d6bcb19560
+  TREE_PR67: b945b86b9b270c26502de13df783633bf31f257d
+  TREE_PR68: 58913ebfe28ee8a2c8127d156dde999ac3313356
+  TREE_PR70: 58d75dc86eb610397b1f0b30441bcfdc6272afe4
+  TREE_ALL: 2402353772278fa0166339edae15ba20f67c65d5
+  ATOMIC_NET_TAG: v1.0
+  ATOMIC_NET_ASSET: atomic-run3b.nnue
+  ATOMIC_NET_SHA256: 99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f92a04a6
+  NET_NAME: atomic_run3b_e202_l05.nnue
+  EXPECT_NNUE: "450539"
+  EXPECT_CLASSICAL: "657485"
+  BENCH_DEPTH: "20"
+  # A multiple of 10: with five binaries every starting position and both
+  # directions of the rotation come up equally often.
+  ROUNDS: "10"
+
+jobs:
+  build-linux:
+    name: build linux x86-64-avx2 (gcc, profile-build)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ env.MAIN_SHA }}
+          path: engine
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Toolchain and host
+        run: |
+          g++ --version | head -n 1
+          lscpu | grep -E 'Model name|^CPU\(s\)'
+          git -C engine log -1 --format='main: %H %s'
+
+      - name: Network
+        run: |
+          mkdir -p net
+          curl -sSfL --retry 3 -o "net/$NET_NAME" \
+            "https://github.com/$GITHUB_REPOSITORY/releases/download/$ATOMIC_NET_TAG/$ATOMIC_NET_ASSET"
+          echo "$ATOMIC_NET_SHA256  net/$NET_NAME" | sha256sum -c -
+
+      - name: Profile-guided builds of main and the pull requests
+        run: bash ci/build_variants.sh engine "net/$NET_NAME" out "" ARCH=x86-64-avx2 COMP=gcc
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: bins-linux
+          path: out/
+          if-no-files-found: error
+
+  measure-linux:
+    name: time linux x86-64-avx2, runner ${{ matrix.runner }}
+    needs: build-linux
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [1, 2, 3]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: bins-linux
+          path: bins
+
+      - name: Network and host
+        run: |
+          chmod +x bins/atomic-*
+          mkdir -p run out
+          curl -sSfL --retry 3 -o "run/$NET_NAME" \
+            "https://github.com/$GITHUB_REPOSITORY/releases/download/$ATOMIC_NET_TAG/$ATOMIC_NET_ASSET"
+          echo "$ATOMIC_NET_SHA256  run/$NET_NAME" | sha256sum -c -
+          lscpu | grep -E 'Model name|^CPU\(s\)'
+
+      - name: Identity and speed
+        run: |
+          set -eo pipefail
+          cpu=$(lscpu | sed -n 's/^Model name: *//p' | head -n 1)
+          python3 ci/engine_check.py --title "linux x86-64-avx2, runner ${{ matrix.runner }}: $cpu" \
+            --bin main=bins/atomic-main --bin pr67=bins/atomic-pr67 --bin pr68=bins/atomic-pr68 \
+            --bin pr70=bins/atomic-pr70 --bin all3=bins/atomic-all3 \
+            --cwd run --expect-nnue "$EXPECT_NNUE" --expect-classical "$EXPECT_CLASSICAL" \
+            --depth "$BENCH_DEPTH" --rounds "$ROUNDS" \
+            --json out/check.json --md "$GITHUB_STEP_SUMMARY" | tee out/check.log
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: check-linux-${{ matrix.runner }}
+          path: out/
+
+  build-windows:
+    name: build windows x86-64-bmi2 (MSYS2 gcc, profile-build)
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ env.MAIN_SHA }}
+          path: engine
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up MSYS2
+        uses: msys2/setup-msys2@e9898307ac31d1a803454791be09ab9973336e1c # v2.31.1
+        with:
+          msystem: mingw64
+          path-type: inherit
+          install: >-
+            make
+            mingw-w64-x86_64-gcc
+
+      - name: Toolchain and host
+        run: |
+          g++ --version | head -n 1
+          powershell -NoProfile -Command "(Get-CimInstance Win32_Processor).Name" || true
+          echo "processors: $NUMBER_OF_PROCESSORS"
+          git -C engine log -1 --format='main: %H %s'
+
+      - name: Network
+        run: |
+          mkdir -p net
+          curl -sSfL --retry 3 -o "net/$NET_NAME" \
+            "https://github.com/$GITHUB_REPOSITORY/releases/download/$ATOMIC_NET_TAG/$ATOMIC_NET_ASSET"
+          echo "$ATOMIC_NET_SHA256  net/$NET_NAME" | sha256sum -c -
+
+      # The network is embedded, as in the Windows binaries the workers download.
+      - name: Profile-guided builds of main and the pull requests
+        run: |
+          bash ci/build_variants.sh engine "net/$NET_NAME" out .exe ARCH=x86-64-bmi2 COMP=mingw \
+            EXTRAPROFILEFLAGS=-DATOMIC_NNUE_EMBEDDING
+          for f in out/atomic-*.exe; do test "$(wc -c < "$f")" -gt "$(wc -c < "net/$NET_NAME")"; done
+          objdump -p out/atomic-main.exe | grep "DLL Name"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: bins-windows
+          path: out/
+          if-no-files-found: error
+          compression-level: 1
+
+  measure-windows:
+    name: time windows x86-64-bmi2, runner ${{ matrix.runner }}
+    needs: build-windows
+    runs-on: windows-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [1, 2, 3, 4]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: bins-windows
+          path: bins
+
+      # The run directory holds no .nnue: a completed NNUE bench can only come from
+      # the embedded network.
+      - name: Identity and speed
+        run: |
+          set -eo pipefail
+          mkdir -p run out
+          test -z "$(ls run/*.nnue bins/*.nnue 2>/dev/null)"
+          cpu=$(powershell -NoProfile -Command "(Get-CimInstance Win32_Processor).Name" | tr -d '\r')
+          echo "$cpu, $NUMBER_OF_PROCESSORS processors"
+          python --version
+          python ci/engine_check.py --title "windows x86-64-bmi2, runner ${{ matrix.runner }}: $cpu" \
+            --bin main=bins/atomic-main.exe --bin pr67=bins/atomic-pr67.exe --bin pr68=bins/atomic-pr68.exe \
+            --bin pr70=bins/atomic-pr70.exe --bin all3=bins/atomic-all3.exe \
+            --cwd run --expect-nnue "$EXPECT_NNUE" --expect-classical "$EXPECT_CLASSICAL" \
+            --depth "$BENCH_DEPTH" --rounds "$ROUNDS" \
+            --json out/check.json --md "$GITHUB_STEP_SUMMARY" | tee out/check.log
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: check-windows-${{ matrix.runner }}
+          path: out/
+
+  # AVX-512 with VNNI exercises the other code path of the first layer. Hosted
+  # runners differ, so this job measures only when the processor has it.
+  vnni512-linux:
+    name: linux x86-64-vnni512, if the runner has AVX-512 VNNI
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Does the processor have AVX-512 VNNI?
+        id: cpu
+        run: |
+          lscpu | grep -E 'Model name|^CPU\(s\)'
+          if grep -qw avx512_vnni /proc/cpuinfo && grep -qw avx512bw /proc/cpuinfo && grep -qw avx512vl /proc/cpuinfo; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::this runner has no AVX-512 VNNI, nothing measured"
+          fi
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        if: steps.cpu.outputs.ok == 'true'
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        if: steps.cpu.outputs.ok == 'true'
+        with:
+          ref: ${{ env.MAIN_SHA }}
+          path: engine
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Network
+        if: steps.cpu.outputs.ok == 'true'
+        run: |
+          mkdir -p net run
+          curl -sSfL --retry 3 -o "net/$NET_NAME" \
+            "https://github.com/$GITHUB_REPOSITORY/releases/download/$ATOMIC_NET_TAG/$ATOMIC_NET_ASSET"
+          echo "$ATOMIC_NET_SHA256  net/$NET_NAME" | sha256sum -c -
+          cp "net/$NET_NAME" "run/$NET_NAME"
+
+      - name: Profile-guided builds of main and the pull requests
+        if: steps.cpu.outputs.ok == 'true'
+        run: bash ci/build_variants.sh engine "net/$NET_NAME" out "" ARCH=x86-64-vnni512 COMP=gcc
+
+      - name: Identity and speed
+        if: steps.cpu.outputs.ok == 'true'
+        run: |
+          set -eo pipefail
+          cpu=$(lscpu | sed -n 's/^Model name: *//p' | head -n 1)
+          python3 ci/engine_check.py --title "linux x86-64-vnni512, runner 1: $cpu" \
+            --bin main=out/atomic-main --bin pr67=out/atomic-pr67 --bin pr68=out/atomic-pr68 \
+            --bin pr70=out/atomic-pr70 --bin all3=out/atomic-all3 \
+            --cwd run --expect-nnue "$EXPECT_NNUE" --expect-classical "$EXPECT_CLASSICAL" \
+            --depth "$BENCH_DEPTH" --rounds "$ROUNDS" \
+            --json out/check.json --md "$GITHUB_STEP_SUMMARY" | tee out/check.log
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always() && steps.cpu.outputs.ok == 'true'
+        with:
+          name: check-vnni512-1
+          path: out/
+
+  pool:
+    name: pooled ratios
+    needs: [measure-linux, measure-windows, vnni512-linux]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: check-*
+          path: checks
+      - name: Pool the per-round ratios
+        run: |
+          set -eo pipefail
+          ls checks/*/check.json
+          python3 ci/pool_checks.py checks/*/check.json --md "$GITHUB_STEP_SUMMARY" | tee pooled.md
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: pooled
+          path: pooled.md

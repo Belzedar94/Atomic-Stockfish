@@ -1,17 +1,20 @@
-# ci/worker-engine-pgo
+# ci/moky-speedups-1019
 
-Build-and-check recipe for the engine binaries the AtomicDB workers download.
-This branch holds no engine source: the workflow checks the engine out by SHA
-from `worker-engine-1adc5239-pgo`, which is `main@1adc5239` plus the
-`src/Makefile` part of PR #59 (so that `make profile-build` profiles the NNUE
-evaluation at that commit).
+Measurement of three NNUE speed-up pull requests against `main@bfc828f6`:
+#67 (refresh cache by king square), #68 (sparse first layer) and #70 (SSE2
+clamp of the feature transformer output). This branch holds no engine source.
 
-- `.github/workflows/worker_engine_pgo.yml` builds the engine profile-guided for
-  `linux x86-64-avx2`, `windows x86-64-bmi2` and `macos apple-silicon`, next to a
-  plain build of the same tree, and compares both with the binary served today.
-- `ci/engine_check.py` is the comparison: bench signatures (338376 with NNUE,
-  825643 classical), identical output on a worker-like UCI session (go nodes,
-  MultiPV, searchmoves, Syzygy), and nodes per second over alternating runs.
-- `ci/fetch_tb.py` fetches a dozen small tablebase files for that session.
+- `.github/workflows/moky_speedups.yml` checks out main by SHA, merges each pull
+  request head into it on its own and all three together (the trees are
+  pinned), and builds the five variants with `make profile-build` (GCC) for
+  `linux x86-64-avx2`, `windows x86-64-bmi2` (network embedded) and, when the
+  runner has AVX-512 VNNI, `linux x86-64-vnni512`.
+- `ci/build_variants.sh` does the merges and the builds.
+- `ci/engine_check.py` requires every variant to search exactly the nodes main
+  searches (bench signatures 450539 with NNUE and 657485 classical, a
+  worker-like UCI session, every timed bench) and times them in alternating
+  rounds. The Linux and Windows binaries are timed on several runners each.
+- `ci/pool_checks.py` pools the per-round speed ratios of those runners.
 
-Nothing is published from here. The binaries are workflow artifacts.
+The workflows of the earlier measurements on this lineage only run on their own
+branches. Nothing is published from here: binaries and reports are artifacts.
