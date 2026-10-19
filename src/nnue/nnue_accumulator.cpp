@@ -68,7 +68,7 @@ void AccumulatorStack::pop() noexcept {
 
 void AccumulatorStack::evaluate(const Position&           pos,
                                 const FeatureTransformer& featureTransformer,
-                                AccumulatorCaches& cache) noexcept {
+                                AccumulatorCaches&        cache) noexcept {
     evaluate_side(WHITE, pos, featureTransformer, cache);
     evaluate_side(BLACK, pos, featureTransformer, cache);
 }
@@ -151,7 +151,7 @@ void AccumulatorStack::refresh_cached(Color                     perspective,
     for (IndexType tile = 0; tile < TransformedFeatureDimensions / Tiling::TileHeight; ++tile)
     {
         const IndexType tileOffset = tile * Tiling::TileHeight;
-        auto* entryTile  = reinterpret_cast<vec_t*>(&entry.accumulation[tileOffset]);
+        auto*           entryTile  = reinterpret_cast<vec_t*>(&entry.accumulation[tileOffset]);
         auto* targetTile = reinterpret_cast<vec_t*>(&target.accumulation[perspective][tileOffset]);
 
         for (IndexType reg = 0; reg < Tiling::NumRegs; ++reg)
@@ -180,7 +180,7 @@ void AccumulatorStack::refresh_cached(Color                     perspective,
     for (IndexType tile = 0; tile < PSQTBuckets / Tiling::PsqtTileHeight; ++tile)
     {
         const IndexType tileOffset = tile * Tiling::PsqtTileHeight;
-        auto* entryTile  = reinterpret_cast<psqt_vec_t*>(&entry.psqtAccumulation[tileOffset]);
+        auto* entryTile = reinterpret_cast<psqt_vec_t*>(&entry.psqtAccumulation[tileOffset]);
         auto* targetTile =
           reinterpret_cast<psqt_vec_t*>(&target.psqtAccumulation[perspective][tileOffset]);
 
