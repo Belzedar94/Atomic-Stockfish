@@ -68,14 +68,25 @@ void AccumulatorStack::pop() noexcept {
 
 void AccumulatorStack::evaluate(const Position&           pos,
                                 const FeatureTransformer& featureTransformer,
-                                AccumulatorCaches&) noexcept {
-    evaluate_side(WHITE, pos, featureTransformer);
-    evaluate_side(BLACK, pos, featureTransformer);
+                                AccumulatorCaches& cache) noexcept {
+    evaluate_side(WHITE, pos, featureTransformer, cache);
+    evaluate_side(BLACK, pos, featureTransformer, cache);
+}
+
+void AccumulatorCaches::init(const FeatureTransformer& featureTransformer) {
+    for (auto& perSquare : entries)
+        for (auto& entry : perSquare)
+        {
+            entry.accumulation = featureTransformer.biases;
+            entry.psqtAccumulation.fill(0);
+            entry.byPiece.fill(0);
+        }
 }
 
 void AccumulatorStack::evaluate_side(Color                     perspective,
                                      const Position&           pos,
-                                     const FeatureTransformer& featureTransformer) noexcept {
+                                     const FeatureTransformer& featureTransformer,
+                                     AccumulatorCaches&        cache) noexcept {
     if (mut_latest().computed[perspective])
         return;
 
@@ -86,7 +97,7 @@ void AccumulatorStack::evaluate_side(Color                     perspective,
 
     if (!accumulators[base].computed[perspective])
     {
-        refresh(perspective, pos, featureTransformer, mut_latest());
+        refresh_cached(perspective, pos, featureTransformer, cache, mut_latest());
         return;
     }
 
@@ -95,13 +106,111 @@ void AccumulatorStack::evaluate_side(Color                     perspective,
     {
         if (FeatureSet::requires_refresh(accumulators[current].dirtyPiece, perspective))
         {
-            refresh(perspective, pos, featureTransformer, mut_latest());
+            refresh_cached(perspective, pos, featureTransformer, cache, mut_latest());
             return;
         }
 
         update(perspective, ksq, featureTransformer, accumulators[current - 1],
                accumulators[current]);
     }
+}
+
+void AccumulatorStack::refresh_cached(Color                     perspective,
+                                      const Position&           pos,
+                                      const FeatureTransformer& featureTransformer,
+                                      AccumulatorCaches&        cache,
+                                      AccumulatorState&         target) noexcept {
+#ifdef VECTOR
+    if (!pos.has_king(perspective))
+    {
+        refresh(perspective, pos, featureTransformer, target);
+        return;
+    }
+    const Square ksq   = pos.square<KING>(perspective);
+    auto&        entry = cache.entries[ksq][perspective];
+
+    FeatureSet::ActiveIndexList removed, added;
+    for (Color c : {WHITE, BLACK})
+        for (PieceType pt = PAWN; pt <= KING; ++pt)
+        {
+            const Piece    pc  = make_piece(c, pt);
+            const Bitboard now = pos.pieces(c, pt);
+            Bitboard       rem = entry.byPiece[pc] & ~now;
+            Bitboard       add = now & ~entry.byPiece[pc];
+            while (rem)
+                removed.push_back(FeatureSet::make_index(perspective, pop_lsb(rem), pc, ksq));
+            while (add)
+                added.push_back(FeatureSet::make_index(perspective, pop_lsb(add), pc, ksq));
+            entry.byPiece[pc] = now;
+        }
+
+    using Tiling = LegacyAtomicAccumulatorTiling;
+    vec_t      acc[Tiling::NumRegs];
+    psqt_vec_t psqt[Tiling::NumPsqtRegs];
+
+    for (IndexType tile = 0; tile < TransformedFeatureDimensions / Tiling::TileHeight; ++tile)
+    {
+        const IndexType tileOffset = tile * Tiling::TileHeight;
+        auto* entryTile  = reinterpret_cast<vec_t*>(&entry.accumulation[tileOffset]);
+        auto* targetTile = reinterpret_cast<vec_t*>(&target.accumulation[perspective][tileOffset]);
+
+        for (IndexType reg = 0; reg < Tiling::NumRegs; ++reg)
+            acc[reg] = vec_load(&entryTile[reg]);
+        for (const IndexType index : removed)
+        {
+            const auto* weightTile = reinterpret_cast<const vec_t*>(
+              &featureTransformer.weights[index * TransformedFeatureDimensions + tileOffset]);
+            for (IndexType reg = 0; reg < Tiling::NumRegs; ++reg)
+                acc[reg] = vec_sub_16(acc[reg], weightTile[reg]);
+        }
+        for (const IndexType index : added)
+        {
+            const auto* weightTile = reinterpret_cast<const vec_t*>(
+              &featureTransformer.weights[index * TransformedFeatureDimensions + tileOffset]);
+            for (IndexType reg = 0; reg < Tiling::NumRegs; ++reg)
+                acc[reg] = vec_add_16(acc[reg], weightTile[reg]);
+        }
+        for (IndexType reg = 0; reg < Tiling::NumRegs; ++reg)
+        {
+            vec_store(&entryTile[reg], acc[reg]);
+            vec_store(&targetTile[reg], acc[reg]);
+        }
+    }
+
+    for (IndexType tile = 0; tile < PSQTBuckets / Tiling::PsqtTileHeight; ++tile)
+    {
+        const IndexType tileOffset = tile * Tiling::PsqtTileHeight;
+        auto* entryTile  = reinterpret_cast<psqt_vec_t*>(&entry.psqtAccumulation[tileOffset]);
+        auto* targetTile =
+          reinterpret_cast<psqt_vec_t*>(&target.psqtAccumulation[perspective][tileOffset]);
+
+        for (IndexType reg = 0; reg < Tiling::NumPsqtRegs; ++reg)
+            psqt[reg] = vec_load_psqt(&entryTile[reg]);
+        for (const IndexType index : removed)
+        {
+            const auto* weightTile = reinterpret_cast<const psqt_vec_t*>(
+              &featureTransformer.psqtWeights[index * PSQTBuckets + tileOffset]);
+            for (IndexType reg = 0; reg < Tiling::NumPsqtRegs; ++reg)
+                psqt[reg] = vec_sub_psqt_32(psqt[reg], weightTile[reg]);
+        }
+        for (const IndexType index : added)
+        {
+            const auto* weightTile = reinterpret_cast<const psqt_vec_t*>(
+              &featureTransformer.psqtWeights[index * PSQTBuckets + tileOffset]);
+            for (IndexType reg = 0; reg < Tiling::NumPsqtRegs; ++reg)
+                psqt[reg] = vec_add_psqt_32(psqt[reg], weightTile[reg]);
+        }
+        for (IndexType reg = 0; reg < Tiling::NumPsqtRegs; ++reg)
+        {
+            vec_store_psqt(&entryTile[reg], psqt[reg]);
+            vec_store_psqt(&targetTile[reg], psqt[reg]);
+        }
+    }
+    target.computed[perspective] = true;
+#else
+    (void) cache;
+    refresh(perspective, pos, featureTransformer, target);
+#endif
 }
 
 void AccumulatorStack::refresh(Color                     perspective,
