@@ -12,7 +12,9 @@ For every binary given as LABEL=PATH it
      SyzygyPath) and requires the engine output to be identical to the first binary's,
      apart from the time and nps fields;
   4. times `bench 16 1 <depth> default depth`, several rounds, the order rotating and
-     alternating; every run of every binary must report the same nodes.
+     alternating; every run of every binary must report the same nodes. Each binary's
+     speed is given against the first; with more than two binaries, the binaries after
+     the first are also compared with each other, round by round.
 
 Exit status 0 only if every identity check passed. Speed is reported, never judged.
 """
@@ -265,6 +267,17 @@ def main() -> int:
             result["binaries"][label][f"timing_{mode}"] = row
             print(f"  {label:14s} {row['mean_nps']:10.0f} +/- {row['ci95']:7.0f} nps (95%)  median {row['median_nps']:.0f}  "
                   f"vs {ref}: {row['vs_ref_pct']:+6.2f}% +/- {row['vs_ref_ci95_pct']:.2f}", flush=True)
+        pairs = []
+        others = [label for label, _ in bins[1:]]
+        for i, against in enumerate(others):
+            for label in others[i + 1:]:
+                ratios = [x / y for x, y in zip(samples[label], samples[against])]
+                pair = {"binary": label, "against": against, "pct": 100 * (statistics.mean(ratios) - 1),
+                        "ci95_pct": 100 * ci95(ratios)}
+                pairs.append(pair)
+                print(f"  {label} vs {against}: {pair['pct']:+6.2f}% +/- {pair['ci95_pct']:.2f} "
+                      f"(same rounds, 95%)", flush=True)
+        result[f"pairs_{mode}"] = pairs
 
     result["failures"] = failures
     if a.json:
@@ -286,6 +299,10 @@ def main() -> int:
             md.write(f"\nhost: `{platform.platform()}`; nodes at depth {a.depth}: "
                      f"{result['binaries'][ref]['timing_nnue']['nodes']}; "
                      f"{a.rounds} alternating rounds.\n\n")
+            for p in result["pairs_nnue"]:
+                md.write(f"- {p['binary']} vs {p['against']}: {p['pct']:+.1f}% ± {p['ci95_pct']:.1f} (same rounds)\n")
+            if result["pairs_nnue"]:
+                md.write("\n")
             if failures:
                 md.write("**FAILED:** " + "; ".join(failures) + "\n\n")
     if failures:
