@@ -12,7 +12,8 @@ For every binary given as LABEL=PATH it
      SyzygyPath) and requires the engine output to be identical to the first binary's,
      apart from the time and nps fields;
   4. times `bench 16 1 <depth> default depth` in both modes, several rounds, the order
-     rotating and alternating; every run of every binary must report the same nodes.
+     rotating and alternating (two binaries: ABBA); every run of every binary must
+     report the same nodes.
 
 Exit status 0 only if every identity check passed. Speed is reported, never judged.
 """
@@ -250,7 +251,11 @@ def main() -> int:
         for label, exe in bins:  # one discarded warm-up each
             nodes_seen.add(bench(exe, a.cwd, classical, a.depth, a.cpu)["nodes"])
         for r in range(a.rounds):
-            order = bins[r % len(bins):] + bins[:r % len(bins)]
+            # Rotate by r // 2 and reverse every other round: over 2 * len(bins) rounds
+            # every binary starts every position in both directions. (Rotating by r
+            # instead gives the same order in every round when there are two binaries.)
+            k = (r // 2) % len(bins)
+            order = bins[k:] + bins[:k]
             if r % 2:
                 order = order[::-1]
             for label, exe in order:

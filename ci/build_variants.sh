@@ -1,21 +1,20 @@
 #!/usr/bin/env bash
-# Builds main and the pull requests under test, each merged into main, with
+# Builds main and the pull request under test, merged into main, with
 # `make profile-build`, one after the other in one checkout of the engine.
 #
 #   ci/build_variants.sh ENGINE_DIR NETWORK OUT_DIR EXE_SUFFIX [make arguments ...]
 #
-# ENGINE_DIR is a full clone of the engine (the merges need the history).
+# ENGINE_DIR is a full clone of the engine (the merge needs the history).
 # NETWORK is copied into ENGINE_DIR/src under its default name before every
 # build, so the profiling run evaluates with NNUE. The binaries land in OUT_DIR
 # as atomic-<variant><EXE_SUFFIX>, next to their build logs.
 #
-# Needs MAIN_SHA, PR67_SHA, PR68_SHA, PR70_SHA, NET_NAME and the expected trees
-# TREE_MAIN, TREE_PR67, TREE_PR68, TREE_PR70 and TREE_ALL in the environment.
-# The merges use a fixed identity and date, so a variant is the same commit on
-# every runner, and its tree must be the expected one: what is built is main
-# plus the pull request(s), nothing else. Node counts are not judged here
-# (ci/engine_check.py does that), so a pull request that changes the search is
-# still built and reported.
+# Needs MAIN_SHA, PR72_SHA, NET_NAME and the expected trees TREE_MAIN and
+# TREE_PR72 in the environment. The merge uses a fixed identity and date, so a
+# variant is the same commit on every runner, and its tree must be the expected
+# one: what is built is main plus the pull request, nothing else. Node counts
+# are not judged here (ci/engine_check.py does that), so a pull request that
+# changes the search is still built and reported.
 set -euo pipefail
 
 engine=$1 network=$2 out=$3 ext=$4
@@ -24,14 +23,14 @@ mkdir -p "$out"
 
 export GIT_AUTHOR_NAME=ci GIT_AUTHOR_EMAIL=ci@invalid
 export GIT_COMMITTER_NAME=ci GIT_COMMITTER_EMAIL=ci@invalid
-export GIT_AUTHOR_DATE=2026-10-19T00:00:00Z GIT_COMMITTER_DATE=2026-10-19T00:00:00Z
+export GIT_AUTHOR_DATE=2026-10-20T00:00:00Z GIT_COMMITTER_DATE=2026-10-20T00:00:00Z
 
 g() { git -C "$engine" "$@"; }
 
-# The pull request heads live in a fork; the base repository serves them as
-# refs/pull/<n>/head. If a head moved since, fetch the pinned commit itself.
-g fetch --quiet --no-tags origin refs/pull/67/head refs/pull/68/head refs/pull/70/head
-for sha in "$PR67_SHA" "$PR68_SHA" "$PR70_SHA"; do
+# The pull request head lives in a fork; the base repository serves it as
+# refs/pull/<n>/head. If the head moved since, fetch the pinned commit itself.
+g fetch --quiet --no-tags origin refs/pull/72/head
+for sha in "$PR72_SHA"; do
     g cat-file -e "$sha^{commit}" 2>/dev/null || g fetch --quiet --no-tags origin "$sha"
     g cat-file -e "$sha^{commit}"
 done
@@ -39,10 +38,7 @@ done
 # name, expected tree, heads merged into main (in this order)
 variants=(
     "main $TREE_MAIN"
-    "pr67 $TREE_PR67 $PR67_SHA"
-    "pr68 $TREE_PR68 $PR68_SHA"
-    "pr70 $TREE_PR70 $PR70_SHA"
-    "all3 $TREE_ALL $PR67_SHA $PR68_SHA $PR70_SHA"
+    "pr72 $TREE_PR72 $PR72_SHA"
 )
 
 for v in "${variants[@]}"; do

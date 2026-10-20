@@ -1,40 +1,35 @@
-name: NNUE speed-up pull requests, profile-guided
+name: Check status cache pull request, profile-guided
 
-# Measures three NNUE speed-up pull requests against main@bfc828f6: #67 (refresh
-# cache by king square), #68 (sparse first layer) and #70 (SSE2 clamp of the
-# feature transformer output), each merged into main on its own and all three
-# together. ci/build_variants.sh builds the five variants one after the other on
-# one runner with `make profile-build` (GCC, as OpenBench and the AtomicDB
-# workers build). ci/engine_check.py then requires every variant to search
-# exactly the nodes main searches (bench signatures, a worker-like UCI session,
-# every timed bench) and times them in alternating rounds. The same binaries are
-# timed on several runners of each kind, and ci/pool_checks.py pools the
-# per-round ratios. Nothing is published: binaries and reports are artifacts.
+# Measures pull request #72 (cache the side-to-move check status in StateInfo)
+# against main@62c60604, its base. The pull request claims to be a pure speed-up,
+# so it must search exactly the nodes main searches. ci/build_variants.sh builds
+# main and main with the pull request head merged, one after the other on one
+# runner, with `make profile-build` (GCC, as OpenBench and the AtomicDB workers
+# build). ci/engine_check.py then requires both to search exactly the nodes main
+# searches (bench signatures, a worker-like UCI session, every timed bench) and
+# times them in alternating rounds. The same binaries are timed on several
+# runners of each kind, and ci/pool_checks.py pools the per-round ratios.
+# Nothing is published: binaries and reports are artifacts.
 
 on:
   push:
     branches:
-      - ci/moky-speedups-1019
+      - ci/moky-check-cache-1020
 
 permissions:
   contents: read
 
 concurrency:
-  group: moky-speedups-1019
+  group: moky-check-cache-1020
   cancel-in-progress: true
 
 env:
-  MAIN_SHA: bfc828f6c73733f254491d0845a3c406f1f41f90
-  PR67_SHA: 422c4850b7c3811ed2e940971ae34387ab36200f
-  PR68_SHA: b3f41cfbeaf7362cdb385e698f319b5c45baf2f9
-  PR70_SHA: f6bf56071a4e27744a8f4ba0c8a6ebc8866a01fe
-  # Trees of main and of main with the pull request(s) merged: the build stops if
-  # a variant is anything else.
-  TREE_MAIN: ba06b4315819899fca63d8a0226277d6bcb19560
-  TREE_PR67: b945b86b9b270c26502de13df783633bf31f257d
-  TREE_PR68: 58913ebfe28ee8a2c8127d156dde999ac3313356
-  TREE_PR70: 58d75dc86eb610397b1f0b30441bcfdc6272afe4
-  TREE_ALL: 2402353772278fa0166339edae15ba20f67c65d5
+  MAIN_SHA: 62c6060461bfc80353da1371d799a57214334dc6
+  PR72_SHA: ca35937fdc60cb6a2b2fedfd35925d5b49aea488
+  # Trees of main and of main with the pull request merged: the build stops if a
+  # variant is anything else.
+  TREE_MAIN: 34997b635497e05a4a3acdba9dc9c49dc6bfc091
+  TREE_PR72: 9521fa82b6228b3ca42f0608351e7cf5a09647a6
   ATOMIC_NET_TAG: v1.0
   ATOMIC_NET_ASSET: atomic-run3b.nnue
   ATOMIC_NET_SHA256: 99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f92a04a6
@@ -42,9 +37,9 @@ env:
   EXPECT_NNUE: "450539"
   EXPECT_CLASSICAL: "657485"
   BENCH_DEPTH: "20"
-  # A multiple of 10: with five binaries every starting position and both
-  # directions of the rotation come up equally often.
-  ROUNDS: "10"
+  # A multiple of 4: with two binaries each one goes first in half of the rounds,
+  # in ABBA order, so a slow drift of the runner's speed cancels out.
+  ROUNDS: "20"
 
 jobs:
   build-linux:
@@ -78,7 +73,7 @@ jobs:
             "https://github.com/$GITHUB_REPOSITORY/releases/download/$ATOMIC_NET_TAG/$ATOMIC_NET_ASSET"
           echo "$ATOMIC_NET_SHA256  net/$NET_NAME" | sha256sum -c -
 
-      - name: Profile-guided builds of main and the pull requests
+      - name: Profile-guided builds of main and the pull request
         run: bash ci/build_variants.sh engine "net/$NET_NAME" out "" ARCH=x86-64-avx2 COMP=gcc
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -122,8 +117,7 @@ jobs:
           set -eo pipefail
           cpu=$(lscpu | sed -n 's/^Model name: *//p' | head -n 1)
           python3 ci/engine_check.py --title "linux x86-64-avx2, runner ${{ matrix.runner }}: $cpu" \
-            --bin main=bins/atomic-main --bin pr67=bins/atomic-pr67 --bin pr68=bins/atomic-pr68 \
-            --bin pr70=bins/atomic-pr70 --bin all3=bins/atomic-all3 \
+            --bin main=bins/atomic-main --bin pr72=bins/atomic-pr72 \
             --cwd run --expect-nnue "$EXPECT_NNUE" --expect-classical "$EXPECT_CLASSICAL" \
             --depth "$BENCH_DEPTH" --rounds "$ROUNDS" \
             --json out/check.json --md "$GITHUB_STEP_SUMMARY" | tee out/check.log
@@ -176,7 +170,7 @@ jobs:
           echo "$ATOMIC_NET_SHA256  net/$NET_NAME" | sha256sum -c -
 
       # The network is embedded, as in the Windows binaries the workers download.
-      - name: Profile-guided builds of main and the pull requests
+      - name: Profile-guided builds of main and the pull request
         run: |
           bash ci/build_variants.sh engine "net/$NET_NAME" out .exe ARCH=x86-64-bmi2 COMP=mingw \
             EXTRAPROFILEFLAGS=-DATOMIC_NNUE_EMBEDDING
@@ -222,8 +216,7 @@ jobs:
           echo "$cpu, $NUMBER_OF_PROCESSORS processors"
           python --version
           python ci/engine_check.py --title "windows x86-64-bmi2, runner ${{ matrix.runner }}: $cpu" \
-            --bin main=bins/atomic-main.exe --bin pr67=bins/atomic-pr67.exe --bin pr68=bins/atomic-pr68.exe \
-            --bin pr70=bins/atomic-pr70.exe --bin all3=bins/atomic-all3.exe \
+            --bin main=bins/atomic-main.exe --bin pr72=bins/atomic-pr72.exe \
             --cwd run --expect-nnue "$EXPECT_NNUE" --expect-classical "$EXPECT_CLASSICAL" \
             --depth "$BENCH_DEPTH" --rounds "$ROUNDS" \
             --json out/check.json --md "$GITHUB_STEP_SUMMARY" | tee out/check.log
@@ -276,7 +269,7 @@ jobs:
           echo "$ATOMIC_NET_SHA256  net/$NET_NAME" | sha256sum -c -
           cp "net/$NET_NAME" "run/$NET_NAME"
 
-      - name: Profile-guided builds of main and the pull requests
+      - name: Profile-guided builds of main and the pull request
         if: steps.cpu.outputs.ok == 'true'
         run: bash ci/build_variants.sh engine "net/$NET_NAME" out "" ARCH=x86-64-vnni512 COMP=gcc
 
@@ -286,8 +279,7 @@ jobs:
           set -eo pipefail
           cpu=$(lscpu | sed -n 's/^Model name: *//p' | head -n 1)
           python3 ci/engine_check.py --title "linux x86-64-vnni512, runner 1: $cpu" \
-            --bin main=out/atomic-main --bin pr67=out/atomic-pr67 --bin pr68=out/atomic-pr68 \
-            --bin pr70=out/atomic-pr70 --bin all3=out/atomic-all3 \
+            --bin main=out/atomic-main --bin pr72=out/atomic-pr72 \
             --cwd run --expect-nnue "$EXPECT_NNUE" --expect-classical "$EXPECT_CLASSICAL" \
             --depth "$BENCH_DEPTH" --rounds "$ROUNDS" \
             --json out/check.json --md "$GITHUB_STEP_SUMMARY" | tee out/check.log
