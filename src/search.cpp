@@ -657,7 +657,11 @@ bool Search::Worker::iterative_deepening() {
             beta      = std::min(avg + delta, VALUE_INFINITE);
 
             // Do not tune these values. They are not intended for playing strength.
-            seekMate = std::abs(rootMoves[pvIdx].score) >= 750 + 220000 / (rootDepth * rootDepth);
+            // previousScore, not score: searching an earlier MultiPV line leaves the
+            // moves that failed low at -VALUE_INFINITE, which is not a mate score.
+            seekMate =
+              rootMoves[pvIdx].previousScore != -VALUE_INFINITE
+              && std::abs(rootMoves[pvIdx].previousScore) >= 750 + 220000 / (rootDepth * rootDepth);
 
             // Adjust optimism based on root move's averageScore
             optimism[us]  = 137 * avg / (std::abs(avg) + 81);
