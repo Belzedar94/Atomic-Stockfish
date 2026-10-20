@@ -457,13 +457,17 @@ jobs:
 
       # As on macOS, the clang PGO recipe replaces EXTRACXXFLAGS and does not read
       # EXTRAPROFILEFLAGS, so the embedding flag goes in through the environment.
+      # libc++ 23 dropped many transitive includes, and numa.h at ENGINE_SHA uses
+      # std::inserter on Windows without including <iterator> (upstream Stockfish
+      # added it in 86433ca7). _LIBCPP_KEEP_TRANSITIVE_INCLUDES_LLVM23 brings back
+      # the headers libc++ 22 included; it only adds includes, no code changes.
       - name: Profile-guided build (clang)
         working-directory: engine/src
         run: |
           set -eo pipefail
           export PATH="/clang64/bin:$PATH"
           rc=0
-          CXXFLAGS=-DATOMIC_NNUE_EMBEDDING make -j4 profile-build ARCH=$ARCH COMP=clang EXE="$NEW_FILE" > ../../out/build-pgo.log 2>&1 || rc=$?
+          CXXFLAGS="-DATOMIC_NNUE_EMBEDDING -D_LIBCPP_KEEP_TRANSITIVE_INCLUDES_LLVM23" make -j4 profile-build ARCH=$ARCH COMP=clang EXE="$NEW_FILE" > ../../out/build-pgo.log 2>&1 || rc=$?
           grep -E "^Step|Nodes searched|Nodes/second|Total time|WARNING|profiled|llvm-profdata" ../../out/build-pgo.log || true
           if [ "$rc" -ne 0 ]; then tail -n 60 ../../out/build-pgo.log; exit "$rc"; fi
           test -f "$NEW_FILE"
