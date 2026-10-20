@@ -1,9 +1,10 @@
-name: Sparse input scan pull request, profile-guided
+name: Move scoring history lookups pull request, profile-guided
 
-# Measures pull request #71 (scan the sparse input of the first layer in groups
-# of eight four-byte chunks with SSSE3/AVX2, sixteen with AVX-512, instead of
-# four, with a 256-entry lookup table) against main@d1de8c5d, its base. The pull
-# request claims accumulation and evaluation are unchanged, so it must search
+# Measures pull request #75 (resolve the history-table references outside the
+# move-scoring loops of src/movepick.cpp, compute the low-ply history row and
+# divisor once per quiet-scoring call, and accumulate each quiet score locally
+# before writing m.value) against main@0c8c6084, its base. The pull request
+# claims the scoring formulas and the move order are unchanged, so it must search
 # exactly the nodes main searches. ci/build_variants.sh builds main and main
 # with the pull request head merged, one after the other on one runner, with
 # `make profile-build` (GCC, as OpenBench and the AtomicDB workers build).
@@ -12,30 +13,29 @@ name: Sparse input scan pull request, profile-guided
 # times them in alternating rounds. The same binaries are timed on several
 # runners of each kind, and ci/pool_checks.py pools the per-round ratios.
 #
-# The pull request has three scan paths: AVX2 (the linux x86-64-avx2 and windows
-# x86-64-bmi2 builds), AVX-512 (x86-64-vnni512, only on runners that have it, so
-# three runners try) and SSE2/SSSE3 without AVX2 (x86-64-sse41-popcnt).
+# The change is scalar code (move ordering), so the linux x86-64-avx2 and windows
+# x86-64-bmi2 builds cover it; there is no AVX-512 or SSE4.1 job this time.
 # Nothing is published: binaries and reports are artifacts.
 
 on:
   push:
     branches:
-      - ci/moky-sparse-wide-1020
+      - ci/moky-quiet-order-1020
 
 permissions:
   contents: read
 
 concurrency:
-  group: moky-sparse-wide-1020
+  group: moky-quiet-order-1020
   cancel-in-progress: true
 
 env:
-  MAIN_SHA: d1de8c5de3777aa3805f77e83509e2c047baf3a4
-  PR71_SHA: 18b04c0f6e713c2b7402782cee142c287e51fdb5
+  MAIN_SHA: 0c8c6084e709361e315f4d15541f7dd6a6d8e517
+  PR75_SHA: 3f890681b49a40670be0abd2e219a350dd284c38
   # Trees of main and of main with the pull request merged: the build stops if a
   # variant is anything else.
-  TREE_MAIN: e2ee3b61119b9447dbd51ac8bbb575bc17ed9a93
-  TREE_PR71: c504ec0e0f6cbfa012eb172f9e2e61ccfff24022
+  TREE_MAIN: fdfdcfdfb5c3f3f8fb7b4bf66ac8dc6959a4174d
+  TREE_PR75: 2b4c226015484a47f743e3c38caa58f0f1396d3c
   ATOMIC_NET_TAG: v1.0
   ATOMIC_NET_ASSET: atomic-run3b.nnue
   ATOMIC_NET_SHA256: 99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f92a04a6
@@ -124,7 +124,7 @@ jobs:
           set -eo pipefail
           cpu=$(lscpu | sed -n 's/^Model name: *//p' | head -n 1)
           python3 ci/engine_check.py --title "linux x86-64-avx2, runner ${{ matrix.runner }}: $cpu" \
-            --bin main=bins/atomic-main --bin pr71=bins/atomic-pr71 \
+            --bin main=bins/atomic-main --bin pr75=bins/atomic-pr75 \
             --cwd run --expect-nnue "$EXPECT_NNUE" --expect-classical "$EXPECT_CLASSICAL" \
             --depth "$BENCH_DEPTH" --rounds "$ROUNDS" \
             --json out/check.json --md "$GITHUB_STEP_SUMMARY" | tee out/check.log
@@ -225,7 +225,7 @@ jobs:
           echo "$cpu, $NUMBER_OF_PROCESSORS processors"
           python --version
           python ci/engine_check.py --title "windows x86-64-bmi2, runner ${{ matrix.runner }}: $cpu" \
-            --bin main=bins/atomic-main.exe --bin pr71=bins/atomic-pr71.exe \
+            --bin main=bins/atomic-main.exe --bin pr75=bins/atomic-pr75.exe \
             --cwd run --expect-nnue "$EXPECT_NNUE" --expect-classical "$EXPECT_CLASSICAL" \
             --depth "$BENCH_DEPTH" --rounds "$ROUNDS" \
             --json out/check.json --md "$GITHUB_STEP_SUMMARY" | tee out/check.log
@@ -237,129 +237,9 @@ jobs:
           path: out/
           overwrite: true
 
-  # AVX-512 runs the sixteen-chunk scan of the pull request. Hosted runners
-  # differ, so three runners try and each one measures only when its processor
-  # has AVX-512 VNNI, building and timing on that runner.
-  vnni512-linux:
-    name: linux x86-64-vnni512, runner ${{ matrix.runner }}, if it has AVX-512 VNNI
-    runs-on: ubuntu-24.04
-    timeout-minutes: 75
-    strategy:
-      fail-fast: false
-      matrix:
-        runner: [1, 2, 3]
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - name: Does the processor have AVX-512 VNNI?
-        id: cpu
-        run: |
-          lscpu | grep -E 'Model name|^CPU\(s\)'
-          if grep -qw avx512_vnni /proc/cpuinfo && grep -qw avx512bw /proc/cpuinfo && grep -qw avx512vl /proc/cpuinfo; then
-            echo "ok=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "ok=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::this runner has no AVX-512 VNNI, nothing measured"
-          fi
-
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        if: steps.cpu.outputs.ok == 'true'
-        with:
-          persist-credentials: false
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        if: steps.cpu.outputs.ok == 'true'
-        with:
-          ref: ${{ env.MAIN_SHA }}
-          path: engine
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: Network
-        if: steps.cpu.outputs.ok == 'true'
-        run: |
-          g++ --version | head -n 1
-          mkdir -p net run
-          curl -sSfL --retry 3 -o "net/$NET_NAME" \
-            "https://github.com/$GITHUB_REPOSITORY/releases/download/$ATOMIC_NET_TAG/$ATOMIC_NET_ASSET"
-          echo "$ATOMIC_NET_SHA256  net/$NET_NAME" | sha256sum -c -
-          cp "net/$NET_NAME" "run/$NET_NAME"
-
-      - name: Profile-guided builds of main and the pull request
-        if: steps.cpu.outputs.ok == 'true'
-        run: bash ci/build_variants.sh engine "net/$NET_NAME" out "" ARCH=x86-64-vnni512 COMP=gcc
-
-      - name: Identity and speed
-        if: steps.cpu.outputs.ok == 'true'
-        run: |
-          set -eo pipefail
-          cpu=$(lscpu | sed -n 's/^Model name: *//p' | head -n 1)
-          python3 ci/engine_check.py --title "linux x86-64-vnni512, runner ${{ matrix.runner }}: $cpu" \
-            --bin main=out/atomic-main --bin pr71=out/atomic-pr71 \
-            --cwd run --expect-nnue "$EXPECT_NNUE" --expect-classical "$EXPECT_CLASSICAL" \
-            --depth "$BENCH_DEPTH" --rounds "$ROUNDS" \
-            --json out/check.json --md "$GITHUB_STEP_SUMMARY" | tee out/check.log
-
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: always() && steps.cpu.outputs.ok == 'true'
-        with:
-          name: check-vnni512-${{ matrix.runner }}
-          path: out/
-          overwrite: true
-
-  # Without AVX2 the pull request finds the zero chunks with SSE2 compares and
-  # packs. The x86-64-sse41-popcnt build takes that path on any runner.
-  sse41-linux:
-    name: linux x86-64-sse41-popcnt (the SSSE3 scan)
-    runs-on: ubuntu-24.04
-    timeout-minutes: 75
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          ref: ${{ env.MAIN_SHA }}
-          path: engine
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: Network and host
-        run: |
-          g++ --version | head -n 1
-          lscpu | grep -E 'Model name|^CPU\(s\)'
-          mkdir -p net run
-          curl -sSfL --retry 3 -o "net/$NET_NAME" \
-            "https://github.com/$GITHUB_REPOSITORY/releases/download/$ATOMIC_NET_TAG/$ATOMIC_NET_ASSET"
-          echo "$ATOMIC_NET_SHA256  net/$NET_NAME" | sha256sum -c -
-          cp "net/$NET_NAME" "run/$NET_NAME"
-
-      - name: Profile-guided builds of main and the pull request
-        run: bash ci/build_variants.sh engine "net/$NET_NAME" out "" ARCH=x86-64-sse41-popcnt COMP=gcc
-
-      - name: Identity and speed
-        run: |
-          set -eo pipefail
-          cpu=$(lscpu | sed -n 's/^Model name: *//p' | head -n 1)
-          python3 ci/engine_check.py --title "linux x86-64-sse41-popcnt, runner 1: $cpu" \
-            --bin main=out/atomic-main --bin pr71=out/atomic-pr71 \
-            --cwd run --expect-nnue "$EXPECT_NNUE" --expect-classical "$EXPECT_CLASSICAL" \
-            --depth "$BENCH_DEPTH" --rounds "$ROUNDS" \
-            --json out/check.json --md "$GITHUB_STEP_SUMMARY" | tee out/check.log
-
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: always()
-        with:
-          name: check-sse41-1
-          path: out/
-          overwrite: true
-
   pool:
     name: pooled ratios
-    needs: [measure-linux, measure-windows, vnni512-linux, sse41-linux]
+    needs: [measure-linux, measure-windows]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 10
