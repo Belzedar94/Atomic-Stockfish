@@ -26,15 +26,15 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  ENGINE_SHA: 62c6060461bfc80353da1371d799a57214334dc6
+  ENGINE_SHA: 0c8c6084e709361e315f4d15541f7dd6a6d8e517
   BASE_SHA: 1adc5239500a684824b178b19be4266f6e249cc8
   ATOMIC_NET_TAG: v1.0
   ATOMIC_NET_ASSET: atomic-run3b.nnue
   ATOMIC_NET_SHA256: 99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f92a04a6
   NET_NAME: atomic_run3b_e202_l05.nnue
   SERVED_URL: https://belzedar.duckdns.org/atomicdb/engines
-  EXPECT_NNUE: "450539"
-  EXPECT_CLASSICAL: "657485"
+  EXPECT_NNUE: "438711"
+  EXPECT_CLASSICAL: "735506"
   BENCH_DEPTH: "18"
   ROUNDS: "10"
 
