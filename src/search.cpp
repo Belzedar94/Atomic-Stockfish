@@ -1046,7 +1046,8 @@ Value Search::Worker::search(
 
     // Step 1. Initialize node
     Color us      = pos.side_to_move();
-    ss->inCheck   = pos.atomic_in_check(us);
+    ss->inCheck   = pos.stm_in_check();
+    assert(ss->inCheck == pos.atomic_in_check(us));
     priorCapture  = pos.captured_piece();
     ss->moveCount = 0;
     bestValue     = -VALUE_INFINITE;
@@ -1974,7 +1975,8 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
     }
 
     bestMove    = Move::none();
-    ss->inCheck = pos.atomic_in_check(pos.side_to_move());
+    ss->inCheck = pos.stm_in_check();
+    assert(ss->inCheck == pos.atomic_in_check(pos.side_to_move()));
     moveCount   = 0;
 
     // Used to send selDepth info to GUI (selDepth counts from 1, ply from 0)
