@@ -7,8 +7,9 @@
 #
 # The eight historical Fairy vectors are kept in atomic.sh. The focused Python
 # contract adds explosions, Atomic check, en passant, promotions, castling
-# rights, mate, stalemate, transitions, and terminal-result assertions. When a
-# net is supplied, all eight vectors run with Use NNUE=false, true, and pure.
+# rights, mate, stalemate, transitions, and terminal-result assertions. Perft
+# needs no network; when a net is supplied, all eight vectors run with
+# Use NNUE=true and pure.
 
 set -euo pipefail
 
@@ -29,6 +30,10 @@ if [[ ! -x "$ENGINE" ]]; then
 fi
 
 bash "$SCRIPT_DIR/atomic.sh" --perft "$ENGINE"
-"$PYTHON_BIN" "$SCRIPT_DIR/atomic_rules.py" --candidate-only --candidate "$ENGINE"
+rules_args=(--candidate-only --candidate "$ENGINE")
+if [[ -n "${ATOMIC_PERFT_NET:-}" ]]; then
+    rules_args+=(--eval-file "$ATOMIC_PERFT_NET")
+fi
+"$PYTHON_BIN" "$SCRIPT_DIR/atomic_rules.py" "${rules_args[@]}"
 
 echo "Atomic perft and rule-transition suite passed"

@@ -16,6 +16,7 @@ Examples::
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import os
 import queue
@@ -217,10 +218,26 @@ def check_uci_contract(uci: list[str]) -> None:
         f"engine is not Atomic-only:\n{uci}",
     )
     require(
-        "option name Use NNUE type combo default true var false var true var pure"
-        in uci,
-        f"missing tri-state NNUE option:\n{uci}",
+        "option name Use NNUE type combo default true var true var pure" in uci,
+        f"missing NNUE option:\n{uci}",
     )
+
+
+def create_material_network(directory: Path) -> Path:
+    """Build the material-only AtomicNNUEV2 test network in ``directory``.
+
+    The engine evaluates with NNUE only. This network evaluates exactly like
+    the material count the probes were first recorded with.
+    """
+    source = Path(__file__).resolve().with_name("create_synthetic_material_nnue.py")
+    spec = importlib.util.spec_from_file_location("create_synthetic_material_nnue", source)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load {source}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    path = directory / "atomic-material.nnue"
+    module.create_network(path)
+    return path
 
 
 def normalize_table_dirs(table_dirs: Sequence[Path]) -> tuple[Path, ...]:
@@ -793,7 +810,7 @@ def main() -> int:
     parser.add_argument(
         "--eval-file",
         type=Path,
-        help="also repeat root/interior probes with Use NNUE=true",
+        help="also repeat root/interior probes with this network",
     )
     parser.add_argument("--timeout", type=float, default=30.0)
     args = parser.parse_args()
@@ -812,14 +829,18 @@ def main() -> int:
         assert args.syzygy_driver is not None
         test_six_man_driver(args.syzygy_driver, args.tables, args.timeout)
 
-    with UciProcess(args.engine, args.timeout) as engine:
+    with tempfile.TemporaryDirectory(prefix="atomic-syzygy-uci-") as scratch, UciProcess(
+        args.engine, args.timeout
+    ) as engine:
+        material_net = create_material_network(Path(scratch))
         check_uci_contract(engine.uci())
         engine.setoption("Threads", "1")
         engine.setoption("Hash", "16")
         engine.setoption("SyzygyProbeLimit", "6")
         engine.setoption("SyzygyProbeDepth", "1")
         engine.setoption("Syzygy50MoveRule", "true")
-        engine.setoption("Use NNUE", "false")
+        engine.setoption("EvalFile", str(material_net))
+        engine.setoption("Use NNUE", "true")
 
         loaded = engine.setoption("SyzygyPath", syzygy_path_value(args.tables))
         assert_real_tables_loaded(loaded, args.tables)
@@ -855,7 +876,7 @@ def main() -> int:
                     args.analysis_book,
                     load_analysis_expectations(args.analysis_manifest),
                 )
-            engine.setoption("Use NNUE", "false")
+            engine.setoption("EvalFile", str(material_net))
 
         kbbb_wdl = find_table_file(args.tables, "KBBBvK.atbw")
         kbbb_dtz = find_table_file(args.tables, "KBBBvK.atbz")
@@ -867,7 +888,7 @@ def main() -> int:
             kbbb_dtz=kbbb_dtz,
         )
 
-    modes = "false/true" if args.eval_file is not None else "false"
+    modes = "material/supplied" if args.eval_file is not None else "material"
     print(
         "Atomic Syzygy UCI tests passed: max6, load, root ranking, interior WDL, "
         "terminal, castling, Atomic960, recoverable paths, "

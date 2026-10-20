@@ -72,21 +72,20 @@ endif
 PREFIX = /usr/local
 BINDIR = $(PREFIX)/bin
 
-### Built-in benchmark for PGO builds: one engine process, two benches. The
-### first runs with the default Use NNUE=true, so the NNUE code is profiled when
-### a network is embedded or found under its default name. The Atomic NNUE is
-### external, so there may be none: that bench then reports "Bench aborted" and
-### the engine reads on. The second bench uses the self-contained classical
-### evaluator and always runs, so a build without a network profiles as before.
-PGOBENCH = printf 'bench\nsetoption name Use NNUE value false\nbench\nquit\n' | $(RUN_PREFIX) ./$(EXE)
+### Built-in benchmark for PGO builds. The engine evaluates with NNUE only, so
+### the bench profiles the search and the NNUE code when a network is embedded
+### or found under its default name. The Atomic NNUE is external, so there may
+### be none: the bench then reports "Bench aborted" and nothing is profiled.
+PGOBENCH = printf 'bench\nquit\n' | $(RUN_PREFIX) ./$(EXE)
 
-### A profile-build whose first bench found no network still completes, but its
-### NNUE code was never profiled. Say so at the end of the build, on stderr.
+### A profile-build whose bench found no network still completes, but neither
+### the search nor the NNUE code was profiled. Say so at the end of the build,
+### on stderr.
 PGO_NETWORK_CHECK = \
 	@if grep -q 'Bench aborted: NNUE verification failed' PGOBENCH.out 2>/dev/null; then \
 		echo "" >&2; \
-		echo "WARNING: the profiling run found no NNUE network, so the NNUE code was not" >&2; \
-		echo "profiled. With NNUE on, this binary will be much slower than a plain" >&2; \
+		echo "WARNING: the profiling run found no NNUE network, so neither the search nor" >&2; \
+		echo "the NNUE code was profiled. This binary will be much slower than a plain" >&2; \
 		echo "'make build'. Put the network in src/ under its default name (see README)," >&2; \
 		echo "or embed it, and run profile-build again." >&2; \
 	fi

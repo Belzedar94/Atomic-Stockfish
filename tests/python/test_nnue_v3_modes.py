@@ -64,7 +64,7 @@ def test_authentication_is_fail_closed_for_size_hash_and_identity(
         )
 
 
-def test_search_markers_accept_only_real_v3_and_classical_paths() -> None:
+def test_search_markers_accept_only_real_v3_paths() -> None:
     MODES.require_v3_search(
         ["NNUE evaluation using AtomicNNUEV3 fixture", "bestmove e2e4"],
         mode="true",
@@ -82,12 +82,7 @@ def test_search_markers_accept_only_real_v3_and_classical_paths() -> None:
             mode="true",
             threads=1,
         )
-
-    MODES.require_classical_search(["bestmove e2e4"])
-    with pytest.raises(AssertionError, match="activated an NNUE backend"):
-        MODES.require_classical_search(
-            ["NNUE evaluation using AtomicNNUEV3 fixture", "bestmove e2e4"]
-        )
+    assert not hasattr(MODES, "require_classical_search")
 
 
 def test_relative_path_collision_accepts_only_cwd_v2_before_root_v3() -> None:

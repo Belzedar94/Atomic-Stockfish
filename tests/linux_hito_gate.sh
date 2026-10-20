@@ -106,13 +106,12 @@ bash tests/perft.sh src/atomic-stockfish
 
 python3 tests/atomic_search.py \
   --candidate src/atomic-stockfish \
-  --use-nnue false \
   --timeout 60
 
 python3 tests/atomic_search.py \
   --candidate src/atomic-stockfish \
   --eval-file "$net" \
-  --use-nnue true \
+  --expectations reference \
   --timeout 60
 
 python3 tests/atomic_syzygy.py \

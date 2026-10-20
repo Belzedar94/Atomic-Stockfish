@@ -134,7 +134,11 @@ Engine::Engine(std::optional<std::filesystem::path> path) :
     options.add("Syzygy50MoveRule", Option(true));
     options.add("SyzygyProbeLimit", Option(6, 0, 6));
 
-    options.add("Use NNUE", Option("true var false var true var pure", "true"));
+    // NNUE is the only evaluation: the classical evaluator was removed, so a
+    // network is required to search. `true` is the playing mode; `pure` is the
+    // raw network result that the data generators require. `false` is no longer
+    // a value: like any other value outside a combo, it is ignored.
+    options.add("Use NNUE", Option("true var true var pure", "true"));
 
     options.add(  //
       "EvalFile", Option(EvalFileDefaultName, [this](const Option& o) {
@@ -262,19 +266,12 @@ void Engine::set_ponderhit(bool b) { threads.main_manager()->ponder = b; }
 // network related
 
 Eval::UseNNUEMode Engine::nnue_mode() const {
-    return options["Use NNUE"] == "pure" ? Eval::UseNNUEMode::Pure
-         : options["Use NNUE"] == "true" ? Eval::UseNNUEMode::True
-                                         : Eval::UseNNUEMode::False;
+    return options["Use NNUE"] == "pure" ? Eval::UseNNUEMode::Pure : Eval::UseNNUEMode::True;
 }
 
 bool Engine::verify_network() const {
-    if (nnue_mode() == Eval::UseNNUEMode::False)
-    {
-        if (onVerifyNetwork)
-            onVerifyNetwork("Classical Atomic evaluation enabled (Use NNUE=false).");
-        return true;
-    }
-
+    // There is no evaluation without a network, so a missing or incompatible
+    // one stops `go`, `bench` and `eval` with an explicit error.
     const auto file = path_from_utf8(std::string(options["EvalFile"]));
     if (!network->verify(onVerifyNetwork, networkFile, file))
         return false;

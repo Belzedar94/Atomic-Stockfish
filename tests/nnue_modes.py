@@ -2,8 +2,9 @@
 """Black-box contract tests for Atomic-Stockfish NNUE mode selection.
 
 The important failure property is deliberately tested in-process: an invalid
-Legacy Atomic V1 network must reject ``go`` while leaving the protocol alive,
-and switching to ``Use NNUE=false`` must make the same engine searchable again.
+Legacy Atomic V1 network must reject ``go`` while leaving the protocol alive.
+The engine evaluates with NNUE only, so the removed ``Use NNUE=false`` must not
+turn the rejected search into a search without a network.
 """
 
 from __future__ import annotations
@@ -225,7 +226,7 @@ def main() -> int:
             uci = engine.read_until(lambda line: line == "uciok")
             expected = (
                 "option name Use NNUE type combo default true "
-                "var false var true var pure"
+                "var true var pure"
             )
             if expected not in uci:
                 raise AssertionError(f"missing exact Use NNUE option: {uci}")
@@ -256,7 +257,12 @@ def main() -> int:
                 engine.ready()
 
             engine.setoption("Use NNUE", "false")
-            require_search(engine.search(), "false")
+            still_rejected = engine.search()
+            if still_rejected[-1] != "bestmove (none)":
+                raise AssertionError(
+                    f"Use NNUE=false searched without a network: {still_rejected}"
+                )
+            engine.ready()
 
             engine.setoption("EvalFile", str(eval_file))
 
@@ -313,7 +319,7 @@ def main() -> int:
                 if not any("NNUE evaluation using" in line for line in output):
                     raise AssertionError(f"valid net was not reported in {mode}: {output}")
 
-    print("NNUE mode contract passed: false, true, pure, and nonfatal invalid-net rejection")
+    print("NNUE mode contract passed: true, pure, ignored false, and nonfatal invalid-net rejection")
     return 0
 
 

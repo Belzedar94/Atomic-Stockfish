@@ -6,20 +6,27 @@ It covers feature negotiation, state editing, Atomic960, ``go``, the
 historically missing ``playother`` command, clocks, terminal results, invalid
 NNUE rejection, valid V1/V2/V3 search, Atomic Syzygy path wiring, and the
 analysis lifecycle.
+
+The engine evaluates with NNUE only, so every search needs a network. Without
+``--eval-file`` the contract builds the material-only AtomicNNUEV2 test network
+in a temporary directory and searches with it.
 """
 
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import queue
 import re
 import subprocess
+import tempfile
 import threading
 from pathlib import Path
 from typing import Callable
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+MATERIAL_NET_SOURCE = Path(__file__).resolve().with_name("create_synthetic_material_nnue.py")
 MOVE_RE = re.compile(r"^move ([a-h][1-8][a-h][1-8][qrbn]?)$")
 HINT_RE = re.compile(r"^Hint: ([a-h][1-8][a-h][1-8][qrbn]?)$")
 FEN_RE = re.compile(r"^Fen:\s+(.+)$")
@@ -139,7 +146,18 @@ def expect_no_move(output: list[str], action: str) -> None:
         raise AssertionError(f"{action}: discarded search leaked moves: {moves}")
 
 
-def run(engine: Path, timeout: float, eval_file: Path | None = None) -> None:
+def create_material_network(directory: Path) -> Path:
+    spec = importlib.util.spec_from_file_location("create_synthetic_material_nnue", MATERIAL_NET_SOURCE)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load {MATERIAL_NET_SOURCE}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    path = directory / "atomic-material.nnue"
+    module.create_network(path)
+    return path
+
+
+def run(engine: Path, timeout: float, eval_file: Path | None, search_net: Path) -> None:
     start = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 
     with XBoardProcess(engine, timeout) as xb:
@@ -156,7 +174,7 @@ def run(engine: Path, timeout: float, eval_file: Path | None = None) -> None:
             'egt="syzygy"',
             'variants="atomic"',
             'myname="Atomic-Stockfish',
-            'option="Use NNUE -combo true /// false /// pure"',
+            'option="Use NNUE -combo true /// pure"',
             'option="Ponder -check 0"',
             'option="SyzygyPath -path <empty>"',
         ):
@@ -165,7 +183,7 @@ def run(engine: Path, timeout: float, eval_file: Path | None = None) -> None:
         if 'variants="chess' in joined or ",chess" in joined:
             raise AssertionError(f"non-Atomic variant advertised:\n{joined}")
 
-        xb.send("option Use NNUE=false")
+        xb.send(f"option EvalFile={search_net}")
         xb.send("variant atomic")
         xb.barrier()
 
@@ -299,7 +317,7 @@ def run(engine: Path, timeout: float, eval_file: Path | None = None) -> None:
         if not any("NNUE" in line or "network" in line.lower() for line in rejected_go):
             raise AssertionError(f"invalid NNUE rejection was not diagnosed: {rejected_go}")
         xb.send("force")
-        xb.send("option Use NNUE=false")
+        xb.send(f"option EvalFile={search_net}")
         xb.barrier()
 
         if eval_file is not None:
@@ -320,7 +338,6 @@ def run(engine: Path, timeout: float, eval_file: Path | None = None) -> None:
                     f"{nnue_output}"
                 )
             xb.send("force")
-            xb.send("option Use NNUE=false")
             xb.barrier()
 
         # Normal go: the engine plays the side to move and applies its move.
@@ -504,7 +521,11 @@ def main() -> int:
     eval_file = args.eval_file.resolve() if args.eval_file is not None else None
     if eval_file is not None and not eval_file.is_file():
         parser.error(f"evaluation file does not exist: {eval_file}")
-    run(candidate, args.timeout, eval_file)
+    with tempfile.TemporaryDirectory(prefix="atomic-xboard-") as scratch:
+        search_net = (
+            eval_file if eval_file is not None else create_material_network(Path(scratch))
+        )
+        run(candidate, args.timeout, eval_file, search_net)
     return 0
 
 

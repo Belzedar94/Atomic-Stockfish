@@ -273,6 +273,9 @@ def test_errors_are_explicit_and_transactional():
         pyffish.set_option("UCCI_Variant", "atomic")
     with pytest.raises(ValueError, match="Use NNUE"):
         pyffish.set_option("Use NNUE", "mixed")
+    # The classical evaluation was removed; false is no longer a value.
+    with pytest.raises(ValueError, match="Use NNUE must be true or pure"):
+        pyffish.set_option("Use NNUE", "false")
     with pytest.raises(TypeError, match="movelist must be a list"):
         pyffish.legal_moves("atomic", "startpos", ("e2e4",))
 

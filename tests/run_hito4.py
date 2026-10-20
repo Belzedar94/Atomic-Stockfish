@@ -489,14 +489,12 @@ await suite.runSuite(module, 'ES module/WASM');
             required_markers=("Atomic perft and rule-transition suite passed",),
         )
         run_step(
-            "Atomic terminal-search regressions without NNUE",
+            "Atomic terminal-search regressions with the material-only test network",
             [
                 python,
                 str(REPO_ROOT / "tests/atomic_search.py"),
                 "--candidate",
                 str(native),
-                "--use-nnue",
-                "false",
             ],
             timeout=args.timeout,
             required_markers=("Atomic search regressions passed: 16/16",),
@@ -510,8 +508,8 @@ await suite.runSuite(module, 'ES module/WASM');
                 str(native),
                 "--eval-file",
                 str(net),
-                "--use-nnue",
-                "true",
+                "--expectations",
+                "reference",
             ],
             timeout=args.timeout,
             required_markers=("Atomic search regressions passed: 16/16",),

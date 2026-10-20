@@ -244,8 +244,9 @@ void set_binding_option(std::string name, std::string value) {
     else if (name == "use nnue")
     {
         value = lower_trim(std::move(value));
-        if (value != "false" && value != "true" && value != "pure")
-            throw std::invalid_argument("Use NNUE must be false, true, or pure");
+        // The classical evaluation was removed, so false is no longer a value.
+        if (value != "true" && value != "pure")
+            throw std::invalid_argument("Use NNUE must be true or pure");
     }
 
     found->second = std::move(value);

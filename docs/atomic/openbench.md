@@ -33,9 +33,10 @@ Bench: 338376
 ```
 
 OpenBench strength tests use `Use NNUE=true`; `Use NNUE=pure` remains reserved
-for data generation. Classical comparison presets still assign the frozen
-network because OpenBench validates the same bare NNUE bench before games, then
-set `Use NNUE=false` for play.
+for data generation. The engine evaluates with NNUE only, so there is no
+classical play mode: `Use NNUE=false` is no longer a value of the option, and an
+engine that receives it ignores it and keeps playing with NNUE. Presets that
+set it no longer compare anything and must not be used.
 
 Atomic tablebases are worker-local artifacts. Start capable workers with
 `--atomic-syzygy <path>`; the OpenBench server schedules required six-man jobs

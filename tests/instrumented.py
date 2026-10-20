@@ -85,7 +85,8 @@ def uci_transcript(net: Path, threads: int) -> str:
             "uci",
             f"setoption name Threads value {threads}",
             "setoption name Hash value 16",
-            "setoption name Use NNUE value false",
+            f"setoption name EvalFile value {net}",
+            "setoption name Use NNUE value true",
             "isready",
             "position startpos",
             "go depth 3",
@@ -97,8 +98,6 @@ def uci_transcript(net: Path, threads: int) -> str:
             "position fen Rr2k1rR/3K4/3p4/8/8/8/7P/8 w kq - 0 1",
             "go perft 2",
             "setoption name UCI_Chess960 value false",
-            f"setoption name EvalFile value {net}",
-            "setoption name Use NNUE value true",
             "position startpos",
             "go depth 3",
             "setoption name Use NNUE value pure",
@@ -110,12 +109,12 @@ def uci_transcript(net: Path, threads: int) -> str:
     )
 
 
-def xboard_transcript() -> str:
+def xboard_transcript(net: Path) -> str:
     return "\n".join(
         (
             "xboard",
             "protover 2",
-            "option Use NNUE=false",
+            f"option EvalFile={net}",
             "new",
             "force",
             "usermove e2e4",
@@ -166,7 +165,7 @@ def main() -> int:
         if marker not in uci_output:
             raise AssertionError(f"missing UCI marker {marker!r}:\n{uci_output}")
 
-    xboard_output = run_protocol(command, xboard_transcript(), args.timeout, environment)
+    xboard_output = run_protocol(command, xboard_transcript(net), args.timeout, environment)
     for marker in ('variants="atomic"', "pong 17"):
         if marker not in xboard_output:
             raise AssertionError(f"missing XBoard marker {marker!r}:\n{xboard_output}")

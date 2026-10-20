@@ -1024,7 +1024,7 @@ jobs:
             --v3-net build/wasm-fixtures/atomic-v3.nnue \
             --v3-sha256 00E46223822D06D7927E884EEC10739BA19EF8DD82A6E262F627D361658080C2
           smoke_output=$(
-            printf 'uci\nisready\nsetoption name Use NNUE value false\nposition startpos\ngo perft 1\nquit\n' |
+            printf 'uci\nisready\nposition startpos\ngo perft 1\nquit\n' |
               docker run --rm -i \
                 --volume "$GITHUB_WORKSPACE:/src:ro" \
                 --workdir "/src/$extracted" \

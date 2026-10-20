@@ -124,7 +124,7 @@ class TestPyffish(unittest.TestCase):
         self.assertIsNone(sf.set_option("Threads", 1))
         self.assertIsNone(sf.set_option("Hash", 16))
         self.assertIsNone(sf.set_option("UCI_Chess960", False))
-        self.assertIsNone(sf.set_option("Use NNUE", False))
+        self.assertIsNone(sf.set_option("Use NNUE", "true"))
 
     def test_two_boards(self) -> None:
         fixture = FIXTURES["contract.single-board"]
@@ -335,6 +335,9 @@ class TestPyffish(unittest.TestCase):
             sf.set_option("UCCI_Variant", "atomic")
         with self.assertRaisesRegex(ValueError, "Use NNUE"):
             sf.set_option("Use NNUE", "mixed")
+        # The classical evaluation was removed; false is no longer a value.
+        with self.assertRaisesRegex(ValueError, "Use NNUE must be true or pure"):
+            sf.set_option("Use NNUE", False)
         with self.assertRaisesRegex(TypeError, "movelist must be a list"):
             sf.legal_moves("atomic", "startpos", ("e2e4",))
 

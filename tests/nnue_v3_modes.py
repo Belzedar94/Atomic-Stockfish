@@ -4,8 +4,8 @@
 The frozen synthetic V3 fixture is authenticated before it reaches the engine.
 One process then proves that the production dispatcher can search with the
 exact network in ``true`` and data-generation-only ``pure`` mode at every
-supported CI thread count, that classical evaluation remains available, and
-that V3 export/import is byte exact.
+supported CI thread count, that the removed classical ``false`` mode cannot
+turn NNUE off, and that V3 export/import is byte exact.
 """
 
 from __future__ import annotations
@@ -186,14 +186,6 @@ def require_v3_search(output: list[str], *, mode: str, threads: int) -> None:
         )
 
 
-def require_classical_search(output: list[str]) -> None:
-    bestmoves = [line for line in output if line.startswith("bestmove ")]
-    if len(bestmoves) != 1 or bestmoves[0] in {"bestmove (none)", "bestmove 0000"}:
-        raise AssertionError(f"Use NNUE=false did not search: {output[-30:]}")
-    if any("NNUE evaluation using" in line for line in output):
-        raise AssertionError(f"Use NNUE=false activated an NNUE backend: {output[-30:]}")
-
-
 def require_relative_v2_selection(output: list[str]) -> None:
     bestmoves = [line for line in output if line.startswith("bestmove ")]
     if len(bestmoves) != 1 or bestmoves[0] in {"bestmove (none)", "bestmove 0000"}:
@@ -342,7 +334,7 @@ def main() -> int:
             uci = engine.read_until(lambda line: line == "uciok")
             expected_option = (
                 "option name Use NNUE type combo default true "
-                "var false var true var pure"
+                "var true var pure"
             )
             if expected_option not in uci:
                 raise AssertionError(f"missing exact Use NNUE option: {uci}")
@@ -359,10 +351,12 @@ def main() -> int:
                     engine.setoption("Use NNUE", mode)
                     require_v3_search(engine.search(), mode=mode, threads=threads)
 
-            engine.setoption("Use NNUE", "false")
-            require_classical_search(engine.search())
-
+            # The classical evaluator was removed, so false is no longer a
+            # value of the combo: the engine ignores it and keeps NNUE on.
             engine.setoption("Use NNUE", "true")
+            engine.setoption("Use NNUE", "false")
+            require_v3_search(engine.search(), mode="true", threads=THREAD_COUNTS[-1])
+
             require_export(engine, first_export, expected_sha256)
 
             # A different path forces the normal transactional loader to parse
@@ -373,7 +367,7 @@ def main() -> int:
 
     print(
         "AtomicNNUEV3 production gate passed: exact load/export/import, "
-        "wide trace/search saturation and contribution table, modes=false,true,pure, "
+        "wide trace/search saturation and contribution table, modes=true,pure, "
         "threads=1,2,4,8, backend_count=3"
         + (", relative_path_order=cwd-v2-before-root-v3" if v2_path else "")
     )

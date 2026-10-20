@@ -40,7 +40,6 @@ fail() {
 protocol_output="$({
     printf 'uci\n'
     printf 'setoption name UCI_Variant value atomic\n'
-    printf 'setoption name Use NNUE value false\n'
     printf 'isready\n'
     printf 'quit\n'
 } | "$ENGINE")"
@@ -85,15 +84,30 @@ if grep -Eq '^[A-Za-z_][A-Za-z0-9_]*,-?[0-9]+,-?[0-9]+,-?[0-9]+,' <<<"$protocol_
     fail "engine printed an SPSA parameter block; this build must not define ATOMIC_TUNE_SEARCH"
 fi
 
+# The engine evaluates with NNUE only. With a network, `eval` must stop at the
+# Atomic terminal instead of entering an orthodox two-king evaluator. Without
+# one, it must report the missing network rather than evaluate anything.
 terminal_eval_output="$({
-    printf 'setoption name Use NNUE value false\n'
+    if [[ -n "$PERFT_NET" ]]; then
+        printf 'setoption name EvalFile value %s\n' "$PERFT_NET"
+    else
+        printf 'setoption name EvalFile value missing-uci-eval-contract-test.nnue\n'
+    fi
     printf 'position fen 8/8/8/8/8/8/8/K7 b - - 0 1\n'
     printf 'eval\n'
     printf 'isready\n'
     printf 'quit\n'
 } | "$ENGINE")"
-grep -Fq 'Final evaluation: none (Atomic terminal)' <<<"$terminal_eval_output" \
-    || fail "terminal eval must not enter an orthodox two-king evaluator"
+if [[ -n "$PERFT_NET" ]]; then
+    grep -Fq 'Final evaluation: none (Atomic terminal)' <<<"$terminal_eval_output" \
+        || fail "terminal eval must not enter an orthodox two-king evaluator"
+else
+    grep -Fq 'network is not available' <<<"$terminal_eval_output" \
+        || fail "eval without a network must report the missing network"
+    if grep -Fq 'Final evaluation' <<<"$terminal_eval_output"; then
+        fail "eval without a network must not print an evaluation"
+    fi
+fi
 grep -Fxq 'readyok' <<<"$terminal_eval_output" \
     || fail "engine did not remain responsive after terminal eval"
 
@@ -131,13 +145,14 @@ PERFT_CASES=(
     'atomic|true|fen 1R4kr/4K3/8/8/8/8/8/8 b k - 0 1|4|17915'
 )
 
-PERFT_MODES=(false)
+# `go perft` bypasses evaluation, so the default NNUE mode needs no network.
+PERFT_MODES=(true)
 if [[ -n "$PERFT_NET" ]]; then
-    PERFT_MODES=(false true pure)
+    PERFT_MODES=(true pure)
 
     # `go perft` deliberately bypasses evaluation, so node counts alone cannot
     # prove that the requested network was accepted. Authenticate the fixture
-    # once with a real search before exercising all three perft modes.
+    # once with a real search before exercising both perft modes.
     nnue_probe_output="$({
         printf 'uci\n'
         printf 'setoption name EvalFile value %s\n' "$PERFT_NET"

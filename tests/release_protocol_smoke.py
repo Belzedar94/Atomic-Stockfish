@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-"""Minimal network-free UCI and XBoard smoke for packaged release binaries."""
+"""Minimal network-free UCI and XBoard smoke for packaged release binaries.
+
+The engine evaluates with NNUE only and release binaries carry no network, so
+the smoke asks for a network that does not exist and requires `go` to fail
+explicitly: an error naming the missing network, `bestmove (none)`, and an
+engine that still answers `isready`. With ``--eval-file`` it also requires a
+real search with that network.
+"""
 
 from __future__ import annotations
 
@@ -34,6 +41,7 @@ def require(transcript: str, marker: str, protocol: str) -> None:
 
 
 OPTION_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "uci_options.txt"
+MISSING_NETWORK = "missing-release-smoke-network.nnue"
 SPSA_LINE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*,-?\d+,-?\d+,-?\d+,")
 
 
@@ -84,6 +92,11 @@ def main() -> int:
     parser.add_argument("--engine", type=Path, required=True)
     parser.add_argument("--version", default="")
     parser.add_argument("--timeout", type=float, default=45.0)
+    parser.add_argument(
+        "--eval-file",
+        type=Path,
+        help="also require a real search with this network",
+    )
     args = parser.parse_args()
 
     engine = args.engine.resolve(strict=True)
@@ -96,11 +109,12 @@ def main() -> int:
             (
                 "uci",
                 "setoption name UCI_Variant value atomic",
-                "setoption name Use NNUE value false",
+                f"setoption name EvalFile value {MISSING_NETWORK}",
                 "isready",
                 "ucinewgame",
                 "position startpos",
                 "go depth 2",
+                "isready",
                 "quit",
                 "",
             )
@@ -114,10 +128,34 @@ def main() -> int:
         "UCI",
     )
     require(uci, "option name UCI_Variant type combo default atomic var atomic", "UCI")
-    require(uci, "option name Use NNUE type combo", "UCI")
-    require(uci, "readyok", "UCI")
-    require(uci, "bestmove ", "UCI")
+    require(uci, "option name Use NNUE type combo default true var true var pure", "UCI")
+    require(uci, "network is not available", "UCI")
+    require(uci, f"The network file {MISSING_NETWORK} was not loaded", "UCI")
+    require(uci, "bestmove (none)", "UCI")
+    if uci.count("readyok") != 2:
+        raise AssertionError(f"UCI engine stopped answering after the failed go:\n{uci}")
     require_option_surface(uci, "UCI")
+
+    if args.eval_file is not None:
+        searched = run_engine(
+            engine,
+            "UCI",
+            "\n".join(
+                (
+                    "uci",
+                    f"setoption name EvalFile value {args.eval_file.resolve(strict=True)}",
+                    "isready",
+                    "position startpos",
+                    "go depth 2",
+                    "quit",
+                    "",
+                )
+            ),
+            args.timeout,
+        )
+        require(searched, "NNUE evaluation using ", "UCI")
+        if not re.search(r"^bestmove [a-h][1-8][a-h][1-8][nbrq]?\b", searched, re.MULTILINE):
+            raise AssertionError(f"UCI search with --eval-file found no move:\n{searched}")
 
     xboard = run_engine(
         engine,
