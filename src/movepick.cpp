@@ -201,46 +201,66 @@ ExtMove* MovePicker::score(const MoveList<Type>& ml) {
     }
 
     ExtMove* it = cur;
-    for (auto move : ml)
+    if constexpr (Type == CAPTURES)
     {
-        ExtMove& m = *it++;
-        m          = move;
+        const CapturePieceToHistory& captureHist = *captureHistory;
 
-        const Square to = m.to_sq();
-        const Piece  pc = pos.moved_piece(m);
-
-        if constexpr (Type == CAPTURES)
+        for (auto move : ml)
         {
-            const Piece capturedPiece = pos.piece_on(to);
-            m.value = (*captureHistory)[pc][to][type_of(capturedPiece)]
-                    + 7 * int(PieceValue[capturedPiece]);
+            ExtMove& m = *it++;
+            m          = move;
+
+            const Square to            = m.to_sq();
+            const Piece  pc            = pos.moved_piece(m);
+            const Piece  capturedPiece = pos.piece_on(to);
+            m.value =
+              captureHist[pc][to][type_of(capturedPiece)] + 7 * int(PieceValue[capturedPiece]);
         }
+    }
+    else
+    {
+        // Loop invariants, looked up once per call instead of once per move.
+        const auto&           mainHist = (*mainHistory)[us];
+        const auto&           pawnHist = sharedHistory->pawn_entry(pos);
+        const PieceToHistory& cont0    = *continuationHistory[0];
+        const PieceToHistory& cont1    = *continuationHistory[1];
+        const PieceToHistory& cont2    = *continuationHistory[2];
+        const PieceToHistory& cont3    = *continuationHistory[3];
+        const PieceToHistory& cont5    = *continuationHistory[5];
+        const auto* lowPlyRow = ply < LOW_PLY_HISTORY_SIZE ? &(*lowPlyHistory)[ply] : nullptr;
+        const int   lowPlyDiv = 1 + ply;
 
-        else if constexpr (Type == QUIETS)
+        for (auto move : ml)
         {
+            ExtMove& m = *it++;
+            m          = move;
+
+            const Square    to   = m.to_sq();
+            const Piece     pc   = pos.moved_piece(m);
             const Square    from = m.from_sq();
             const PieceType pt   = type_of(pc);
 
             // histories
-            m.value = 2 * (*mainHistory)[us][m.raw()];
-            m.value += 2 * sharedHistory->pawn_entry(pos)[pc][to];
-            m.value += (*continuationHistory[0])[pc][to];
-            m.value += (*continuationHistory[1])[pc][to];
-            m.value += (*continuationHistory[2])[pc][to];
-            m.value += (*continuationHistory[3])[pc][to];
-            m.value += (*continuationHistory[5])[pc][to];
+            int value = 2 * mainHist[m.raw()];
+            value += 2 * pawnHist[pc][to];
+            value += cont0[pc][to];
+            value += cont1[pc][to];
+            value += cont2[pc][to];
+            value += cont3[pc][to];
+            value += cont5[pc][to];
 
             // bonus for checks
-            m.value += ((pos.check_squares(pt) & to) && pos.see_ge(m, -75)) * 16384;
+            value += ((pos.check_squares(pt) & to) && pos.see_ge(m, -75)) * 16384;
 
             // penalty for moving to a square threatened by a lesser piece
             // or bonus for escaping an attack by a lesser piece.
             int v = 20 * (bool(threatByLesser[pt] & from) - bool(threatByLesser[pt] & to));
-            m.value += PieceValue[pt] * v;
+            value += PieceValue[pt] * v;
 
+            if (lowPlyRow)
+                value += 8 * (*lowPlyRow)[m.raw()] / lowPlyDiv;
 
-            if (ply < LOW_PLY_HISTORY_SIZE)
-                m.value += 8 * (*lowPlyHistory)[ply][m.raw()] / (1 + ply);
+            m.value = value;
         }
     }
     return it;
