@@ -430,6 +430,7 @@ Position::set(const string& fenStr, bool isChess960, StateInfo* si) {
     chess960 = isChess960;
     set_state();
     st->atomicOpponentInCheck = atomic_in_check(~sideToMove);
+    st->stmInCheck            = atomic_in_check(sideToMove);
 
     assert(pos_is_ok());
 
@@ -937,7 +938,7 @@ bool Position::gives_check(Move m) const {
 // will be prefetched, and likewise for shared history.
 void Position::do_move(Move                      m,
                        StateInfo&                newSt,
-                       [[maybe_unused]] bool     givesCheck,
+                       bool                      givesCheck,
                        DirtyPiece&               dp,
                        const TranspositionTable* tt      = nullptr,
                        const SharedHistories*    history = nullptr) {
@@ -955,6 +956,7 @@ void Position::do_move(Move                      m,
     st                        = &newSt;
     st->atomicBlastCount      = 0;
     st->atomicOpponentInCheck = false;
+    st->stmInCheck            = givesCheck;
 
     // Increment ply counters. In particular, rule50 will be reset to zero later on
     // in case of a capture or a pawn move.
@@ -1385,6 +1387,7 @@ void Position::do_null_move(StateInfo& newSt) {
     set_check_info();
 
     st->repetition = 0;
+    st->stmInCheck = atomic_in_check(sideToMove);
 
     assert(pos_is_ok());
 }
