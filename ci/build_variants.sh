@@ -9,8 +9,8 @@
 # build, so the profiling run evaluates with NNUE. The binaries land in OUT_DIR
 # as atomic-<variant><EXE_SUFFIX>, next to their build logs.
 #
-# Needs MAIN_SHA, PR72_SHA, NET_NAME and the expected trees TREE_MAIN and
-# TREE_PR72 in the environment. The merge uses a fixed identity and date, so a
+# Needs MAIN_SHA, PR71_SHA, NET_NAME and the expected trees TREE_MAIN and
+# TREE_PR71 in the environment. The merge uses a fixed identity and date, so a
 # variant is the same commit on every runner, and its tree must be the expected
 # one: what is built is main plus the pull request, nothing else. Node counts
 # are not judged here (ci/engine_check.py does that), so a pull request that
@@ -29,8 +29,8 @@ g() { git -C "$engine" "$@"; }
 
 # The pull request head lives in a fork; the base repository serves it as
 # refs/pull/<n>/head. If the head moved since, fetch the pinned commit itself.
-g fetch --quiet --no-tags origin refs/pull/72/head
-for sha in "$PR72_SHA"; do
+g fetch --quiet --no-tags origin refs/pull/71/head
+for sha in "$PR71_SHA"; do
     g cat-file -e "$sha^{commit}" 2>/dev/null || g fetch --quiet --no-tags origin "$sha"
     g cat-file -e "$sha^{commit}"
 done
@@ -38,7 +38,7 @@ done
 # name, expected tree, heads merged into main (in this order)
 variants=(
     "main $TREE_MAIN"
-    "pr72 $TREE_PR72 $PR72_SHA"
+    "pr71 $TREE_PR71 $PR71_SHA"
 )
 
 for v in "${variants[@]}"; do
