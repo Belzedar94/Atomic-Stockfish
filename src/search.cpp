@@ -117,13 +117,13 @@ bool Search::atomic_capture_futility_eligible(const Position& pos, Move move) {
 
 namespace {
 
-// Can `us` explode the enemy king with one capture? The captured piece stands
+// Find a capture that explodes the enemy king. The captured piece stands
 // next to the enemy king and not next to ours (kings never capture). Pins do
 // not matter: the game ends at once.
-bool can_explode_enemy_king(const Position& pos, Color us) {
+Move king_explosion_move(const Position& pos, Color us) {
     const Color them = ~us;
     if (!pos.has_king(us) || !pos.has_king(them))
-        return false;
+        return Move::none();
     const Square   theirKing = pos.square<KING>(them);
     const Bitboard ourRing   = Attacks::attacks_bb<KING>(pos.square<KING>(us));
     Bitboard       targets   = Attacks::attacks_bb<KING>(theirKing) & pos.pieces(them) & ~ourRing;
@@ -132,22 +132,31 @@ bool can_explode_enemy_king(const Position& pos, Color us) {
     const Bitboard rq = pos.pieces(us, ROOK, QUEEN), bq = pos.pieces(us, BISHOP, QUEEN);
     while (targets)
     {
-        const Square s = pop_lsb(targets);
-        if ((Attacks::attacks_bb<KNIGHT>(s) & knights)
-            || (Attacks::attacks_bb<PAWN>(s, them) & pawns)
-            || (rq && (Attacks::attacks_bb<ROOK>(s, occ) & rq))
-            || (bq && (Attacks::attacks_bb<BISHOP>(s, occ) & bq)))
-            return true;
+        const Square s         = pop_lsb(targets);
+        Bitboard     attackers = Attacks::attacks_bb<KNIGHT>(s) & knights;
+        if (!attackers)
+            attackers = Attacks::attacks_bb<PAWN>(s, them) & pawns;
+        if (!attackers && rq)
+            attackers = Attacks::attacks_bb<ROOK>(s, occ) & rq;
+        if (!attackers && bq)
+            attackers = Attacks::attacks_bb<BISHOP>(s, occ) & bq;
+        if (attackers)
+        {
+            const Square from = lsb(attackers);
+            return type_of(pos.piece_on(from)) == PAWN && relative_rank(us, s) == RANK_8
+                   ? Move::make<PROMOTION>(from, s, QUEEN)
+                   : Move(from, s);
+        }
     }
     // En passant: the capture lands on an empty square.
     if (pos.side_to_move() == us && pos.ep_square() != SQ_NONE)
     {
         const Square ep = pos.ep_square();
-        if ((Attacks::attacks_bb<KING>(theirKing) & ep) && !(ourRing & ep)
-            && (Attacks::attacks_bb<PAWN>(ep, them) & pawns))
-            return true;
+        if ((Attacks::attacks_bb<KING>(theirKing) & ep) && !(ourRing & ep))
+            if (Bitboard attackers = Attacks::attacks_bb<PAWN>(ep, them) & pawns)
+                return Move::make<EN_PASSANT>(lsb(attackers), ep);
     }
-    return false;
+    return Move::none();
 }
 
 constexpr u64 NODES_LIMIT_OUTPUT = 10'000'000;
@@ -1127,8 +1136,12 @@ Value Search::Worker::search(
             return alpha;
 
         // An explosion of the enemy king ends the game at once.
-        if (can_explode_enemy_king(pos, us))
+        if (Move explosion = king_explosion_move(pos, us))
+        {
+            if (PvNode)
+                ss->pv->update(explosion, nullptr);
             return mate_in(ss->ply + 1);
+        }
     }
 
     assert(0 <= ss->ply && ss->ply < MAX_PLY);
@@ -2030,8 +2043,12 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
         return (ss->ply >= MAX_PLY && !ss->inCheck) ? evaluate(pos) : VALUE_DRAW;
 
     // An explosion of the enemy king ends the game at once.
-    if (can_explode_enemy_king(pos, pos.side_to_move()))
+    if (Move explosion = king_explosion_move(pos, pos.side_to_move()))
+    {
+        if (PvNode)
+            ss->pv->update(explosion, nullptr);
         return mate_in(ss->ply + 1);
+    }
 
     assert(0 <= ss->ply && ss->ply < MAX_PLY);
 
