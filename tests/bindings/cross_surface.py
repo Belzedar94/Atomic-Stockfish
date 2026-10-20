@@ -17,6 +17,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from types import ModuleType
 from typing import Any, Iterable, Sequence
@@ -69,7 +70,27 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--fixtures", type=Path, default=DEFAULT_FIXTURES)
     parser.add_argument("--node", default="node", help="Node executable or command name")
     parser.add_argument("--timeout", type=float, default=60.0, help="timeout per process")
+    parser.add_argument(
+        "--eval-file",
+        type=Path,
+        help=(
+            "network for the native engine's terminal searches; by default the "
+            "material-only AtomicNNUEV2 test network is built in a temporary directory"
+        ),
+    )
     return parser.parse_args()
+
+
+def create_material_network(directory: Path) -> Path:
+    source = HERE.parent / "create_synthetic_material_nnue.py"
+    spec = importlib.util.spec_from_file_location("create_synthetic_material_nnue", source)
+    if spec is None or spec.loader is None:
+        raise GateFailure(f"cannot load {source}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    path = directory / "atomic-material.nnue"
+    module.create_network(path)
+    return path
 
 
 def existing_file(path: Path, label: str) -> Path:
@@ -244,7 +265,7 @@ def evaluate_python(pyffish: ModuleType, fixture: dict[str, Any]) -> Any:
 def evaluate_all_python(pyffish: ModuleType, fixtures: Iterable[dict[str, Any]]) -> dict[str, Any]:
     try:
         pyffish.set_option("UCI_Variant", "atomic")
-        pyffish.set_option("Use NNUE", "false")
+        pyffish.set_option("Use NNUE", "true")
         return {fixture["id"]: evaluate_python(pyffish, fixture) for fixture in fixtures}
     except Exception as error:
         if isinstance(error, GateFailure):
@@ -315,10 +336,12 @@ def evaluate_javascript(
     return payload
 
 
-def native_options(chess960: bool) -> list[str]:
+def native_options(chess960: bool, eval_file: Path) -> list[str]:
+    # The engine evaluates with NNUE only, so even a search of a terminal root
+    # needs a network to start.
     return [
         "setoption name UCI_Variant value atomic",
-        "setoption name Use NNUE value false",
+        f"setoption name EvalFile value {eval_file}",
         f"setoption name UCI_Chess960 value {'true' if chess960 else 'false'}",
         "isready",
     ]
@@ -362,9 +385,14 @@ def parse_native_nodes(output: str) -> int:
     return nodes[-1]
 
 
-def evaluate_native(native: Path, fixture: dict[str, Any], timeout: float) -> Any:
+def evaluate_native(
+    native: Path, fixture: dict[str, Any], timeout: float, eval_file: Path
+) -> Any:
     probe = fixture["probe"]
-    commands = [*native_options(fixture.get("chess960", False)), position_command(fixture)]
+    commands = [
+        *native_options(fixture.get("chess960", False), eval_file),
+        position_command(fixture),
+    ]
     if probe == "legal_moves":
         commands.append("go perft 1")
         output = run_native(native, commands, timeout, fixture["id"])
@@ -401,13 +429,18 @@ def evaluate_native(native: Path, fixture: dict[str, Any], timeout: float) -> An
 
 
 def evaluate_all_native(
-    native: Path, fixtures: Iterable[dict[str, Any]], timeout: float
+    native: Path,
+    fixtures: Iterable[dict[str, Any]],
+    timeout: float,
+    eval_file: Path | None = None,
 ) -> dict[str, Any]:
-    return {
-        fixture["id"]: evaluate_native(native, fixture, timeout)
-        for fixture in fixtures
-        if fixture["probe"] in NATIVE_PROBES
-    }
+    with tempfile.TemporaryDirectory(prefix="atomic-cross-surface-") as scratch:
+        network = eval_file if eval_file is not None else create_material_network(Path(scratch))
+        return {
+            fixture["id"]: evaluate_native(native, fixture, timeout, network)
+            for fixture in fixtures
+            if fixture["probe"] in NATIVE_PROBES
+        }
 
 
 def compare_values(
@@ -474,7 +507,10 @@ def main() -> int:
             args.timeout,
         )
         native_values = evaluate_all_native(
-            inputs["native"], fixtures, args.timeout  # type: ignore[arg-type]
+            inputs["native"],  # type: ignore[arg-type]
+            fixtures,
+            args.timeout,
+            args.eval_file.resolve() if args.eval_file is not None else None,
         )
 
         errors: list[str] = []

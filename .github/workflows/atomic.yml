@@ -142,7 +142,7 @@ jobs:
       - name: Atomic and Atomic960 perft
         run: ATOMIC_PERFT_NET="$RUNNER_TEMP/atomic-v3-wire-v1.nnue" bash tests/perft.sh src/atomic-stockfish
       - name: Atomic search regressions
-        run: python3 tests/atomic_search.py --candidate src/atomic-stockfish --use-nnue false
+        run: python3 tests/atomic_search.py --candidate src/atomic-stockfish
       - name: XBoard protocol
         run: >-
           python3 tests/xboard_protocol.py
@@ -567,7 +567,9 @@ jobs:
           make -C src -j2 ARCH=x86-64 debug=yes optimize=no data-tools-tests
           make -C src -j2 ARCH=x86-64 debug=yes optimize=no data-generator
           ATOMIC_PERFT_NET="$RUNNER_TEMP/atomic-v2.nnue" bash tests/perft.sh src/atomic-stockfish
-          python3 tests/atomic_search.py --candidate src/atomic-stockfish --use-nnue false
+          # The suite searches with the material-only NNUE test network; an
+          # unoptimized debug build evaluates it far slower than an optimized one.
+          python3 tests/atomic_search.py --candidate src/atomic-stockfish --timeout 60
       - name: Functional debug data-generator smoke (Threads=2)
         run: |
           src/atomic-v2-backend-core-tests.bin "$RUNNER_TEMP/atomic-v2.nnue"
@@ -1427,7 +1429,7 @@ jobs:
           make -C src -j2 ARCH=x86-64 atomic-bin-v2-reader-tests
           make -C src -j2 ARCH=x86-64 data-tools
           bash tests/perft.sh src/atomic-stockfish
-          python tests/atomic_search.py --candidate src/atomic-stockfish --use-nnue false
+          python tests/atomic_search.py --candidate src/atomic-stockfish
       - name: Enforce locked clean checkouts
         run: >-
           python tests/legacy_pipeline_lock.py verify-checkouts

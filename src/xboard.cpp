@@ -221,7 +221,7 @@ void XBoardProtocol::send_features() const {
                  "analyze=1 sigint=0 ping=1 reuse=1 san=0 name=0 egt=\"syzygy\" myname=\""
               << engine_version_info() << "\" variants=\"atomic\"" << sync_endl;
 
-    sync_cout << "feature option=\"Use NNUE -combo true /// false /// pure\"" << sync_endl;
+    sync_cout << "feature option=\"Use NNUE -combo true /// pure\"" << sync_endl;
     sync_cout << "feature option=\"EvalFile -file " << std::string(engine.get_options()["EvalFile"])
               << "\"" << sync_endl;
     const std::string syzygyPath = engine.get_options()["SyzygyPath"];

@@ -247,7 +247,7 @@ async function main() {
     await engine.waitFor(/Atomic-Stockfish/, 0);
     const uci = await engine.command('uci', /uciok/);
     assert.match(uci, /id name Atomic-Stockfish/);
-    assert.match(uci, /option name Use NNUE type combo default true var false var true var pure/);
+    assert.match(uci, /option name Use NNUE type combo default true var true var pure/);
     await engine.setOption('Hash', '16');
     await engine.setOption('Threads', '4');
 

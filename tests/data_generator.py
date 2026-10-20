@@ -1271,7 +1271,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             no_pure = root / "no-pure.bin"
             assert_failed_without_output(
                 generator,
-                ("uci", "setoption name Use NNUE value false", generation_command(no_pure)),
+                ("uci", "setoption name Use NNUE value true", generation_command(no_pure)),
                 no_pure,
                 "requires Use NNUE=pure",
             )

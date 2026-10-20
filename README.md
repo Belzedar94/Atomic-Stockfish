@@ -59,21 +59,25 @@ UCCI, USI and non-Atomic variants are outside the release contract.
 ## Neural network
 
 NNUE files are external artifacts and are never downloaded or embedded by the
-native build. Set `EvalFile` to a compatible Legacy Atomic V1, AtomicNNUEV2 or
-AtomicNNUEV3 network and select one of:
+native build. Atomic-Stockfish evaluates with NNUE only: it has no classical
+evaluation, so it needs a network to search. Set `EvalFile` to a compatible
+Legacy Atomic V1, AtomicNNUEV2 or AtomicNNUEV3 network. `Use NNUE` selects how
+the network result is used:
 
 ```text
-setoption name Use NNUE value false
 setoption name Use NNUE value true
 setoption name Use NNUE value pure
 ```
 
-`true` is the normal playing mode and the only NNUE mode used for Elo/LOS
-matches. `pure` is reserved for isolated data-generation and
-training-pipeline compatibility; it is not a playing-strength mode. `false`
-disables NNUE.
+`true` is the default and normal playing mode, and the only mode used for
+Elo/LOS matches. `pure` is reserved for isolated data-generation and
+training-pipeline compatibility; it is not a playing-strength mode. The former
+`false` value, which selected a material-only classical evaluation, was removed;
+like any value outside the list, it is ignored and NNUE stays on.
 
-An incompatible or missing network blocks `go` when NNUE is enabled. The frozen
+An incompatible or missing network stops `go`, `bench` and `eval` with an
+explicit error, and `go` answers `bestmove (none)`; `go perft` needs no
+network. The frozen
 development reference is `atomic_run3b_e202_l05.nnue`, identified by SHA-256
 `99DC67EABF26A64FAEECA3A88B4C38597A840B8D4A874B9F2CF658C6F92A04A6`.
 The file is not distributed here.
@@ -97,12 +101,12 @@ The resulting executable is `atomic-stockfish` (or
 `atomic-stockfish.exe` on Windows).
 
 `make -j profile-build ARCH=x86-64-bmi2` adds profile-guided optimization. Its
-profiling run covers the NNUE code only when it can load a network, so place
-the network in `src` under its default name first; to embed it as well, GCC and
-MinGW builds need `EXTRAPROFILEFLAGS=-DATOMIC_NNUE_EMBEDDING`, because
-`profile-build` replaces `EXTRACXXFLAGS` in its sub-builds. Without a network
-the build still completes, but it ends with a warning: with NNUE on, that
-binary is much slower than a plain `make build`.
+profiling run is a bench, and the engine can only search when it can load a
+network, so place the network in `src` under its default name first; to embed
+it as well, GCC and MinGW builds need `EXTRAPROFILEFLAGS=-DATOMIC_NNUE_EMBEDDING`,
+because `profile-build` replaces `EXTRACXXFLAGS` in its sub-builds. Without a
+network the build still completes, but it ends with a warning: nothing of the
+search was profiled, so that binary is much slower than a plain `make build`.
 
 Every build names itself in `id name`, the same way upstream Stockfish does. A
 development build reports `Atomic-Stockfish dev-YYYYMMDD-<commit>`, with the

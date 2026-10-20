@@ -19,10 +19,12 @@ Examples:
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import os
 import re
 import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Mapping, Sequence
@@ -30,6 +32,18 @@ from typing import Iterable, Mapping, Sequence
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 WORKSPACE_ROOT = REPO_ROOT.parent
+MATERIAL_NET_SOURCE = Path(__file__).resolve().with_name("create_synthetic_material_nnue.py")
+
+
+def create_material_network(directory: Path) -> Path:
+    spec = importlib.util.spec_from_file_location("create_synthetic_material_nnue", MATERIAL_NET_SOURCE)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load {MATERIAL_NET_SOURCE}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    path = directory / "atomic-material.nnue"
+    module.create_network(path)
+    return path
 
 
 def root_counts(specification: str) -> dict[str, int]:
@@ -306,10 +320,24 @@ def run_engine(engine: Path, commands: Sequence[str], timeout: float) -> str:
     return completed.stdout
 
 
-def option_commands(chess960: bool) -> tuple[str, ...]:
+# The frozen Fairy reference keeps its classical evaluator, which needs no
+# network. Atomic-Stockfish evaluates with NNUE only, so its terminal searches
+# load a network; a terminal root is never evaluated, so any compatible one
+# works. Perft and transitions need none.
+REFERENCE_OPTIONS = ("setoption name Use NNUE value false",)
+
+
+def candidate_options(eval_file: Path) -> tuple[str, ...]:
+    return (
+        f"setoption name EvalFile value {eval_file}",
+        "setoption name Use NNUE value true",
+    )
+
+
+def option_commands(chess960: bool, engine_options: Sequence[str]) -> tuple[str, ...]:
     return (
         "setoption name UCI_Variant value atomic",
-        "setoption name Use NNUE value false",
+        *engine_options,
         f"setoption name UCI_Chess960 value {'true' if chess960 else 'false'}",
         "isready",
     )
@@ -354,11 +382,13 @@ def compare_mapping(expected: Mapping[str, int], actual: Mapping[str, int]) -> l
     return errors
 
 
-def check_perft(engine: Path, fixture: PerftFixture, timeout: float) -> list[str]:
+def check_perft(
+    engine: Path, fixture: PerftFixture, timeout: float, engine_options: Sequence[str]
+) -> list[str]:
     output = run_engine(
         engine,
         (
-            *option_commands(fixture.chess960),
+            *option_commands(fixture.chess960, engine_options),
             f"position fen {fixture.fen}",
             f"go perft {fixture.depth}",
         ),
@@ -374,11 +404,13 @@ def check_perft(engine: Path, fixture: PerftFixture, timeout: float) -> list[str
     return errors
 
 
-def check_transition(engine: Path, fixture: TransitionFixture, timeout: float) -> list[str]:
+def check_transition(
+    engine: Path, fixture: TransitionFixture, timeout: float, engine_options: Sequence[str]
+) -> list[str]:
     output = run_engine(
         engine,
         (
-            *option_commands(fixture.chess960),
+            *option_commands(fixture.chess960, engine_options),
             f"position fen {fixture.fen} moves {fixture.move}",
             "d",
         ),
@@ -390,11 +422,13 @@ def check_transition(engine: Path, fixture: TransitionFixture, timeout: float) -
     return [f"after {fixture.move}: {actual} (expected {fixture.expected_fen})"]
 
 
-def check_terminal(engine: Path, fixture: TerminalFixture, timeout: float) -> list[str]:
+def check_terminal(
+    engine: Path, fixture: TerminalFixture, timeout: float, engine_options: Sequence[str]
+) -> list[str]:
     output = run_engine(
         engine,
         (
-            *option_commands(False),
+            *option_commands(False, engine_options),
             f"position fen {fixture.fen}",
             "go depth 1",
         ),
@@ -423,7 +457,13 @@ def report_failure(kind: str, name: str, rule: str, fen: str, errors: Iterable[s
         print(f"       {error}")
 
 
-def run_contract(label: str, engine: Path, timeout: float) -> int:
+def run_contract(
+    label: str,
+    engine: Path,
+    timeout: float,
+    engine_options: Sequence[str],
+    search_options: Sequence[str] = (),
+) -> int:
     print(f"\n{label}: {engine}")
     failures = 0
 
@@ -435,11 +475,13 @@ def run_contract(label: str, engine: Path, timeout: float) -> int:
     for kind, fixture in checks:
         try:
             if kind == "perft":
-                errors = check_perft(engine, fixture, timeout)  # type: ignore[arg-type]
+                errors = check_perft(engine, fixture, timeout, engine_options)  # type: ignore[arg-type]
             elif kind == "transition":
-                errors = check_transition(engine, fixture, timeout)  # type: ignore[arg-type]
+                errors = check_transition(engine, fixture, timeout, engine_options)  # type: ignore[arg-type]
             else:
-                errors = check_terminal(engine, fixture, timeout)  # type: ignore[arg-type]
+                errors = check_terminal(  # type: ignore[arg-type]
+                    engine, fixture, timeout, (*engine_options, *search_options)
+                )
         except EngineFailure as error:
             errors = [str(error)]
 
@@ -489,6 +531,14 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument("--candidate", type=Path, default=default_candidate)
     parser.add_argument("--reference-only", action="store_true")
     parser.add_argument("--candidate-only", action="store_true")
+    parser.add_argument(
+        "--eval-file",
+        type=Path,
+        help=(
+            "network for the candidate; by default the material-only AtomicNNUEV2 "
+            "test network is built in a temporary directory"
+        ),
+    )
     parser.add_argument("--timeout", type=float, default=30.0)
     args = parser.parse_args(argv)
     if args.reference_only and args.candidate_only:
@@ -511,14 +561,28 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if not args.candidate_only:
         reference = validate_engine_path("reference", args.reference)
-        failures += run_contract("Frozen Fairy reference", reference, args.timeout)
+        failures += run_contract(
+            "Frozen Fairy reference", reference, args.timeout, REFERENCE_OPTIONS
+        )
         if failures:
             print("\nReference drift detected; candidate results are not trustworthy.")
             return 1
 
     if not args.reference_only:
         candidate = validate_engine_path("candidate", args.candidate)
-        failures += run_contract("Atomic-Stockfish candidate", candidate, args.timeout)
+        with tempfile.TemporaryDirectory(prefix="atomic-rules-") as scratch:
+            eval_file = (
+                validate_engine_path("eval file", args.eval_file)
+                if args.eval_file is not None
+                else create_material_network(Path(scratch))
+            )
+            failures += run_contract(
+                "Atomic-Stockfish candidate",
+                candidate,
+                args.timeout,
+                (),
+                candidate_options(eval_file),
+            )
 
     if failures:
         print(f"\nAtomic rules contract FAILED ({failures} fixture failures).")

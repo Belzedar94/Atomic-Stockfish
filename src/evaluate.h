@@ -34,7 +34,12 @@ namespace Eval {
 // redistribution rights are explicitly confirmed.
 #define EvalFileDefaultName "atomic_run3b_e202_l05.nnue"
 
-enum class UseNNUEMode { False, True, Pure };
+// Atomic-Stockfish evaluates with NNUE only. True is the playing mode; Pure is
+// the raw network result reserved for data generation.
+enum class UseNNUEMode {
+    True,
+    Pure
+};
 
 namespace NNUE {
 class AnyAccumulator;
@@ -51,6 +56,10 @@ Value atomic_nnue_value_from_scaled(i64 scaled) noexcept;
 // domain. AtomicNNUEV3 authenticates each component as a full i32, so callers
 // must widen before adding them.
 Value atomic_nnue_value_from_raw(i32 rawPsqt, i32 rawPositional) noexcept;
+
+// Scale an evaluation linearly toward zero as the halfmove clock approaches
+// Atomic's 100-ply draw boundary. It is neutral at and beyond that boundary.
+Value damp_for_atomic_rule50(Value value, const Position& pos);
 
 }  // namespace Detail
 

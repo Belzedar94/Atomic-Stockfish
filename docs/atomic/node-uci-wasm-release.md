@@ -23,18 +23,19 @@ node .\atomic-stockfish-nnue-node.mjs
 ```
 
 Enter `uci`, then `isready`, to inspect the engine and its options. A minimal
-classical-evaluation smoke test is:
+smoke test that needs no network is:
 
 ```text
-setoption name Use NNUE value false
 position startpos
 go perft 1
 ```
 
-To use NNUE, set `EvalFile` to an external `.nnue` file and enable `Use NNUE`.
-Authenticate that external file against the SHA-256 published by its provider;
-the network is intentionally not present in this archive. `Use NNUE=pure` is a
-data-generation mode, not a playing recommendation.
+The engine evaluates with NNUE only, so searching needs a network: set
+`EvalFile` to an external `.nnue` file. Without one, `go` reports the missing
+network and answers `bestmove (none)`. Authenticate that external file against
+the SHA-256 published by its provider; the network is intentionally not present
+in this archive. `Use NNUE=pure` is a data-generation mode, not a playing
+recommendation.
 
 The archive also contains `manifest.json`, `atomic-stockfish-nnue.wasm`, any
 generated pthread worker required by the runtime, `AUTHORS`, `CITATION.cff`,

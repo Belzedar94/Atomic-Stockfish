@@ -4,14 +4,22 @@
 The suite protects quiet Atomic checks/evasions, every terminal-capture
 encoding accepted by ``Position::atomic_wins``, and explosive captures whose
 material cannot be bounded by orthodox main-search or qsearch futility.
+
+The engine evaluates with NNUE only. The expectations were recorded with the
+material-count evaluation the engine used to carry, so by default the suite
+builds the material-only AtomicNNUEV2 test network, which evaluates exactly
+like that count on these standard Atomic positions. ``--eval-file`` with
+``--expectations reference`` checks a trained network instead.
 """
 
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import queue
 import re
 import subprocess
+import tempfile
 import threading
 from dataclasses import dataclass
 from pathlib import Path
@@ -19,6 +27,7 @@ from typing import Callable
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+MATERIAL_NET_SOURCE = Path(__file__).resolve().with_name("create_synthetic_material_nnue.py")
 SCORE_RE = re.compile(r"\bscore mate (-?\d+)\b")
 CP_RE = re.compile(r"\bscore cp (-?\d+)\b")
 PV_RE = re.compile(r"\bpv(?:\s+(.+))?$")
@@ -34,8 +43,9 @@ class SearchCase:
     expected_cp: int | None = None
     depth: int = 1
     force_searchmove: bool = True
-    nnue_true_bestmove: str | None = None
-    nnue_true_pv: tuple[str, ...] | None = None
+    # Expectations that differ under a trained reference network.
+    reference_bestmove: str | None = None
+    reference_pv: tuple[str, ...] | None = None
 
 
 SEARCH_CASES = (
@@ -166,10 +176,21 @@ SEARCH_CASES = (
         expected_pv=("g7g5", "d2d4"),
         depth=14,
         force_searchmove=False,
-        nnue_true_bestmove="f8b4",
-        nnue_true_pv=("f8b4", "c2c3"),
+        reference_bestmove="f8b4",
+        reference_pv=("f8b4", "c2c3"),
     ),
 )
+
+
+def create_material_network(directory: Path) -> Path:
+    spec = importlib.util.spec_from_file_location("create_synthetic_material_nnue", MATERIAL_NET_SOURCE)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load {MATERIAL_NET_SOURCE}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    path = directory / "atomic-material.nnue"
+    module.create_network(path)
+    return path
 
 
 class UciProcess:
@@ -177,12 +198,12 @@ class UciProcess:
         self,
         executable: Path,
         timeout: float,
-        eval_file: Path | None = None,
-        use_nnue: str = "false",
+        eval_file: Path,
+        expectations: str = "material",
     ) -> None:
         self.executable = executable
         self.timeout = timeout
-        self.use_nnue = use_nnue
+        self.expectations = expectations
         self.process = subprocess.Popen(
             [str(executable)],
             stdin=subprocess.PIPE,
@@ -203,9 +224,8 @@ class UciProcess:
         self.read_until(lambda line: line == "uciok")
         self.send("setoption name Threads value 1")
         self.send("setoption name Hash value 16")
-        if eval_file is not None:
-            self.send(f"setoption name EvalFile value {eval_file}")
-        self.send(f"setoption name Use NNUE value {use_nnue}")
+        self.send(f"setoption name EvalFile value {eval_file}")
+        self.send("setoption name Use NNUE value true")
         self.ready()
 
     def _read_output(self) -> None:
@@ -302,14 +322,15 @@ def check_case(engine: UciProcess, test: SearchCase) -> None:
             f"{test.name}: expected mate {test.expected_mate}, got {rendered}: {final_info}"
         )
 
+    reference = engine.expectations == "reference"
     expected_pv = (
-        test.nnue_true_pv
-        if engine.use_nnue == "true" and test.nnue_true_pv is not None
+        test.reference_pv
+        if reference and test.reference_pv is not None
         else test.expected_pv
     )
     expected_bestmove = (
-        test.nnue_true_bestmove
-        if engine.use_nnue == "true" and test.nnue_true_bestmove is not None
+        test.reference_bestmove
+        if reference and test.reference_bestmove is not None
         else test.searchmove
     )
 
@@ -342,13 +363,19 @@ def main() -> int:
     parser.add_argument(
         "--eval-file",
         type=Path,
-        help="NNUE to load before search (resolved to an absolute path)",
+        help=(
+            "NNUE to search with (resolved to an absolute path); by default the "
+            "material-only AtomicNNUEV2 test network is built in a temporary directory"
+        ),
     )
     parser.add_argument(
-        "--use-nnue",
-        choices=("false", "true"),
-        required=True,
-        help="set the Atomic Use NNUE mode before search",
+        "--expectations",
+        choices=("material", "reference"),
+        default="material",
+        help=(
+            "material: the expectations recorded with the material-count evaluation; "
+            "reference: those recorded with the trained reference network"
+        ),
     )
     args = parser.parse_args()
 
@@ -359,12 +386,15 @@ def main() -> int:
     eval_file = args.eval_file.resolve() if args.eval_file is not None else None
     if eval_file is not None and not eval_file.is_file():
         parser.error(f"eval file does not exist: {eval_file}")
-    if args.use_nnue == "true" and eval_file is None:
-        parser.error("--eval-file is required when --use-nnue true")
+    if args.expectations == "reference" and eval_file is None:
+        parser.error("--eval-file is required with --expectations reference")
 
-    with UciProcess(candidate, args.timeout, eval_file, args.use_nnue) as engine:
-        for test in SEARCH_CASES:
-            check_case(engine, test)
+    with tempfile.TemporaryDirectory(prefix="atomic-search-") as scratch:
+        if eval_file is None:
+            eval_file = create_material_network(Path(scratch))
+        with UciProcess(candidate, args.timeout, eval_file, args.expectations) as engine:
+            for test in SEARCH_CASES:
+                check_case(engine, test)
 
     print(f"Atomic search regressions passed: {len(SEARCH_CASES)}/{len(SEARCH_CASES)}")
     return 0

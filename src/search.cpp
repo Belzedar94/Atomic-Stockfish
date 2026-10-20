@@ -239,9 +239,7 @@ void Search::Worker::ensure_network_replicated() {
 void Search::Worker::start_searching() {
 
     accumulator.reset();
-    useNnueMode = options["Use NNUE"] == "pure" ? Eval::UseNNUEMode::Pure
-                : options["Use NNUE"] == "true" ? Eval::UseNNUEMode::True
-                                                : Eval::UseNNUEMode::False;
+    useNnueMode = options["Use NNUE"] == "pure" ? Eval::UseNNUEMode::Pure : Eval::UseNNUEMode::True;
 
     // Non-main threads go directly to iterative_deepening()
     if (!is_mainthread())
@@ -341,9 +339,7 @@ Search::TrainingSearchResult Search::Worker::training_search(Position&          
     trainingSharedHistory = request.sharedHistories;
 
     accumulator.reset();
-    useNnueMode = options["Use NNUE"] == "pure" ? Eval::UseNNUEMode::Pure
-                : options["Use NNUE"] == "true" ? Eval::UseNNUEMode::True
-                                                : Eval::UseNNUEMode::False;
+    useNnueMode = options["Use NNUE"] == "pure" ? Eval::UseNNUEMode::Pure : Eval::UseNNUEMode::True;
 
     LimitsType freshLimits;
     freshLimits.startTime = now();

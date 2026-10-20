@@ -266,12 +266,13 @@ function testContractsAndLifetime(ffish) {
   assert.equal(ffish.loadVariantConfig, undefined);
 
   ffish.setOption('UCI_Variant', 'atomic');
-  ffish.setOption('Use NNUE', 'false');
+  ffish.setOption('Use NNUE', 'true');
   ffish.setOptionInt('Threads', 1);
   ffish.setOptionInt('Hash', 16);
   ffish.setOptionBool('UCI_Chess960', true);
   ffish.setOptionBool('Ponder', false);
   assertThrows(() => ffish.setOption('UCI_Variant', 'chess'), 'non-Atomic option must fail');
+  assertThrows(() => ffish.setOption('Use NNUE', 'false'), 'removed classical evaluation must fail');
   assertThrows(() => ffish.setOptionInt('Threads', 0), 'invalid thread count must fail');
   assertThrows(() => new ffish.Board('chess'), 'non-Atomic Board must fail');
 

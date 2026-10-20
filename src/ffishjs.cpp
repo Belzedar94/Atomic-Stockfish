@@ -265,10 +265,11 @@ void set_option(const std::string& name, const std::string& value) {
     }
     if (normalized == "use nnue")
     {
+        // The classical evaluation was removed, so false is no longer a value.
         const std::string mode = lower(trim(value));
-        if (mode == "false" || mode == "true" || mode == "pure")
+        if (mode == "true" || mode == "pure")
             return;
-        throw std::invalid_argument("Use NNUE must be false, true, or pure");
+        throw std::invalid_argument("Use NNUE must be true or pure");
     }
     throw std::invalid_argument("unsupported Atomic JS string option: " + name);
 }

@@ -482,7 +482,7 @@ class Worker {
 
     // Used by NNUE
     Eval::NNUE::AnyAccumulator accumulator;
-    Eval::UseNNUEMode          useNnueMode = Eval::UseNNUEMode::False;
+    Eval::UseNNUEMode          useNnueMode = Eval::UseNNUEMode::True;
 
     friend class Stockfish::ThreadPool;
     friend class SearchManager;

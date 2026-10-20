@@ -189,22 +189,38 @@ Value evaluate_fen(std::string_view fen, const NNUE::AnyNetwork& network, Eval::
     return Eval::evaluate(network, pos, *accumulator, VALUE_ZERO, mode);
 }
 
+Value damp_fen(std::string_view fen, Value value) {
+    Position  pos;
+    StateInfo state{};
+    if (auto error = pos.set(std::string(fen), false, &state))
+        die("invalid rule50 damping fixture: " + std::string(error->what()));
+
+    return Eval::Detail::damp_for_atomic_rule50(value, pos);
+}
+
 void run_rule50_damping(const NNUE::AnyNetwork& network) {
     constexpr std::string_view At99   = "7k/8/8/8/8/8/Q7/K7 w - - 99 1";
     constexpr std::string_view At100  = "7k/8/8/8/8/8/Q7/K7 w - - 100 1";
     constexpr std::string_view Beyond = "7k/8/8/8/8/8/Q7/K7 w - - 150 1";
 
-    const Value classical99 = evaluate_fen(At99, network, Eval::UseNNUEMode::False);
-    if (classical99 <= VALUE_ZERO)
-        die("rule50 damping erased or reversed a positive evaluation before the boundary");
-
-    for (const auto mode : {Eval::UseNNUEMode::False, Eval::UseNNUEMode::True})
+    // The test networks may evaluate every position as zero, so the damping
+    // itself is checked on a fixed positive and negative value. The playing
+    // evaluation must then be neutral at and beyond the boundary.
+    for (const Value value : {Value(PawnValue * 4), Value(-PawnValue * 4)})
     {
-        if (evaluate_fen(At100, network, mode) != VALUE_ZERO)
+        const Value at99 = damp_fen(At99, value);
+        if (at99 == VALUE_ZERO || (at99 > VALUE_ZERO) != (value > VALUE_ZERO))
+            die("rule50 damping erased or reversed an evaluation before the boundary");
+        if (damp_fen(At100, value) != VALUE_ZERO)
             die("rule50 damping did not neutralize evaluation at 100 reversible plies");
-        if (evaluate_fen(Beyond, network, mode) != VALUE_ZERO)
+        if (damp_fen(Beyond, value) != VALUE_ZERO)
             die("rule50 damping reversed evaluation beyond 100 reversible plies");
     }
+
+    if (evaluate_fen(At100, network, Eval::UseNNUEMode::True) != VALUE_ZERO)
+        die("rule50 damping did not neutralize evaluation at 100 reversible plies");
+    if (evaluate_fen(Beyond, network, Eval::UseNNUEMode::True) != VALUE_ZERO)
+        die("rule50 damping reversed evaluation beyond 100 reversible plies");
 
     std::cout << "PASS rule50 evaluation damping at and beyond draw boundary\n";
 }

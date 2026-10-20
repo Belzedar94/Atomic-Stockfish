@@ -147,8 +147,7 @@ async function interactiveSearch(mode, moves = '') {
     1,
     `expected exactly the GUI readyok during ${mode} search`,
   );
-  if (mode === 'false') assert.match(search, /Classical Atomic evaluation enabled/);
-  else assert.match(search, /NNUE evaluation using/);
+  assert.match(search, /NNUE evaluation using/);
 }
 
 try {
@@ -157,19 +156,17 @@ try {
   const uci = await command('uci', /uciok/);
   assert.match(uci, /id name Atomic-Stockfish/);
   assert.match(uci, /option name UCI_Variant type combo default atomic var atomic/);
-  assert.match(uci, /option name Use NNUE type combo default true var false var true var pure/);
+  assert.match(uci, /option name Use NNUE type combo default true var true var pure/);
   assert.doesNotMatch(uci, /UCCI_Variant|USI_Variant/);
   await command('isready', /readyok/);
 
-  child.stdin.write('setoption name Use NNUE value false\n');
+  // The engine evaluates with NNUE only. Without a network, go must fail
+  // explicitly and leave the engine responsive.
+  child.stdin.write('setoption name EvalFile value missing-wasm-contract-test.nnue\n');
   child.stdin.write('position startpos\n');
-  const classicalSearch = await command(
-    'go nodes 128',
-    /bestmove\s+(?!\(none\))\S+/,
-    180_000,
-  );
-  assert.match(classicalSearch, /Classical Atomic evaluation enabled/);
-  await interactiveSearch('false');
+  const networkless = await command('go nodes 128', /bestmove\s+\(none\)/, 180_000);
+  assert.match(networkless, /network is not available/);
+  await command('isready', /readyok/);
 
   const netForUci = net.replaceAll('\\', '/');
   child.stdin.write(`setoption name EvalFile value ${netForUci}\n`);

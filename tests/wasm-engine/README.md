@@ -35,8 +35,9 @@ command-line stdin performs a blocking read that otherwise starves pthread
 delivery until another line arrives. At most one private pump is outstanding,
 and every real GUI `isready` is tracked separately so its `readyok` remains
 visible. Integration tests exercise genuinely interactive stdin—with wall-clock
-pauses during active classical, NNUE `true`, and NNUE `pure` searches. Build
-products and the NNUE file are ignored and must not be committed.
+pauses during active NNUE `true` and NNUE `pure` searches—and check that `go`
+fails explicitly when no network is loaded. Build products and the NNUE file
+are ignored and must not be committed.
 
 The three-backend gate additionally verifies V1/V2/V3 switching, byte-exact V3
 export/reimport, transactional rejection of a V2 file with trailing data,
