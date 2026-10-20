@@ -6,13 +6,13 @@ single-threaded, started without a console window, and killed on timeout.
 
 For every binary given as LABEL=PATH it
   1. records what the binary says about itself (`compiler`, `id name`);
-  2. runs the default `bench` with NNUE and with the classical evaluation and compares
-     the node counts with --expect-nnue / --expect-classical;
+  2. runs the default `bench` and compares the node count with --expect-nnue (the
+     engine is NNUE-only since Atomic-Stockfish#76, so there is no classical bench);
   3. replays a worker-like UCI session (go nodes, MultiPV, searchmoves, optional
      SyzygyPath) and requires the engine output to be identical to the first binary's,
      apart from the time and nps fields;
-  4. times `bench 16 1 <depth> default depth` in both modes, several rounds, the order
-     rotating and alternating; every run of every binary must report the same nodes.
+  4. times `bench 16 1 <depth> default depth`, several rounds, the order rotating and
+     alternating; every run of every binary must report the same nodes.
 
 Exit status 0 only if every identity check passed. Speed is reported, never judged.
 """
@@ -100,10 +100,9 @@ def self_description(exe: Path, cwd: Path) -> dict:
     return info
 
 
-def bench(exe: Path, cwd: Path, classical: bool, depth: int | None, cpu: int | None, timeout: float = 1800) -> dict:
+def bench(exe: Path, cwd: Path, depth: int | None, cpu: int | None, timeout: float = 1800) -> dict:
     cmd = "bench" if depth is None else f"bench 16 1 {depth} default depth"
-    lines = (["setoption name Use NNUE value false"] if classical else []) + [cmd]
-    out = run_batch(exe, cwd, lines, timeout, cpu)
+    out = run_batch(exe, cwd, [cmd], timeout, cpu)
     t, n = TIME_RE.search(out), NODES_RE.search(out)
     if not (t and n):
         raise RuntimeError(f"{exe.name}: incomplete bench output\n{out[-1500:]}")
@@ -179,7 +178,6 @@ def main() -> int:
                     help="first one is the reference the others are compared with")
     ap.add_argument("--cwd", type=Path, required=True, help="working directory of every engine run")
     ap.add_argument("--expect-nnue", type=int, required=True)
-    ap.add_argument("--expect-classical", type=int, required=True)
     ap.add_argument("--depth", type=int, default=18, help="depth of the timed bench")
     ap.add_argument("--rounds", type=int, default=8)
     ap.add_argument("--cpu", type=int, default=None, help="logical CPU to pin every engine to")
@@ -205,19 +203,15 @@ def main() -> int:
         result["binaries"][label] = {"path": str(exe), "self": d}
         print(f"[{label}] {d['id_name']} | {d['compiled_by']} | {d['arch']} | {d['settings']} | {d['size']} bytes", flush=True)
 
-    # 2. bench signatures
+    # 2. bench signature
     for label, exe in bins:
-        n = bench(exe, a.cwd, False, None, a.cpu)
-        c = bench(exe, a.cwd, True, None, a.cpu)
-        result["binaries"][label]["signature"] = {"nnue": n["nodes"], "classical": c["nodes"],
-                                                  "nnue_active": n["nnue"], "classical_is_classical": not c["nnue"]}
-        ok = (n["nodes"] == a.expect_nnue and c["nodes"] == a.expect_classical and n["nnue"] and not c["nnue"]
-              and not n["aborted"])
-        print(f"[{label}] bench NNUE {n['nodes']} (NNUE active: {n['nnue']}), classical {c['nodes']}  "
+        n = bench(exe, a.cwd, None, a.cpu)
+        result["binaries"][label]["signature"] = {"nnue": n["nodes"], "nnue_active": n["nnue"]}
+        ok = n["nodes"] == a.expect_nnue and n["nnue"] and not n["aborted"]
+        print(f"[{label}] bench NNUE {n['nodes']} (NNUE active: {n['nnue']})  "
               f"{'OK' if ok else 'MISMATCH'}", flush=True)
         if not ok:
-            failures.append(f"{label}: bench signature {n['nodes']}/{c['nodes']}, expected "
-                            f"{a.expect_nnue}/{a.expect_classical}")
+            failures.append(f"{label}: bench signature {n['nodes']}, expected {a.expect_nnue}")
 
     # 3. worker-like session, output must be identical
     if not a.skip_session:
@@ -243,18 +237,18 @@ def main() -> int:
                             print(f"   first difference at line {i}:\n   {ref}: {x}\n   {label}: {y}", flush=True)
                             break
 
-    # 4. timing, both modes
-    for mode, classical in (("nnue", False), ("classical", True)):
+    # 4. timing
+    for mode in ("nnue",):
         samples: dict[str, list[float]] = {label: [] for label, _ in bins}
         nodes_seen: set[int] = set()
         for label, exe in bins:  # one discarded warm-up each
-            nodes_seen.add(bench(exe, a.cwd, classical, a.depth, a.cpu)["nodes"])
+            nodes_seen.add(bench(exe, a.cwd, a.depth, a.cpu)["nodes"])
         for r in range(a.rounds):
             order = bins[r % len(bins):] + bins[:r % len(bins)]
             if r % 2:
                 order = order[::-1]
             for label, exe in order:
-                m = bench(exe, a.cwd, classical, a.depth, a.cpu)
+                m = bench(exe, a.cwd, a.depth, a.cpu)
                 nodes_seen.add(m["nodes"])
                 samples[label].append(m["nps"])
             print(f"{mode} round {r + 1}/{a.rounds}: " + "  ".join(f"{l}={samples[l][-1]:.0f}" for l, _ in bins), flush=True)
@@ -278,20 +272,19 @@ def main() -> int:
     if a.md:
         with a.md.open("a", encoding="utf-8") as md:
             md.write(f"### {a.title}\n\n")
-            md.write("| binary | says | bench NNUE / classical | session | NNUE nps (d{0}) | vs {1} | classical nps (d{0}) | vs {1} |\n".format(a.depth, ref))
-            md.write("|---|---|---|---|---|---|---|---|\n")
+            md.write("| binary | says | bench | session | NNUE nps (d{0}) | vs {1} |\n".format(a.depth, ref))
+            md.write("|---|---|---|---|---|---|\n")
             for label, _ in bins:
                 b = result["binaries"][label]
                 s = b["self"]
                 sess = b.get("session", {})
                 sess_txt = "reference" if label == ref else ("identical" if sess.get("identical_to_reference") else ("DIFFERENT" if sess else "-"))
-                tn, tc = b["timing_nnue"], b["timing_classical"]
+                tn = b["timing_nnue"]
                 md.write(f"| {label} | {s['id_name']}; {s['compiled_by']}; {s['arch']} | "
-                         f"{b['signature']['nnue']} / {b['signature']['classical']} | {sess_txt} | "
-                         f"{tn['mean_nps']:.0f} ± {tn['ci95']:.0f} | {tn['vs_ref_pct']:+.1f}% ± {tn['vs_ref_ci95_pct']:.1f} | "
-                         f"{tc['mean_nps']:.0f} ± {tc['ci95']:.0f} | {tc['vs_ref_pct']:+.1f}% ± {tc['vs_ref_ci95_pct']:.1f} |\n")
-            md.write(f"\nhost: `{platform.platform()}`; nodes at depth {a.depth}: NNUE "
-                     f"{result['binaries'][ref]['timing_nnue']['nodes']}, classical {result['binaries'][ref]['timing_classical']['nodes']}; "
+                         f"{b['signature']['nnue']} | {sess_txt} | "
+                         f"{tn['mean_nps']:.0f} ± {tn['ci95']:.0f} | {tn['vs_ref_pct']:+.1f}% ± {tn['vs_ref_ci95_pct']:.1f} |\n")
+            md.write(f"\nhost: `{platform.platform()}`; nodes at depth {a.depth}: "
+                     f"{result['binaries'][ref]['timing_nnue']['nodes']}; "
                      f"{a.rounds} alternating rounds.\n\n")
             if failures:
                 md.write("**FAILED:** " + "; ".join(failures) + "\n\n")

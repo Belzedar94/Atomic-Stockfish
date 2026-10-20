@@ -2,7 +2,7 @@ name: AtomicDB worker engines (PGO)
 
 # Builds the engine the AtomicDB workers download, profile-guided, for the three
 # platforms of the worker manifest. Each profile-guided binary must search exactly
-# like a plain build of the same commit (same bench signatures, same output on a
+# like a plain build of the same commit (same bench signature, same output on a
 # worker-like UCI session), and both are timed back to back on the same runner.
 # The served binary comes from an older commit, so it is only used to compare
 # what the binaries need from the system, not their output.
@@ -26,7 +26,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  ENGINE_SHA: 0c8c6084e709361e315f4d15541f7dd6a6d8e517
+  ENGINE_SHA: 8e81598f0dc8133fc3ee24ba6128327af58f4534
   BASE_SHA: 1adc5239500a684824b178b19be4266f6e249cc8
   ATOMIC_NET_TAG: v1.0
   ATOMIC_NET_ASSET: atomic-run3b.nnue
@@ -34,7 +34,6 @@ env:
   NET_NAME: atomic_run3b_e202_l05.nnue
   SERVED_URL: https://belzedar.duckdns.org/atomicdb/engines
   EXPECT_NNUE: "438711"
-  EXPECT_CLASSICAL: "735506"
   BENCH_DEPTH: "18"
   ROUNDS: "10"
 
@@ -133,8 +132,8 @@ jobs:
           if grep -q "WARNING: the profiling run found no NNUE network" ../../out/build-pgo.log; then
             echo "::error::the PGO network warning fired"; exit 1
           fi
-          # Step 2 prints the tail of the profiling output: the classical bench.
-          grep -q "Nodes searched  : $EXPECT_CLASSICAL" ../../out/build-pgo.log
+          # The profiling run ends with the default bench: the NNUE signature.
+          grep -q "Nodes searched  : $EXPECT_NNUE" ../../out/build-pgo.log
           cp "$NEW_FILE" "../../out/$NEW_FILE"
 
       - name: What the new binary needs from the system
@@ -154,7 +153,7 @@ jobs:
         run: |
           python3 ci/engine_check.py --title "linux $ARCH on $(lscpu | sed -n 's/^Model name: *//p' | head -n 1)" \
             --bin "plain=out/plain" --bin "pgo=out/$NEW_FILE" \
-            --cwd run --expect-nnue "$EXPECT_NNUE" --expect-classical "$EXPECT_CLASSICAL" \
+            --cwd run --expect-nnue "$EXPECT_NNUE" \
             --depth "$BENCH_DEPTH" --rounds "$ROUNDS" --syzygy "$PWD/tb" \
             --json out/check.json --md "$GITHUB_STEP_SUMMARY" | tee out/check.log
           "out/$NEW_FILE" compiler < /dev/null | tee out/compiler.txt
@@ -282,7 +281,7 @@ jobs:
           if grep -q "WARNING: the profiling run found no NNUE network" ../../out/build-pgo.log; then
             echo "::error::the PGO network warning fired"; exit 1
           fi
-          grep -q "Nodes searched  : $EXPECT_CLASSICAL" ../../out/build-pgo.log
+          grep -q "Nodes searched  : $EXPECT_NNUE" ../../out/build-pgo.log
           test "$(wc -c < "$NEW_FILE")" -gt "$(wc -c < "$NET_NAME")"
           cp "$NEW_FILE" "../../out/$NEW_FILE"
 
@@ -294,7 +293,7 @@ jobs:
           test -z "$(ls run/*.nnue 2>/dev/null)"
           python ci/engine_check.py --title "windows $ARCH, ${{ matrix.toolchain }}" \
             --bin "plain=out/plain.exe" --bin "pgo=out/$NEW_FILE" \
-            --cwd run --expect-nnue "$EXPECT_NNUE" --expect-classical "$EXPECT_CLASSICAL" \
+            --cwd run --expect-nnue "$EXPECT_NNUE" \
             --depth "$BENCH_DEPTH" --rounds "$ROUNDS" --syzygy "$(cygpath -m "$PWD/tb")" \
             --json out/check.json --md "$(cygpath -m "$GITHUB_STEP_SUMMARY")" | tee out/check.log
           (cd run && printf 'compiler\nquit\n' | "../out/$NEW_FILE") | tee out/compiler.txt
@@ -411,7 +410,7 @@ jobs:
           if grep -q "WARNING: the profiling run found no NNUE network" ../../out/build-pgo.log; then
             echo "::error::the PGO network warning fired"; exit 1
           fi
-          grep -q "Nodes searched  : $EXPECT_CLASSICAL" ../../out/build-pgo.log
+          grep -q "Nodes searched  : $EXPECT_NNUE" ../../out/build-pgo.log
           grep -c -- "-fprofile-use=stockfish.profdata" ../../out/build-pgo.log
           strip "$NEW_FILE"
           test "$(wc -c < "$NEW_FILE")" -gt "$(wc -c < "$NET_NAME")"
@@ -422,7 +421,7 @@ jobs:
           test -z "$(ls run/*.nnue 2>/dev/null)"
           python3 ci/engine_check.py --title "macos $ARCH on $(sysctl -n machdep.cpu.brand_string)" \
             --bin "plain=out/plain" --bin "pgo=out/$NEW_FILE" \
-            --cwd run --expect-nnue "$EXPECT_NNUE" --expect-classical "$EXPECT_CLASSICAL" \
+            --cwd run --expect-nnue "$EXPECT_NNUE" \
             --depth "$BENCH_DEPTH" --rounds "$ROUNDS" --syzygy "$PWD/tb" \
             --json out/check.json --md "$GITHUB_STEP_SUMMARY" | tee out/check.log
           "out/$NEW_FILE" compiler < /dev/null | tee out/compiler.txt
