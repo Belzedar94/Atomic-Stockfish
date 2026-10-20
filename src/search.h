@@ -458,6 +458,7 @@ class Worker {
     RootMoves rootMoves;
     Depth     rootDepth;
     Value     rootDelta;
+    bool      seekMate = false;
 
     PVMoves lastIterationIdxPV;
 
