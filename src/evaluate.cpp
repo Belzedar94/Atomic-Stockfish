@@ -149,6 +149,14 @@ Value Eval::evaluate(const Eval::NNUE::AnyNetwork& network,
         const int scale = 903 + 32 * pos.count<PAWN>() + 32 * legacyNpm / 1024;
         v               = Value((blendedRaw / 16) * scale / 1024);
 
+        // The material scale makes every trade look like a loss to the side that
+        // is ahead. Once one side is clearly ahead, lift the scale back toward its
+        // full-material value (1977), fading in smoothly from |v| = 600 up to half
+        // of the lost scale at |v| = 1200.
+        const int t    = std::clamp(std::abs(int(v)) - 600, 0, 600);
+        const int lift = std::max(0, 1977 - scale) * t * t / 720000;
+        v              = Value((blendedRaw / 16) * (scale + lift) / 1024);
+
         if (pos.is_chess960())
             v += fix_frc(pos);
 
