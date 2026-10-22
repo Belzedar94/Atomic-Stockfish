@@ -24,7 +24,10 @@ This branch holds no engine source.
   network. AtomicNNUEV2 networks are external-only and none is published, so
   every runner also checks identity (bench, session, a short timed bench) with
   the synthetic AtomicNNUEV2 fixture that main's own CI generates
-  (`tests/create_synthetic_atomic_v2_nnue.py`, pinned by its sha256).
+  (`tests/create_synthetic_atomic_v2_nnue.py`, pinned by its sha256). Those
+  benches are node-limited: with this fixture the default depth-13 bench of
+  main did not finish within 15 minutes on any runner of the first run
+  (39748666706).
 - `ci/pool_checks.py` pools the per-round speed ratios of those runners, per
   platform and network.
 

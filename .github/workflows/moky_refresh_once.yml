@@ -18,7 +18,9 @@ name: NNUE refresh check pull request, profile-guided
 # AtomicNNUEV2 networks are external-only; the second check of every runner
 # loads the synthetic AtomicNNUEV2 fixture that main's own CI generates
 # (tests/create_synthetic_atomic_v2_nnue.py, pinned by its sha256) and
-# requires the same identity on it, with a short timed bench.
+# requires the same identity on it, with a short timed bench. Its benches are
+# node-limited: with this fixture the default depth-13 bench of main did not
+# finish within 15 minutes on any runner (run 39748666706).
 #
 # Nothing is published: binaries and reports are artifacts.
 
@@ -54,7 +56,9 @@ env:
   # The synthetic AtomicNNUEV2 network of main's CI (ATOMIC_SYNTHETIC_V2_NNUE_SHA256).
   V2_NET: atomic-v2-synthetic.nnue
   V2_NET_SHA256: 4deb05cff79b5d5eba51c560f64ed24224671c188b6c5db27521033e587c87c6
-  V2_BENCH_DEPTH: "16"
+  # Nodes per bench position: signature bench and timed bench.
+  V2_SIGNATURE_NODES: "50000"
+  V2_TIMED_NODES: "100000"
   V2_ROUNDS: "8"
 
 jobs:
@@ -176,6 +180,7 @@ jobs:
 
       - name: Identity and short timing, synthetic AtomicNNUEV2 network
         if: success() || failure()
+        timeout-minutes: 30
         run: |
           set -eo pipefail
           echo "$V2_NET_SHA256  v2net/$V2_NET" | sha256sum -c -
@@ -184,7 +189,8 @@ jobs:
             --net v2-synthetic --evalfile "v2net/$V2_NET" \
             --bin main=bins/atomic-main --bin pr77=bins/atomic-pr77 \
             --cwd run --expect-backend AtomicNNUEV2 \
-            --depth "$V2_BENCH_DEPTH" --rounds "$V2_ROUNDS" --timeout 900 \
+            --limit-type nodes --signature-limit "$V2_SIGNATURE_NODES" --limit "$V2_TIMED_NODES" \
+            --rounds "$V2_ROUNDS" --timeout 600 --session-timeout 900 \
             --json out/check-v2.json --md "$GITHUB_STEP_SUMMARY" | tee out/check-v2.log
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -294,6 +300,7 @@ jobs:
 
       - name: Identity and short timing, synthetic AtomicNNUEV2 network
         if: success() || failure()
+        timeout-minutes: 30
         run: |
           set -eo pipefail
           mkdir -p run out
@@ -303,7 +310,8 @@ jobs:
             --net v2-synthetic --evalfile "v2net/$V2_NET" \
             --bin main=bins/atomic-main.exe --bin pr77=bins/atomic-pr77.exe \
             --cwd run --expect-backend AtomicNNUEV2 \
-            --depth "$V2_BENCH_DEPTH" --rounds "$V2_ROUNDS" --timeout 900 \
+            --limit-type nodes --signature-limit "$V2_SIGNATURE_NODES" --limit "$V2_TIMED_NODES" \
+            --rounds "$V2_ROUNDS" --timeout 600 --session-timeout 900 \
             --json out/check-v2.json --md "$GITHUB_STEP_SUMMARY" | tee out/check-v2.log
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

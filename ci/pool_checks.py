@@ -7,7 +7,8 @@ its speed to the reference binary's speed in the same round, on the same runner,
 and pools those ratios over all the runners of a platform that used the same
 network: mean and a 95% Student t interval over all rounds. The per-runner means
 and intervals are listed as well, so a speed-up that depends on the processor
-shows up.
+shows up. A report without timing (a check that stopped early) still shows its
+identity results.
 
 Reports are grouped by the name of the directory that holds them, without a
 leading "check-" and a trailing "-<number>" (check-linux-2/check.json -> linux),
@@ -45,6 +46,17 @@ def pct(ratios: list[float]) -> tuple[float, float]:
     return 100 * (mean - 1), 100 * t95(len(ratios) - 1) * statistics.stdev(ratios) / math.sqrt(len(ratios))
 
 
+def session_state(report: dict, label: str) -> str:
+    s = report["binaries"][label].get("session")
+    if not s:
+        return "-"
+    if "error" in s:
+        return "FAILED"
+    if label == report["reference"]:
+        return "reference"
+    return "identical" if s.get("identical_to_reference") else "DIFFERENT"
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("reports", nargs="+", type=Path)
@@ -63,51 +75,53 @@ def main() -> int:
     for (platform, net), reports in sorted(groups.items()):
         ref = reports[0][1]["reference"]
         labels = list(reports[0][1]["binaries"])
-        rounds = sum(r["rounds"] for _, r in reports)
-        depths = sorted({r["depth"] for _, r in reports})
-        out.append(f"### {platform}, network {net}: {len(reports)} runner(s), {rounds} rounds at depth "
-                   f"{'/'.join(map(str, depths))}, speed relative to {ref}\n")
+        rounds = sum(r.get("rounds_completed", r["rounds"]) for _, r in reports)
+        timed = sorted({r.get("timed_cmd", f"bench 16 1 {r['depth']} default depth") for _, r in reports})
+        sig_cmds = sorted({r.get("signature_cmd", "bench") for _, r in reports})
+        out.append(f"### {platform}, network {net}: {len(reports)} runner(s), {rounds} rounds of "
+                   f"`{' / '.join(timed)}`, speed relative to {ref}\n")
+        out.append(f"Signature bench: `{' / '.join(sig_cmds)}`.\n")
         for _, r in reports:
             fails = "; ".join(r.get("failures", [])) or "none"
             out.append(f"- {r['title']}: identity failures: {fails}")
         out.append("")
-        out.append(f"| binary | backend | bench nodes | session | timed-bench nodes | vs {ref} (pooled, 95%) | per runner (95%) |")
+        out.append(f"| binary | backend | signature nodes | session | timed-bench nodes | vs {ref} (pooled, 95%) | per runner (95%) |")
         out.append("|---|---|---|---|---|---|---|")
         for label in labels:
-            backends = sorted({b for _, r in reports for b in r["binaries"][label]["signature"]["backends"]})
-            sigs = sorted({r["binaries"][label]["signature"]["nodes"] for _, r in reports})
-            sess = set()
-            for _, r in reports:
-                s = r["binaries"][label].get("session")
-                if not s:
-                    sess.add("-")
-                elif label == ref:
-                    sess.add("reference")
-                else:
-                    sess.add("identical" if s.get("identical_to_reference") else "DIFFERENT")
-            timed = sorted({n for _, r in reports for n in r["binaries"][label]["timing"]["nodes"]})
+            sigs_b = [r["binaries"][label].get("signature", {}) for _, r in reports]
+            backends = sorted({b for s in sigs_b for b in s.get("backends", [])})
+            sigs = sorted({str(s.get("nodes")) for s in sigs_b})
+            sess = sorted({session_state(r, label) for _, r in reports})
+            timed_nodes = sorted({n for _, r in reports for n in r["binaries"][label].get("timing", {}).get("nodes", [])})
             pooled: list[float] = []
             per_runner: list[str] = []
             runner_rows: list[dict] = []
             for _, r in reports:
-                mine = r["binaries"][label]["timing"]["samples"]
-                base = r["binaries"][ref]["timing"]["samples"]
+                mine = r["binaries"][label].get("timing", {}).get("samples", [])
+                base = r["binaries"][ref].get("timing", {}).get("samples", [])
                 ratios = [x / y for x, y in zip(mine, base)]
+                if not ratios:
+                    per_runner.append("no timing")
+                    continue
                 pooled += ratios
                 m, c = pct(ratios)
                 per_runner.append(f"{m:+.2f} ± {c:.2f}")
                 runner_rows.append({"title": r["title"], "mean_pct": m, "ci95_pct": c, "rounds": len(ratios)})
-            mean, ci = pct(pooled)
+            if pooled:
+                mean, ci = pct(pooled)
+                speed = f"{mean:+.2f}% ± {ci:.2f}"
+            else:
+                mean, ci, speed = None, None, "no timing"
             out.append("| " + " | ".join([
-                label, " / ".join(backends), " or ".join(map(str, sigs)), " or ".join(sorted(sess)),
-                " or ".join(map(str, timed)),
-                f"{mean:+.2f}% ± {ci:.2f}" if label != ref else "reference",
+                label, " / ".join(backends) or "-", " or ".join(sigs), " or ".join(sess),
+                " or ".join(map(str, timed_nodes)) or "-",
+                speed if label != ref else "reference",
                 ", ".join(per_runner) if label != ref else ""]) + " |")
             if label != ref:
                 pooled_json.setdefault(f"{platform}/{net}", {})[label] = {
                     "pooled_mean_pct": mean, "pooled_ci95_pct": ci, "rounds": len(pooled),
-                    "per_runner": runner_rows, "bench_nodes": sigs, "timed_nodes": timed,
-                    "backends": backends, "session": sorted(sess)}
+                    "per_runner": runner_rows, "signature_nodes": sigs, "timed_nodes": timed_nodes,
+                    "backends": backends, "session": sess}
         out.append("")
 
     text = "\n".join(out) + "\n"
