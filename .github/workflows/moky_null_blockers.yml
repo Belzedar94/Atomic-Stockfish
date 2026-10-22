@@ -1,10 +1,13 @@
-name: NNUE refresh check pull request, profile-guided
+name: Null move king blockers pull request, profile-guided
 
-# Measures pull request #77 (remove the requires_refresh() checks from the
-# forward accumulator updates of Legacy Atomic V1 and AtomicNNUEV2, since the
-# backward scan before them already stops at every accumulator that needs a
-# refresh) against main@8e81598f, its base. The pull request claims the
-# evaluation is unchanged, so it must search exactly the nodes main searches.
+# Measures pull request #78 (do_null_move() stops recomputing the king blockers
+# with set_check_info() and calls set_check_squares() instead, which only
+# recomputes the side-dependent check squares: the null move copies the whole
+# StateInfo and leaves the board unchanged, so the copied blockers are already
+# right) against main@74ab89ad, the current main. The pull request was opened
+# against 8e81598f; main has only #77 on top of it, which touches NNUE files
+# only, and the merge is clean. The pull request claims the search is
+# unchanged, so it must search exactly the nodes main searches.
 # ci/build_variants.sh builds main and main with the pull request head merged,
 # one after the other on one runner, with `make profile-build` (GCC, as
 # OpenBench and the AtomicDB workers build). ci/engine_check.py then requires
@@ -15,8 +18,9 @@ name: NNUE refresh check pull request, profile-guided
 #
 # The engine is NNUE-only since #76, so there is no classical bench. The
 # default network (atomic_run3b_e202_l05.nnue) is a Legacy Atomic V1 network.
-# AtomicNNUEV2 networks are external-only; the second check of every runner
-# loads the synthetic AtomicNNUEV2 fixture that main's own CI generates
+# AtomicNNUEV2 networks are external-only. The change is not in NNUE code, so
+# the second check of every runner is only a cheap extra: it loads the
+# synthetic AtomicNNUEV2 fixture that main's own CI generates
 # (tests/create_synthetic_atomic_v2_nnue.py, pinned by its sha256) and
 # requires the same identity on it, with a short timed bench. Its benches are
 # node-limited: with this fixture the default depth-13 bench of main did not
@@ -27,22 +31,22 @@ name: NNUE refresh check pull request, profile-guided
 on:
   push:
     branches:
-      - ci/moky-refresh-once-1022
+      - ci/moky-null-blockers-1022
 
 permissions:
   contents: read
 
 concurrency:
-  group: moky-refresh-once-1022
+  group: moky-null-blockers-1022
   cancel-in-progress: true
 
 env:
-  MAIN_SHA: 8e81598f0dc8133fc3ee24ba6128327af58f4534
-  PR77_SHA: fb6de014bcd5876389b3e250ca39275c3bdc5637
+  MAIN_SHA: 74ab89adf58fac7b5e72c0ee3479f0581a78733e
+  PR78_SHA: 4f40b6a1ddc04aa629fdcdc9f39d6d813e991115
   # Trees of main and of main with the pull request merged: the build stops if a
   # variant is anything else.
-  TREE_MAIN: db484fb1c8114260c9fd7791920576cbd4c7988f
-  TREE_PR77: 53512f3353eb6c160a13e21c93b231f1ff4a63fc
+  TREE_MAIN: 53512f3353eb6c160a13e21c93b231f1ff4a63fc
+  TREE_PR78: 3c0a2b83ee07b761614b272a8b2bed4060266d56
   ATOMIC_NET_TAG: v1.0
   ATOMIC_NET_ASSET: atomic-run3b.nnue
   ATOMIC_NET_SHA256: 99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f92a04a6
@@ -173,7 +177,7 @@ jobs:
           set -eo pipefail
           cpu=$(lscpu | sed -n 's/^Model name: *//p' | head -n 1)
           python3 ci/engine_check.py --title "linux x86-64-avx2, runner ${{ matrix.runner }}: $cpu" --net v1 \
-            --bin main=bins/atomic-main --bin pr77=bins/atomic-pr77 \
+            --bin main=bins/atomic-main --bin pr78=bins/atomic-pr78 \
             --cwd run --expect-backend "$V1_BACKEND" --expect-bench "$EXPECT_BENCH" \
             --depth "$BENCH_DEPTH" --rounds "$ROUNDS" \
             --json out/check.json --md "$GITHUB_STEP_SUMMARY" | tee out/check.log
@@ -187,7 +191,7 @@ jobs:
           cpu=$(lscpu | sed -n 's/^Model name: *//p' | head -n 1)
           python3 ci/engine_check.py --title "linux x86-64-avx2, runner ${{ matrix.runner }}, synthetic AtomicNNUEV2: $cpu" \
             --net v2-synthetic --evalfile "v2net/$V2_NET" \
-            --bin main=bins/atomic-main --bin pr77=bins/atomic-pr77 \
+            --bin main=bins/atomic-main --bin pr78=bins/atomic-pr78 \
             --cwd run --expect-backend AtomicNNUEV2 \
             --limit-type nodes --signature-limit "$V2_SIGNATURE_NODES" --limit "$V2_TIMED_NODES" \
             --rounds "$V2_ROUNDS" --timeout 600 --session-timeout 900 \
@@ -293,7 +297,7 @@ jobs:
           echo "$cpu, $NUMBER_OF_PROCESSORS processors"
           python --version
           python ci/engine_check.py --title "windows x86-64-bmi2, runner ${{ matrix.runner }}: $cpu" --net v1 \
-            --bin main=bins/atomic-main.exe --bin pr77=bins/atomic-pr77.exe \
+            --bin main=bins/atomic-main.exe --bin pr78=bins/atomic-pr78.exe \
             --cwd run --expect-backend "$V1_BACKEND" --expect-bench "$EXPECT_BENCH" \
             --depth "$BENCH_DEPTH" --rounds "$ROUNDS" \
             --json out/check.json --md "$GITHUB_STEP_SUMMARY" | tee out/check.log
@@ -308,7 +312,7 @@ jobs:
           cpu=$(powershell -NoProfile -Command "(Get-CimInstance Win32_Processor).Name" | tr -d '\r')
           python ci/engine_check.py --title "windows x86-64-bmi2, runner ${{ matrix.runner }}, synthetic AtomicNNUEV2: $cpu" \
             --net v2-synthetic --evalfile "v2net/$V2_NET" \
-            --bin main=bins/atomic-main.exe --bin pr77=bins/atomic-pr77.exe \
+            --bin main=bins/atomic-main.exe --bin pr78=bins/atomic-pr78.exe \
             --cwd run --expect-backend AtomicNNUEV2 \
             --limit-type nodes --signature-limit "$V2_SIGNATURE_NODES" --limit "$V2_TIMED_NODES" \
             --rounds "$V2_ROUNDS" --timeout 600 --session-timeout 900 \
