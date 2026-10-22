@@ -6,11 +6,12 @@
 #
 # ENGINE_DIR is a full clone of the engine (the merge needs the history).
 # NETWORK is copied into ENGINE_DIR/src under its default name before every
-# build, so the profiling run evaluates with NNUE. The binaries land in OUT_DIR
-# as atomic-<variant><EXE_SUFFIX>, next to their build logs.
+# build, so the profiling bench evaluates with it (the engine has no other
+# evaluation). The binaries land in OUT_DIR as atomic-<variant><EXE_SUFFIX>,
+# next to their build logs.
 #
-# Needs MAIN_SHA, PR75_SHA, NET_NAME and the expected trees TREE_MAIN and
-# TREE_PR75 in the environment. The merge uses a fixed identity and date, so a
+# Needs MAIN_SHA, PR77_SHA, NET_NAME and the expected trees TREE_MAIN and
+# TREE_PR77 in the environment. The merge uses a fixed identity and date, so a
 # variant is the same commit on every runner, and its tree must be the expected
 # one: what is built is main plus the pull request, nothing else. Node counts
 # are not judged here (ci/engine_check.py does that), so a pull request that
@@ -23,14 +24,14 @@ mkdir -p "$out"
 
 export GIT_AUTHOR_NAME=ci GIT_AUTHOR_EMAIL=ci@invalid
 export GIT_COMMITTER_NAME=ci GIT_COMMITTER_EMAIL=ci@invalid
-export GIT_AUTHOR_DATE=2026-10-20T00:00:00Z GIT_COMMITTER_DATE=2026-10-20T00:00:00Z
+export GIT_AUTHOR_DATE=2026-10-22T00:00:00Z GIT_COMMITTER_DATE=2026-10-22T00:00:00Z
 
 g() { git -C "$engine" "$@"; }
 
 # The pull request head lives in a fork; the base repository serves it as
 # refs/pull/<n>/head. If the head moved since, fetch the pinned commit itself.
-g fetch --quiet --no-tags origin refs/pull/75/head
-for sha in "$PR75_SHA"; do
+g fetch --quiet --no-tags origin refs/pull/77/head
+for sha in "$PR77_SHA"; do
     g cat-file -e "$sha^{commit}" 2>/dev/null || g fetch --quiet --no-tags origin "$sha"
     g cat-file -e "$sha^{commit}"
 done
@@ -38,7 +39,7 @@ done
 # name, expected tree, heads merged into main (in this order)
 variants=(
     "main $TREE_MAIN"
-    "pr75 $TREE_PR75 $PR75_SHA"
+    "pr77 $TREE_PR77 $PR77_SHA"
 )
 
 for v in "${variants[@]}"; do
@@ -65,7 +66,7 @@ for v in "${variants[@]}"; do
         exit "$rc"
     fi
     if grep -q "WARNING: the profiling run found no NNUE network" "$log"; then
-        echo "::error::$name: the profiling run had no network, NNUE was not profiled"
+        echo "::error::$name: the profiling run had no network, nothing was profiled"
         exit 1
     fi
     cp "$engine/src/atomic-$name$ext" "$out/atomic-$name$ext"

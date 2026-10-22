@@ -2,14 +2,16 @@
 """Pool several ci/engine_check.py reports that timed the same binaries.
 
 Each report comes from one runner, which timed every binary once per round, in
-alternating order. For every binary and evaluation mode this takes the ratio of
+alternating order, with one network. For every binary this takes the ratio of
 its speed to the reference binary's speed in the same round, on the same runner,
-and pools those ratios over all the runners of a platform: mean and a 95%
-Student t interval over all rounds. The per-runner means are listed as well, so a
-speed-up that depends on the processor shows up.
+and pools those ratios over all the runners of a platform that used the same
+network: mean and a 95% Student t interval over all rounds. The per-runner means
+and intervals are listed as well, so a speed-up that depends on the processor
+shows up.
 
 Reports are grouped by the name of the directory that holds them, without a
-leading "check-" and a trailing "-<number>": check-linux-2/check.json -> linux.
+leading "check-" and a trailing "-<number>" (check-linux-2/check.json -> linux),
+and by the network label each report carries ("net").
 
 Standard library only.
 """
@@ -47,44 +49,65 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("reports", nargs="+", type=Path)
     ap.add_argument("--md", type=Path, help="append the Markdown tables here")
+    ap.add_argument("--json", type=Path, help="write the pooled numbers here")
     a = ap.parse_args()
 
-    groups: dict[str, list[tuple[Path, dict]]] = {}
+    groups: dict[tuple[str, str], list[tuple[Path, dict]]] = {}
     for path in sorted(a.reports):
-        name = re.sub(r"-\d+$", "", re.sub(r"^check-", "", path.parent.name))
-        groups.setdefault(name, []).append((path, json.loads(path.read_text())))
+        report = json.loads(path.read_text())
+        platform = re.sub(r"-\d+$", "", re.sub(r"^check-", "", path.parent.name))
+        groups.setdefault((platform, report.get("net", "default")), []).append((path, report))
 
     out: list[str] = []
-    for name, reports in sorted(groups.items()):
+    pooled_json: dict = {}
+    for (platform, net), reports in sorted(groups.items()):
         ref = reports[0][1]["reference"]
         labels = list(reports[0][1]["binaries"])
         rounds = sum(r["rounds"] for _, r in reports)
-        out.append(f"### {name}: {len(reports)} runner(s), {rounds} rounds, speed relative to {ref}\n")
+        depths = sorted({r["depth"] for _, r in reports})
+        out.append(f"### {platform}, network {net}: {len(reports)} runner(s), {rounds} rounds at depth "
+                   f"{'/'.join(map(str, depths))}, speed relative to {ref}\n")
         for _, r in reports:
             fails = "; ".join(r.get("failures", [])) or "none"
             out.append(f"- {r['title']}: identity failures: {fails}")
         out.append("")
-        out.append("| binary | bench NNUE / classical | NNUE vs " + ref + " (pooled, 95%) | per runner |"
-                   " classical vs " + ref + " (pooled, 95%) | per runner |")
-        out.append("|---|---|---|---|---|---|")
+        out.append(f"| binary | backend | bench nodes | session | timed-bench nodes | vs {ref} (pooled, 95%) | per runner (95%) |")
+        out.append("|---|---|---|---|---|---|---|")
         for label in labels:
-            sigs = {(r["binaries"][label]["signature"]["nnue"], r["binaries"][label]["signature"]["classical"])
-                    for _, r in reports}
-            sig = " or ".join(f"{n} / {c}" for n, c in sorted(sigs))
-            cells = [label, sig]
-            for mode in ("nnue", "classical"):
-                pooled: list[float] = []
-                per_runner: list[str] = []
-                for _, r in reports:
-                    mine = r["binaries"][label][f"timing_{mode}"]["samples"]
-                    base = r["binaries"][ref][f"timing_{mode}"]["samples"]
-                    ratios = [x / y for x, y in zip(mine, base)]
-                    pooled += ratios
-                    per_runner.append(f"{pct(ratios)[0]:+.2f}")
-                mean, ci = pct(pooled)
-                cells.append(f"{mean:+.2f}% ± {ci:.2f}" if label != ref else "reference")
-                cells.append(", ".join(per_runner) if label != ref else "")
-            out.append("| " + " | ".join(cells) + " |")
+            backends = sorted({b for _, r in reports for b in r["binaries"][label]["signature"]["backends"]})
+            sigs = sorted({r["binaries"][label]["signature"]["nodes"] for _, r in reports})
+            sess = set()
+            for _, r in reports:
+                s = r["binaries"][label].get("session")
+                if not s:
+                    sess.add("-")
+                elif label == ref:
+                    sess.add("reference")
+                else:
+                    sess.add("identical" if s.get("identical_to_reference") else "DIFFERENT")
+            timed = sorted({n for _, r in reports for n in r["binaries"][label]["timing"]["nodes"]})
+            pooled: list[float] = []
+            per_runner: list[str] = []
+            runner_rows: list[dict] = []
+            for _, r in reports:
+                mine = r["binaries"][label]["timing"]["samples"]
+                base = r["binaries"][ref]["timing"]["samples"]
+                ratios = [x / y for x, y in zip(mine, base)]
+                pooled += ratios
+                m, c = pct(ratios)
+                per_runner.append(f"{m:+.2f} ± {c:.2f}")
+                runner_rows.append({"title": r["title"], "mean_pct": m, "ci95_pct": c, "rounds": len(ratios)})
+            mean, ci = pct(pooled)
+            out.append("| " + " | ".join([
+                label, " / ".join(backends), " or ".join(map(str, sigs)), " or ".join(sorted(sess)),
+                " or ".join(map(str, timed)),
+                f"{mean:+.2f}% ± {ci:.2f}" if label != ref else "reference",
+                ", ".join(per_runner) if label != ref else ""]) + " |")
+            if label != ref:
+                pooled_json.setdefault(f"{platform}/{net}", {})[label] = {
+                    "pooled_mean_pct": mean, "pooled_ci95_pct": ci, "rounds": len(pooled),
+                    "per_runner": runner_rows, "bench_nodes": sigs, "timed_nodes": timed,
+                    "backends": backends, "session": sorted(sess)}
         out.append("")
 
     text = "\n".join(out) + "\n"
@@ -92,6 +115,8 @@ def main() -> int:
     if a.md:
         with a.md.open("a", encoding="utf-8") as md:
             md.write(text)
+    if a.json:
+        a.json.write_text(json.dumps(pooled_json, indent=1))
     return 0
 
 

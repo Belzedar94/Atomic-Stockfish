@@ -1,24 +1,32 @@
-# ci/moky-quiet-order-1020
+# ci/moky-refresh-once-1022
 
-Measurement of pull request #75 (resolve the history-table references outside
-the move-scoring loops of `src/movepick.cpp`, compute the low-ply history row
-and divisor once per quiet-scoring call, and accumulate each quiet score locally
-before writing `m.value`) against its base, `main@0c8c6084`. The pull request
-claims the scoring formulas and the move order are unchanged, so it must search
-exactly the nodes main searches. This branch holds no engine source.
+Measurement of pull request #77 (remove the `requires_refresh()` checks from the
+forward accumulator updates of Legacy Atomic V1 and AtomicNNUEV2, because the
+backward scan before them already stops at every accumulator that needs a
+refresh) against its base, `main@8e81598f`. The pull request claims the
+evaluation is unchanged, so it must search exactly the nodes main searches.
+This branch holds no engine source.
 
-- `.github/workflows/moky_quiet_order.yml` checks out main by SHA, merges the
-  pull request head `3f890681` into it (the trees are pinned), and builds the
-  two variants, `main` and `pr75`, with `make profile-build` (GCC) for
-  `linux x86-64-avx2` and `windows x86-64-bmi2` (network embedded). The change
-  is scalar code, so there is no AVX-512 or SSE4.1 build this time.
+- `.github/workflows/moky_refresh_once.yml` checks out main by SHA, merges the
+  pull request head `fb6de014` into it (the trees are pinned), and builds the
+  two variants, `main` and `pr77`, with `make profile-build` (GCC) for
+  `linux x86-64-avx2` and `windows x86-64-bmi2`. The Windows binaries embed the
+  default network; the Linux binaries read it from the run directory under its
+  default name, as in the earlier measurements of this lineage.
 - `ci/build_variants.sh` does the merge and the builds.
 - `ci/engine_check.py` requires both variants to search exactly the nodes main
-  searches (bench signatures 438711 with NNUE and 735506 classical, a
-  worker-like UCI session, every timed bench) and times them in 20 alternating
-  rounds, in ABBA order. The Linux binaries are timed on three runners and the
-  Windows binaries on four.
-- `ci/pool_checks.py` pools the per-round speed ratios of those runners.
+  searches and times them in 20 alternating rounds, in ABBA order. The engine
+  is NNUE-only since #76, so there is one bench signature (438711) and no
+  classical bench; the check also requires every search to report the
+  expected network backend. The Linux binaries are timed on three runners and
+  the Windows binaries on four.
+- The default network (`atomic_run3b_e202_l05.nnue`) is a Legacy Atomic V1
+  network. AtomicNNUEV2 networks are external-only and none is published, so
+  every runner also checks identity (bench, session, a short timed bench) with
+  the synthetic AtomicNNUEV2 fixture that main's own CI generates
+  (`tests/create_synthetic_atomic_v2_nnue.py`, pinned by its sha256).
+- `ci/pool_checks.py` pools the per-round speed ratios of those runners, per
+  platform and network.
 
 The workflows of the earlier measurements on this lineage only run on their own
 branches. Nothing is published from here: binaries and reports are artifacts.
