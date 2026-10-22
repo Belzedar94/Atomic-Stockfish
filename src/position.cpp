@@ -462,6 +462,11 @@ void Position::set_check_info() const {
 
     update_slider_blockers(WHITE);
     update_slider_blockers(BLACK);
+    set_check_squares();
+}
+
+
+void Position::set_check_squares() const {
 
     st->checkSquares.fill(0);
 
@@ -1384,7 +1389,8 @@ void Position::do_null_move(StateInfo& newSt) {
 
     sideToMove = ~sideToMove;
 
-    set_check_info();
+    // Null moves preserve the board and the copied king blockers.
+    set_check_squares();
 
     st->repetition = 0;
     st->stmInCheck = atomic_in_check(sideToMove);
