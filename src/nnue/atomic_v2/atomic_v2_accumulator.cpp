@@ -190,17 +190,10 @@ void AccumulatorStack::evaluate_side(Color                     perspective,
     }
 
     const Square kingSquare = pos.square<KING>(perspective);
+    // The backward scan already ruled out refreshes after base.
     for (usize current = base + 1; current < size; ++current)
-    {
-        if (FeatureSet::requires_refresh(accumulators[current].dirtyPiece, perspective))
-        {
-            refresh(perspective, pos, featureTransformer, mut_latest(), cache);
-            return;
-        }
-
         update(perspective, kingSquare, featureTransformer, accumulators[current - 1],
                accumulators[current]);
-    }
 }
 
 void AccumulatorStack::refresh(Color                     perspective,
