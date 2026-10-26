@@ -54,7 +54,10 @@ static_assert((CORRHIST_BASE_SIZE & (CORRHIST_BASE_SIZE - 1)) == 0,
 // when we update values with the << operator
 template<typename T, int D, bool Shared = false>
 struct StatsEntry {
-    static_assert(std::is_arithmetic_v<T>, "Not an arithmetic type");
+    static_assert(std::is_integral_v<T> && std::is_signed_v<T>, "Not a signed integer type");
+    static_assert(D > 0 && D <= std::numeric_limits<T>::max()
+                    && D <= std::numeric_limits<int>::max() / D,
+                  "D can lead to overflows");
 
    private:
     std::conditional_t<Shared, RelaxedAtomic<T>, T> entry;
@@ -192,6 +195,10 @@ using CorrectionHistory = typename Detail::CorrHistTypedef<T>::type;
 
 using TTMoveHistory = StatsEntry<i16, 8192>;
 
+struct ContinuationHistoryBlock {
+    ContinuationHistory table[2][2];
+};
+
 // Set of histories shared between groups of threads. To avoid excessive
 // cross-node data transfer, histories are shared only between threads
 // on a given NUMA node. The passed size must be a power of two to make
@@ -199,27 +206,31 @@ using TTMoveHistory = StatsEntry<i16, 8192>;
 struct SharedHistories {
     SharedHistories(usize threadCount) :
         correctionHistory(threadCount),
+        continuationHistoryBlock(make_unique_large_page<ContinuationHistoryBlock>()),
         pawnHistory(threadCount) {
         assert((threadCount & (threadCount - 1)) == 0 && threadCount != 0);
         sizeMinus1         = correctionHistory.get_size() - 1;
         pawnHistSizeMinus1 = pawnHistory.get_size() - 1;
     }
 
+    auto& continuationHistory() { return continuationHistoryBlock->table; }
+
     usize get_size() const { return sizeMinus1 + 1; }
 
     // Reset every shared search history to the tuned Worker::clear baseline.
-    // A thread owns only its DynStats range, while continuation histories are
-    // atomic and are reset identically by every worker on the NUMA node.
+    // A thread owns only its DynStats range, while the constant-size
+    // continuation history is initialized by thread 0 of the NUMA node.
     void clear_for_search(usize threadIdx, usize numaTotal) {
         assert(numaTotal != 0 && threadIdx < numaTotal);
-        correctionHistory.clear_range(-6, threadIdx, numaTotal);
-        pawnHistory.clear_range(-1262, threadIdx, numaTotal);
+        correctionHistory.clear_range(-5, threadIdx, numaTotal);
+        pawnHistory.clear_range(-1338, threadIdx, numaTotal);
 
-        for (bool inCheck : {false, true})
-            for (StatsType c : {NoCaptures, Captures})
-                for (auto& to : continuationHistory[inCheck][c])
-                    for (auto& h : to)
-                        h.fill(-552);
+        if (threadIdx == 0)
+            for (bool inCheck : {false, true})
+                for (StatsType c : {NoCaptures, Captures})
+                    for (auto& to : continuationHistory()[inCheck][c])
+                        for (auto& h : to)
+                            h.fill(-586);
     }
 
     auto& pawn_entry(const Position& pos) {
@@ -252,9 +263,9 @@ struct SharedHistories {
         return correctionHistory[pos.non_pawn_key(c) & sizeMinus1];
     }
 
-    UnifiedCorrectionHistory correctionHistory;
-    ContinuationHistory      continuationHistory[2][2];
-    PawnHistory              pawnHistory;
+    UnifiedCorrectionHistory               correctionHistory;
+    LargePagePtr<ContinuationHistoryBlock> continuationHistoryBlock;
+    PawnHistory                            pawnHistory;
 
 
    private:

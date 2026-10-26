@@ -28,6 +28,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include "misc.h"
@@ -42,9 +43,13 @@
 #include "syzygy/tbprobe.h"  // for Stockfish::Depth
 #include "thread.h"
 #include "tt.h"
+#include "types.h"
 #include "ucioption.h"
 
 namespace Stockfish {
+
+constexpr int MaxHashMB = Is64Bit ? 33554432 : 2048;
+extern int    MaxThreads;
 
 class Engine;
 
@@ -71,7 +76,7 @@ class Engine {
 
     ~Engine() { wait_for_search_finished(); }
 
-    u64 perft(const std::string& fen, Depth depth, bool isChess960);
+    std::variant<u64, PositionSetError> perft(const std::string& fen, Depth depth, bool isChess960);
 
     // non blocking call to start searching
     bool go(Search::LimitsType&);
@@ -86,7 +91,7 @@ class Engine {
 
     // modifiers
 
-    void set_numa_config_from_option(const std::string& o);
+    bool set_numa_config_from_option(const std::string& o);
     void resize_threads();
     void set_tt_size(usize mb);
     void set_ponderhit(bool);
@@ -96,6 +101,7 @@ class Engine {
     void set_on_update_full(std::function<void(const InfoFull&)>&&);
     void set_on_iter(std::function<void(const InfoIter&)>&&);
     void set_on_bestmove(std::function<void(std::string_view, std::string_view)>&&);
+    void set_on_start(std::function<void()>&&);
     void set_on_verify_network(std::function<void(std::string_view)>&&);
 
     // network related
@@ -116,7 +122,7 @@ class Engine {
     int get_hashfull(int maxAge = 0) const;
 
     std::string                          fen() const;
-    void                                 flip();
+    std::optional<PositionSetError>      flip();
     std::string                          visualize() const;
     std::vector<std::pair<usize, usize>> get_bound_thread_count_by_numa_node() const;
     std::string                          get_numa_config_as_string() const;

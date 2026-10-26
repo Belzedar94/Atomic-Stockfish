@@ -31,16 +31,19 @@ class ThreadPool;
 struct TTEntry;
 struct Cluster;
 
-// There is only one global hash table for the engine and all its threads. For chess in particular, we even allow racy
-// updates between threads to and from the TT, as taking the time to synchronize access would cost thinking time and
-// thus elo. As a hash table, collisions are possible and may cause chess playing issues (bizarre blunders, faulty mate
-// reports, etc). Fixing these also loses elo; however such risk decreases quickly with larger TT size.
+// There is only one global hash table for the engine and all its threads.
+// For chess in particular, we even allow racy updates between threads to and
+// from the TT, as taking the time to synchronize access would cost thinking
+// time and thus Elo. As a hash table, collisions are possible and may cause
+// chess playing issues (bizarre blunders, faulty mate reports, etc). Fixing
+// these also loses Elo; however such risk decreases with larger TT size.
 //
-// We clearly separate TTData, a local copy of an entry, from TTWriter, which writes to the global table.
+// We clearly separate TTData, a local copy of an entry, from TTWriter, which
+// writes to the global table.
 
 
-// A copy of the data already in an entry (possibly collided). Probes and reads are racy and non-atomic,
-// possibly resulting in inconsistent data.
+// A copy of the data already in an entry (possibly collided). Probes and reads
+// are racy and non-atomic, possibly resulting in inconsistent data.
 struct TTData {
     Move  move;
     Value value, eval;
@@ -57,13 +60,14 @@ struct TTData {
         eval(ev),
         depth(d),
         bound(b),
-        is_pv(pv) {};
+        is_pv(pv) {}
     // clang-format on
 };
 
 
-// This is used to make racy, non-atomic writes to the global TT. Writes are not "guaranteed":
-// for chess reasons, we may decide the new data is less important than the old.
+// This is used to make racy, non-atomic writes to the global TT. Writes are
+// not "guaranteed": for chess reasons, we may decide the new data is less
+// important than the old.
 struct TTWriter {
    public:
     void write(Key k, Value v, bool pv, Bound b, Depth d, Move m, Value ev, u8 generation8);
@@ -71,8 +75,9 @@ struct TTWriter {
 
    private:
     friend class TranspositionTable;
-    TTEntry* entry;
-    TTWriter(TTEntry* tte);
+    Cluster* cluster;
+    int      index;
+    TTWriter(Cluster* cl, int idx);
 };
 
 
@@ -81,24 +86,39 @@ class TranspositionTable {
    public:
     ~TranspositionTable() { aligned_large_pages_free(table); }
 
-    void resize(usize mbSize, ThreadPool& threads);  // Set TT size in MiB
-    void clear(ThreadPool& threads);                 // Re-initialize memory, multithreaded
+    // Set TT size in MiB
+    void resize(usize mbSize, ThreadPool& threads);
+
+    // Re-initialize memory, multithreaded
+    void clear(ThreadPool& threads);
+
     // Re-initialize a private generator TT without dispatching on ThreadPool.
     // The caller must be the sole owner and no search may access it concurrently.
     void clear_for_single_owner();
 
-    void
-    new_search();  // This must be called at the beginning of each root search to track entry aging
-    u8 generation() const;  // The current age, used when writing new data to the TT
-    // Approximate what fraction of entries (permille) have been written to during this root search
+    // Must be called at the beginning of each root search to track entry aging
+    void new_search();
+
+    // The current age, used when writing new data to the TT
+    u8 generation() const;
+
+    // Approximate what fraction of entries (permille) have been written to
+    // during this root search.
     int hashfull(int maxAge = 0) const;
 
-    // `probe` is the primary method: given a board position, we lookup its entry in the table, and return a tuple of:
+    // `probe(key)` is the primary method: given a board position, we lookup
+    //  its entry in the table, and return a tuple of:
     //   1) whether the entry already had data on this position
-    //   2) a copy of the prior data, if any (may be self-inconsistent due to read races)
+    //   2) a copy of the prior data, if any (may be self-inconsistent due to races)
     //   3) a writer object to the entry
     std::tuple<bool, TTData, TTWriter> probe(const Key key) const;
+
     // The hash function; its only external use is memory prefetching
+    Cluster* get_cluster(const Key key) const;
+
+    // The same prefetch address, under the name the Atomic rules code uses.
+    // Position::do_move prefetches with it, and the binaries that link the
+    // rules without tt.o stub it out.
     TTEntry* first_entry(const Key key) const;
 
    private:

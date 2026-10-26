@@ -25,6 +25,7 @@
 #include <cstdlib>
 #include <functional>
 #include <iostream>
+#include <iterator>
 #include <limits>
 #include <map>
 #include <memory>
@@ -39,6 +40,7 @@
 
 #include "misc.h"
 #include "shm.h"
+#include "thread_native.h"
 
 // We support linux very well, but we explicitly do NOT support Android,
 // because there is no affected systems, not worth maintaining.
@@ -69,8 +71,6 @@ using SetThreadSelectedCpuSetMasks_t = BOOL (*)(HANDLE, PGROUP_AFFINITY, USHORT)
 using GetThreadSelectedCpuSetMasks_t = BOOL (*)(HANDLE, PGROUP_AFFINITY, USHORT, PUSHORT);
 
 #endif
-
-#include "misc.h"
 
 namespace Stockfish {
 
@@ -155,15 +155,11 @@ inline std::pair<BOOL, std::vector<USHORT>> get_process_group_affinity() {
           GetProcessGroupAffinity(GetCurrentProcess(), &GroupCount, GroupArrayAligned);
 
         if (status == 0 && GetLastError() != ERROR_INSUFFICIENT_BUFFER)
-        {
             break;
-        }
 
         if (status != 0)
-        {
             return std::make_pair(status,
                                   std::vector(GroupArrayAligned, GroupArrayAligned + GroupCount));
-        }
     }
 
     return std::make_pair(0, std::vector<USHORT>());
@@ -196,9 +192,7 @@ inline WindowsAffinity get_process_affinity() {
         // We expect ERROR_INSUFFICIENT_BUFFER from GetThreadSelectedCpuSetMasks,
         // but other failure is an actual error.
         if (status == 0 && GetLastError() != ERROR_INSUFFICIENT_BUFFER)
-        {
             affinity.isNewDeterminate = false;
-        }
         else if (RequiredMaskCount > 0)
         {
             // If RequiredMaskCount then these affinities were never set, but it's
@@ -209,9 +203,7 @@ inline WindowsAffinity get_process_affinity() {
                                                     RequiredMaskCount, &RequiredMaskCount);
 
             if (status == 0)
-            {
                 affinity.isNewDeterminate = false;
-            }
             else
             {
                 std::set<CpuIndex> cpus;
@@ -299,7 +291,7 @@ inline WindowsAffinity get_process_affinity() {
 
         if (GetThreadSelectedCpuSetMasks_f != nullptr)
         {
-            std::thread th([&]() {
+            NativeThread th = create_native_thread(NativeThreadOptions{}, [&]() {
                 std::set<CpuIndex> cpus;
                 bool               isAffinityFull = true;
 
@@ -360,9 +352,7 @@ inline WindowsAffinity get_process_affinity() {
                 // or is set to all processors so that we correctly produce as
                 // std::nullopt result.
                 if (!isAffinityFull)
-                {
                     affinity.oldApi = std::move(cpus);
-                }
             });
 
             th.join();
@@ -584,9 +574,7 @@ class NumaConfig {
         {
             usize l3BundleSize = 0;
             if (const auto* v = std::get_if<BundledL3Policy>(&policy))
-            {
                 l3BundleSize = v->bundleSize;
-            }
             if (auto l3Cfg =
                   try_get_l3_aware_config(respectProcessAffinity, l3BundleSize, is_cpu_allowed))
             {
@@ -664,7 +652,7 @@ class NumaConfig {
     // ','-separated cpu indices
     // supports "first-last" range syntax for cpu indices
     // For example "0-15,128-143:16-31,144-159:32-47,160-175:48-63,176-191"
-    static NumaConfig from_string(const std::string& s) {
+    static std::optional<NumaConfig> from_string(const std::string& s) {
         NumaConfig cfg = empty();
 
         NumaIndex n = 0;
@@ -676,12 +664,15 @@ class NumaConfig {
                 for (auto idx : indices)
                 {
                     if (!cfg.add_cpu_to_node(n, CpuIndex(idx)))
-                        std::exit(EXIT_FAILURE);
+                        return std::nullopt;
                 }
 
                 n += 1;
             }
         }
+
+        if (n == 0)  // failed to parse any nodes
+            return std::nullopt;
 
         cfg.customAffinity = true;
 
@@ -830,7 +821,7 @@ class NumaConfig {
     }
 
     NumaReplicatedAccessToken bind_current_thread_to_numa_node(NumaIndex n) const {
-        if (n >= nodes.size() || nodes[n].size() == 0)
+        if (n >= nodes.size() || nodes[n].empty())
             std::exit(EXIT_FAILURE);
 
 #if defined(__linux__) && !defined(__ANDROID__)
@@ -953,10 +944,16 @@ class NumaConfig {
 
     template<typename FuncT>
     void execute_on_numa_node(NumaIndex n, FuncT&& f) const {
-        std::thread th([this, &f, n]() {
+        NativeThread th = create_native_thread(NativeThreadOptions{}, [this, &f, n]() {
             bind_current_thread_to_numa_node(n);
             std::forward<FuncT>(f)();
         });
+
+        if (!th.joinable())
+        {
+            std::cerr << "Failed to execute function on NUMA node\n";
+            std::exit(EXIT_FAILURE);
+        }
 
         th.join();
     }
@@ -1041,16 +1038,20 @@ class NumaConfig {
             auto parts = split(ss, "-");
             if (parts.size() == 1)
             {
-                const CpuIndex c = CpuIndex{str_to_size_t(std::string(parts[0]))};
-                indices.emplace_back(c);
+                auto c = str_to_size_t(std::string(parts[0]));
+                if (c.has_value())
+                    indices.emplace_back(*c);
             }
             else if (parts.size() == 2)
             {
-                const CpuIndex cfirst = CpuIndex{str_to_size_t(std::string(parts[0]))};
-                const CpuIndex clast  = CpuIndex{str_to_size_t(std::string(parts[1]))};
-                for (usize c = cfirst; c <= clast; ++c)
+                constexpr usize MaxIndices = 1 << 20;  // prevent oom
+
+                auto cfirst = str_to_size_t(std::string(parts[0]));
+                auto clast  = str_to_size_t(std::string(parts[1]));
+                if (cfirst.has_value() && clast.has_value() && *clast - *cfirst < MaxIndices)
                 {
-                    indices.emplace_back(c);
+                    for (usize c = *cfirst; c <= *clast; ++c)
+                        indices.emplace_back(c);
                 }
             }
         }
@@ -1083,9 +1084,7 @@ class NumaConfig {
         // /sys/devices/system/node/online contains information about active NUMA nodes
         auto nodeIdsStr = read_file_to_string("/sys/devices/system/node/online");
         if (!nodeIdsStr.has_value() || nodeIdsStr->empty())
-        {
             fallback();
-        }
         else
         {
             remove_whitespace(*nodeIdsStr);
@@ -1191,9 +1190,7 @@ class NumaConfig {
                 seenCpus.insert(c);
             }
             if (!domain.cpus.empty())
-            {
                 l3Domains.emplace_back(std::move(domain));
-            }
         }
 
 #elif defined(_WIN64)
@@ -1266,9 +1263,7 @@ class NumaConfig {
             {
                 const NumaIndex dn = n++;
                 for (CpuIndex cpu : d.cpus)
-                {
                     cfg.add_cpu_to_node(dn, cpu);
-                }
             }
         }
         return cfg;

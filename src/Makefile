@@ -126,8 +126,8 @@ HEADERS = atomic_init.h atomic_version.h attacks.h benchmark.h bitboard.h evalua
 		nnue/atomic_v3/incremental_simd_kernels.h nnue/atomic_v3/incremental_backend.h \
 		nnue/layers/affine_transform.h nnue/layers/clipped_relu.h nnue/nnue_accumulator.h \
 		nnue/nnue_architecture.h nnue/nnue_common.h nnue/nnue_dispatcher.h nnue/nnue_feature_transformer.h nnue/simd.h \
-		position.h search.h syzygy/tbprobe.h thread.h thread_win32_osx.h timeman.h \
-		tt.h tune.h types.h uci.h uci_move.h ucioption.h xboard.h perft.h nnue/network.h engine.h score.h numa.h memory.h shm.h shm_linux.h
+		position.h search.h syzygy/tbprobe.h thread.h thread_native.h timeman.h \
+		tt.h tune.h types.h uci.h uci_move.h ucioption.h xboard.h perft.h nnue/network.h engine.h score.h numa.h memory.h shm.h shm_unix.h
 
 OBJS = $(notdir $(SRCS:.cpp=.o))
 ATOMIC_V3_RUNTIME_OBJS = atomic_v3_hm_oracle.o atomic_v3_capture_pair.o \
@@ -800,7 +800,7 @@ ifeq ($(COMP),gcc)
 			LDFLAGS += -m$(bits)
 		endif
 	else ifeq ($(arch),loongarch64)
-		CXXFLAGS += -latomic
+		LDFLAGS += -latomic
 	else ifneq ($(arch),wasm32)
 		CXXFLAGS += -m$(bits)
 		LDFLAGS += -m$(bits)
@@ -871,15 +871,20 @@ ifeq ($(COMP),clang)
 			LDFLAGS += -m$(bits)
 		endif
 	else ifeq ($(arch),loongarch64)
-		CXXFLAGS += -latomic
+		LDFLAGS += -latomic
 	else
 		CXXFLAGS += -m$(bits)
 		LDFLAGS += -m$(bits)
 	endif
 endif
 
+ifneq ($(MACOSX_VERSION_MIN),)
+	mac_target_flags := -mmacosx-version-min=$(MACOSX_VERSION_MIN)
+else
+	mac_target_flags :=
+endif
+
 ifeq ($(TARGET_KERNEL),Darwin)
-	mac_target_flags := -mmacosx-version-min=10.15
 	ifneq ($(arch),any)
 		mac_target_flags += -arch $(arch)
 	endif
@@ -962,35 +967,34 @@ ifeq ($(COMP),gcc)
 		profile_use = clang-profile-use
 		CXXFLAGS += -fconstexpr-steps=500000000
 	else
+		gccmajorv := $(shell $(CXX) -dumpversion 2>/dev/null | cut -f1 -d.)
 		CXXFLAGS += -Wstack-usage=128000 -fno-ipa-cp-clone -fconstexpr-ops-limit=500000000
 	endif
+else ifeq ($(COMP),mingw)
+	CXXFLAGS += -fno-ipa-cp-clone
 endif
 
-### On mingw use Windows threads, otherwise POSIX
-ifneq ($(comp),mingw)
-	CXXFLAGS += -DUSE_PTHREADS
-	# On Android Bionic's C library comes with its own pthread implementation bundled in
-	ifneq ($(OS),Android)
-		# Haiku has pthreads in its libroot, so only link it in on other platforms
-		ifneq ($(KERNEL),Haiku)
-			ifneq ($(COMP),ndk)
-			ifneq ($(arch),wasm32)
-				LDFLAGS += -lpthread
+# On Android Bionic's C library comes with its own pthread implementation bundled in
+ifneq ($(OS),Android)
+	# Haiku has pthreads in its libroot, so only link it in on other platforms
+	ifneq ($(KERNEL),Haiku)
+		ifneq ($(COMP),ndk)
+		ifneq ($(arch),wasm32)
+			LDFLAGS += -lpthread
 
-				add_lrt = yes
-				ifeq ($(target_windows),yes)
-					add_lrt = no
-				endif
-
-				ifeq ($(TARGET_KERNEL),Darwin)
-					add_lrt = no
-				endif
-
-				ifeq ($(add_lrt),yes)
-					LDFLAGS += -lrt
-				endif
+			add_lrt = yes
+			ifeq ($(target_windows),yes)
+				add_lrt = no
 			endif
+
+			ifeq ($(TARGET_KERNEL),Darwin)
+				add_lrt = no
 			endif
+
+			ifeq ($(add_lrt),yes)
+				LDFLAGS += -lrt
+			endif
+		endif
 		endif
 	endif
 endif
@@ -1192,7 +1196,7 @@ endif
 ifeq ($(pext),yes)
 	CXXFLAGS += -DUSE_PEXT
 	ifeq ($(comp),$(filter $(comp),gcc clang mingw icx))
-		CXXFLAGS += -mbmi2 -DUSE_COMPTIME_ATTACKS
+		CXXFLAGS += -mbmi2
 	endif
 endif
 
@@ -1283,7 +1287,16 @@ ifeq ($(debug),no)
 # GCC on some systems.
 	else ifeq ($(comp),gcc)
 		ifeq ($(gccisclang),)
-			CXXFLAGS += -flto -flto-partition=one
+			# lto-partition=balanced is much faster on multi-core systems and
+			# has not been observed to reduce performance for gcc > 13.
+			# It is however not compatible with universal builds.
+			ifeq ($(UNIVERSAL_SLICE),true)
+				CXXFLAGS += -flto -flto-partition=one
+			else ifeq ($(shell test "$(gccmajorv)" -le 13 2>/dev/null && echo true),true)
+				CXXFLAGS += -flto -flto-partition=one
+			else
+				CXXFLAGS += -flto -flto-partition=balanced
+			endif
 			LDFLAGS += $(CXXFLAGS) -flto=jobserver
 		else
 			CXXFLAGS += -flto=full
@@ -1478,7 +1491,7 @@ profile-build: config-sanity objclean profileclean
 endif
 
 # Default network filename, read from evaluate.h's EvalFileDefaultName.
-macos-lipo: NNUE_NET = $(shell grep -oE 'nn-[0-9a-f]+\.nnue' $(CURDIR)/evaluate.h | head -1)
+macos-lipo: NNUE_NET = $(shell grep -oE 'nn-[0-9a-f]+\.nnue' evaluate.h | head -1)
 macos-lipo:
 	@echo ""
 	@echo "Step 1/4. Building x86-64 slice (network shared from Apple-silicon slice) ..."
@@ -1582,7 +1595,10 @@ profileclean:
 	@rm -f ./-lstdc++.res
 
 universalclean:
-	@rm -rf $(TEMP_DIR)
+# On Windows "ln -s" to a directory makes a native directory symlink that rm
+# cannot unlink; rmdir unlinks it without following it. No-op elsewhere.
+	@find "$(TEMP_DIR)" -type l -exec rmdir {} + 2>/dev/null || true
+	@rm -rf "$(TEMP_DIR)"
 	@rm -f universal/network_dump.inc
 
 # Legacy Atomic V1 networks are intentionally external. The engine validates
@@ -1824,8 +1840,10 @@ config-sanity:
 	 test "$(comp)" = "clang" || test "$(comp)" = "armv7a-linux-androideabi16-clang" || \
 	 test "$(comp)" = "aarch64-linux-android21-clang")
 
+ifeq ($(UNIVERSAL_BUILD),false)
 $(EXE): $(OBJS)
 	+$(CXX) -o $@ $(OBJS) $(LDFLAGS)
+endif
 
 $(ATOMIC_DATA_GENERATOR_EXE): $(ATOMIC_DATA_GENERATOR_OBJS)
 	+$(CXX) -o $@ $(ATOMIC_DATA_GENERATOR_OBJS) $(LDFLAGS)
@@ -2163,12 +2181,12 @@ endif
 #   make -j ARCH=x86-64-universal profile-build  # PGO (use RUN_PREFIX for intel SDE)
 #   make -j ARCH=arm64-universal build
 
-TEMP_DIR             := $(CURDIR)/temp_builds
-UNIVERSAL_EXE        := $(CURDIR)/$(EXE)
+TEMP_DIR             := temp_builds
+UNIVERSAL_EXE        := $(EXE)
 
 ifeq ($(UNIVERSAL_BUILD),true)
 
-UNIVERSAL_SRC_DIR    := $(CURDIR)/universal
+UNIVERSAL_SRC_DIR    := universal
 NNUE_EMBED_OBJ       := $(TEMP_DIR)/nnue_embed.o
 NET_SENTINEL         := $(TEMP_DIR)/.net-done
 
@@ -2213,7 +2231,7 @@ else ifeq ($(TARGET_KERNEL),Linux)
 else    # windows
   UNIVERSAL_FINAL_FLAGS += -Wl,--allow-multiple-definition -static
   ifeq ($(COMP),clang)
-    UNIVERSAL_FINAL_FLAGS += -lpthread
+    UNIVERSAL_FINAL_FLAGS += -lpthread -fuse-ld=lld
   endif
 endif
 
@@ -2238,7 +2256,8 @@ endif
 
 EMBED_DIR_SUPPORTED := $(shell echo 'int main(){}' | $(CXX) -x c++ --embed-dir=. -o /dev/null -c - 2>/dev/null && echo 1 || echo 0)
 ifeq ($(EMBED_DIR_SUPPORTED),1)
-  EMBED_DIR = --embed-dir=$(CURDIR)
+  EMBED_DIR = --embed-dir=.
+  ARCH_EMBED_DIR = --embed-dir=../..
 endif
 
 # macos-lipo sets MACOS_X86_SLICE=1 when building the x86-64 slice so that the
@@ -2248,7 +2267,7 @@ ifeq ($(MACOS_X86_SLICE),1)
   SLICE_DEF := -DUNIVERSAL_BINARY_MACOS_X86_SLICE
 endif
 
-arch-cxxflags   = $(EMBED_DIR) -DStockfish=$(call arch-namespace,$(1)) -DUNIVERSAL_BINARY $(SLICE_DEF) \
+arch-cxxflags   = $(ARCH_EMBED_DIR) -DStockfish=$(call arch-namespace,$(1)) -DUNIVERSAL_BINARY $(SLICE_DEF) \
                   $(call arch-defmain,$(1)) -Wno-c++26-extensions -Wno-c23-extensions
 
 UOBJ_TGT ?= universal-object-pgo
@@ -2269,7 +2288,7 @@ $(TEMP_DIR):
 
 # Download nnue files once in src/ (reused by every sub-arch via --embed-dir).
 $(NET_SENTINEL): | $(TEMP_DIR)
-	@cd $(CURDIR) && $(SHELL) ../scripts/net.sh $(EMBED_DIR_SUPPORTED)
+	@cd "$(CURDIR)" && $(SHELL) ../scripts/net.sh $(EMBED_DIR_SUPPORTED)
 	@touch $@
 
 $(NNUE_EMBED_OBJ): $(UNIVERSAL_SRC_DIR)/nnue_embed.cpp $(NET_SENTINEL) | $(TEMP_DIR)
@@ -2282,7 +2301,7 @@ $(UNIVERSAL_ENTRY_OBJ): $(UNIVERSAL_ENTRY_SRC) | $(TEMP_DIR)
 $(TEMP_DIR)/%/.setup: | $(TEMP_DIR)
 	@rm -rf $(TEMP_DIR)/$*
 	@mkdir -p $(TEMP_DIR)/$*
-	@$(foreach f,$(TRACKED_TOP),ln -s $(CURDIR)/$(f) $(TEMP_DIR)/$*/$(f);)
+	@$(foreach f,$(TRACKED_TOP),ln -s ../../$(f) $(TEMP_DIR)/$*/$(f);)
 	@touch $@
 
 # Per-arch stockfish.o
@@ -2290,9 +2309,9 @@ $(TEMP_DIR)/%/.setup: | $(TEMP_DIR)
 
 $(TEMP_DIR)/%/stockfish.o: $(TEMP_DIR)/%/.setup $(NNUE_EMBED_OBJ) $(NET_SENTINEL)
 	+ENV_CXXFLAGS='$(ENV_CXXFLAGS) $(call arch-cxxflags,$*)' \
-	    $(MAKE) -C $(TEMP_DIR)/$* $(UOBJ_TGT) \
-	        ARCH=$* CXX=$(CXX) COMP=$(COMP) \
-	        NNUE_EMBED_OBJ=$(NNUE_EMBED_OBJ)
+	    $(MAKE) -C "$(TEMP_DIR)/$*" $(UOBJ_TGT) \
+		        ARCH=$* CXX="$(CXX)" COMP=$(COMP) UNIVERSAL_SLICE=true \
+	        NNUE_EMBED_OBJ=../nnue_embed.o
 ifeq ($(TARGET_KERNEL),Darwin)
 # Rename the initializer section
 	ld -r -rename_section __DATA __mod_init_func __DATA $(call arch-mac-section,$*) $@ -o $@.tmp
