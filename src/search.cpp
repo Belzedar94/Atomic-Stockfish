@@ -1011,7 +1011,7 @@ Value Search::Worker::search(
 
     // Dive into quiescence search when the depth reaches zero
     if (depth <= 0)
-        return qsearch<PvNode ? PV : NonPV>(pos, ss, alpha, beta);
+        return qsearch<PvNode ? PV : NonPV>(pos, ss, alpha, beta, true);
 
     // Limit the depth if extensions made it too large
     depth = std::min(depth, MAX_PLY - 1);
@@ -1942,7 +1942,7 @@ moves_loop:  // When in check, search starts here
 // See https://www.chessprogramming.org/Horizon_Effect
 // and https://www.chessprogramming.org/Quiescence_Search
 template<NodeType nodeType>
-Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta) {
+Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta, bool firstPly) {
 
     static_assert(nodeType != Root);
     constexpr bool PvNode = nodeType == PV;
@@ -2165,6 +2165,38 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
             }
         }
     }
+
+    // When seeking a mate, the first quiescence ply also tries the quiet checks
+    // that do not lose material: forcing moves that reach a mate at the horizon.
+    if (firstPly && seekMate && !ss->inCheck && bestValue < beta)
+        for (Move move : MoveList<QUIETS>(pos))
+        {
+            if (!pos.gives_check(move) || !pos.legal(move) || !pos.see_ge(move, 0))
+                continue;
+
+            moveCount++;
+            do_move(pos, move, st, true, ss);
+            value = -qsearch<nodeType>(pos, ss + 1, -beta, -alpha);
+            undo_move(pos, move);
+
+            if (value > bestValue)
+            {
+                bestValue = value;
+
+                if (value > alpha)
+                {
+                    bestMove = move;
+
+                    if (PvNode)
+                        ss->pv->update(move, (ss + 1)->pv);
+
+                    if (value < beta)
+                        alpha = value;
+                    else
+                        break;
+                }
+            }
+        }
 
     // Step 9. Check for mate and stalemate
     // All legal moves have been searched. A special case: if we are
