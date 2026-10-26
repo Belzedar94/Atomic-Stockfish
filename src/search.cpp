@@ -1308,8 +1308,10 @@ Value Search::Worker::search(
     }
 
     // Step 9. Null move search with verification search
+    // A blast check is a check: passing lets the opponent explode our king.
     if (cutNode && ss->staticEval >= beta - 14 * depth - 45 * improving + 374 && !excludedMove
-        && pos.non_pawn_material(us) && ss->ply >= nmpMinPly && !is_loss(beta))
+        && pos.non_pawn_material(us) && ss->ply >= nmpMinPly && !is_loss(beta)
+        && !pos.under_blast_threat())
     {
         assert((ss - 1)->currentMove != Move::null());
 
