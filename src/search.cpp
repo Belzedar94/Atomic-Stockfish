@@ -1622,6 +1622,11 @@ moves_loop:  // When in check, search starts here
                 extension = -2;
         }
 
+        // When seeking a mate, extend checks far from the horizon, as the
+        // Stockfish 16 search of MultiVariant-Stockfish does at every node.
+        if (seekMate && givesCheck && depth > 9 && ss->ply < 2 * rootDepth)
+            extension = 1;
+
         u64 nodeCount = rootNode ? u64(nodes) : 0;
 
         // Step 16. Make the move
