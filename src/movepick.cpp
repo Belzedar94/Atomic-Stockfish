@@ -230,6 +230,15 @@ ExtMove* MovePicker::score(const MoveList<Type>& ml) {
         const auto* lowPlyRow = ply < LOW_PLY_HISTORY_SIZE ? &(*lowPlyHistory)[ply] : nullptr;
         const int   lowPlyDiv = 1 + ply;
 
+        // Enemy pieces next to the enemy king (and not next to ours): attacking
+        // one threatens a capture that explodes the king, the Atomic check.
+        const Bitboard blastTargets =
+          pos.has_king(us) && pos.has_king(~us)
+            ? Attacks::attacks_bb<KING>(pos.square<KING>(~us)) & pos.pieces(~us)
+                & ~Attacks::attacks_bb<KING>(pos.square<KING>(us))
+            : Bitboard(0);
+        const Bitboard occupied = pos.pieces();
+
         for (auto move : ml)
         {
             ExtMove& m = *it++;
@@ -249,8 +258,11 @@ ExtMove* MovePicker::score(const MoveList<Type>& ml) {
             value += cont3[pc][to];
             value += cont5[pc][to];
 
-            // bonus for checks
-            value += ((pos.check_squares(pt) & to) && pos.see_ge(m, -75)) * 16384;
+            // bonus for checks and for quiet threats to explode the enemy king
+            const bool blastThreat =
+              blastTargets && pt != KING
+              && (Attacks::attacks_bb(pc, to, (occupied ^ from) | to) & blastTargets);
+            value += (((pos.check_squares(pt) & to) || blastThreat) && pos.see_ge(m, -75)) * 16384;
 
             // penalty for moving to a square threatened by a lesser piece
             // or bonus for escaping an attack by a lesser piece.
