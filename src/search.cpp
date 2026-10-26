@@ -1459,6 +1459,9 @@ moves_loop:  // When in check, search starts here
         givesCheck           = pos.gives_check(move);
         const bool atomicWin = pos.atomic_wins(move);
 
+        // A check, or a quiet move that threatens to explode the enemy king
+        const bool forcing = givesCheck || (seekMate && !capture && pos.creates_blast_threat(move));
+
         // Calculate new depth for this move
         newDepth = depth - 1;
 
@@ -1670,9 +1673,11 @@ moves_loop:  // When in check, search starts here
         if (allNode)
             r += r * 272 / (256 * depth + 285);
 
-        // When seeking a mate, reduce non-checking moves more and checking moves less
-        if (seekMate && r > 0)
-            r += (givesCheck ? -r : r) / 4;
+        // When seeking a mate, halve the reduction of forcing moves. Atomic mates
+        // are built from quiet threats as much as from checks, so the other moves
+        // keep their reduction.
+        if (seekMate && r > 0 && forcing)
+            r -= r / 2;
 
         // Step 17. Late moves reduction / extension (LMR)
         if (depth >= 2 && moveCount > 1)

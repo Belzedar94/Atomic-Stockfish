@@ -784,6 +784,30 @@ bool Position::under_blast_threat() const {
 }
 
 
+// Tests whether a quiet move creates an Atomic "blast threat": afterwards the
+// moved piece attacks an enemy piece next to the enemy king, so capturing it
+// next move explodes the king. It is the Atomic counterpart of a check. Kings
+// never capture, and a capture next to our own king would explode it too.
+bool Position::creates_blast_threat(Move m) const {
+
+    if (m.type_of() != NORMAL || capture(m) || !has_king(sideToMove) || !has_king(~sideToMove))
+        return false;
+
+    const Color  us   = sideToMove;
+    const Square from = m.from_sq();
+    const Square to   = m.to_sq();
+    const Piece  pc   = piece_on(from);
+
+    if (type_of(pc) == KING)
+        return false;
+
+    const Bitboard targets = attacks_bb<KING>(square<KING>(~us)) & pieces(~us)
+                           & ~attacks_bb<KING>(square<KING>(us));
+
+    return targets && (attacks_bb(pc, to, (pieces() ^ from) | to) & targets);
+}
+
+
 // Takes a random move and tests whether the move is
 // pseudo-legal. It is used to validate moves from TT that can be corrupted
 // due to SMP concurrent access or hash position key aliasing.
