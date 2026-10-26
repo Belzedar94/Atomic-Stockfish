@@ -1514,8 +1514,10 @@ moves_loop:  // When in check, search starts here
                             + (*contHist[1])[movedPiece][move.to_sq()]
                             + active_shared_history().pawn_entry(pos)[movedPiece][move.to_sq()];
 
-                // Continuation history based pruning
-                if (history < -4313 * depth)
+                // Continuation history based pruning. When seeking a mate it
+                // keeps the old depth limit: mating quiet moves rarely have a
+                // good history.
+                if ((!seekMate || lmrDepth < 6) && history < -4313 * depth)
                     continue;
 
                 history += 64 * mainHistory[us][move.raw()] / 32;
