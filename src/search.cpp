@@ -1459,6 +1459,10 @@ moves_loop:  // When in check, search starts here
         givesCheck           = pos.gives_check(move);
         const bool atomicWin = pos.atomic_wins(move);
 
+        // When seeking a mate, a quiet move that threatens to explode the enemy
+        // king is as forcing as a check.
+        const bool forcing = givesCheck || (seekMate && !capture && pos.creates_blast_threat(move));
+
         // Calculate new depth for this move
         newDepth = depth - 1;
 
@@ -1482,7 +1486,7 @@ moves_loop:  // When in check, search starts here
             // Reduced depth of the next LMR search
             int lmrDepth = newDepth - r / 1024;
 
-            if (capture || givesCheck)
+            if (capture || forcing)
             {
                 Piece capturedPiece = pos.piece_on(move.to_sq());
                 int   captHist = captureHistory[movedPiece][move.to_sq()][type_of(capturedPiece)];
@@ -1670,9 +1674,9 @@ moves_loop:  // When in check, search starts here
         if (allNode)
             r += r * 272 / (256 * depth + 285);
 
-        // When seeking a mate, reduce non-checking moves more and checking moves less
+        // When seeking a mate, reduce non-forcing moves more and forcing moves less
         if (seekMate && r > 0)
-            r += (givesCheck ? -r : r) / 4;
+            r += (forcing ? -r : r) / 4;
 
         // Step 17. Late moves reduction / extension (LMR)
         if (depth >= 2 && moveCount > 1)
