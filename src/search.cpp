@@ -1622,6 +1622,15 @@ moves_loop:  // When in check, search starts here
                 extension = -2;
         }
 
+        // When seeking a mate, extend forcing moves: checks and quiet moves that
+        // threaten to explode the enemy king. Decisive Atomic lines are chains of
+        // them with few replies, so the extension reaches the mate without
+        // widening the tree.
+        if (seekMate && ss->ply < 2 * rootDepth
+            && (givesCheck || (!capture && pos.creates_blast_threat(move)))
+            && pos.see_ge(move, -75))
+            extension = 1;
+
         u64 nodeCount = rootNode ? u64(nodes) : 0;
 
         // Step 16. Make the move

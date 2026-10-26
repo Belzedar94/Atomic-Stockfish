@@ -155,6 +155,7 @@ class Position {
     bool  stm_in_check() const;
     bool  atomic_wins(Move m) const;
     bool  under_blast_threat() const;
+    bool  creates_blast_threat(Move m) const;
     bool  has_legal_quiet() const;
     bool  has_legal_move() const;
     Piece moved_piece(Move m) const;
