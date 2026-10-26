@@ -32,6 +32,15 @@ HINT_RE = re.compile(r"^Hint: ([a-h][1-8][a-h][1-8][qrbn]?)$")
 FEN_RE = re.compile(r"^Fen:\s+(.+)$")
 ANALYSIS_RE = re.compile(r"^\d+\s+-?\d+\s+\d+\s+\d+(?:\s+.*)?$")
 RESULT_RE = re.compile(r"^(?:1-0|0-1|1/2-1/2) \{.+\}$")
+# The ponder fixtures need the depth-limited search to come back with a ponder
+# move. A shallow search does not always give one: once alpha improves, the
+# remaining root moves are searched shallower, and if one of them becomes best
+# its PV can be a single move with no TT entry to extend it. Depth 2 stopped
+# being enough with the spsa90 constants and depth 3 with the October 2026
+# upstream merge (AtomicNNUEV2 fixture from the start position). Depth 5 gives a
+# ponder move after both 1.e4 and the start position with the AtomicNNUEV2,
+# AtomicNNUEV3 and material fixture networks.
+PONDER_FIXTURE_DEPTH = 5
 
 
 class XBoardProcess:
@@ -357,8 +366,9 @@ def run(engine: Path, timeout: float, eval_file: Path | None, search_net: Path) 
         # completed search. A thinking line after ``move`` and before any new
         # board command proves this is a real background ponder, not a restart
         # deferred until usermove. ``hint`` exposes that exact predicted move.
+        # The search must come back with a ponder move: see PONDER_FIXTURE_DEPTH.
         xb.send("new")
-        xb.send("sd 3")
+        xb.send(f"sd {PONDER_FIXTURE_DEPTH}")
         xb.send("hard")
         xb.send("go")
         xb.expect_move()
@@ -383,16 +393,11 @@ def run(engine: Path, timeout: float, eval_file: Path | None, search_net: Path) 
             raise AssertionError("ponderhit sequence did not commit exactly three plies")
 
         # The fixture needs a real background ponder to miss, so the search has
-        # to come back with a ponder move. Depth 2 used to return a two-ply PV
-        # here; with the spsa90 constants the depth-2 PV in this position is a
-        # single move, which leaves nothing to ponder on. With the upstream
-        # search merged on top of the Atomic constants the depth-3 PV is a
-        # single move as well (once alpha improves, the remaining root moves
-        # are searched two plies shallower), so the fixture uses depth 4.
+        # to come back with a ponder move (see PONDER_FIXTURE_DEPTH).
         def start_live_ponder() -> str:
             xb.send("new")
             xb.send("hard")
-            xb.send("sd 4")
+            xb.send(f"sd {PONDER_FIXTURE_DEPTH}")
             xb.send("usermove e2e4")
             _, engine_output = xb.expect_move()
             if any("Illegal move" in line for line in engine_output):
