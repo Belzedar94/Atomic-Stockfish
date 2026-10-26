@@ -105,7 +105,7 @@ def test_checked_in_lock_is_structurally_valid() -> None:
     )
     assert (
         lock.profiles["strong-local"].data_sha256
-        == "d95f5180c7d6319e8d838752b49c51f611c311aef728c30b42c2df02c2071639"
+        == "80b85e11e1a91c8247c9dc7d811d81647f18de452815fe68cf1d09683a972a49"
     )
     assert (
         lock.profiles["synthetic-ci"].data_sha256
