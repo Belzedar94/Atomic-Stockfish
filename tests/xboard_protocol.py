@@ -385,12 +385,14 @@ def run(engine: Path, timeout: float, eval_file: Path | None, search_net: Path) 
         # The fixture needs a real background ponder to miss, so the search has
         # to come back with a ponder move. Depth 2 used to return a two-ply PV
         # here; with the spsa90 constants the depth-2 PV in this position is a
-        # single move, which leaves nothing to ponder on. Depth 3 is the depth
-        # the autonomous-ponder check above already relies on.
+        # single move, which leaves nothing to ponder on. With the upstream
+        # search merged on top of the Atomic constants the depth-3 PV is a
+        # single move as well (once alpha improves, the remaining root moves
+        # are searched two plies shallower), so the fixture uses depth 4.
         def start_live_ponder() -> str:
             xb.send("new")
             xb.send("hard")
-            xb.send("sd 3")
+            xb.send("sd 4")
             xb.send("usermove e2e4")
             _, engine_output = xb.expect_move()
             if any("Illegal move" in line for line in engine_output):

@@ -95,9 +95,9 @@ def test_private_v3_histories_use_the_canonical_worker_baseline() -> None:
     makefile = (TESTS_DIR.parent / "src" / "Makefile").read_text(encoding="utf-8")
 
     assert "void clear_for_search(usize threadIdx, usize numaTotal)" in history
-    assert "correctionHistory.clear_range(-5, threadIdx, numaTotal);" in history
-    assert "pawnHistory.clear_range(-1338, threadIdx, numaTotal);" in history
-    assert "h.fill(-586);" in history
+    assert "correctionHistory.clear_range(-6, threadIdx, numaTotal);" in history
+    assert "pawnHistory.clear_range(-1262, threadIdx, numaTotal);" in history
+    assert "h.fill(-552);" in history
     assert "clear_for_new_game(sharedHistory, numaThreadIdx, numaTotal);" in search
     tt_reset = generator.index("privateTt.clear_for_single_owner();")
     history_reset = generator.index("worker.clear_training_game(privateHistory);")
@@ -121,17 +121,17 @@ def test_private_v3_histories_use_the_canonical_worker_baseline() -> None:
     # `make tune=yes`, and the same 2736 either way.
     for local_reset in (
         "mainHistory.fill(-5);",
-        "captureHistory.fill(-742);",
+        "captureHistory.fill(-699);",
         "ttMoveHistory = 0;",
         "h.fill(5);",
         "reductions[i] = int(LmrLogScale / 128.0 * std::log(i));",
         "TUNABLE_INT LmrLogScale          = 2736;",
         "accumulator.rebind(network[numaAccessToken]);",
-        "lowPlyHistory.fill(102);",
+        "lowPlyHistory.fill(100);",
     ):
         assert local_reset in search
     assert "2834" not in search
-    for baseline in ("clear_range(-5", "clear_range(-1338", "fill(-586"):
+    for baseline in ("clear_range(-6", "clear_range(-1262", "fill(-552"):
         assert baseline not in search
         assert baseline not in generator
 

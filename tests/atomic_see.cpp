@@ -992,23 +992,23 @@ bool expect_shared_search_history_baseline() {
     histories->clear_for_search(0, 1);
 
     const auto correction_matches = [](const auto& bundle) {
-        return i16(bundle.pawn) == -5 && i16(bundle.minor) == -5 && i16(bundle.nonPawnWhite) == -5
-            && i16(bundle.nonPawnBlack) == -5;
+        return i16(bundle.pawn) == -6 && i16(bundle.minor) == -6 && i16(bundle.nonPawnWhite) == -6
+            && i16(bundle.nonPawnBlack) == -6;
     };
 
     bool ok =
       correction_matches(histories->correctionHistory[0][WHITE])
       && correction_matches(
         histories->correctionHistory[histories->correctionHistory.get_size() - 1][BLACK])
-      && i16(histories->pawnHistory[0][NO_PIECE][SQ_A1]) == -1338
-      && i16(histories->pawnHistory[histories->pawnHistory.get_size() - 1][B_KING][SQ_H8]) == -1338;
+      && i16(histories->pawnHistory[0][NO_PIECE][SQ_A1]) == -1262
+      && i16(histories->pawnHistory[histories->pawnHistory.get_size() - 1][B_KING][SQ_H8]) == -1262;
 
     auto& continuationHistory = histories->continuationHistory();
     for (bool inCheck : {false, true})
         for (StatsType captures : {NoCaptures, Captures})
             ok &=
-              i16(continuationHistory[inCheck][captures][NO_PIECE][SQ_A1][NO_PIECE][SQ_A1]) == -586
-              && i16(continuationHistory[inCheck][captures][B_KING][SQ_H8][B_KING][SQ_H8]) == -586;
+              i16(continuationHistory[inCheck][captures][NO_PIECE][SQ_A1][NO_PIECE][SQ_A1]) == -552
+              && i16(continuationHistory[inCheck][captures][B_KING][SQ_H8][B_KING][SQ_H8]) == -552;
 
     if (!ok)
         std::cerr << "FAIL shared search histories: tuned baseline differs\n";

@@ -222,15 +222,15 @@ struct SharedHistories {
     // continuation history is initialized by thread 0 of the NUMA node.
     void clear_for_search(usize threadIdx, usize numaTotal) {
         assert(numaTotal != 0 && threadIdx < numaTotal);
-        correctionHistory.clear_range(-5, threadIdx, numaTotal);
-        pawnHistory.clear_range(-1338, threadIdx, numaTotal);
+        correctionHistory.clear_range(-6, threadIdx, numaTotal);
+        pawnHistory.clear_range(-1262, threadIdx, numaTotal);
 
         if (threadIdx == 0)
             for (bool inCheck : {false, true})
                 for (StatsType c : {NoCaptures, Captures})
                     for (auto& to : continuationHistory()[inCheck][c])
                         for (auto& h : to)
-                            h.fill(-586);
+                            h.fill(-552);
     }
 
     auto& pawn_entry(const Position& pos) {
