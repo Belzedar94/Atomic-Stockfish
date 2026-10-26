@@ -24,7 +24,7 @@
       "records": 8,
       "seed": "20260711",
       "source_net_sha256": "99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f92a04a6",
-      "data_sha256": "d95f5180c7d6319e8d838752b49c51f611c311aef728c30b42c2df02c2071639",
+      "data_sha256": "fa519fc1711c9926a9b5c4da57c57408d1370f76174d1fda14b23b0ea7132c83",
       "build_recipes": {
         "tools": "strong-local-tools-windows-v2",
         "trainer": "strong-local-trainer-windows-v1",
@@ -38,7 +38,7 @@
       "seed": "20260711",
       "synthetic_model_seed": 20260711,
       "source_net_sha256": "9cf054ca00b82ab53a34473de52d1104aeddaa19b2e7b24091b5e613af485985",
-      "data_sha256": "60308342207b66da3d07db5a7aee937837d0ca107a7a876150aadf911e0c1484",
+      "data_sha256": "980528227e109686c00234dd664abc6ca9fb4ffc0bf766fec8d60ba5fb4b2778",
       "build_recipes": {
         "tools": "synthetic-ci-tools-linux-v2",
         "trainer": "synthetic-ci-trainer-linux-v1",

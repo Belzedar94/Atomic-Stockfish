@@ -105,11 +105,11 @@ def test_checked_in_lock_is_structurally_valid() -> None:
     )
     assert (
         lock.profiles["strong-local"].data_sha256
-        == "d95f5180c7d6319e8d838752b49c51f611c311aef728c30b42c2df02c2071639"
+        == "fa519fc1711c9926a9b5c4da57c57408d1370f76174d1fda14b23b0ea7132c83"
     )
     assert (
         lock.profiles["synthetic-ci"].data_sha256
-        == "60308342207b66da3d07db5a7aee937837d0ca107a7a876150aadf911e0c1484"
+        == "980528227e109686c00234dd664abc6ca9fb4ffc0bf766fec8d60ba5fb4b2778"
     )
     assert lock.profiles["synthetic-ci"].hashes_resolved is True
     assert lock.profiles["strong-local"].build_recipes["tools"] == (
