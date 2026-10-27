@@ -2332,6 +2332,12 @@ endif  # UNIVERSAL_BUILD
 # by its OpenBench network SHA. Copy it to the canonical short name inside the
 # ephemeral build checkout, then embed it so the moved executable has no
 # dependency on a temporary source path.
+#
+# The embedding define goes through ENV_CXXFLAGS, which every compile of every
+# profile recipe reads. EXTRAPROFILEFLAGS only reaches the GCC recipes: with
+# CXX=clang++ the "gcc is really clang" check picks clang-profile-make/use,
+# which drop it, so the binary came out without the network and failed its
+# bench once OpenBench moved it (a clang 23 worker, 27-Oct-2026).
 
 OPENBENCH_NET = atomic_run3b_e202_l05.nnue
 
@@ -2352,7 +2358,8 @@ else
 	@mv "$(OPENBENCH_NET).tmp" "$(OPENBENCH_NET)"
 	+$(MAKE) profile-build EXE="$(EXE)" CXX="$(CXX)" \
 		ARCH=native COMP=$(OPENBENCH_COMP) \
-		EXTRAPROFILEFLAGS='$(EXTRACXXFLAGS) -DATOMIC_NNUE_EMBEDDING'
+		ENV_CXXFLAGS='$(ENV_CXXFLAGS) -DATOMIC_NNUE_EMBEDDING' \
+		EXTRAPROFILEFLAGS='$(EXTRACXXFLAGS)'
 endif
 
 # Distributed generation needs the isolated generator, not the playing-engine
