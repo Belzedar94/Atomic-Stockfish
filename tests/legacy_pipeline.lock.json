@@ -24,7 +24,7 @@
       "records": 8,
       "seed": "20260711",
       "source_net_sha256": "99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f92a04a6",
-      "data_sha256": "d95f5180c7d6319e8d838752b49c51f611c311aef728c30b42c2df02c2071639",
+      "data_sha256": "80b85e11e1a91c8247c9dc7d811d81647f18de452815fe68cf1d09683a972a49",
       "build_recipes": {
         "tools": "strong-local-tools-windows-v2",
         "trainer": "strong-local-trainer-windows-v1",

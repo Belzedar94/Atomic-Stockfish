@@ -37,13 +37,10 @@
 #include <utility>
 #include <variant>
 
-#if defined(__linux__) && !defined(__ANDROID__)
-    #include "shm_linux.h"
-#endif
-
-#if defined(__ANDROID__)
-    #include <limits.h>
-    #define SF_MAX_SEM_NAME_LEN NAME_MAX
+#if (defined(__linux__) && !defined(__ANDROID__)) || defined(__APPLE__) || defined(__FreeBSD__) \
+  || defined(__OpenBSD__) || defined(__NetBSD__) || defined(__DragonFly__)
+    #define USE_UNIX_SHM
+    #include "shm_unix.h"
 #endif
 
 #include "types.h"
@@ -204,7 +201,7 @@ class SharedMemoryBackend {
     static constexpr DWORD IS_INITIALIZED_VALUE = 1;
 
     SharedMemoryBackend() :
-        status(Status::NotInitialized) {};
+        status(Status::NotInitialized) {}
 
     SharedMemoryBackend(const std::string& shm_name, const T& value) :
         status(Status::NotInitialized) {
@@ -282,7 +279,7 @@ class SharedMemoryBackend {
         const usize total_size = sizeof(T) + sizeof(IS_INITIALIZED_VALUE);
 
         // Try allocating with large pages first.
-        hMapFile = windows_try_with_large_page_priviliges(
+        hMapFile = windows_try_with_large_page_privileges(
           [&](usize largePageSize) {
               const usize total_size_aligned =
                 (total_size + largePageSize - 1) / largePageSize * largePageSize;
@@ -408,7 +405,7 @@ class SharedMemoryBackend {
     std::string last_error_message;
 };
 
-#elif defined(__linux__) && !defined(__ANDROID__)
+#elif defined(USE_UNIX_SHM)
 
 template<typename T>
 class SharedMemoryBackend {
@@ -423,7 +420,7 @@ class SharedMemoryBackend {
         return reinterpret_cast<void*>(const_cast<T*>(ptr));
     }
 
-    bool is_valid() const { return shm1 && shm1->is_open() && shm1->is_initialized(); }
+    bool is_valid() const { return shm1 && shm1->is_mapped() && shm1->is_serving(); }
 
     SystemWideSharedConstantAllocationStatus get_status() const {
         return is_valid() ? SystemWideSharedConstantAllocationStatus::SharedMemory
@@ -434,11 +431,11 @@ class SharedMemoryBackend {
         if (!shm1)
             return "Shared memory not initialized";
 
-        if (!shm1->is_open())
-            return "Shared memory is not open";
+        if (!shm1->is_mapped())
+            return "Shared memory is not mapped";
 
-        if (!shm1->is_initialized())
-            return "Not initialized";
+        if (!shm1->is_serving())
+            return "Shared memory is not serving to other processes";
 
         return std::nullopt;
     }
@@ -531,10 +528,11 @@ struct SystemWideSharedConstant {
                       discriminator);
         std::string shm_name = buf;
 
-#if defined(__linux__) && !defined(__ANDROID__)
+#if defined(USE_UNIX_SHM)
         // POSIX shared memory names must start with a slash.
         shm_name = "/sf_" + createHashString(shm_name);
 
+        // hash name and make sure it is not longer than SF_MAX_SEM_NAME_LEN
         if (shm_name.size() > SF_MAX_SEM_NAME_LEN)
             shm_name = shm_name.substr(0, SF_MAX_SEM_NAME_LEN - 1);
 #endif

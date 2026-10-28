@@ -18,6 +18,7 @@
 #include <limits>
 #include <type_traits>
 #include <utility>
+#include <variant>
 
 #include "engine.h"
 #include "misc.h"
@@ -788,9 +789,12 @@ void XBoardProtocol::process_command(const std::string& token, std::istringstrea
         else
         {
             stop_search(true);
-            const auto nodes =
+            const auto result =
               engine.perft(engine.fen(), depth, engine.get_options()["UCI_Chess960"]);
-            sync_cout << "Nodes searched: " << nodes << sync_endl;
+            if (const auto* error = std::get_if<PositionSetError>(&result))
+                sync_cout << "Error (perft): " << error->what() << sync_endl;
+            else
+                sync_cout << "Nodes searched: " << std::get<u64>(result) << sync_endl;
         }
     }
     else

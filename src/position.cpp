@@ -113,8 +113,8 @@ inline int H1(Key h) { return h & 0x1fff; }
 inline int H2(Key h) { return (h >> 16) & 0x1fff; }
 
 // Cuckoo tables with Zobrist hashes of valid reversible moves, and the moves themselves
-std::array<Key, 8192>  cuckoo;
-std::array<Move, 8192> cuckooMove;
+static std::array<Key, 8192>  cuckoo;
+static std::array<Move, 8192> cuckooMove;
 
 // Initializes at startup the various arrays used to compute hash keys
 void Position::init() {
@@ -306,7 +306,7 @@ Position::set(const string& fenStr, bool isChess960, StateInfo* si) {
     // if an inner rook is associated with the castling right, the castling tag is
     // replaced by the file letter of the involved rook, as for the Shredder-FEN.
     //
-    // NOTE: Due to the prevalnce of incorrect (or missing) castling rights the
+    // NOTE: Due to the prevalence of incorrect (or missing) castling rights the
     // validation is less strict. However, incorrect castling rights are still sanitized.
     int num_castling_rights = 0;
     for (;;)
@@ -416,7 +416,7 @@ Position::set(const string& fenStr, bool isChess960, StateInfo* si) {
     ss >> std::skipws >> st->rule50 >> gamePly;
 
     // Normally values larger than 99 would be pointless but we do support ignoring 50 move rule for TB purposes.
-    // Limit at 2**15 as it's used multiplicativly with position evaluation during search.
+    // Limit at 2**15 as it's used multiplicatively with position evaluation during search.
     if (st->rule50 < 0 || st->rule50 > 32767)
         return PositionSetError("Unsupported position. Rule50 counter out of range.");
 
@@ -1618,8 +1618,6 @@ bool Position::has_repeated() const {
 // This function accurately matches the outcome of is_draw() over all legal moves.
 bool Position::upcoming_repetition(int ply) const {
 
-    int j;
-
     int end = std::min(st->rule50, st->pliesFromNull);
 
     if (end < 3)
@@ -1639,7 +1637,8 @@ bool Position::upcoming_repetition(int ply) const {
             continue;
 
         Key moveKey = originalKey ^ stp->key;
-        if ((j = H1(moveKey), cuckoo[j] == moveKey) || (j = H2(moveKey), cuckoo[j] == moveKey))
+
+        if (int j = H1(moveKey); cuckoo[j] == moveKey || (j = H2(moveKey), cuckoo[j] == moveKey))
         {
             Move   move = cuckooMove[j];
             Square s1   = move.from_sq();
@@ -1663,7 +1662,7 @@ bool Position::upcoming_repetition(int ply) const {
 
 // Flips position with the white and black sides reversed. This
 // is only useful for debugging e.g. for finding evaluation symmetry bugs.
-void Position::flip() {
+std::optional<PositionSetError> Position::flip() {
 
     string            f, token;
     std::stringstream ss(fen());
@@ -1684,7 +1683,7 @@ void Position::flip() {
     f += token + " ";
 
     std::transform(f.begin(), f.end(), f.begin(),
-                   [](char c) { return char(islower(c) ? toupper(c) : tolower(c)); });
+                   [](unsigned char c) { return char(islower(c) ? toupper(c) : tolower(c)); });
 
     ss >> token;  // En passant square
     f += (token == "-" ? token : token.replace(1, 1, token[1] == '3' ? "6" : "3"));
@@ -1692,9 +1691,7 @@ void Position::flip() {
     std::getline(ss, token);  // Half and full moves
     f += token;
 
-    set(f, is_chess960(), st);
-
-    assert(pos_is_ok());
+    return set(f, is_chess960(), st);
 }
 
 

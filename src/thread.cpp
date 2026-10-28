@@ -23,6 +23,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <deque>
+#include <iostream>
 #include <map>
 #include <memory>
 #include <string>
@@ -45,17 +46,23 @@ namespace Stockfish {
 
 // Constructor launches the thread and waits until it goes to sleep
 // in idle_loop(). Note that 'searching' and 'exit' should be already set.
-Thread::Thread(Search::SharedState&                    sharedState,
-               std::unique_ptr<Search::ISearchManager> sm,
-               usize                                   n,
-               usize                                   numaN,
-               usize                                   totalNumaCount,
-               OptionalThreadToNumaNodeBinder          binder) :
+Thread::Thread(Search::SharedState&                   sharedState,
+               std::unique_ptr<Search::SearchManager> sm,
+               usize                                  n,
+               usize                                  numaN,
+               usize                                  totalNumaCount,
+               OptionalThreadToNumaNodeBinder         binder) :
     idx(n),
     idxInNuma(numaN),
     totalNuma(totalNumaCount),
-    nthreads(sharedState.options["Threads"]),
-    stdThread(&Thread::idle_loop, this) {
+    stdThread(
+      create_native_thread(NativeThreadOptions{}.setLargeStack(true), &Thread::idle_loop, this)) {
+
+    if (!stdThread.joinable())
+    {
+        std::cerr << "Failed to create search thread\n";
+        std::exit(EXIT_FAILURE);
+    }
 
     wait_for_search_finished();
 
@@ -219,10 +226,8 @@ void ThreadPool::set(const NumaConfig&                           numaConfig,
             const usize     threadId      = threads.size();
             const NumaIndex numaId        = doBindThreads ? boundThreadToNumaNode[threadId] : 0;
             auto            create_thread = [&]() {
-                auto manager = threadId == 0
-                                          ? std::unique_ptr<Search::ISearchManager>(
-                                   std::make_unique<Search::SearchManager>(updateContext))
-                                          : std::make_unique<Search::NullSearchManager>();
+                auto manager =
+                  threadId == 0 ? std::make_unique<Search::SearchManager>(updateContext) : nullptr;
 
                 // When not binding threads we want to force all access to happen
                 // from the same NUMA node, because in case of NUMA replicated memory
@@ -252,7 +257,7 @@ void ThreadPool::set(const NumaConfig&                           numaConfig,
 
 // Sets threadPool data to initial values
 void ThreadPool::clear() {
-    if (threads.size() == 0)
+    if (threads.empty())
         return;
 
     for (auto&& th : threads)
@@ -299,18 +304,17 @@ void ThreadPool::start_thinking(const OptionsMap&  options,
     increaseDepth = true;
 
     Search::RootMoves rootMoves;
-    const auto        legalmoves = MoveList<LEGAL>(pos);
 
     for (const auto& uciMove : limits.searchmoves)
     {
         auto move = UCI::to_move(pos, uciMove);
 
-        if (std::find(legalmoves.begin(), legalmoves.end(), move) != legalmoves.end())
+        if (move != Move::none())
             rootMoves.emplace_back(move);
     }
 
     if (rootMoves.empty())
-        for (const auto& m : legalmoves)
+        for (const auto& m : MoveList<LEGAL>(pos))
             rootMoves.emplace_back(m);
 
     // Atomic tablebases expose DTZ as their distance metric. Preserve that
@@ -380,10 +384,10 @@ Thread* ThreadPool::get_best_thread() const {
         // Aborted (d1) searches may lead to inexact win (or loss) scores.
         const bool bestThreadDecisive = bestThreadMove.score != -VALUE_INFINITE
                                      && is_decisive(bestThreadMove.score)
-                                     && !bestThreadMove.score_is_bound();
+                                     && !bestThreadMove.is_inexact();
         const bool newThreadDecisive = newThreadMove.score != -VALUE_INFINITE
                                     && is_decisive(newThreadMove.score)
-                                    && !newThreadMove.score_is_bound();
+                                    && !newThreadMove.is_inexact();
 
         if (bestThreadDecisive)
         {

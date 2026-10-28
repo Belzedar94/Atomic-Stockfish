@@ -19,14 +19,17 @@
 #include "uci.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdlib>
+#include <initializer_list>
 #include <iterator>
 #include <optional>
 #include <sstream>
 #include <string_view>
 #include <filesystem>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include "benchmark.h"
@@ -46,6 +49,9 @@
 #include "xboard.h"
 
 namespace Stockfish {
+
+using Time = std::chrono::steady_clock;
+using ms   = std::chrono::milliseconds;
 
 constexpr auto BenchmarkCommand = "speedtest";
 
@@ -85,6 +91,7 @@ void UCIEngine::init_search_update_listeners() {
     engine.set_on_iter([](const auto& i) { on_iter(i); });
     engine.set_on_update_no_moves([](const auto& i) { on_update_no_moves(i); });
     engine.set_on_update_full([](const auto& i) { on_update_full(i, false); });
+    engine.set_on_start([]() {});
     engine.set_on_bestmove([](const auto& bm, const auto& p) { on_bestmove(bm, p); });
     engine.set_on_verify_network([](const auto& s) { print_info_string(s); });
 }
@@ -102,6 +109,7 @@ void UCIEngine::loop() {
             && !getline(std::cin, cmd))  // Wait for an input or an end-of-file (EOF) indication
             cmd = "quit";
 
+        currentCmd = cmd;
         std::istringstream is(cmd);
 
         token.clear();  // Avoid a stale if getline() returns nothing or a blank line
@@ -171,9 +179,13 @@ void UCIEngine::loop() {
 #endif
 
         // Add custom non-UCI commands, mainly for debugging purposes.
-        // These commands must not be used during a search!
         else if (token == "flip")
-            engine.flip();
+        {
+            if (auto err = engine.flip())
+            {
+                terminate_on_critical_error(err->what());
+            }
+        }
         else if (token == "bench")
             bench(is);
         else if (token == BenchmarkCommand)
@@ -217,9 +229,13 @@ Search::LimitsType UCIEngine::parse_limits(std::istream& is) {
     limits.startTime = now();  // The search starts as early as possible
 
     while (is >> token)
+    {
         if (token == "searchmoves")  // Needs to be the last command on the line
+        {
             while (is >> token)
                 limits.searchmoves.push_back(UCI::to_lower(token));
+            break;
+        }
 
         else if (token == "wtime")
             is >> limits.time[WHITE];
@@ -245,6 +261,15 @@ Search::LimitsType UCIEngine::parse_limits(std::istream& is) {
             limits.infinite = 1;
         else if (token == "ponder")
             limits.ponderMode = true;
+
+        if (is.fail())
+            terminate_on_critical_error("Invalid argument for '" + token + "'");
+    }
+
+    // Sanitize negative time values, zero for stm means no TM
+    for (auto* t : {&limits.time[WHITE], &limits.time[BLACK], &limits.movetime})
+        if (*t < 0)
+            *t = 1;
 
     return limits;
 }
@@ -337,11 +362,9 @@ void UCIEngine::benchmark(std::istream& args) {
     static constexpr int NUM_WARMUP_POSITIONS = 3;
 
     std::string token;
-    u64         nodes = 0, cnt = 1;
-    u64         nodesSearched = 0;
+    u64         cnt = 1;
 
-    engine.set_on_update_full([&](const Engine::InfoFull& i) { nodesSearched = i.nodes; });
-
+    engine.set_on_update_full([](const auto&) {});
     engine.set_on_iter([](const auto&) {});
     engine.set_on_update_no_moves([](const auto&) {});
     engine.set_on_bestmove([](const auto&, const auto&) {});
@@ -352,7 +375,6 @@ void UCIEngine::benchmark(std::istream& args) {
     const auto numGoCommands = count_if(setup.commands.begin(), setup.commands.end(),
                                         [](const std::string& s) { return s.find("go ") == 0; });
 
-    TimePoint totalTime = 0;
 
     // Set options once at the start.
     auto ss = std::istringstream("name Threads value " + std::to_string(setup.threads));
@@ -398,8 +420,7 @@ void UCIEngine::benchmark(std::istream& args) {
 
     std::cerr << "\n";
 
-    cnt   = 1;
-    nodes = 0;
+    cnt = 1;
 
     int           numHashfullReadings = 0;
     constexpr int hashfullAges[]      = {0, 999};  // Only normal hashfull and touched hash.
@@ -420,6 +441,24 @@ void UCIEngine::benchmark(std::istream& args) {
 
     engine.search_clear();  // search_clear may take a while
 
+    Time::time_point elapsed;
+    Time::duration   totalTime(0);
+
+    u64 nodes = 0, nodesSearched = 0;
+
+    engine.set_on_update_full([&](const Engine::InfoFull& i) { nodesSearched = i.nodes; });
+
+    engine.set_on_start([&elapsed, &nodesSearched]() {
+        elapsed       = Time::now();
+        nodesSearched = 0;
+    });
+
+    engine.set_on_bestmove(
+      [&totalTime, &elapsed, &nodes, &nodesSearched](const auto&, const auto&) {
+          totalTime += Time::now() - elapsed;
+          nodes += nodesSearched;
+      });
+
     for (const auto& cmd : setup.commands)
     {
         std::istringstream is(cmd);
@@ -432,9 +471,6 @@ void UCIEngine::benchmark(std::istream& args) {
 
             Search::LimitsType limits = parse_limits(is);
 
-            nodesSearched     = 0;
-            TimePoint elapsed = now();
-
             // Run with silenced network verification
             if (!engine.go(limits))
             {
@@ -444,11 +480,7 @@ void UCIEngine::benchmark(std::istream& args) {
             }
             engine.wait_for_search_finished();
 
-            totalTime += now() - elapsed;
-
             updateHashfullReadings();
-
-            nodes += nodesSearched;
         }
         else if (token == "position")
             position(is);
@@ -458,7 +490,8 @@ void UCIEngine::benchmark(std::istream& args) {
         }
     }
 
-    totalTime = std::max<TimePoint>(totalTime, 1);  // Ensure positivity to avoid a 'divide by zero'
+    // Ensure positivity to avoid a 'divide by zero'
+    const auto totalTimeMs = std::max<i64>(std::chrono::duration_cast<ms>(totalTime).count(), 1LL);
 
     dbg_print();
 
@@ -493,8 +526,8 @@ void UCIEngine::benchmark(std::istream& args) {
               << "\n    single game            : " << maxHashfull[1] << ", "
               << totalHashfull[1] / numHashfullReadings
               << "\nTotal nodes searched       : " << nodes
-              << "\nTotal search time [s]      : " << totalTime / 1000.0
-              << "\nNodes/second               : " << 1000 * nodes / totalTime << std::endl;
+              << "\nTotal search time [s]      : " << totalTimeMs / 1000.0
+              << "\nNodes/second               : " << 1000 * nodes / totalTimeMs << std::endl;
 
     // clang-format on
 
@@ -507,14 +540,16 @@ void UCIEngine::setoption(std::istringstream& is) {
 }
 
 u64 UCIEngine::perft(const Search::LimitsType& limits) {
-    auto nodes = engine.perft(engine.fen(), limits.perft, engine.get_options()["UCI_Chess960"]);
+    auto result = engine.perft(engine.fen(), limits.perft, engine.get_options()["UCI_Chess960"]);
+    if (auto err = std::get_if<PositionSetError>(&result))
+        terminate_on_critical_error(err->what());
+
+    auto nodes = std::get<u64>(result);
     sync_cout << "\nNodes searched: " << nodes << "\n" << sync_endl;
     return nodes;
 }
 
 void UCIEngine::position(std::istringstream& is) {
-    const std::string fullCommand = is.str();
-
     std::string token, fen;
 
     is >> token;
@@ -540,7 +575,7 @@ void UCIEngine::position(std::istringstream& is) {
     auto err = engine.set_position(fen, moves);
     if (err.has_value())
     {
-        terminate_on_critical_error(fullCommand, err->what());
+        terminate_on_critical_error(err->what());
     }
 }
 
@@ -678,9 +713,8 @@ void UCIEngine::on_bestmove(std::string_view bestmove, std::string_view ponder) 
     std::cout << sync_endl;
 }
 
-void UCIEngine::terminate_on_critical_error(const std::string& fullCommand,
-                                            const std::string& message) {
-    sync_cout << "info string CRITICAL ERROR: Command `" << fullCommand
+void UCIEngine::terminate_on_critical_error(const std::string& message) {
+    sync_cout << "info string CRITICAL ERROR: Command `" << currentCmd
               << "` failed. Reason: " << message << '\n'
               << sync_endl;
     std::exit(1);

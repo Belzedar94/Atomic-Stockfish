@@ -26,7 +26,6 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <cstdio>
 #include <exception>  // IWYU pragma: keep
 // IWYU pragma: no_include <__exception/terminate.h>
 #include <functional>
@@ -133,32 +132,19 @@ void prefetch(const void* addr) {
 
 void start_logger(const std::filesystem::path& fname);
 
-usize str_to_size_t(const std::string& s);
+std::optional<usize> str_to_size_t(const std::string& s);
 
 std::string           utf8_from_wstring(std::wstring_view s);
 std::filesystem::path path_from_utf8(const std::string& path);
-
-#if defined(__linux__)
-
-struct PipeDeleter {
-    void operator()(FILE* file) const {
-        if (file != nullptr)
-        {
-            pclose(file);
-        }
-    }
-};
-
-#endif
 
 // Reads the file as bytes.
 // Returns std::nullopt if the file does not exist.
 std::optional<std::string> read_file_to_string(const std::string& path);
 
-void dbg_hit_on(bool cond, int slot = 0);
-void dbg_mean_of(i64 value, int slot = 0);
-void dbg_stdev_of(i64 value, int slot = 0);
-void dbg_extremes_of(i64 value, int slot = 0);
+bool dbg_hit_on(bool cond, int slot = 0);
+i64  dbg_mean_of(i64 value, int slot = 0);
+i64  dbg_stdev_of(i64 value, int slot = 0);
+i64  dbg_extremes_of(i64 value, int slot = 0);
 void dbg_correl_of(i64 value1, i64 value2, int slot = 0);
 void dbg_print();
 void dbg_clear();
@@ -529,7 +515,6 @@ struct CommandLine {
     CommandLine& operator=(CommandLine&&)      = default;
 
     static std::filesystem::path get_binary_directory(std::filesystem::path argv0);
-    static std::filesystem::path get_working_directory();
 
     int    argc;
     char** argv;
@@ -548,9 +533,7 @@ void move_to_front(std::vector<T>& vec, Predicate pred) {
     auto it = std::find_if(vec.begin(), vec.end(), pred);
 
     if (it != vec.end())
-    {
         std::rotate(vec.begin(), it, it + 1);
-    }
 }
 }
 
@@ -559,12 +542,12 @@ void move_to_front(std::vector<T>& vec, Predicate pred) {
 #endif
 
 #if defined(__GNUC__)
-    #define sf_always_inline __attribute__((always_inline))
+    #define sf_always_inline inline __attribute__((always_inline))
 #elif defined(_MSC_VER)
     #define sf_always_inline __forceinline
 #else
-    // do nothing for other compilers
-    #define sf_always_inline
+    // plain inline for other compilers
+    #define sf_always_inline inline
 #endif
 
 #if defined(__clang__)

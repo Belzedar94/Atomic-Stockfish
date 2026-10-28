@@ -1003,15 +1003,12 @@ bool expect_shared_search_history_baseline() {
       && i16(histories->pawnHistory[0][NO_PIECE][SQ_A1]) == -1262
       && i16(histories->pawnHistory[histories->pawnHistory.get_size() - 1][B_KING][SQ_H8]) == -1262;
 
+    auto& continuationHistory = histories->continuationHistory();
     for (bool inCheck : {false, true})
         for (StatsType captures : {NoCaptures, Captures})
             ok &=
-              i16(
-                histories->continuationHistory[inCheck][captures][NO_PIECE][SQ_A1][NO_PIECE][SQ_A1])
-                == -552
-              && i16(
-                   histories->continuationHistory[inCheck][captures][B_KING][SQ_H8][B_KING][SQ_H8])
-                   == -552;
+              i16(continuationHistory[inCheck][captures][NO_PIECE][SQ_A1][NO_PIECE][SQ_A1]) == -552
+              && i16(continuationHistory[inCheck][captures][B_KING][SQ_H8][B_KING][SQ_H8]) == -552;
 
     if (!ok)
         std::cerr << "FAIL shared search histories: tuned baseline differs\n";

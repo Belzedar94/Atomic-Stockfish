@@ -31,7 +31,7 @@
 #include "numa.h"
 #include "position.h"
 #include "search.h"
-#include "thread_win32_osx.h"
+#include "thread_native.h"
 
 namespace Stockfish {
 
@@ -73,7 +73,7 @@ class OptionalThreadToNumaNodeBinder {
 class Thread {
    public:
     Thread(Search::SharedState&,
-           std::unique_ptr<Search::ISearchManager>,
+           std::unique_ptr<Search::SearchManager>,
            usize,
            usize,
            usize,
@@ -101,7 +101,7 @@ class Thread {
    private:
     std::mutex                mutex;
     std::condition_variable   cv;
-    usize                     idx, idxInNuma, totalNuma, nthreads;
+    usize                     idx, idxInNuma, totalNuma;
     bool                      exit = false, searching = true;  // Set before starting std::thread
     NativeThread              stdThread;
     NumaReplicatedAccessToken numaAccessToken;
