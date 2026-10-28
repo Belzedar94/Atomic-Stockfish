@@ -39,7 +39,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  ENGINE_SHA: 5205e15b3f84e6ffbeef246924fc721cf5a0a4cd
+  ENGINE_SHA: 16c8f0dd643a3a249e28cc7cd31416eb8472c18d
   BASE_SHA: 1adc5239500a684824b178b19be4266f6e249cc8
   ATOMIC_NET_TAG: v1.0
   ATOMIC_NET_ASSET: atomic-run3b.nnue
