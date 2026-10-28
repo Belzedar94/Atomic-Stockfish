@@ -2046,14 +2046,6 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
     if (pos.is_draw(ss->ply) || ss->ply >= MAX_PLY)
         return (ss->ply >= MAX_PLY && !ss->inCheck) ? evaluate(pos) : VALUE_DRAW;
 
-    // An explosion of the enemy king ends the game at once.
-    if (Move explosion = king_explosion_move(pos, pos.side_to_move()))
-    {
-        if (PvNode)
-            ss->pv->update(explosion, nullptr);
-        return mate_in(ss->ply + 1);
-    }
-
     assert(0 <= ss->ply && ss->ply < MAX_PLY);
 
     // Step 3. Transposition table lookup
@@ -2075,6 +2067,15 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
         if (ss->inCheck || legalTtMove || pos.has_legal_move())
             return ttData.value;
         return VALUE_DRAW;
+    }
+
+    // An explosion of the enemy king ends the game at once. A TT cutoff above
+    // saves the scan; PV nodes never cut, so a PV still ends with the explosion.
+    if (Move explosion = king_explosion_move(pos, pos.side_to_move()))
+    {
+        if (PvNode)
+            ss->pv->update(explosion, nullptr);
+        return mate_in(ss->ply + 1);
     }
 
     // Step 4. Static evaluation of the position
