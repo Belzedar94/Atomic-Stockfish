@@ -61,7 +61,8 @@ void syzygy_extend_pv(const OptionsMap&            options,
                       const Search::LimitsType&    limits,
                       Stockfish::Position&         pos,
                       Stockfish::Search::RootMove& rootMove,
-                      Value&                       v);
+                      Value&                       v,
+                      const std::atomic_bool&      stop);
 
 using namespace Search;
 
@@ -2499,16 +2500,19 @@ void syzygy_extend_pv(const OptionsMap&         options,
                       const Search::LimitsType& limits,
                       Position&                 pos,
                       RootMove&                 rootMove,
-                      Value&                    v) {
+                      Value&                    v,
+                      const std::atomic_bool&   stop) {
 
     auto t_start      = std::chrono::steady_clock::now();
     int  moveOverhead = int(options["Move Overhead"]);
     bool rule50       = bool(options["Syzygy50MoveRule"]);
 
-    // Do not use more than moveOverhead / 2 time, if time management is active
-    auto time_abort = [&t_start, &moveOverhead, &limits]() -> bool {
+    // Do not use more than moveOverhead / 2 time if time management is active,
+    // nor once an infinite search has been stopped: the GUI is then waiting for
+    // bestmove, and the DTZ probes below can take seconds on cold tables.
+    auto time_abort = [&t_start, &moveOverhead, &limits, &stop]() -> bool {
         auto t_end = std::chrono::steady_clock::now();
-        return limits.use_time_management()
+        return (limits.use_time_management() || (limits.infinite && stop))
             && 2 * std::chrono::duration<double, std::milli>(t_end - t_start).count()
                  > moveOverhead;
     };
@@ -2658,7 +2662,7 @@ void SearchManager::pv(Search::Worker&           worker,
         // Previous PVs have already been extended. Bound flags indicate an unreliable PV.
         if (is_decisive(v) && !is_mate_or_mated(v) && !usePreviousScore
             && (!rootMoves[i].score_is_bound() || isTBScore))
-            syzygy_extend_pv(worker.options, worker.limits, pos, rootMoves[i], v);
+            syzygy_extend_pv(worker.options, worker.limits, pos, rootMoves[i], v, threads.stop);
 
         std::string pv;
         for (Move m : usePreviousScore ? rootMoves[i].previousPV : rootMoves[i].pv)
