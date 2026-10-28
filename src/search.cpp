@@ -1137,9 +1137,17 @@ Value Search::Worker::search(
         if (alpha >= beta)
             return alpha;
 
-        // An explosion of the enemy king ends the game at once.
+        // An explosion of the enemy king ends the game at once. Store the win
+        // as an exact result, except in an excluded-move search.
         if (Move explosion = king_explosion_move(pos, us))
         {
+            if (!ss->excludedMove)
+            {
+                auto [ttHit, ttData, ttWriter] = active_tt().probe(pos.key());
+                ttWriter.write(pos.key(), value_to_tt(mate_in(ss->ply + 1), ss->ply),
+                               PvNode || (ttHit && ttData.is_pv), BOUND_EXACT, depth, explosion,
+                               VALUE_NONE, active_tt().generation());
+            }
             if (PvNode)
                 ss->pv->update(explosion, nullptr);
             return mate_in(ss->ply + 1);
@@ -2046,9 +2054,13 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
     if (pos.is_draw(ss->ply) || ss->ply >= MAX_PLY)
         return (ss->ply >= MAX_PLY && !ss->inCheck) ? evaluate(pos) : VALUE_DRAW;
 
-    // An explosion of the enemy king ends the game at once.
+    // An explosion of the enemy king ends the game at once. Store the win as an
+    // exact result.
     if (Move explosion = king_explosion_move(pos, pos.side_to_move()))
     {
+        auto [ttHit, ttData, ttWriter] = active_tt().probe(pos.key());
+        ttWriter.write(pos.key(), value_to_tt(mate_in(ss->ply + 1), ss->ply), ttHit && ttData.is_pv,
+                       BOUND_EXACT, DEPTH_QS, explosion, VALUE_NONE, active_tt().generation());
         if (PvNode)
             ss->pv->update(explosion, nullptr);
         return mate_in(ss->ply + 1);
