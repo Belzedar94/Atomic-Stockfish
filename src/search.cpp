@@ -1456,8 +1456,11 @@ Value Search::Worker::search(
     // Step 12. ProbCut
     // If we have a good enough capture (or queen promotion) and a reduced search
     // returns a value much above beta, we can (almost) safely prune the previous move.
+    // When seeking a mate, a material gain does not prove anything: do not prune
+    // on it.
     probCutBeta = beta + 214 - 59 * improving;
-    if (depth >= 3 && !is_decisive(beta) && !(is_valid(ttData.value) && ttData.value < probCutBeta))
+    if (depth >= 3 && !seekMate && !is_decisive(beta)
+        && !(is_valid(ttData.value) && ttData.value < probCutBeta))
     {
         assert(probCutBeta < VALUE_INFINITE && probCutBeta > beta);
 
