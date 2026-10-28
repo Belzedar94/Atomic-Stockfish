@@ -130,6 +130,39 @@ SEARCH_CASES = (
         expected_mate=1,
         expected_pv=("g7h8q",),
     ),
+    # The winning capture is below the root: depth 1 reaches qsearch,
+    # while depth 2 reaches the main search. Both must retain it in the PV.
+    *(
+        SearchCase(
+            name=f"{name} at depth {depth}",
+            fen=fen,
+            searchmove=searchmove,
+            expected_mate=-1,
+            expected_pv=(searchmove, explosion),
+            depth=depth,
+        )
+        for depth in (1, 2)
+        for name, fen, searchmove, explosion in (
+            (
+                "PV includes the en-passant king explosion",
+                "8/2kp4/8/4P3/8/8/8/K7 b - - 0 1",
+                "d7d5",
+                "e5d6",
+            ),
+            (
+                "PV includes the capture-promotion king explosion",
+                "6k1/6Pr/8/8/8/8/8/K7 b - - 0 1",
+                "h7h8",
+                "g7h8q",
+            ),
+            (
+                "PV includes a pinned piece's winning explosion",
+                "1r4k1/7r/8/8/8/8/1B6/1K6 b - - 0 1",
+                "h7h8",
+                "b2h8",
+            ),
+        )
+    ),
     SearchCase(
         name="main capture futility preserves explosive non-pawn bycatch",
         fen="2n5/7k/1p2p2p/Q2PQ1R1/2B1R3/8/8/K5N1 w - - 0 1",

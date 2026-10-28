@@ -123,6 +123,48 @@ bool Search::atomic_capture_futility_eligible(const Position& pos, Move move) {
 
 namespace {
 
+// Find a capture that explodes the enemy king. The captured piece stands
+// next to the enemy king and not next to ours (kings never capture). Pins do
+// not matter: the game ends at once.
+Move king_explosion_move(const Position& pos, Color us) {
+    const Color them = ~us;
+    if (!pos.has_king(us) || !pos.has_king(them))
+        return Move::none();
+    const Square   theirKing = pos.square<KING>(them);
+    const Bitboard ourRing   = Attacks::attacks_bb<KING>(pos.square<KING>(us));
+    Bitboard       targets   = Attacks::attacks_bb<KING>(theirKing) & pos.pieces(them) & ~ourRing;
+    const Bitboard occ       = pos.pieces();
+    const Bitboard knights = pos.pieces(us, KNIGHT), pawns = pos.pieces(us, PAWN);
+    const Bitboard rq = pos.pieces(us, ROOK, QUEEN), bq = pos.pieces(us, BISHOP, QUEEN);
+    while (targets)
+    {
+        const Square s         = pop_lsb(targets);
+        Bitboard     attackers = Attacks::attacks_bb<KNIGHT>(s) & knights;
+        if (!attackers)
+            attackers = Attacks::attacks_bb<PAWN>(s, them) & pawns;
+        if (!attackers && rq)
+            attackers = Attacks::attacks_bb<ROOK>(s, occ) & rq;
+        if (!attackers && bq)
+            attackers = Attacks::attacks_bb<BISHOP>(s, occ) & bq;
+        if (attackers)
+        {
+            const Square from = lsb(attackers);
+            return type_of(pos.piece_on(from)) == PAWN && relative_rank(us, s) == RANK_8
+                   ? Move::make<PROMOTION>(from, s, QUEEN)
+                   : Move(from, s);
+        }
+    }
+    // En passant: the capture lands on an empty square.
+    if (pos.side_to_move() == us && pos.ep_square() != SQ_NONE)
+    {
+        const Square ep = pos.ep_square();
+        if ((Attacks::attacks_bb<KING>(theirKing) & ep) && !(ourRing & ep))
+            if (Bitboard attackers = Attacks::attacks_bb<PAWN>(ep, them) & pawns)
+                return Move::make<EN_PASSANT>(lsb(attackers), ep);
+    }
+    return Move::none();
+}
+
 constexpr u64 NODES_LIMIT_OUTPUT = 10'000'000;
 
 constexpr int SEARCHEDLIST_CAPACITY = 32;
@@ -148,9 +190,9 @@ int correction_value(const Worker& w, const Position& pos, const Stack* const ss
     const int   cntcv =
       m.is_ok()
           ? 7885
-              * ((*(ss - 2)->continuationCorrectionHistory)[pos.piece_on(m.to_sq())][m.to_sq()]
-                 + (*(ss - 4)->continuationCorrectionHistory)[pos.piece_on(m.to_sq())][m.to_sq()])
-            + 6307 * (*(ss - 6)->continuationCorrectionHistory)[pos.piece_on(m.to_sq())][m.to_sq()]
+              * ((*(ss - 2)->continuationCorrectionHistory)[(ss - 1)->movedPiece][m.to_sq()]
+                 + (*(ss - 4)->continuationCorrectionHistory)[(ss - 1)->movedPiece][m.to_sq()])
+            + 6307 * (*(ss - 6)->continuationCorrectionHistory)[(ss - 1)->movedPiece][m.to_sq()]
           : 80695;
 
     return 13806 * pcv + 9512 * micv + 11615 * (wnpcv + bnpcv) + cntcv;
@@ -180,7 +222,7 @@ void update_correction_history(const Position& pos,
     if (m.is_ok())
     {
         const Square to = m.to_sq();
-        const Piece  pc = pos.piece_on(to);
+        const Piece  pc = (ss - 1)->movedPiece;
         (*(ss - 2)->continuationCorrectionHistory)[pc][to] << bonus * 136 / 128;
         (*(ss - 4)->continuationCorrectionHistory)[pc][to] << bonus * 68 / 128;
         (*(ss - 6)->continuationCorrectionHistory)[pc][to] << bonus * 35 / 128;
@@ -974,6 +1016,7 @@ void Search::Worker::do_move(Position&    pos,
     if (ss != nullptr)
     {
         ss->currentMove = move;
+        ss->movedPiece  = dirtyPiece.pc;
         ss->continuationHistory =
           &active_continuation_history()[ss->inCheck][capture][dirtyPiece.pc][move.to_sq()];
         ss->continuationCorrectionHistory =
@@ -984,6 +1027,7 @@ void Search::Worker::do_move(Position&    pos,
 void Search::Worker::do_null_move(Position& pos, StateInfo& st, Stack* const ss) {
     pos.do_null_move(st);
     ss->currentMove                   = Move::null();
+    ss->movedPiece                    = NO_PIECE;
     ss->continuationHistory           = &active_continuation_history()[0][0][NO_PIECE][0];
     ss->continuationCorrectionHistory = &continuationCorrectionHistory[NO_PIECE][0];
 }
@@ -1125,6 +1169,14 @@ Value Search::Worker::search(
         beta  = std::min(mate_in(ss->ply + 1), beta);
         if (alpha >= beta)
             return alpha;
+
+        // An explosion of the enemy king ends the game at once.
+        if (Move explosion = king_explosion_move(pos, us))
+        {
+            if (PvNode)
+                ss->pv->update(explosion, nullptr);
+            return mate_in(ss->ply + 1);
+        }
     }
 
     assert(0 <= ss->ply && ss->ply < MAX_PLY);
@@ -1981,7 +2033,7 @@ moves_loop:  // When in check, search starts here
 
         Piece capturedPiece = pos.captured_piece();
         assert(capturedPiece != NO_PIECE);
-        captureHistory[pos.piece_on(prevSq)][prevSq][type_of(capturedPiece)] << 901;
+        captureHistory[(ss - 1)->movedPiece][prevSq][type_of(capturedPiece)] << 901;
     }
 
     if (PvNode)
@@ -2075,6 +2127,14 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
 
     if (pos.is_draw(ss->ply) || ss->ply >= MAX_PLY)
         return (ss->ply >= MAX_PLY && !ss->inCheck) ? evaluate(pos) : VALUE_DRAW;
+
+    // An explosion of the enemy king ends the game at once.
+    if (Move explosion = king_explosion_move(pos, pos.side_to_move()))
+    {
+        if (PvNode)
+            ss->pv->update(explosion, nullptr);
+        return mate_in(ss->ply + 1);
+    }
 
     assert(0 <= ss->ply && ss->ply < MAX_PLY);
 
