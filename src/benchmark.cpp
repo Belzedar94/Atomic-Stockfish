@@ -27,6 +27,7 @@
 
 namespace {
 
+// clang-format off
 const std::vector<std::string> AtomicDefaults = {
   "setoption name UCI_Chess960 value false",
   "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
@@ -43,8 +44,19 @@ const std::vector<std::string> AtomicDefaults = {
   "bbqnnrkr/pppppppp/8/8/8/8/PPPPPPPP/BBQNNRKR w HFhf - 0 1",
   "Rr2k1rR/3K4/3p4/8/8/8/7P/8 w kq - 0 1",
   "1R4kr/4K3/8/8/8/8/8/8 b k - 0 1",
-  "setoption name UCI_Chess960 value false"
+  "setoption name UCI_Chess960 value false",
+
+  // Decided positions, mates proven in AtomicDB. Within the default depth their
+  // root score passes the seekMate threshold before the search finds the mate,
+  // so changes that act only while seeking a mate move the bench.
+  "rnb1k1nr/pp4pp/2p5/1B1pp3/1b2q3/2P1PPP1/PP1P3P/RNB1K1R1 b Qkq - 0 1",  // Black mates in 6
+  "4k3/1Qr1b3/3pppp1/p6p/Pp5P/1P2P3/2PP1PP1/R1B1KB1R w KQ - 0 1",         // White mates in 22
+  "6k1/4b1p1/rp2ppB1/p2p3p/2P2Q2/4P3/PP1P1PPP/R1B1K2R w KQ - 0 1",        // White mates in 5
+  "2k5/7n/3p3p/pppP1Pp1/8/2N5/PPPB2PP/4R1K1 w - - 0 1",                   // White mates in 12
+  "3r1kn1/5B2/3pp1p1/pp6/3PPp1p/N6P/PPPQ1PP1/2R1K2R b K - 0 1",           // Black is mated in 10
+  "6k1/p7/6p1/3n3p/3P4/P7/1P3r2/7K w - - 0 1"                             // White is mated in 4
 };
+// clang-format on
 
 const std::vector<std::vector<std::string>> AtomicBenchmarkPositions = {
   {
