@@ -10,9 +10,15 @@ name: AtomicDB worker engines (PGO)
 # On Linux the profile-guided binary is built with the newest LLVM release from
 # apt.llvm.org (LLVM_VERSION) and checked against the plain GCC build, so its
 # identity is checked across compilers. A profile-guided GCC build and a build
-# with Ubuntu's own clang are timed next to it, as references only. Windows is
-# still built with gcc 15.2.0-8; a separate job times a profile-guided build with
-# MSYS2's newest clang against it on one runner, without publishing it.
+# with Ubuntu's own clang are timed next to it, as references only. On Windows
+# the binary is built profile-guided with MSYS2's newest clang and checked, on
+# one runner, against the profile-guided gcc 15.2.0-8 build, which its own job
+# checks against a plain build of the same commit; the gcc builds are references
+# only.
+#
+# The binaries to publish are in the artifacts worker-engine-linux,
+# worker-engine-windows and worker-engine-macos, named
+# Atomic-Stockfish-<platform>-pgo (.exe on Windows).
 #
 # The engine source is not on this branch. It is checked out by SHA (ENGINE_SHA,
 # a main commit), so changing this workflow never changes what is built.
@@ -33,14 +39,14 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  ENGINE_SHA: 8e81598f0dc8133fc3ee24ba6128327af58f4534
+  ENGINE_SHA: 5205e15b3f84e6ffbeef246924fc721cf5a0a4cd
   BASE_SHA: 1adc5239500a684824b178b19be4266f6e249cc8
   ATOMIC_NET_TAG: v1.0
   ATOMIC_NET_ASSET: atomic-run3b.nnue
   ATOMIC_NET_SHA256: 99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f92a04a6
   NET_NAME: atomic_run3b_e202_l05.nnue
   SERVED_URL: https://belzedar.duckdns.org/atomicdb/engines
-  EXPECT_NNUE: "438711"
+  EXPECT_NNUE: "409185"
   BENCH_DEPTH: "18"
   ROUNDS: "10"
   # The LLVM release the Linux binary is built with (apt.llvm.org packages).
@@ -227,8 +233,11 @@ jobs:
           if-no-files-found: error
           compression-level: 6
 
+  # The gcc builds of Windows, references only: each checks its profile-guided
+  # build against a plain build of the same commit. The windows-clang job checks
+  # the published clang binary against the gcc-15.2.0-8 one.
   windows:
-    name: windows x86-64-bmi2 (${{ matrix.toolchain }})
+    name: windows x86-64-bmi2 gcc reference (${{ matrix.toolchain }})
     runs-on: windows-latest
     timeout-minutes: 90
     defaults:
@@ -242,7 +251,7 @@ jobs:
       ARCH: x86-64-bmi2
       SERVED_FILE: Atomic-Stockfish-win-x86_64.exe
       SERVED_SHA256: 88a5c04e8ac111109c73749473343dd7ccf823361a23417b616978562cf78ed4
-      NEW_FILE: Atomic-Stockfish-win-x86_64-pgo.exe
+      NEW_FILE: Atomic-Stockfish-win-x86_64-gcc-pgo.exe
       MSYS2_REPO: https://repo.msys2.org/mingw/mingw64
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -364,18 +373,18 @@ jobs:
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
-          name: worker-engine-windows-${{ matrix.toolchain }}
+          name: reference-windows-${{ matrix.toolchain }}
           path: out/
           if-no-files-found: error
           compression-level: 0
 
-  # Windows is still published from the gcc-15.2.0-8 leg. This job builds the same
-  # commit profile-guided with the newest clang MSYS2 packages (clang64: libc++
-  # linked statically, the C runtime is Windows' own UCRT) and times it on one
-  # runner against the binary that leg uploaded, byte for byte. The clang binary
-  # is a measurement only.
+  # Windows is published from this job. It builds the same commit profile-guided
+  # with the newest clang MSYS2 packages (clang64: libc++ linked statically, the
+  # C runtime is Windows' own UCRT, so Windows 10 or later) and checks and times
+  # it on one runner against the binary the gcc-15.2.0-8 leg uploaded, byte for
+  # byte; that leg checked its binary against a plain build of the same commit.
   windows-clang:
-    name: windows x86-64-bmi2 (MSYS2 clang against gcc-15.2.0-8)
+    name: windows x86-64-bmi2 (MSYS2 clang, published; against gcc-15.2.0-8)
     needs: windows
     if: ${{ !cancelled() }}
     runs-on: windows-latest
@@ -385,8 +394,8 @@ jobs:
         shell: msys2 {0}
     env:
       ARCH: x86-64-bmi2
-      GCC_FILE: Atomic-Stockfish-win-x86_64-pgo.exe
-      NEW_FILE: Atomic-Stockfish-win-x86_64-clang-pgo.exe
+      GCC_FILE: Atomic-Stockfish-win-x86_64-gcc-pgo.exe
+      NEW_FILE: Atomic-Stockfish-win-x86_64-pgo.exe
       # Windows runners are noisy (the 18-oct comparison read +2.0% +/- 2.8 after
       # 12 rounds), so many more alternating rounds than the other checks.
       CLANG_ROUNDS: "80"
@@ -417,7 +426,7 @@ jobs:
       - name: Download the gcc-15.2.0-8 binary
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: worker-engine-windows-gcc-15.2.0-8
+          name: reference-windows-gcc-15.2.0-8
           path: gcc
 
       - name: Name the build after its commit
@@ -492,13 +501,14 @@ jobs:
             --json out/check.json --md "$(cygpath -m "$GITHUB_STEP_SUMMARY")" | tee out/check.log
           (cd run && printf 'compiler\nquit\n' | "../out/$NEW_FILE") | tee out/compiler.txt
           grep -q "dev-.*-${ENGINE_SHA:0:8}" out/compiler.txt
+          grep -q "^Compiled by *: clang++ " out/compiler.txt
           objdump -p "out/$NEW_FILE" | grep "DLL Name" | tee out/new.dlls
           (cd out && sha256sum "$NEW_FILE" | tee sha256.txt)
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
-          name: clang-vs-gcc-windows
+          name: worker-engine-windows
           path: out/
           if-no-files-found: error
           compression-level: 0
