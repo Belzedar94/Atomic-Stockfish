@@ -1,18 +1,18 @@
-# ci/prefetch-speed-1101
+# ci/avx2-speed-1101
 
-Measurement of the continuation correction history prefetch (`58545648`, the
-head of `test/sf-corrhist-prefetch-main00f68d61`, a port of upstream Stockfish
-`4150d22b`: `do_move()` prefetches the two continuation correction history
-entries that the child reads in `correction_value()` before the position is
-updated) against the current main, `main@c2736596`. The commit sits on
-`00f68d61`; main has only #87 on top of it, which touches other files, and the
-merge is clean. The commit claims the search is unchanged, so it must search
-exactly the nodes main searches. This branch holds no engine
+Measurement of the AVX2 attacks (`a908e669`, pull request #87, a port of
+upstream Stockfish `82d73d0a` and `205f0052` on the AVX2 `both_attacks_bb()`
+path), merged into main as `c2736596`, against `00f68d61`, main before #87.
+In this branch the variant called `main` is `00f68d61`. #87 went in on an
+OpenBench non-regression run, which cannot resolve a 1% speed difference. The
+commit claims the search is unchanged, so it must search exactly the nodes
+`00f68d61` searches, and with it merged the tree is exactly the one of
+`c2736596`. This branch holds no engine
 source.
 
-- `.github/workflows/prefetch_speed.yml` checks out main by SHA, merges the
-  commit `58545648` into it (the trees are pinned), and builds the two
-  variants, `main` and `prefetch`, with `make profile-build` (GCC) for
+- `.github/workflows/avx2_speed.yml` checks out `00f68d61` by SHA, merges
+  the commit `a908e669` into it (the trees are pinned), and builds the two
+  variants, `main` and `avx2`, with `make profile-build` (GCC) for
   `linux x86-64-avx2` and `windows x86-64-bmi2`. The Windows binaries embed the
   default network; the Linux binaries read it from the run directory under its
   default name, as in the earlier measurements of this lineage.

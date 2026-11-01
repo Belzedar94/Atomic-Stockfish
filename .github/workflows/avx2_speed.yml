@@ -1,13 +1,13 @@
-name: Correction history prefetch, profile-guided
+name: AVX2 attacks (#87), profile-guided
 
-# Measures the continuation correction history prefetch (58545648, a port of
-# upstream Stockfish 4150d22b: do_move() prefetches the two continuation
-# correction history entries that the child reads in correction_value()
-# before the position is updated) against main@c2736596, the current main.
-# The commit sits on 00f68d61; main has only #87 on top of it, which touches
-# other files, and the merge is clean. The commit claims the search is
-# unchanged, so it must search exactly the nodes main searches.
-# ci/build_variants.sh builds main and main with the commit merged,
+# Measures the AVX2 attacks (a908e669, pull request #87, a port of upstream
+# Stockfish 82d73d0a and 205f0052 on the AVX2 both_attacks_bb() path), merged
+# into main as c2736596, against 00f68d61, main before #87: the variant called
+# main below is 00f68d61. #87 went in on an OpenBench non-regression run,
+# which cannot resolve a 1% speed difference. The commit claims the search is
+# unchanged, so it must search exactly the nodes 00f68d61 searches, and with
+# it merged the tree is exactly the one of c2736596.
+# ci/build_variants.sh builds 00f68d61 and 00f68d61 with the commit merged,
 # one after the other on one runner, with `make profile-build` (GCC, as
 # OpenBench and the AtomicDB workers build). ci/engine_check.py then requires
 # both to search exactly the nodes main searches (bench signature, a
@@ -30,22 +30,22 @@ name: Correction history prefetch, profile-guided
 on:
   push:
     branches:
-      - ci/prefetch-speed-1101
+      - ci/avx2-speed-1101
 
 permissions:
   contents: read
 
 concurrency:
-  group: prefetch-speed-1101
+  group: avx2-speed-1101
   cancel-in-progress: true
 
 env:
-  MAIN_SHA: c2736596d1e9ef731fcef08595f2d53f8c4fcc97
-  PREFETCH_SHA: 58545648ef6b397b2aabb37dda73219d786f9222
-  # Trees of main and of main with the commit merged: the build stops if a
-  # variant is anything else.
-  TREE_MAIN: 94958d08f8324097a188dd13b3ae5ac0a9bc556c
-  TREE_PREFETCH: 8d31904ee359ee0035b192e8286c89207d542f2f
+  MAIN_SHA: 00f68d61ddf1e5730956f51fcbfed1d072e54131
+  AVX2_SHA: a908e669481c56266bf39b6f6f2bd93c7b289957
+  # Trees of 00f68d61 and of 00f68d61 with the commit merged (the tree of
+  # c2736596): the build stops if a variant is anything else.
+  TREE_MAIN: 98e9d440009fc25b917f11ece03bb30e65591e43
+  TREE_AVX2: 94958d08f8324097a188dd13b3ae5ac0a9bc556c
   ATOMIC_NET_TAG: v1.0
   ATOMIC_NET_ASSET: atomic-run3b.nnue
   ATOMIC_NET_SHA256: 99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f92a04a6
@@ -125,7 +125,7 @@ jobs:
             "https://github.com/$GITHUB_REPOSITORY/releases/download/$ATOMIC_NET_TAG/$ATOMIC_NET_ASSET"
           echo "$ATOMIC_NET_SHA256  net/$NET_NAME" | sha256sum -c -
 
-      - name: Profile-guided builds of main and the prefetch
+      - name: Profile-guided builds of 00f68d61 and the AVX2 attacks
         run: bash ci/build_variants.sh engine "net/$NET_NAME" out "" ARCH=x86-64-avx2 COMP=gcc
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -176,7 +176,7 @@ jobs:
           set -eo pipefail
           cpu=$(lscpu | sed -n 's/^Model name: *//p' | head -n 1)
           python3 ci/engine_check.py --title "linux x86-64-avx2, runner ${{ matrix.runner }}: $cpu" --net v1 \
-            --bin main=bins/atomic-main --bin prefetch=bins/atomic-prefetch \
+            --bin main=bins/atomic-main --bin avx2=bins/atomic-avx2 \
             --cwd run --expect-backend "$V1_BACKEND" --expect-bench "$EXPECT_BENCH" \
             --depth "$BENCH_DEPTH" --rounds "$ROUNDS" \
             --json out/check.json --md "$GITHUB_STEP_SUMMARY" | tee out/check.log
@@ -190,7 +190,7 @@ jobs:
           cpu=$(lscpu | sed -n 's/^Model name: *//p' | head -n 1)
           python3 ci/engine_check.py --title "linux x86-64-avx2, runner ${{ matrix.runner }}, synthetic AtomicNNUEV2: $cpu" \
             --net v2-synthetic --evalfile "v2net/$V2_NET" \
-            --bin main=bins/atomic-main --bin prefetch=bins/atomic-prefetch \
+            --bin main=bins/atomic-main --bin avx2=bins/atomic-avx2 \
             --cwd run --expect-backend AtomicNNUEV2 \
             --limit-type nodes --signature-limit "$V2_SIGNATURE_NODES" --limit "$V2_TIMED_NODES" \
             --rounds "$V2_ROUNDS" --timeout 600 --session-timeout 900 \
@@ -245,7 +245,7 @@ jobs:
           echo "$ATOMIC_NET_SHA256  net/$NET_NAME" | sha256sum -c -
 
       # The network is embedded, as in the Windows binaries the workers download.
-      - name: Profile-guided builds of main and the prefetch
+      - name: Profile-guided builds of 00f68d61 and the AVX2 attacks
         run: |
           bash ci/build_variants.sh engine "net/$NET_NAME" out .exe ARCH=x86-64-bmi2 COMP=mingw \
             EXTRAPROFILEFLAGS=-DATOMIC_NNUE_EMBEDDING
@@ -296,7 +296,7 @@ jobs:
           echo "$cpu, $NUMBER_OF_PROCESSORS processors"
           python --version
           python ci/engine_check.py --title "windows x86-64-bmi2, runner ${{ matrix.runner }}: $cpu" --net v1 \
-            --bin main=bins/atomic-main.exe --bin prefetch=bins/atomic-prefetch.exe \
+            --bin main=bins/atomic-main.exe --bin avx2=bins/atomic-avx2.exe \
             --cwd run --expect-backend "$V1_BACKEND" --expect-bench "$EXPECT_BENCH" \
             --depth "$BENCH_DEPTH" --rounds "$ROUNDS" \
             --json out/check.json --md "$GITHUB_STEP_SUMMARY" | tee out/check.log
@@ -311,7 +311,7 @@ jobs:
           cpu=$(powershell -NoProfile -Command "(Get-CimInstance Win32_Processor).Name" | tr -d '\r')
           python ci/engine_check.py --title "windows x86-64-bmi2, runner ${{ matrix.runner }}, synthetic AtomicNNUEV2: $cpu" \
             --net v2-synthetic --evalfile "v2net/$V2_NET" \
-            --bin main=bins/atomic-main.exe --bin prefetch=bins/atomic-prefetch.exe \
+            --bin main=bins/atomic-main.exe --bin avx2=bins/atomic-avx2.exe \
             --cwd run --expect-backend AtomicNNUEV2 \
             --limit-type nodes --signature-limit "$V2_SIGNATURE_NODES" --limit "$V2_TIMED_NODES" \
             --rounds "$V2_ROUNDS" --timeout 600 --session-timeout 900 \

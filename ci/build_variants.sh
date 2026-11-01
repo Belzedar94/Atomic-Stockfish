@@ -10,8 +10,8 @@
 # evaluation). The binaries land in OUT_DIR as atomic-<variant><EXE_SUFFIX>,
 # next to their build logs.
 #
-# Needs MAIN_SHA, PREFETCH_SHA, NET_NAME and the expected trees TREE_MAIN and
-# TREE_PREFETCH in the environment. The merge uses a fixed identity and date, so a
+# Needs MAIN_SHA, AVX2_SHA, NET_NAME and the expected trees TREE_MAIN and
+# TREE_AVX2 in the environment. The merge uses a fixed identity and date, so a
 # variant is the same commit on every runner, and its tree must be the expected
 # one: what is built is main plus the commit, nothing else. Node counts
 # are not judged here (ci/engine_check.py does that), so a commit that
@@ -30,7 +30,7 @@ g() { git -C "$engine" "$@"; }
 
 # The commit is the head of a branch of this repository, which the full clone
 # already holds; if it is missing, fetch the pinned commit itself.
-for sha in "$PREFETCH_SHA"; do
+for sha in "$AVX2_SHA"; do
     g cat-file -e "$sha^{commit}" 2>/dev/null || g fetch --quiet --no-tags origin "$sha"
     g cat-file -e "$sha^{commit}"
 done
@@ -38,7 +38,7 @@ done
 # name, expected tree, heads merged into main (in this order)
 variants=(
     "main $TREE_MAIN"
-    "prefetch $TREE_PREFETCH $PREFETCH_SHA"
+    "avx2 $TREE_AVX2 $AVX2_SHA"
 )
 
 for v in "${variants[@]}"; do
