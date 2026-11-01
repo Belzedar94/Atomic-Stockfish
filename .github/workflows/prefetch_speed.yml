@@ -1,14 +1,13 @@
-name: Null move king blockers pull request, profile-guided
+name: Correction history prefetch, profile-guided
 
-# Measures pull request #78 (do_null_move() stops recomputing the king blockers
-# with set_check_info() and calls set_check_squares() instead, which only
-# recomputes the side-dependent check squares: the null move copies the whole
-# StateInfo and leaves the board unchanged, so the copied blockers are already
-# right) against main@74ab89ad, the current main. The pull request was opened
-# against 8e81598f; main has only #77 on top of it, which touches NNUE files
-# only, and the merge is clean. The pull request claims the search is
+# Measures the continuation correction history prefetch (58545648, a port of
+# upstream Stockfish 4150d22b: do_move() prefetches the two continuation
+# correction history entries that the child reads in correction_value()
+# before the position is updated) against main@c2736596, the current main.
+# The commit sits on 00f68d61; main has only #87 on top of it, which touches
+# other files, and the merge is clean. The commit claims the search is
 # unchanged, so it must search exactly the nodes main searches.
-# ci/build_variants.sh builds main and main with the pull request head merged,
+# ci/build_variants.sh builds main and main with the commit merged,
 # one after the other on one runner, with `make profile-build` (GCC, as
 # OpenBench and the AtomicDB workers build). ci/engine_check.py then requires
 # both to search exactly the nodes main searches (bench signature, a
@@ -31,28 +30,28 @@ name: Null move king blockers pull request, profile-guided
 on:
   push:
     branches:
-      - ci/moky-null-blockers-1022
+      - ci/prefetch-speed-1101
 
 permissions:
   contents: read
 
 concurrency:
-  group: moky-null-blockers-1022
+  group: prefetch-speed-1101
   cancel-in-progress: true
 
 env:
-  MAIN_SHA: 74ab89adf58fac7b5e72c0ee3479f0581a78733e
-  PR78_SHA: 4f40b6a1ddc04aa629fdcdc9f39d6d813e991115
-  # Trees of main and of main with the pull request merged: the build stops if a
+  MAIN_SHA: c2736596d1e9ef731fcef08595f2d53f8c4fcc97
+  PREFETCH_SHA: 58545648ef6b397b2aabb37dda73219d786f9222
+  # Trees of main and of main with the commit merged: the build stops if a
   # variant is anything else.
-  TREE_MAIN: 53512f3353eb6c160a13e21c93b231f1ff4a63fc
-  TREE_PR78: 3c0a2b83ee07b761614b272a8b2bed4060266d56
+  TREE_MAIN: 94958d08f8324097a188dd13b3ae5ac0a9bc556c
+  TREE_PREFETCH: 8d31904ee359ee0035b192e8286c89207d542f2f
   ATOMIC_NET_TAG: v1.0
   ATOMIC_NET_ASSET: atomic-run3b.nnue
   ATOMIC_NET_SHA256: 99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f92a04a6
   NET_NAME: atomic_run3b_e202_l05.nnue
   V1_BACKEND: Legacy Atomic V1
-  EXPECT_BENCH: "438711"
+  EXPECT_BENCH: "433197"
   BENCH_DEPTH: "20"
   # A multiple of 4: with two binaries each one goes first in half of the rounds,
   # in ABBA order, so a slow drift of the runner's speed cancels out.
@@ -126,7 +125,7 @@ jobs:
             "https://github.com/$GITHUB_REPOSITORY/releases/download/$ATOMIC_NET_TAG/$ATOMIC_NET_ASSET"
           echo "$ATOMIC_NET_SHA256  net/$NET_NAME" | sha256sum -c -
 
-      - name: Profile-guided builds of main and the pull request
+      - name: Profile-guided builds of main and the prefetch
         run: bash ci/build_variants.sh engine "net/$NET_NAME" out "" ARCH=x86-64-avx2 COMP=gcc
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -177,7 +176,7 @@ jobs:
           set -eo pipefail
           cpu=$(lscpu | sed -n 's/^Model name: *//p' | head -n 1)
           python3 ci/engine_check.py --title "linux x86-64-avx2, runner ${{ matrix.runner }}: $cpu" --net v1 \
-            --bin main=bins/atomic-main --bin pr78=bins/atomic-pr78 \
+            --bin main=bins/atomic-main --bin prefetch=bins/atomic-prefetch \
             --cwd run --expect-backend "$V1_BACKEND" --expect-bench "$EXPECT_BENCH" \
             --depth "$BENCH_DEPTH" --rounds "$ROUNDS" \
             --json out/check.json --md "$GITHUB_STEP_SUMMARY" | tee out/check.log
@@ -191,7 +190,7 @@ jobs:
           cpu=$(lscpu | sed -n 's/^Model name: *//p' | head -n 1)
           python3 ci/engine_check.py --title "linux x86-64-avx2, runner ${{ matrix.runner }}, synthetic AtomicNNUEV2: $cpu" \
             --net v2-synthetic --evalfile "v2net/$V2_NET" \
-            --bin main=bins/atomic-main --bin pr78=bins/atomic-pr78 \
+            --bin main=bins/atomic-main --bin prefetch=bins/atomic-prefetch \
             --cwd run --expect-backend AtomicNNUEV2 \
             --limit-type nodes --signature-limit "$V2_SIGNATURE_NODES" --limit "$V2_TIMED_NODES" \
             --rounds "$V2_ROUNDS" --timeout 600 --session-timeout 900 \
@@ -246,7 +245,7 @@ jobs:
           echo "$ATOMIC_NET_SHA256  net/$NET_NAME" | sha256sum -c -
 
       # The network is embedded, as in the Windows binaries the workers download.
-      - name: Profile-guided builds of main and the pull request
+      - name: Profile-guided builds of main and the prefetch
         run: |
           bash ci/build_variants.sh engine "net/$NET_NAME" out .exe ARCH=x86-64-bmi2 COMP=mingw \
             EXTRAPROFILEFLAGS=-DATOMIC_NNUE_EMBEDDING
@@ -297,7 +296,7 @@ jobs:
           echo "$cpu, $NUMBER_OF_PROCESSORS processors"
           python --version
           python ci/engine_check.py --title "windows x86-64-bmi2, runner ${{ matrix.runner }}: $cpu" --net v1 \
-            --bin main=bins/atomic-main.exe --bin pr78=bins/atomic-pr78.exe \
+            --bin main=bins/atomic-main.exe --bin prefetch=bins/atomic-prefetch.exe \
             --cwd run --expect-backend "$V1_BACKEND" --expect-bench "$EXPECT_BENCH" \
             --depth "$BENCH_DEPTH" --rounds "$ROUNDS" \
             --json out/check.json --md "$GITHUB_STEP_SUMMARY" | tee out/check.log
@@ -312,7 +311,7 @@ jobs:
           cpu=$(powershell -NoProfile -Command "(Get-CimInstance Win32_Processor).Name" | tr -d '\r')
           python ci/engine_check.py --title "windows x86-64-bmi2, runner ${{ matrix.runner }}, synthetic AtomicNNUEV2: $cpu" \
             --net v2-synthetic --evalfile "v2net/$V2_NET" \
-            --bin main=bins/atomic-main.exe --bin pr78=bins/atomic-pr78.exe \
+            --bin main=bins/atomic-main.exe --bin prefetch=bins/atomic-prefetch.exe \
             --cwd run --expect-backend AtomicNNUEV2 \
             --limit-type nodes --signature-limit "$V2_SIGNATURE_NODES" --limit "$V2_TIMED_NODES" \
             --rounds "$V2_ROUNDS" --timeout 600 --session-timeout 900 \

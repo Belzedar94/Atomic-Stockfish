@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds main and the pull request under test, merged into main, with
+# Builds main and the commit under test, merged into main, with
 # `make profile-build`, one after the other in one checkout of the engine.
 #
 #   ci/build_variants.sh ENGINE_DIR NETWORK OUT_DIR EXE_SUFFIX [make arguments ...]
@@ -10,11 +10,11 @@
 # evaluation). The binaries land in OUT_DIR as atomic-<variant><EXE_SUFFIX>,
 # next to their build logs.
 #
-# Needs MAIN_SHA, PR78_SHA, NET_NAME and the expected trees TREE_MAIN and
-# TREE_PR78 in the environment. The merge uses a fixed identity and date, so a
+# Needs MAIN_SHA, PREFETCH_SHA, NET_NAME and the expected trees TREE_MAIN and
+# TREE_PREFETCH in the environment. The merge uses a fixed identity and date, so a
 # variant is the same commit on every runner, and its tree must be the expected
-# one: what is built is main plus the pull request, nothing else. Node counts
-# are not judged here (ci/engine_check.py does that), so a pull request that
+# one: what is built is main plus the commit, nothing else. Node counts
+# are not judged here (ci/engine_check.py does that), so a commit that
 # changes the search is still built and reported.
 set -euo pipefail
 
@@ -24,14 +24,13 @@ mkdir -p "$out"
 
 export GIT_AUTHOR_NAME=ci GIT_AUTHOR_EMAIL=ci@invalid
 export GIT_COMMITTER_NAME=ci GIT_COMMITTER_EMAIL=ci@invalid
-export GIT_AUTHOR_DATE=2026-10-22T00:00:00Z GIT_COMMITTER_DATE=2026-10-22T00:00:00Z
+export GIT_AUTHOR_DATE=2026-11-01T00:00:00Z GIT_COMMITTER_DATE=2026-11-01T00:00:00Z
 
 g() { git -C "$engine" "$@"; }
 
-# The pull request head lives in a fork; the base repository serves it as
-# refs/pull/<n>/head. If the head moved since, fetch the pinned commit itself.
-g fetch --quiet --no-tags origin refs/pull/78/head
-for sha in "$PR78_SHA"; do
+# The commit is the head of a branch of this repository, which the full clone
+# already holds; if it is missing, fetch the pinned commit itself.
+for sha in "$PREFETCH_SHA"; do
     g cat-file -e "$sha^{commit}" 2>/dev/null || g fetch --quiet --no-tags origin "$sha"
     g cat-file -e "$sha^{commit}"
 done
@@ -39,7 +38,7 @@ done
 # name, expected tree, heads merged into main (in this order)
 variants=(
     "main $TREE_MAIN"
-    "pr78 $TREE_PR78 $PR78_SHA"
+    "prefetch $TREE_PREFETCH $PREFETCH_SHA"
 )
 
 for v in "${variants[@]}"; do
