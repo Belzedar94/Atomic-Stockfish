@@ -1,4 +1,4 @@
-name: AVX2 attacks (#87), profile-guided
+name: AVX2 attacks (#87), clang, profile-guided
 
 # Measures the AVX2 attacks (a908e669, pull request #87, a port of upstream
 # Stockfish 82d73d0a and 205f0052 on the AVX2 both_attacks_bb() path), merged
@@ -8,8 +8,10 @@ name: AVX2 attacks (#87), profile-guided
 # unchanged, so it must search exactly the nodes 00f68d61 searches, and with
 # it merged the tree is exactly the one of c2736596.
 # ci/build_variants.sh builds 00f68d61 and 00f68d61 with the commit merged,
-# one after the other on one runner, with `make profile-build` (GCC, as
-# OpenBench and the AtomicDB workers build). ci/engine_check.py then requires
+# one after the other on one runner, with `make profile-build` and clang 23,
+# as the AtomicDB worker engines are published (ci/worker-engine-pgo-1028).
+# Run 41330373747 timed the same pair built with GCC. ci/engine_check.py then
+# requires
 # both to search exactly the nodes main searches (bench signature, a
 # worker-like UCI session, every timed bench) and times them in alternating
 # rounds. The same binaries are timed on several runners of each kind, and
@@ -30,13 +32,13 @@ name: AVX2 attacks (#87), profile-guided
 on:
   push:
     branches:
-      - ci/avx2-speed-1101
+      - ci/avx2-clang-1101
 
 permissions:
   contents: read
 
 concurrency:
-  group: avx2-speed-1101
+  group: avx2-clang-1101
   cancel-in-progress: true
 
 env:
@@ -52,6 +54,8 @@ env:
   NET_NAME: atomic_run3b_e202_l05.nnue
   V1_BACKEND: Legacy Atomic V1
   EXPECT_BENCH: "433197"
+  # The LLVM release the published Linux worker engine is built with (apt.llvm.org).
+  LLVM_VERSION: "23"
   BENCH_DEPTH: "20"
   # A multiple of 4: with two binaries each one goes first in half of the rounds,
   # in ABBA order, so a slow drift of the runner's speed cancels out.
@@ -95,7 +99,7 @@ jobs:
           overwrite: true
 
   build-linux:
-    name: build linux x86-64-avx2 (gcc, profile-build)
+    name: build linux x86-64-avx2 (clang 23, profile-build)
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     defaults:
@@ -112,9 +116,19 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      # The LLVM project's own packages, installed with its llvm.sh and an explicit
+      # version, plus llvm-N, which holds the llvm-profdata that must match the
+      # compiler, as in ci/worker-engine-pgo-1028.
+      - name: Install clang ${{ env.LLVM_VERSION }} from apt.llvm.org
+        run: |
+          log="$RUNNER_TEMP/llvm-install.log"
+          curl -sSfL --retry 3 -o "$RUNNER_TEMP/llvm.sh" https://apt.llvm.org/llvm.sh
+          sudo bash "$RUNNER_TEMP/llvm.sh" "$LLVM_VERSION" > "$log" 2>&1 || { tail -n 40 "$log"; exit 1; }
+          sudo apt-get install -y "llvm-$LLVM_VERSION" >> "$log" 2>&1 || { tail -n 40 "$log"; exit 1; }
+
       - name: Toolchain and host
         run: |
-          g++ --version | head -n 1
+          "clang++-$LLVM_VERSION" --version | head -n 1
           lscpu | grep -E 'Model name|^CPU\(s\)'
           git -C engine log -1 --format='main: %H %s'
 
@@ -126,7 +140,12 @@ jobs:
           echo "$ATOMIC_NET_SHA256  net/$NET_NAME" | sha256sum -c -
 
       - name: Profile-guided builds of 00f68d61 and the AVX2 attacks
-        run: bash ci/build_variants.sh engine "net/$NET_NAME" out "" ARCH=x86-64-avx2 COMP=gcc
+        run: |
+          set -eo pipefail
+          bash ci/build_variants.sh engine "net/$NET_NAME" out "" ARCH=x86-64-avx2 COMP=clang \
+            CXX="clang++-$LLVM_VERSION" RTLIB=compiler-rt
+          for f in out/build-*.log; do grep -q "/usr/lib/llvm-$LLVM_VERSION/bin/llvm-profdata merge" "$f"; done
+          for f in out/atomic-main out/atomic-avx2; do readelf -p .comment "$f" | grep -q "clang version $LLVM_VERSION\."; done
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -204,7 +223,7 @@ jobs:
           overwrite: true
 
   build-windows:
-    name: build windows x86-64-bmi2 (MSYS2 gcc, profile-build)
+    name: build windows x86-64-bmi2 (MSYS2 clang, profile-build)
     runs-on: windows-latest
     timeout-minutes: 60
     defaults:
@@ -221,18 +240,25 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Set up MSYS2
+      # As in ci/worker-engine-pgo-1028: the newest clang MSYS2 packages (clang64,
+      # libc++ linked statically), with the package databases brought up to date
+      # first.
+      - name: Set up MSYS2 with its newest clang
         uses: msys2/setup-msys2@e9898307ac31d1a803454791be09ab9973336e1c # v2.31.1
         with:
           msystem: mingw64
           path-type: inherit
+          update: true
           install: >-
             make
-            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-binutils
+            mingw-w64-clang-x86_64-clang
+            mingw-w64-clang-x86_64-llvm
 
       - name: Toolchain and host
         run: |
-          g++ --version | head -n 1
+          /clang64/bin/clang++ --version | head -n 1
+          /clang64/bin/llvm-profdata --version | grep -i "llvm version"
           powershell -NoProfile -Command "(Get-CimInstance Win32_Processor).Name" || true
           echo "processors: $NUMBER_OF_PROCESSORS"
           git -C engine log -1 --format='main: %H %s'
@@ -244,11 +270,17 @@ jobs:
             "https://github.com/$GITHUB_REPOSITORY/releases/download/$ATOMIC_NET_TAG/$ATOMIC_NET_ASSET"
           echo "$ATOMIC_NET_SHA256  net/$NET_NAME" | sha256sum -c -
 
-      # The network is embedded, as in the Windows binaries the workers download.
+      # The network is embedded, as in the Windows binaries the workers download. As
+      # in the published recipe, the clang PGO recipe replaces EXTRACXXFLAGS and does
+      # not read EXTRAPROFILEFLAGS, so the embedding flag goes in through the
+      # environment, and libc++ 23 gets back the transitive includes numa.h needs.
       - name: Profile-guided builds of 00f68d61 and the AVX2 attacks
         run: |
-          bash ci/build_variants.sh engine "net/$NET_NAME" out .exe ARCH=x86-64-bmi2 COMP=mingw \
-            EXTRAPROFILEFLAGS=-DATOMIC_NNUE_EMBEDDING
+          set -eo pipefail
+          export PATH="/clang64/bin:$PATH"
+          CXXFLAGS="-DATOMIC_NNUE_EMBEDDING -D_LIBCPP_KEEP_TRANSITIVE_INCLUDES_LLVM23" \
+            bash ci/build_variants.sh engine "net/$NET_NAME" out .exe ARCH=x86-64-bmi2 COMP=clang
+          for f in out/build-*.log; do grep -q -- "-fprofile-use=stockfish.profdata" "$f"; done
           for f in out/atomic-*.exe; do test "$(wc -c < "$f")" -gt "$(wc -c < "net/$NET_NAME")"; done
           objdump -p out/atomic-main.exe | grep "DLL Name"
 

@@ -1,6 +1,6 @@
-# ci/avx2-speed-1101
+# ci/avx2-clang-1101
 
-Measurement of the AVX2 attacks (`a908e669`, pull request #87, a port of
+Clang measurement of the AVX2 attacks (`a908e669`, pull request #87, a port of
 upstream Stockfish `82d73d0a` and `205f0052` on the AVX2 `both_attacks_bb()`
 path), merged into main as `c2736596`, against `00f68d61`, main before #87.
 In this branch the variant called `main` is `00f68d61`. #87 went in on an
@@ -10,9 +10,9 @@ commit claims the search is unchanged, so it must search exactly the nodes
 `c2736596`. This branch holds no engine
 source.
 
-- `.github/workflows/avx2_speed.yml` checks out `00f68d61` by SHA, merges
+- `.github/workflows/avx2_clang.yml` checks out `00f68d61` by SHA, merges
   the commit `a908e669` into it (the trees are pinned), and builds the two
-  variants, `main` and `avx2`, with `make profile-build` (GCC) for
+  variants, `main` and `avx2`, with `make profile-build` and clang for
   `linux x86-64-avx2` and `windows x86-64-bmi2`. The Windows binaries embed the
   default network; the Linux binaries read it from the run directory under its
   default name, as in the earlier measurements of this lineage.
