@@ -967,6 +967,18 @@ void Search::Worker::do_move(
         prefetch(active_tt().first_entry(pos.prefetch_key(move)));
 
     bool capture = pos.capture_stage(move);
+
+    if (ss != nullptr)
+    {
+        // Prefetch the continuation correction history entries that the child
+        // reads in correction_value(), both indexed by the moved piece
+        const Piece  pc = pos.moved_piece(move);
+        const Square to = move.to_sq();
+
+        prefetch(&(*(ss - 1)->continuationCorrectionHistory)[pc][to]);
+        prefetch(&(*(ss - 3)->continuationCorrectionHistory)[pc][to]);
+    }
+
     ++nodes;
 
     DirtyPiece& dirtyPiece = accumulator.push();
