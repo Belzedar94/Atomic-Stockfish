@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds main and the commits under test, each merged into main, with
+# Builds main and the commit under test, merged into main, with
 # `make profile-build`, one after the other in one checkout of the engine.
 #
 #   ci/build_variants.sh ENGINE_DIR NETWORK OUT_DIR EXE_SUFFIX [make arguments ...]
@@ -10,12 +10,12 @@
 # evaluation). The binaries land in OUT_DIR as atomic-<variant><EXE_SUFFIX>,
 # next to their build logs.
 #
-# Needs MAIN_SHA, CAND_SHA, P66_SHA, NET_NAME and the expected trees
-# TREE_MAIN, TREE_CAND and TREE_P66 in the environment. The merge uses a fixed
-# identity and date, so a variant is the same commit on every runner, and its
-# tree must be the expected one: what is built is main plus the commit, nothing
-# else. Node counts are not judged here (ci/engine_check.py does that), so a
-# commit that changes the search is still built and reported.
+# Needs MAIN_SHA, CAND_SHA, NET_NAME and the expected trees TREE_MAIN and
+# TREE_CAND in the environment. The merge uses a fixed identity and date, so a
+# variant is the same commit on every runner, and its tree must be the
+# expected one: what is built is main plus the commit, nothing else. Node
+# counts are not judged here (ci/engine_check.py does that), so a commit that
+# changes the search is still built and reported.
 set -euo pipefail
 
 engine=$1 network=$2 out=$3 ext=$4
@@ -29,20 +29,14 @@ export GIT_AUTHOR_DATE=2026-11-01T00:00:00Z GIT_COMMITTER_DATE=2026-11-01T00:00:
 g() { git -C "$engine" "$@"; }
 
 # CAND_SHA is the head of a branch of this repository, which the full clone
-# already holds; P66_SHA is the head of pull request #66 (refs/pull/66/head),
-# which it does not. A missing commit is fetched by its pinned SHA, or else
-# through that pull request ref; either way it must be the pinned commit.
-for sha in "$CAND_SHA" "$P66_SHA"; do
-    g cat-file -e "$sha^{commit}" 2>/dev/null || g fetch --quiet --no-tags origin "$sha" \
-        || g fetch --quiet --no-tags origin refs/pull/66/head
-    g cat-file -e "$sha^{commit}"
-done
+# already holds; if it does not, it is fetched by its pinned SHA.
+g cat-file -e "$CAND_SHA^{commit}" 2>/dev/null || g fetch --quiet --no-tags origin "$CAND_SHA"
+g cat-file -e "$CAND_SHA^{commit}"
 
 # name, expected tree, heads merged into main (in this order)
 variants=(
     "main $TREE_MAIN"
-    "lq $TREE_CAND $CAND_SHA"
-    "p66 $TREE_P66 $P66_SHA"
+    "bw $TREE_CAND $CAND_SHA"
 )
 
 for v in "${variants[@]}"; do

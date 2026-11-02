@@ -1,67 +1,100 @@
-name: legal() quiet shortcut, clang, profile-guided
+name: NNUE backward accumulator updates, clang, profile-guided
 
-# Measures the speed of two legality shortcuts against main 722b4735:
-#   lq    main with a2ec395d merged (branch speed/legal-quiet-shortcut-1102):
-#         legal() accepts a quiet move of a non-king that is not a blocker
-#         of our king, outside check, without the post-move attack scan;
-#   p66   main with 5c29397c merged (the head of pull request #66): the same
-#         quiet shortcut plus an exception for blockers that move along their
-#         line, and king-ray shortcuts for captures in legal() and
-#         gives_check(). Its check-status cache is already in main (#72), so
-#         the merge adds only those legal() and gives_check() parts.
-# Neither may change the search: same bench (433197), same nodes, same output.
-# ci/build_variants.sh builds the three variants one after the other on one
+# Measures the speed of one NNUE accumulator change against main 722b4735:
+#   bw    main with 114cd1e8 merged (branch speed/nnue-backward-update-1102):
+#         after a refresh, the accumulator is walked back down to the last
+#         king move of that perspective (or the root) with backward
+#         incremental updates, as upstream Stockfish does, in both the Legacy
+#         Atomic V1 and the AtomicNNUEV2 accumulator.
+# It may not change the search: same bench (433197), same nodes, same output.
+# ci/build_variants.sh builds the two variants one after the other on one
 # runner, with `make profile-build` and clang 23, as the AtomicDB worker
 # engines are published (ci/worker-engine-pgo-1028). ci/engine_check.py
-# requires main, lq and p66 to search exactly the same nodes (bench signature,
-# a worker-like UCI session, every timed bench), then times the three in
-# alternating rounds. The same binaries are timed on several runners of each
-# kind, and ci/pool_checks.py pools the per-round ratios.
+# requires main and bw to search exactly the same nodes (bench signature, a
+# worker-like UCI session, every timed bench), then times the two in
+# alternating ABBA rounds. The same binaries are timed on several runners of
+# each kind, and ci/pool_checks.py pools the per-round ratios.
 #
 # The engine is NNUE-only since #76, so there is no classical bench. The
 # default network (atomic_run3b_e202_l05.nnue) is a Legacy Atomic V1 network.
-# The change is not in NNUE code, so the synthetic AtomicNNUEV2 check of the
-# earlier measurements of this lineage is left out.
+# The change is in NNUE code shared by two backends, so every runner also
+# times the synthetic AtomicNNUEV2 fixture that main's own CI generates
+# (tests/create_synthetic_atomic_v2_nnue.py, pinned by its sha256), with the
+# same identity checks and as many rounds. Its benches are node-limited, as in
+# the earlier measurements of this lineage.
 #
 # Nothing is published: binaries and reports are artifacts.
 
 on:
   push:
     branches:
-      - ci/legal-quiet-clang-1102
+      - ci/nnue-backward-clang-1102
 
 permissions:
   contents: read
 
 concurrency:
-  group: legal-quiet-clang-1102
+  group: nnue-backward-clang-1102
   cancel-in-progress: true
 
 env:
   MAIN_SHA: 722b47357803895e9f47b30caec381087dcf4a44
-  CAND_SHA: a2ec395d41b7427d51623d961680a67fc7e59eba
-  P66_SHA: 5c29397c684c5de565de5873d03c4db4033f2445
-  # Trees of 722b4735 and of 722b4735 with each commit merged: the build stops
+  CAND_SHA: 114cd1e88d7e31f763537ac3ea167d9127a057dd
+  # Trees of 722b4735 and of 722b4735 with the commit merged: the build stops
   # if a variant is anything else.
   TREE_MAIN: 98e9d440009fc25b917f11ece03bb30e65591e43
-  TREE_CAND: b883fecb39f556fe5fe16b96b83f3a57b9ccb1dc
-  TREE_P66: 8ad918b33eac12d3f07de53e342926c22126ac8d
+  TREE_CAND: 08be6f8a7a05f46701ad88c1a972ac8f21b92bd8
   ATOMIC_NET_TAG: v1.0
   ATOMIC_NET_ASSET: atomic-run3b.nnue
   ATOMIC_NET_SHA256: 99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f92a04a6
   NET_NAME: atomic_run3b_e202_l05.nnue
   V1_BACKEND: Legacy Atomic V1
-  # main, lq and p66
+  # main and bw
   EXPECT_BENCH: "433197"
   # The LLVM release the published Linux worker engine is built with (apt.llvm.org).
   LLVM_VERSION: "23"
   BENCH_DEPTH: "20"
-  # A multiple of 6: with three binaries the order rotates and reverses, so over
-  # six rounds every binary goes first, in the middle and last in both
-  # directions, and a slow drift of the runner's speed cancels out.
+  # Even: with two binaries the order alternates (ABBA), so a slow drift of the
+  # runner's speed cancels out.
   ROUNDS: "24"
+  # The synthetic AtomicNNUEV2 network of main's CI (ATOMIC_SYNTHETIC_V2_NNUE_SHA256).
+  V2_NET: atomic-v2-synthetic.nnue
+  V2_NET_SHA256: 4deb05cff79b5d5eba51c560f64ed24224671c188b6c5db27521033e587c87c6
+  # Nodes per bench position: signature bench and timed bench.
+  V2_SIGNATURE_NODES: "50000"
+  V2_TIMED_NODES: "100000"
+  V2_ROUNDS: "24"
 
 jobs:
+  v2net:
+    name: synthetic AtomicNNUEV2 network (main's CI fixture)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ env.MAIN_SHA }}
+          path: engine
+          persist-credentials: false
+
+      - name: Generate it with main's script
+        run: |
+          set -eo pipefail
+          python3 --version
+          python3 engine/tests/create_synthetic_atomic_v2_nnue.py --output "v2net/$V2_NET"
+          echo "$V2_NET_SHA256  v2net/$V2_NET" | sha256sum -c -
+          ls -l v2net
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: v2net
+          path: v2net/
+          if-no-files-found: error
+          overwrite: true
+
   build-linux:
     name: build linux x86-64-avx2 (clang 23, profile-build)
     runs-on: ubuntu-24.04
@@ -103,13 +136,13 @@ jobs:
             "https://github.com/$GITHUB_REPOSITORY/releases/download/$ATOMIC_NET_TAG/$ATOMIC_NET_ASSET"
           echo "$ATOMIC_NET_SHA256  net/$NET_NAME" | sha256sum -c -
 
-      - name: Profile-guided builds of main, lq and p66
+      - name: Profile-guided builds of main and bw
         run: |
           set -eo pipefail
           bash ci/build_variants.sh engine "net/$NET_NAME" out "" ARCH=x86-64-avx2 COMP=clang \
             CXX="clang++-$LLVM_VERSION" RTLIB=compiler-rt
           for f in out/build-*.log; do grep -q "/usr/lib/llvm-$LLVM_VERSION/bin/llvm-profdata merge" "$f"; done
-          for f in out/atomic-main out/atomic-lq out/atomic-p66; do
+          for f in out/atomic-main out/atomic-bw; do
             readelf -p .comment "$f" | grep -q "clang version $LLVM_VERSION\."
           done
 
@@ -122,9 +155,9 @@ jobs:
 
   measure-linux:
     name: time linux x86-64-avx2, runner ${{ matrix.runner }}
-    needs: build-linux
+    needs: [build-linux, v2net]
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
@@ -140,16 +173,21 @@ jobs:
         with:
           name: bins-linux
           path: bins
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: v2net
+          path: v2net
 
       # The Linux binaries read the default network from the run directory, under
       # its default name, as in the earlier measurements of this lineage.
-      - name: Network and host
+      - name: Networks and host
         run: |
           chmod +x bins/atomic-*
           mkdir -p run out
           curl -sSfL --retry 3 -o "run/$NET_NAME" \
             "https://github.com/$GITHUB_REPOSITORY/releases/download/$ATOMIC_NET_TAG/$ATOMIC_NET_ASSET"
           echo "$ATOMIC_NET_SHA256  run/$NET_NAME" | sha256sum -c -
+          echo "$V2_NET_SHA256  v2net/$V2_NET" | sha256sum -c -
           lscpu | grep -E 'Model name|^CPU\(s\)'
 
       - name: Identity and speed, default network (Legacy Atomic V1)
@@ -157,10 +195,24 @@ jobs:
           set -eo pipefail
           cpu=$(lscpu | sed -n 's/^Model name: *//p' | head -n 1)
           python3 ci/engine_check.py --title "linux x86-64-avx2, runner ${{ matrix.runner }}: $cpu" --net v1 \
-            --bin main=bins/atomic-main --bin lq=bins/atomic-lq --bin p66=bins/atomic-p66 \
+            --bin main=bins/atomic-main --bin bw=bins/atomic-bw \
             --cwd run --expect-backend "$V1_BACKEND" --expect-bench "$EXPECT_BENCH" \
             --depth "$BENCH_DEPTH" --rounds "$ROUNDS" \
             --json out/check.json --md "$GITHUB_STEP_SUMMARY" | tee out/check.log
+
+      - name: Identity and speed, synthetic AtomicNNUEV2 network
+        if: success() || failure()
+        timeout-minutes: 60
+        run: |
+          set -eo pipefail
+          cpu=$(lscpu | sed -n 's/^Model name: *//p' | head -n 1)
+          python3 ci/engine_check.py --title "linux x86-64-avx2, runner ${{ matrix.runner }}, synthetic AtomicNNUEV2: $cpu" \
+            --net v2-synthetic --evalfile "v2net/$V2_NET" \
+            --bin main=bins/atomic-main --bin bw=bins/atomic-bw \
+            --cwd run --expect-backend AtomicNNUEV2 \
+            --limit-type nodes --signature-limit "$V2_SIGNATURE_NODES" --limit "$V2_TIMED_NODES" \
+            --rounds "$V2_ROUNDS" --timeout 600 --session-timeout 900 \
+            --json out/check-v2.json --md "$GITHUB_STEP_SUMMARY" | tee out/check-v2.log
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
@@ -221,7 +273,7 @@ jobs:
       # in the published recipe, the clang PGO recipe replaces EXTRACXXFLAGS and does
       # not read EXTRAPROFILEFLAGS, so the embedding flag goes in through the
       # environment, and libc++ 23 gets back the transitive includes numa.h needs.
-      - name: Profile-guided builds of main, lq and p66
+      - name: Profile-guided builds of main and bw
         run: |
           set -eo pipefail
           export PATH="/clang64/bin:$PATH"
@@ -241,9 +293,9 @@ jobs:
 
   measure-windows:
     name: time windows x86-64-bmi2, runner ${{ matrix.runner }}
-    needs: build-windows
+    needs: [build-windows, v2net]
     runs-on: windows-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
@@ -259,6 +311,10 @@ jobs:
         with:
           name: bins-windows
           path: bins
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: v2net
+          path: v2net
 
       # The run directory holds no .nnue: a completed bench with the default
       # network can only come from the embedded one.
@@ -271,10 +327,25 @@ jobs:
           echo "$cpu, $NUMBER_OF_PROCESSORS processors"
           python --version
           python ci/engine_check.py --title "windows x86-64-bmi2, runner ${{ matrix.runner }}: $cpu" --net v1 \
-            --bin main=bins/atomic-main.exe --bin lq=bins/atomic-lq.exe --bin p66=bins/atomic-p66.exe \
+            --bin main=bins/atomic-main.exe --bin bw=bins/atomic-bw.exe \
             --cwd run --expect-backend "$V1_BACKEND" --expect-bench "$EXPECT_BENCH" \
             --depth "$BENCH_DEPTH" --rounds "$ROUNDS" \
             --json out/check.json --md "$GITHUB_STEP_SUMMARY" | tee out/check.log
+
+      - name: Identity and speed, synthetic AtomicNNUEV2 network
+        if: success() || failure()
+        timeout-minutes: 60
+        run: |
+          set -eo pipefail
+          echo "$V2_NET_SHA256  v2net/$V2_NET" | sha256sum -c -
+          cpu=$(powershell -NoProfile -Command "(Get-CimInstance Win32_Processor).Name" | tr -d '\r')
+          python ci/engine_check.py --title "windows x86-64-bmi2, runner ${{ matrix.runner }}, synthetic AtomicNNUEV2: $cpu" \
+            --net v2-synthetic --evalfile "v2net/$V2_NET" \
+            --bin main=bins/atomic-main.exe --bin bw=bins/atomic-bw.exe \
+            --cwd run --expect-backend AtomicNNUEV2 \
+            --limit-type nodes --signature-limit "$V2_SIGNATURE_NODES" --limit "$V2_TIMED_NODES" \
+            --rounds "$V2_ROUNDS" --timeout 600 --session-timeout 900 \
+            --json out/check-v2.json --md "$GITHUB_STEP_SUMMARY" | tee out/check-v2.log
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
