@@ -1,24 +1,17 @@
-name: Blast value capture order, clang, profile-guided
+name: atomic_wins() below the root, clang, profile-guided
 
-# Measures the speed cost of ordering captures by their blast value
-# (d09ed03e, branch mate/capture-blast-order) against main 722b4735.
-# The commit changes the search (bench 383181 against 433197), so two
-# measurements are made:
-#   blast  main with d09ed03e merged: its speed on its own tree, a different
-#          tree from main's;
-#   cost   main with 50167df6 merged (branch mate/capture-blast-order-cost,
-#          d09ed03e plus a volatile zero mask): it computes the blast term on
-#          every capture exactly as blast does and then drops it, so it must
-#          search exactly the nodes main searches, and its speed difference is
-#          the per-node cost of the term on main's own tree.
-# ci/build_variants.sh builds the three variants one after the other on one
+# Measures the speed of 20dd2b92 (branch speed/atomic-wins-dead-1102), which
+# drops the atomic_wins() calls of the search() and qsearch() move loops that
+# king_explosion_move() makes dead below the root, against main 722b4735. The
+# commit must not change the search: same bench (433197), same nodes, same
+# output.
+# ci/build_variants.sh builds the two variants one after the other on one
 # runner, with `make profile-build` and clang 23, as the AtomicDB worker
 # engines are published (ci/worker-engine-pgo-1028). ci/engine_check.py
-# requires main and cost to search exactly the same nodes (bench signature, a
-# worker-like UCI session, every timed bench) and blast to search its own
-# bench, then times the three in alternating rounds. The same binaries are
-# timed on several runners of each kind, and ci/pool_checks.py pools the
-# per-round ratios.
+# requires main and wins to search exactly the same nodes (bench signature, a
+# worker-like UCI session, every timed bench), then times the two in
+# alternating rounds (ABBA). The same binaries are timed on several runners of
+# each kind, and ci/pool_checks.py pools the per-round ratios.
 #
 # The engine is NNUE-only since #76, so there is no classical bench. The
 # default network (atomic_run3b_e202_l05.nnue) is a Legacy Atomic V1 network.
@@ -30,40 +23,35 @@ name: Blast value capture order, clang, profile-guided
 on:
   push:
     branches:
-      - ci/blast-order-clang-1102
+      - ci/atomic-wins-clang-1102
 
 permissions:
   contents: read
 
 concurrency:
-  group: blast-order-clang-1102
+  group: atomic-wins-clang-1102
   cancel-in-progress: true
 
 env:
   MAIN_SHA: 722b47357803895e9f47b30caec381087dcf4a44
-  CAND_SHA: d09ed03e08cd0dae04db3b1e8523817df77ae215
-  COST_SHA: 50167df603e23087df7e5d6eca85c07d32ce1c41
-  # Trees of 722b4735 and of 722b4735 with each commit merged: the build stops
+  CAND_SHA: 20dd2b928b1383070f729de3e0de621cb35d0b6e
+  # Trees of 722b4735 and of 722b4735 with the commit merged: the build stops
   # if a variant is anything else.
   TREE_MAIN: 98e9d440009fc25b917f11ece03bb30e65591e43
-  TREE_CAND: 56a5b318b55343bd846e0d7968140402fcc1997e
-  TREE_COST: e51da2f2500bac7ad8e664203d966af8dba0d525
+  TREE_CAND: 1189a147dfa8afc5e60d9bb513f57d9385ec41a0
   ATOMIC_NET_TAG: v1.0
   ATOMIC_NET_ASSET: atomic-run3b.nnue
   ATOMIC_NET_SHA256: 99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f92a04a6
   NET_NAME: atomic_run3b_e202_l05.nnue
   V1_BACKEND: Legacy Atomic V1
-  # main and cost
+  # main and wins
   EXPECT_BENCH: "433197"
-  # blast
-  CAND_BENCH: "383181"
   # The LLVM release the published Linux worker engine is built with (apt.llvm.org).
   LLVM_VERSION: "23"
   BENCH_DEPTH: "20"
-  # A multiple of 6: with three binaries the order rotates and reverses, so over
-  # six rounds every binary goes first, in the middle and last in both
-  # directions, and a slow drift of the runner's speed cancels out.
-  ROUNDS: "18"
+  # A multiple of 4: with two binaries each one goes first in half of the rounds,
+  # in both directions (ABBA), and a slow drift of the runner's speed cancels out.
+  ROUNDS: "24"
 
 jobs:
   build-linux:
@@ -107,13 +95,13 @@ jobs:
             "https://github.com/$GITHUB_REPOSITORY/releases/download/$ATOMIC_NET_TAG/$ATOMIC_NET_ASSET"
           echo "$ATOMIC_NET_SHA256  net/$NET_NAME" | sha256sum -c -
 
-      - name: Profile-guided builds of main, blast and cost
+      - name: Profile-guided builds of main and wins
         run: |
           set -eo pipefail
           bash ci/build_variants.sh engine "net/$NET_NAME" out "" ARCH=x86-64-avx2 COMP=clang \
             CXX="clang++-$LLVM_VERSION" RTLIB=compiler-rt
           for f in out/build-*.log; do grep -q "/usr/lib/llvm-$LLVM_VERSION/bin/llvm-profdata merge" "$f"; done
-          for f in out/atomic-main out/atomic-blast out/atomic-cost; do
+          for f in out/atomic-main out/atomic-wins; do
             readelf -p .comment "$f" | grep -q "clang version $LLVM_VERSION\."
           done
 
@@ -132,7 +120,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: [1, 2, 3]
+        runner: [1, 2, 3, 4]
     defaults:
       run:
         shell: bash
@@ -161,8 +149,7 @@ jobs:
           set -eo pipefail
           cpu=$(lscpu | sed -n 's/^Model name: *//p' | head -n 1)
           python3 ci/engine_check.py --title "linux x86-64-avx2, runner ${{ matrix.runner }}: $cpu" --net v1 \
-            --bin main=bins/atomic-main --bin blast=bins/atomic-blast --bin cost=bins/atomic-cost \
-            --own-search "blast=$CAND_BENCH" \
+            --bin main=bins/atomic-main --bin wins=bins/atomic-wins \
             --cwd run --expect-backend "$V1_BACKEND" --expect-bench "$EXPECT_BENCH" \
             --depth "$BENCH_DEPTH" --rounds "$ROUNDS" \
             --json out/check.json --md "$GITHUB_STEP_SUMMARY" | tee out/check.log
@@ -226,7 +213,7 @@ jobs:
       # in the published recipe, the clang PGO recipe replaces EXTRACXXFLAGS and does
       # not read EXTRAPROFILEFLAGS, so the embedding flag goes in through the
       # environment, and libc++ 23 gets back the transitive includes numa.h needs.
-      - name: Profile-guided builds of main, blast and cost
+      - name: Profile-guided builds of main and wins
         run: |
           set -eo pipefail
           export PATH="/clang64/bin:$PATH"
@@ -276,8 +263,7 @@ jobs:
           echo "$cpu, $NUMBER_OF_PROCESSORS processors"
           python --version
           python ci/engine_check.py --title "windows x86-64-bmi2, runner ${{ matrix.runner }}: $cpu" --net v1 \
-            --bin main=bins/atomic-main.exe --bin blast=bins/atomic-blast.exe --bin cost=bins/atomic-cost.exe \
-            --own-search "blast=$CAND_BENCH" \
+            --bin main=bins/atomic-main.exe --bin wins=bins/atomic-wins.exe \
             --cwd run --expect-backend "$V1_BACKEND" --expect-bench "$EXPECT_BENCH" \
             --depth "$BENCH_DEPTH" --rounds "$ROUNDS" \
             --json out/check.json --md "$GITHUB_STEP_SUMMARY" | tee out/check.log
