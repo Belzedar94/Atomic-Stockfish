@@ -1,0 +1,86 @@
+name: Orthodox Stockfish cut-off reference
+
+# The move-ordering instrument of the Atomic speed profile (rank and stage of the
+# move that fails high, effort spent before it), applied to orthodox Stockfish at
+# eca43a97, the upstream commit Atomic-Stockfish main is based on, so that the
+# Atomic numbers have a reference measured the same way. Same load shape as the
+# Atomic run: go nodes 3M, Hash 256, one thread, 40 seeds (the standard bench
+# positions) each followed by the positions after its best moves, no ucinewgame.
+# The counters must not change the search: the patched build must give the bench
+# of a plain build of the same commit. Nothing is published.
+
+on:
+  push:
+    branches:
+      - ci/orthodox-cuts-1102
+
+permissions:
+  contents: read
+
+concurrency:
+  group: orthodox-cuts-1102
+  cancel-in-progress: true
+
+env:
+  SF_SHA: eca43a97efd2cf0c9b7153c71b85f35e0fd1f5ca
+
+jobs:
+  cuts:
+    name: orthodox cut-offs (eca43a97, x86-64-avx2)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: official-stockfish/Stockfish
+          ref: ${{ env.SF_SHA }}
+          path: sf
+          persist-credentials: false
+
+      - name: Plain build and its bench
+        working-directory: sf/src
+        run: |
+          set -eo pipefail
+          mkdir -p ../../out ../../bins
+          g++ --version | head -n 1; lscpu | grep -E 'Model name|^CPU\(s\)'
+          make -j4 build ARCH=x86-64-avx2 > ../../out/build-plain.log 2>&1 || { tail -n 40 ../../out/build-plain.log; exit 1; }
+          ./stockfish bench > ../../out/bench-plain.txt 2>&1
+          grep "Nodes searched" ../../out/bench-plain.txt
+          cp stockfish ../../bins/sf-plain
+          make objclean > /dev/null 2>&1 || true
+
+      - name: Counters build, same bench
+        run: |
+          set -eo pipefail
+          python3 ci/orthodox_patch.py sf/src
+          cd sf/src
+          make -j4 build ARCH=x86-64-avx2 > ../../out/build-cnt.log 2>&1 || { tail -n 40 ../../out/build-cnt.log; exit 1; }
+          PROF_OUT=/dev/null ./stockfish bench > ../../out/bench-cnt.txt 2>&1
+          grep "Nodes searched" ../../out/bench-cnt.txt
+          test "$(grep 'Nodes searched' ../../out/bench-cnt.txt)" = "$(grep 'Nodes searched' ../../out/bench-plain.txt)"
+          cp stockfish ../../bins/sf-cnt
+
+      - name: Load, MultiPV 1 and MultiPV 5 (one thread each, side by side)
+        run: |
+          set -eo pipefail
+          for m in 1 5; do
+            PROF_OUT="$PWD/out/orthodox_mpv$m.prof" python3 ci/atomicdb_load.py --engine bins/sf-cnt \
+              --seeds ci/orthodox_seeds.tsv --limit 40 --nodes 3000000 --multipv "$m" --walk 3 --threads 1 \
+              --hash 256 --out "out/orthodox_mpv$m.jsonl" > "out/orthodox_mpv$m.log" 2>&1 &
+          done
+          wait
+          tail -n 2 out/orthodox_mpv*.log
+          ls -l out
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: orthodox-cuts
+          path: out/
+          retention-days: 30
