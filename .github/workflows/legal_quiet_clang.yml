@@ -1,17 +1,22 @@
-name: atomic_wins() below the root, clang, profile-guided
+name: legal() quiet shortcut, clang, profile-guided
 
-# Measures the speed of 20dd2b92 (branch speed/atomic-wins-dead-1102), which
-# drops the atomic_wins() calls of the search() and qsearch() move loops that
-# king_explosion_move() makes dead below the root, against main 722b4735. The
-# commit must not change the search: same bench (433197), same nodes, same
-# output.
-# ci/build_variants.sh builds the two variants one after the other on one
+# Measures the speed of two legality shortcuts against main 722b4735:
+#   lq    main with a2ec395d merged (branch speed/legal-quiet-shortcut-1102):
+#         legal() accepts a quiet move of a non-king that is not a blocker
+#         of our king, outside check, without the post-move attack scan;
+#   p66   main with 5c29397c merged (the head of pull request #66): the same
+#         quiet shortcut plus an exception for blockers that move along their
+#         line, and king-ray shortcuts for captures in legal() and
+#         gives_check(). Its check-status cache is already in main (#72), so
+#         the merge adds only those legal() and gives_check() parts.
+# Neither may change the search: same bench (433197), same nodes, same output.
+# ci/build_variants.sh builds the three variants one after the other on one
 # runner, with `make profile-build` and clang 23, as the AtomicDB worker
 # engines are published (ci/worker-engine-pgo-1028). ci/engine_check.py
-# requires main and wins to search exactly the same nodes (bench signature, a
-# worker-like UCI session, every timed bench), then times the two in
-# alternating rounds (ABBA). The same binaries are timed on several runners of
-# each kind, and ci/pool_checks.py pools the per-round ratios.
+# requires main, lq and p66 to search exactly the same nodes (bench signature,
+# a worker-like UCI session, every timed bench), then times the three in
+# alternating rounds. The same binaries are timed on several runners of each
+# kind, and ci/pool_checks.py pools the per-round ratios.
 #
 # The engine is NNUE-only since #76, so there is no classical bench. The
 # default network (atomic_run3b_e202_l05.nnue) is a Legacy Atomic V1 network.
@@ -23,34 +28,37 @@ name: atomic_wins() below the root, clang, profile-guided
 on:
   push:
     branches:
-      - ci/atomic-wins-clang-1102
+      - ci/legal-quiet-clang-1102
 
 permissions:
   contents: read
 
 concurrency:
-  group: atomic-wins-clang-1102
+  group: legal-quiet-clang-1102
   cancel-in-progress: true
 
 env:
   MAIN_SHA: 722b47357803895e9f47b30caec381087dcf4a44
-  CAND_SHA: 20dd2b928b1383070f729de3e0de621cb35d0b6e
-  # Trees of 722b4735 and of 722b4735 with the commit merged: the build stops
+  CAND_SHA: a2ec395d41b7427d51623d961680a67fc7e59eba
+  P66_SHA: 5c29397c684c5de565de5873d03c4db4033f2445
+  # Trees of 722b4735 and of 722b4735 with each commit merged: the build stops
   # if a variant is anything else.
   TREE_MAIN: 98e9d440009fc25b917f11ece03bb30e65591e43
-  TREE_CAND: 1189a147dfa8afc5e60d9bb513f57d9385ec41a0
+  TREE_CAND: b883fecb39f556fe5fe16b96b83f3a57b9ccb1dc
+  TREE_P66: 8ad918b33eac12d3f07de53e342926c22126ac8d
   ATOMIC_NET_TAG: v1.0
   ATOMIC_NET_ASSET: atomic-run3b.nnue
   ATOMIC_NET_SHA256: 99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f92a04a6
   NET_NAME: atomic_run3b_e202_l05.nnue
   V1_BACKEND: Legacy Atomic V1
-  # main and wins
+  # main, lq and p66
   EXPECT_BENCH: "433197"
   # The LLVM release the published Linux worker engine is built with (apt.llvm.org).
   LLVM_VERSION: "23"
   BENCH_DEPTH: "20"
-  # A multiple of 4: with two binaries each one goes first in half of the rounds,
-  # in both directions (ABBA), and a slow drift of the runner's speed cancels out.
+  # A multiple of 6: with three binaries the order rotates and reverses, so over
+  # six rounds every binary goes first, in the middle and last in both
+  # directions, and a slow drift of the runner's speed cancels out.
   ROUNDS: "24"
 
 jobs:
@@ -95,13 +103,13 @@ jobs:
             "https://github.com/$GITHUB_REPOSITORY/releases/download/$ATOMIC_NET_TAG/$ATOMIC_NET_ASSET"
           echo "$ATOMIC_NET_SHA256  net/$NET_NAME" | sha256sum -c -
 
-      - name: Profile-guided builds of main and wins
+      - name: Profile-guided builds of main, lq and p66
         run: |
           set -eo pipefail
           bash ci/build_variants.sh engine "net/$NET_NAME" out "" ARCH=x86-64-avx2 COMP=clang \
             CXX="clang++-$LLVM_VERSION" RTLIB=compiler-rt
           for f in out/build-*.log; do grep -q "/usr/lib/llvm-$LLVM_VERSION/bin/llvm-profdata merge" "$f"; done
-          for f in out/atomic-main out/atomic-wins; do
+          for f in out/atomic-main out/atomic-lq out/atomic-p66; do
             readelf -p .comment "$f" | grep -q "clang version $LLVM_VERSION\."
           done
 
@@ -149,7 +157,7 @@ jobs:
           set -eo pipefail
           cpu=$(lscpu | sed -n 's/^Model name: *//p' | head -n 1)
           python3 ci/engine_check.py --title "linux x86-64-avx2, runner ${{ matrix.runner }}: $cpu" --net v1 \
-            --bin main=bins/atomic-main --bin wins=bins/atomic-wins \
+            --bin main=bins/atomic-main --bin lq=bins/atomic-lq --bin p66=bins/atomic-p66 \
             --cwd run --expect-backend "$V1_BACKEND" --expect-bench "$EXPECT_BENCH" \
             --depth "$BENCH_DEPTH" --rounds "$ROUNDS" \
             --json out/check.json --md "$GITHUB_STEP_SUMMARY" | tee out/check.log
@@ -213,7 +221,7 @@ jobs:
       # in the published recipe, the clang PGO recipe replaces EXTRACXXFLAGS and does
       # not read EXTRAPROFILEFLAGS, so the embedding flag goes in through the
       # environment, and libc++ 23 gets back the transitive includes numa.h needs.
-      - name: Profile-guided builds of main and wins
+      - name: Profile-guided builds of main, lq and p66
         run: |
           set -eo pipefail
           export PATH="/clang64/bin:$PATH"
@@ -263,7 +271,7 @@ jobs:
           echo "$cpu, $NUMBER_OF_PROCESSORS processors"
           python --version
           python ci/engine_check.py --title "windows x86-64-bmi2, runner ${{ matrix.runner }}: $cpu" --net v1 \
-            --bin main=bins/atomic-main.exe --bin wins=bins/atomic-wins.exe \
+            --bin main=bins/atomic-main.exe --bin lq=bins/atomic-lq.exe --bin p66=bins/atomic-p66.exe \
             --cwd run --expect-backend "$V1_BACKEND" --expect-bench "$EXPECT_BENCH" \
             --depth "$BENCH_DEPTH" --rounds "$ROUNDS" \
             --json out/check.json --md "$GITHUB_STEP_SUMMARY" | tee out/check.log
