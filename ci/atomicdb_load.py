@@ -91,6 +91,9 @@ def main() -> int:
         with a.out.open("w", encoding="utf-8") as out:
             for si, (label, fen) in enumerate(seeds):
                 moves: list[str] = []
+                if " moves " in fen:  # a seed given as a position plus moves
+                    fen, tail = fen.split(" moves ", 1)
+                    moves = tail.split()
                 for step in range(a.walk):
                     send(f"setoption name MultiPV value {a.multipv}")
                     send(f"position fen {fen}" + (" moves " + " ".join(moves) if moves else ""))
