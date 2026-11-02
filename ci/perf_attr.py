@@ -51,7 +51,7 @@ CATEGORIES = [
     ("tt", r"TranspositionTable::|TTWriter::|TTEntry::|TTData"),
     ("movepicker_score", r"MovePicker::score<"),
     ("movepicker_next", r"MovePicker::(next_move|select|MovePicker)|partial_insertion_sort|MoveSorter"),
-    ("movegen", r"(^|::)generate<|MoveList<|generate_(pawn_moves|moves|all|promotions)"),
+    ("movegen", r"(^|::)generate<|MoveList<|generate_(pawn_moves|moves|all|promotions)|splat_(pawn_)?moves|make_promotions"),
     ("legal", r"Position::legal\("),
     ("pseudo_legal", r"Position::pseudo_legal\("),
     ("see", r"Position::see_ge\("),
@@ -62,7 +62,7 @@ CATEGORIES = [
     ("attackers_to", r"Position::attackers_to"),
     ("tablebases", r"Tablebases::|(^|::)TB::|probe_wdl|probe_dtz"),
     ("qsearch_own", r"Worker::qsearch<"),
-    ("search_own", r"Worker::search<"),
+    ("search_own", r"Worker::search<|Worker::reduction\(|is_shuffling|value_(to|from)_tt|value_draw"),
     ("iter_deepening", r"Worker::iterative_deepening|Worker::start_searching"),
     ("time_check", r"check_time|TimeManagement|::elapsed|::now\("),
     ("libc", r"^(__)?(memset|memcpy|memmove|memcmp)"),
@@ -95,7 +95,7 @@ LABELS = {
     "see": "Position::see_ge() (atomic SEE)",
     "stalemate_guard": "has_legal_move()/has_legal_quiet()",
     "draw_rep": "is_draw()/upcoming_repetition()",
-    "histories": "history updates",
+    "histories": "history tables (reads in scoring/pruning + updates)",
     "correction_read": "correction_value()",
     "attackers_to": "Position::attackers_to()",
     "tablebases": "tablebases",
@@ -109,8 +109,8 @@ LABELS = {
 }
 
 HELPER_FILE = re.compile(
-    r"(^|[/\\])(bitboard\.h|attacks\.h|types\.h|position\.h|misc\.h|simd\.h|memory\.h|movegen\.h|search\.h|"
-    r"score\.h|history\.h)$|^/usr/|[/\\]c\+\+[/\\]|[/\\]include[/\\]c\+\+")
+    r"(^|[/\\])(bitboard\.h|bitboard\.cpp|attacks\.h|attacks\.cpp|types\.h|position\.h|misc\.h|simd\.h|memory\.h|"
+    r"movegen\.h|search\.h|score\.h|history\.h)$|^/usr/|[/\\]c\+\+[/\\]|[/\\]include[/\\]c\+\+")
 NOT_HELPER_FN = re.compile(r"(^|::)prefetch\(|StatsEntry|::Stats<")
 
 MMAP_RE = re.compile(r"PERF_RECORD_MMAP2?\s+(\d+)/\d+:\s+\[(0x[0-9a-f]+)\((0x[0-9a-f]+)\) @ (0x[0-9a-f]+|\d+)[^\]]*\]:\s+(\S+)\s+(\S.*?)\s*$")
@@ -133,9 +133,13 @@ def qualified_name(fn: str) -> str:
             cut = i
             break
     head = s[:cut]
+    # A conversion operator ("...::operator short") has a space in its own name:
+    # only spaces before "::operator" can end a return type.
+    op = head.find("::operator")
+    limit = op if op >= 0 else len(head)
     angle = 0
     start = 0
-    for i, ch in enumerate(head):
+    for i, ch in enumerate(head[:limit]):
         if ch == "<":
             angle += 1
         elif ch == ">":
@@ -191,19 +195,22 @@ def parse_script(path: Path, bin_name: str):
                     samples.append(cur)
                     cur = None
                 continue
-            if line[0] in " \t":
-                m = FRAME_RE.match(line)
-                if m and cur is not None:
+            # Callchain frames start with whitespace and a hex address; sample lines may
+            # start with whitespace too, because perf right-aligns the comm field.
+            m = FRAME_RE.match(line) if line[0] in " \t" else None
+            if m:
+                if cur is not None:
                     cur[1].append((int(m.group(1), 16), m.group(2), m.group(3)))
                 continue
             if cur is not None:
                 samples.append(cur)
                 cur = None
-            m = ONELINE_RE.match(line)
+            s = line.strip()
+            m = ONELINE_RE.match(s)
             if m:
                 samples.append((int(m.group(2)), [(int(m.group(3), 16), m.group(4), m.group(5))]))
                 continue
-            m = HEAD_RE.match(line)
+            m = HEAD_RE.match(s)
             if m:
                 cur = (int(m.group(2)), [])
     if cur is not None:
