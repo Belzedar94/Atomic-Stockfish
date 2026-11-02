@@ -205,6 +205,13 @@ ExtMove* MovePicker::score(const MoveList<Type>& ml) {
     {
         const CapturePieceToHistory& captureHist = *captureHistory;
 
+        // An Atomic capture also explodes every non-pawn next to the landing
+        // square: score the victim plus the enemy pieces the blast takes, minus
+        // our own. Adjacent pawns survive. A blast that takes the enemy king
+        // ends the game and goes first.
+        const Bitboard nonPawns  = pos.pieces() ^ pos.pieces(PAWN);
+        const Bitboard theirKing = pos.pieces(~us, KING);
+
         for (auto move : ml)
         {
             ExtMove& m = *it++;
@@ -213,8 +220,32 @@ ExtMove* MovePicker::score(const MoveList<Type>& ml) {
             const Square to            = m.to_sq();
             const Piece  pc            = pos.moved_piece(m);
             const Piece  capturedPiece = pos.piece_on(to);
-            m.value =
-              captureHist[pc][to][type_of(capturedPiece)] + 7 * int(PieceValue[capturedPiece]);
+            int          blastValue    = int(PieceValue[capturedPiece]);
+
+            // A queen promotion that captures nothing does not explode
+            if (pos.capture(m))
+            {
+                // The capturer leaves its square and explodes on the landing one
+                Bitboard blast = Attacks::attacks_bb<KING>(to) & nonPawns & ~square_bb(m.from_sq());
+
+                if (blast & theirKing)
+                {
+                    m.value = std::numeric_limits<int>::max() / 2;
+                    continue;
+                }
+
+                // En passant takes a pawn that is not on the landing square
+                if (m.type_of() == EN_PASSANT)
+                    blastValue += PawnValue;
+
+                while (blast)
+                {
+                    const Piece bp = pos.piece_on(pop_lsb(blast));
+                    blastValue += color_of(bp) == us ? -int(PieceValue[bp]) : int(PieceValue[bp]);
+                }
+            }
+
+            m.value = captureHist[pc][to][type_of(capturedPiece)] + 7 * blastValue;
         }
     }
     else
