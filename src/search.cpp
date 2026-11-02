@@ -1508,11 +1508,14 @@ moves_loop:  // When in check, search starts here
         if (PvNode)
             (ss + 1)->pv = nullptr;
 
-        extension            = 0;
-        capture              = pos.capture_stage(move);
-        movedPiece           = pos.moved_piece(move);
-        givesCheck           = pos.gives_check(move);
-        const bool atomicWin = pos.atomic_wins(move);
+        extension  = 0;
+        capture    = pos.capture_stage(move);
+        movedPiece = pos.moved_piece(move);
+        givesCheck = pos.gives_check(move);
+
+        // Below the root, king_explosion_move() has already returned if any
+        // legal move explodes the enemy king.
+        assert(rootNode || !pos.atomic_wins(move));
 
         // Calculate new depth for this move
         newDepth = depth - 1;
@@ -1543,8 +1546,7 @@ moves_loop:  // When in check, search starts here
                 int   captHist = captureHistory[movedPiece][move.to_sq()][type_of(capturedPiece)];
 
                 // Futility pruning for captures
-                if (!atomicWin && !givesCheck && lmrDepth < 7
-                    && atomic_capture_futility_eligible(pos, move))
+                if (!givesCheck && lmrDepth < 7 && atomic_capture_futility_eligible(pos, move))
                 {
                     Value futilityValue = ss->staticEval + AtomicCaptFutBase
                                         + AtomicCaptFutLmrMult * lmrDepth
@@ -1557,8 +1559,7 @@ moves_loop:  // When in check, search starts here
                 // SEE based pruning for captures and checks
                 // Avoid pruning sacrifices of our last piece for stalemate
                 int margin = 175 * depth + captHist * 34 / 1024;
-                if (!atomicWin
-                    && (alpha >= VALUE_DRAW || pos.non_pawn_material(us) != PieceValue[movedPiece])
+                if ((alpha >= VALUE_DRAW || pos.non_pawn_material(us) != PieceValue[movedPiece])
                     && !pos.see_ge(move, -margin))
                     continue;
             }
@@ -2157,9 +2158,14 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
         if (!pos.legal(move))
             continue;
 
+        // king_explosion_move() has already returned if a legal move explodes
+        // the enemy king, except at a root: there the side not to move may stand
+        // in Atomic check, and the shortcut does not look for a capture of that
+        // king itself. qsearch() starts at a root only in a PV training search.
         givesCheck           = pos.gives_check(move);
         capture              = pos.capture_stage(move);
-        const bool atomicWin = pos.atomic_wins(move);
+        const bool atomicWin = PvNode && !ss->ply && pos.atomic_wins(move);
+        assert(atomicWin == pos.atomic_wins(move));
 
         moveCount++;
 
