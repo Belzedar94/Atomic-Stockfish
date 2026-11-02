@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds main and the commit under test, merged into main, with
+# Builds main and the commits under test, each merged into main, with
 # `make profile-build`, one after the other in one checkout of the engine.
 #
 #   ci/build_variants.sh ENGINE_DIR NETWORK OUT_DIR EXE_SUFFIX [make arguments ...]
@@ -10,12 +10,12 @@
 # evaluation). The binaries land in OUT_DIR as atomic-<variant><EXE_SUFFIX>,
 # next to their build logs.
 #
-# Needs MAIN_SHA, AVX2_SHA, NET_NAME and the expected trees TREE_MAIN and
-# TREE_AVX2 in the environment. The merge uses a fixed identity and date, so a
-# variant is the same commit on every runner, and its tree must be the expected
-# one: what is built is main plus the commit, nothing else. Node counts
-# are not judged here (ci/engine_check.py does that), so a commit that
-# changes the search is still built and reported.
+# Needs MAIN_SHA, CAND_SHA, COST_SHA, NET_NAME and the expected trees
+# TREE_MAIN, TREE_CAND and TREE_COST in the environment. The merge uses a fixed
+# identity and date, so a variant is the same commit on every runner, and its
+# tree must be the expected one: what is built is main plus the commit, nothing
+# else. Node counts are not judged here (ci/engine_check.py does that), so a
+# commit that changes the search is still built and reported.
 set -euo pipefail
 
 engine=$1 network=$2 out=$3 ext=$4
@@ -28,9 +28,9 @@ export GIT_AUTHOR_DATE=2026-11-01T00:00:00Z GIT_COMMITTER_DATE=2026-11-01T00:00:
 
 g() { git -C "$engine" "$@"; }
 
-# The commit is the head of a branch of this repository, which the full clone
-# already holds; if it is missing, fetch the pinned commit itself.
-for sha in "$AVX2_SHA"; do
+# The commits are heads of branches of this repository, which the full clone
+# already holds; if one is missing, fetch the pinned commit itself.
+for sha in "$CAND_SHA" "$COST_SHA"; do
     g cat-file -e "$sha^{commit}" 2>/dev/null || g fetch --quiet --no-tags origin "$sha"
     g cat-file -e "$sha^{commit}"
 done
@@ -38,7 +38,8 @@ done
 # name, expected tree, heads merged into main (in this order)
 variants=(
     "main $TREE_MAIN"
-    "avx2 $TREE_AVX2 $AVX2_SHA"
+    "blast $TREE_CAND $CAND_SHA"
+    "cost $TREE_COST $COST_SHA"
 )
 
 for v in "${variants[@]}"; do

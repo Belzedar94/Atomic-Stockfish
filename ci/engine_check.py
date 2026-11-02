@@ -22,6 +22,10 @@ classical bench any more). For every binary given as LABEL=PATH it
 A stage that fails (a timeout, an aborted bench) is recorded as a failure and the
 next stage still runs, so the report says how far each check got.
 
+A binary named with --own-search LABEL=BENCH changes the search on purpose: its
+signature must be BENCH, its session is run but not compared, and its timed benches
+must agree with each other only. Its speed is then a speed on its own tree.
+
 With --evalfile every engine process loads that network (setoption name EvalFile)
 before it searches; without it the engine uses its default network.
 
@@ -218,6 +222,8 @@ def main() -> int:
                     help='backend every search must report, e.g. "Legacy Atomic V1" or "AtomicNNUEV2"')
     ap.add_argument("--expect-bench", type=int, default=None,
                     help="node count of the signature bench; without it, the first binary's count")
+    ap.add_argument("--own-search", action="append", default=[], metavar="LABEL=BENCH",
+                    help="a binary whose search differs on purpose, with its own signature node count")
     ap.add_argument("--limit-type", choices=("depth", "nodes"), default="depth",
                     help="limit type of the timed bench and of a --signature-limit bench")
     ap.add_argument("--limit", "--depth", dest="limit", type=int, default=18,
@@ -237,6 +243,10 @@ def main() -> int:
 
     bins = [(b.split("=", 1)[0], Path(b.split("=", 1)[1]).resolve()) for b in a.bin]
     ref = bins[0][0]
+    own = {o.split("=", 1)[0]: int(o.split("=", 1)[1]) for o in a.own_search}
+    if ref in own or not set(own) <= {label for label, _ in bins}:
+        print(f"--own-search must name binaries other than the reference {ref}", flush=True)
+        return 1
     evalfile = str(Path(a.evalfile).resolve()) if a.evalfile else ""
     if evalfile and not Path(evalfile).is_file():
         print(f"no network at {evalfile}", flush=True)
@@ -251,8 +261,8 @@ def main() -> int:
                     "signature_cmd": signature_cmd, "timed_cmd": timed_cmd,
                     "host": {"platform": platform.platform(), "machine": platform.machine(),
                              "processor": platform.processor()},
-                    "reference": ref, "binaries": {}, "depth": a.limit, "limit_type": a.limit_type,
-                    "rounds": a.rounds}
+                    "reference": ref, "own_search": own, "binaries": {}, "depth": a.limit,
+                    "limit_type": a.limit_type, "rounds": a.rounds}
     print(f"# {a.title}\nhost: {platform.platform()} / {platform.machine()} / {platform.processor()}", flush=True)
     print(f"network: {evalfile or 'the default network of each binary'}; expected backend: {a.expect_backend}; "
           f"signature: {signature_cmd}; timed: {timed_cmd}", flush=True)
@@ -278,9 +288,13 @@ def main() -> int:
             failures.append(f"{label}: signature bench: {msg}")
             result["binaries"][label]["signature"] = {"nodes": None, "backends": [], "ok": False, "error": msg}
             continue
-        if expected_bench is None:
-            expected_bench = b["nodes"]  # the reference binary sets it
-        ok = b["backends"] == [a.expect_backend] and b["nodes"] == expected_bench
+        if label in own:
+            want = own[label]
+        else:
+            if expected_bench is None:
+                expected_bench = b["nodes"]  # the reference binary sets it
+            want = expected_bench
+        ok = b["backends"] == [a.expect_backend] and b["nodes"] == want
         result["binaries"][label]["signature"] = {"nodes": b["nodes"], "backends": b["backends"],
                                                   "searches_with_backend_line": b["searches_with_backend_line"],
                                                   "ms": b["ms"], "ok": ok}
@@ -288,7 +302,7 @@ def main() -> int:
               f"({b['searches_with_backend_line']} searches, {b['ms']} ms)  {'OK' if ok else 'MISMATCH'}", flush=True)
         if not ok:
             failures.append(f"{label}: signature {b['nodes']} nodes with backend {b['backends']}, expected "
-                            f"{expected_bench} with {a.expect_backend}")
+                            f"{want} with {a.expect_backend}")
     result["expected_bench_used"] = expected_bench
 
     # 3. worker-like session, output must be identical
@@ -310,7 +324,11 @@ def main() -> int:
                                                     "tablebase_lines": tb[:3], "progress": progress}
             if backends != [a.expect_backend]:
                 failures.append(f"{label}: session backend {backends}, expected {a.expect_backend}")
-            if base is None:
+            if label in own:
+                result["binaries"][label]["session"]["own_search"] = True
+                print(f"[{label}] session: {len(tr)} lines ({infos} info lines), own search: not compared",
+                      flush=True)
+            elif base is None:
                 base = tr
                 print(f"[{label}] session: {len(tr)} lines ({infos} info lines), backend {' / '.join(backends)}"
                       f"{'; ' + tb[0] if tb else ''}", flush=True)
@@ -329,12 +347,12 @@ def main() -> int:
     # 4. timing
     if a.rounds > 0:
         samples: dict[str, list[float]] = {label: [] for label, _ in bins}
-        nodes_seen: set[int] = set()
+        nodes_by: dict[str, set[int]] = {label: set() for label, _ in bins}
         backends_seen: set[str] = set()
         try:
             for label, exe in bins:  # one discarded warm-up each
                 m = bench(exe, a.cwd, setup, timed_cmd, a.cpu, a.timeout)
-                nodes_seen.add(m["nodes"])
+                nodes_by[label].add(m["nodes"])
                 backends_seen.update(m["backends"])
             for r in range(a.rounds):
                 # Rotate by r // 2 and reverse every other round: over 2 * len(bins) rounds
@@ -346,7 +364,7 @@ def main() -> int:
                     order = order[::-1]
                 for label, exe in order:
                     m = bench(exe, a.cwd, setup, timed_cmd, a.cpu, a.timeout)
-                    nodes_seen.add(m["nodes"])
+                    nodes_by[label].add(m["nodes"])
                     backends_seen.update(m["backends"])
                     samples[label].append(m["nps"])
                 print(f"round {r + 1}/{a.rounds}: " + "  ".join(f"{l}={samples[l][-1]:.0f}" for l, _ in bins),
@@ -355,19 +373,26 @@ def main() -> int:
             msg = str(exc).splitlines()[0]
             print(f"timed bench FAILED: {msg}", flush=True)
             failures.append(f"timed bench: {msg}")
+        # Every binary that keeps the reference search shares one node count; a binary
+        # with its own search must at least agree with itself.
+        nodes_seen: set[int] = set().union(*(nodes_by[l] for l, _ in bins if l not in own))
         if len(nodes_seen) > 1:
             failures.append(f"{timed_cmd}: node counts differ between runs or binaries: {sorted(nodes_seen)}")
+        for l in own:
+            if len(nodes_by[l]) > 1:
+                failures.append(f"{timed_cmd}: {l}: node counts differ between runs: {sorted(nodes_by[l])}")
         if backends_seen and sorted(backends_seen) != [a.expect_backend]:
             failures.append(f"{timed_cmd}: backends {sorted(backends_seen)}, expected {a.expect_backend}")
-        print(f"{timed_cmd}: nodes in every run of every binary = {sorted(nodes_seen)}, "
-              f"backend {' / '.join(sorted(backends_seen))}", flush=True)
+        print(f"{timed_cmd}: nodes in every run of every binary = {sorted(nodes_seen)}"
+              + "".join(f"; {l} (own search) = {sorted(nodes_by[l])}" for l in own)
+              + f", backend {' / '.join(sorted(backends_seen))}", flush=True)
         n = min(len(v) for v in samples.values())
         for label, _ in bins:
             v = samples[label][:n]
             if not v:
                 continue
             ratios = [x / y for x, y in zip(v, samples[ref][:n])]
-            row = {"nodes": sorted(nodes_seen), "backends": sorted(backends_seen),
+            row = {"nodes": sorted(nodes_by[label]), "backends": sorted(backends_seen),
                    "mean_nps": statistics.mean(v), "median_nps": statistics.median(v),
                    "sd": statistics.stdev(v) if len(v) > 1 else 0.0, "ci95": ci95(v), "min": min(v), "max": max(v),
                    "vs_ref_pct": 100 * (statistics.mean(ratios) - 1),
@@ -394,6 +419,8 @@ def main() -> int:
                     sess_txt = "FAILED"
                 elif label == ref:
                     sess_txt = "reference" if sess else "-"
+                elif sess.get("own_search"):
+                    sess_txt = "own search"
                 else:
                     sess_txt = "identical" if sess.get("identical_to_reference") else ("DIFFERENT" if sess else "-")
                 t = b.get("timing")

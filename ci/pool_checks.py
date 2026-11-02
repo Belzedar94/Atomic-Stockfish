@@ -54,6 +54,8 @@ def session_state(report: dict, label: str) -> str:
         return "FAILED"
     if label == report["reference"]:
         return "reference"
+    if s.get("own_search"):
+        return "own search"
     return "identical" if s.get("identical_to_reference") else "DIFFERENT"
 
 
