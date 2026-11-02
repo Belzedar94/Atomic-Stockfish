@@ -1,26 +1,27 @@
-# ci/atomic-wins-clang-1102
+# ci/profile-1102
 
-Clang measurement of `20dd2b92` (branch `speed/atomic-wins-dead-1102`), which
-drops the `atomic_wins()` calls of the `search()` and `qsearch()` move loops that
-`king_explosion_move()` makes dead below the root, against main `722b4735`. The
-commit must not change the search, so both variants must have bench 433197 and
-search exactly the same nodes. This branch holds no engine source.
+CPU profile of the engine the AtomicDB workers run, for a report on which speed
+work is worth doing. Report only: no engine source here, no patch, nothing
+published; every result is a workflow artifact.
 
-- `.github/workflows/atomic_wins_clang.yml` checks out `722b4735` by SHA, merges
-  the commit into it (the trees are pinned), and builds the two variants, `main`
-  and `wins`, with `make profile-build` and clang for `linux x86-64-avx2` and
-  `windows x86-64-bmi2`, with the recipe of the published AtomicDB worker engines
-  (ci/worker-engine-pgo-1028). The Windows binaries embed the default network;
-  the Linux binaries read it from the run directory under its default name, as in
-  the earlier measurements of this lineage.
-- `ci/build_variants.sh` does the merge and the builds.
-- `ci/engine_check.py` requires `main` and `wins` to search exactly the same
-  nodes (bench signature 433197, a worker-like UCI session, every timed bench),
-  and times the two in 24 alternating rounds (ABBA). It also requires every
-  search to report the expected network backend. The binaries of each platform
-  are timed on four runners.
-- `ci/pool_checks.py` pools the per-round speed ratios of those runners, per
-  platform.
+- `.github/workflows/profile.yml` checks out main `722b4735` by SHA (its tree is
+  checked), builds it twice with the recipe of the published Linux worker engine
+  (`make profile-build ARCH=x86-64-avx2 COMP=clang CXX=clang++-23
+  RTLIB=compiler-rt`, ci/worker-engine-pgo-1028) with the default network
+  embedded, once as is and once with `-g` added, requires the two to have a
+  byte-identical `.text`, bench 433197 and the same worker-like session, and
+  records the `-g` binary with `perf record --call-graph dwarf`.
+- `ci/atomicdb_load.py` is the load: AtomicDB-shaped tasks (go nodes, Hash 256,
+  MultiPV, no `ucinewgame` anywhere), each seed followed by the positions after its
+  best moves. Every line is read up to `bestmove` before anything else is sent.
+- `ci/profile_seeds.tsv`: 24 open positions (logs/fens_open1000.txt of the
+  speed lab) and 16 decided ones from the mate battery (atomic_mt.tsv: one W and
+  one L for six bands; atomic_mt_hard.tsv: four H).
+- `ci/perf_attr.py` turns the samples into self and accumulated shares per source
+  function, inlined functions included (llvm-symbolizer `--inlining`).
+- `ci/engine_check.py` (from the earlier measurements of this lineage) checks the
+  two builds against each other.
 
-The workflows of the earlier measurements on this lineage only run on their own
-branches. Nothing is published from here: binaries and reports are artifacts.
+Passes: MultiPV 1 and MultiPV 5 with one thread (40 seeds, 3 positions each, 3M
+nodes per position), and MultiPV 5 with four threads (12 seeds, 2 positions,
+8M nodes).
