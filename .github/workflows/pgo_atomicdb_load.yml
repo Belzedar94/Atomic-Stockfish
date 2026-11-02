@@ -1,0 +1,417 @@
+name: PGO trained on an AtomicDB-like load, clang
+
+# Does training the clang PGO profile on AtomicDB-like searches, instead of the
+# default `bench`, make the AtomicDB worker engine faster on AtomicDB-like
+# searches? Two profile-guided builds of main 7f705c8f, per platform, with the
+# recipe of the published worker engines (ci/worker-engine-pgo-1102):
+#   A  `make profile-build` as published: the training run is `bench`;
+#   B  the same build, whose training run (PGOBENCH) is ci/pgo_load.py: 40
+#      AtomicDB positions (ci/positions/train.tsv), go nodes 1M to 2M, Hash 256,
+#      no ucinewgame, Threads 1 for half and 4 for the other half, MultiPV 1 and
+#      3 alternating, six searches with searchmoves.
+# Only the compiler profile differs, so the search must not: both must give bench
+# 433197 and the same output on 200 positions at fixed nodes (build jobs), on the
+# worker-like session and on every timed run (timing jobs).
+#
+# ci/engine_check.py then times A and B in alternating rounds, single-threaded, on
+# two loads, on four runners per platform:
+#   - bench 16 1 18 default depth, the reference;
+#   - ci/positions/load.tsv, AtomicDB-like and disjoint from the training
+#     positions: 60 positions, go nodes 2M to 4M, Hash 512, no ucinewgame, MultiPV
+#     3 on every fifth search, three searches with searchmoves.
+# ci/pool_checks.py pools the per-round ratios of each load.
+#
+# Nothing is published: binaries and reports are artifacts.
+
+on:
+  push:
+    branches:
+      - ci/pgo-atomicdb-load-1102
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pgo-atomicdb-load-1102
+  cancel-in-progress: true
+
+env:
+  ENGINE_SHA: 7f705c8f4ca1287d1afad1e03a8664327e775043
+  # The tree of 7f705c8f: the build stops if the checkout is anything else.
+  ENGINE_TREE: 6363d409fc98b74294be69d9f30c7de9ce403391
+  ATOMIC_NET_TAG: v1.0
+  ATOMIC_NET_ASSET: atomic-run3b.nnue
+  ATOMIC_NET_SHA256: 99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f92a04a6
+  NET_NAME: atomic_run3b_e202_l05.nnue
+  V1_BACKEND: Legacy Atomic V1
+  EXPECT_BENCH: "433197"
+  # The LLVM release the published Linux worker engine is built with (apt.llvm.org).
+  LLVM_VERSION: "23"
+  # Fixed-node identity of A and B on ci/positions/identity.tsv (single-threaded,
+  # ucinewgame before each position).
+  IDENTITY_NODES: "400000"
+  # The reference load.
+  BENCH_DEPTH: "18"
+  ROUNDS: "24"
+  # The AtomicDB-like load: about two minutes per run on a 1.6 Mnps runner. A
+  # round that would end past LOAD_BUDGET seconds of its timing is not started.
+  LOAD_HASH: "512"
+  LOAD_ROUNDS: "24"
+  LOAD_BUDGET: "15000"
+
+jobs:
+  build-linux:
+    name: build linux x86-64-avx2 (clang 23, profile-build A and B)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ env.ENGINE_SHA }}
+          path: engine
+          persist-credentials: false
+
+      # The LLVM project's own packages, installed with its llvm.sh and an explicit
+      # version, plus llvm-N, which holds the llvm-profdata that must match the
+      # compiler, as in ci/worker-engine-pgo-1102.
+      - name: Install clang ${{ env.LLVM_VERSION }} from apt.llvm.org
+        run: |
+          log="$RUNNER_TEMP/llvm-install.log"
+          curl -sSfL --retry 3 -o "$RUNNER_TEMP/llvm.sh" https://apt.llvm.org/llvm.sh
+          sudo bash "$RUNNER_TEMP/llvm.sh" "$LLVM_VERSION" > "$log" 2>&1 || { tail -n 40 "$log"; exit 1; }
+          sudo apt-get install -y "llvm-$LLVM_VERSION" >> "$log" 2>&1 || { tail -n 40 "$log"; exit 1; }
+
+      - name: Toolchain and host
+        run: |
+          "clang++-$LLVM_VERSION" --version | head -n 1
+          "/usr/lib/llvm-$LLVM_VERSION/bin/llvm-profdata" --version | grep -i "llvm version"
+          python3 --version
+          lscpu | grep -E 'Model name|^CPU\(s\)'
+          git -C engine log -1 --format='engine: %H %s'
+
+      - name: Network
+        run: |
+          mkdir -p net
+          curl -sSfL --retry 3 -o "net/$NET_NAME" \
+            "https://github.com/$GITHUB_REPOSITORY/releases/download/$ATOMIC_NET_TAG/$ATOMIC_NET_ASSET"
+          echo "$ATOMIC_NET_SHA256  net/$NET_NAME" | sha256sum -c -
+
+      - name: Profile-guided builds A (trained on bench) and B (trained on the AtomicDB-like load)
+        env:
+          PY: python3
+        run: |
+          set -eo pipefail
+          bash ci/build_pgo_pair.sh engine "net/$NET_NAME" out "" ARCH=x86-64-avx2 COMP=clang \
+            CXX="clang++-$LLVM_VERSION" RTLIB=compiler-rt
+          for v in A B; do
+            grep -q "/usr/lib/llvm-$LLVM_VERSION/bin/llvm-profdata merge" "out/build-$v.log"
+            readelf -p .comment "out/atomic-$v" | grep -q "clang version $LLVM_VERSION\."
+          done
+          # A trained on the default bench, B on the 40 positions and nothing else
+          grep -q "Nodes searched  : $EXPECT_BENCH" out/build-A.log
+          grep -q "PGO training load (train.tsv): 40 positions" out/build-B.log
+          if grep -q "Nodes searched  : $EXPECT_BENCH" out/build-B.log; then echo "::error::B ran the bench"; exit 1; fi
+
+      - name: What the two profiles were trained on, and how they differ
+        run: bash ci/show_profiles.sh "/usr/lib/llvm-$LLVM_VERSION/bin/llvm-profdata" out
+
+      # The Linux binaries read the default network from the run directory, under
+      # its default name, as in the earlier measurements of this lineage.
+      - name: Identity of A and B (bench, fixed-node output on 200 positions)
+        run: |
+          set -eo pipefail
+          mkdir -p idrun
+          cp "net/$NET_NAME" idrun/
+          for v in A B; do
+            (cd idrun && printf 'bench\nquit\n' | "../out/atomic-$v") > "out/bench-$v.txt" 2>&1
+            echo "$v: $(grep 'Nodes searched' "out/bench-$v.txt")"
+            grep -q "Nodes searched  : $EXPECT_BENCH" "out/bench-$v.txt"
+            python3 ci/identity_run.py --engine "$PWD/out/atomic-$v" --fens ci/positions/identity.tsv \
+              --nodes "$IDENTITY_NODES" --hash 64 --cwd idrun --out "out/identity-$v.txt"
+          done
+          (cd out && sha256sum atomic-A atomic-B identity-A.txt identity-B.txt | tee sha256.txt)
+          echo "searches: $(grep -c '^bestmove' out/identity-A.txt), info lines: $(grep -c '^info depth' out/identity-A.txt)"
+          cmp out/identity-A.txt out/identity-B.txt
+          echo "identity-A.txt and identity-B.txt are byte-identical"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: bins-linux
+          path: |
+            out/atomic-A
+            out/atomic-B
+          if-no-files-found: error
+          overwrite: true
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: build-linux
+          path: |
+            out/
+            !out/atomic-A
+            !out/atomic-B
+          overwrite: true
+
+  measure-linux:
+    name: time linux x86-64-avx2, runner ${{ matrix.runner }}
+    needs: build-linux
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [1, 2, 3, 4]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: bins-linux
+          path: bins
+
+      - name: Network and host
+        run: |
+          chmod +x bins/atomic-*
+          mkdir -p run out
+          curl -sSfL --retry 3 -o "run/$NET_NAME" \
+            "https://github.com/$GITHUB_REPOSITORY/releases/download/$ATOMIC_NET_TAG/$ATOMIC_NET_ASSET"
+          echo "$ATOMIC_NET_SHA256  run/$NET_NAME" | sha256sum -c -
+          lscpu | grep -E 'Model name|^CPU\(s\)'
+
+      - name: Identity and speed, bench 16 1 ${{ env.BENCH_DEPTH }} default depth, then the AtomicDB-like load
+        run: |
+          set -o pipefail
+          cpu=$(lscpu | sed -n 's/^Model name: *//p' | head -n 1)
+          title="linux x86-64-avx2, runner ${{ matrix.runner }}: $cpu"
+          rc=0
+          python3 ci/engine_check.py --title "$title" --net v1 \
+            --bin A=bins/atomic-A --bin B=bins/atomic-B \
+            --cwd run --expect-backend "$V1_BACKEND" --expect-bench "$EXPECT_BENCH" \
+            --depth "$BENCH_DEPTH" --rounds "$ROUNDS" \
+            --json out/check.json --md "$GITHUB_STEP_SUMMARY" | tee out/check.log || rc=1
+          python3 ci/engine_check.py --title "$title" --net v1 \
+            --bin A=bins/atomic-A --bin B=bins/atomic-B \
+            --cwd run --expect-backend "$V1_BACKEND" --expect-bench "$EXPECT_BENCH" --skip-session \
+            --load ci/positions/load.tsv --load-hash "$LOAD_HASH" --rounds "$LOAD_ROUNDS" --budget "$LOAD_BUDGET" \
+            --json out/load.json --md "$GITHUB_STEP_SUMMARY" | tee out/load.log || rc=1
+          exit $rc
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: check-linux-${{ matrix.runner }}
+          path: out/
+          overwrite: true
+
+  build-windows:
+    name: build windows x86-64-bmi2 (MSYS2 clang, profile-build A and B)
+    runs-on: windows-latest
+    timeout-minutes: 75
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ env.ENGINE_SHA }}
+          path: engine
+          persist-credentials: false
+
+      # As in ci/worker-engine-pgo-1102: the newest clang MSYS2 packages (clang64,
+      # libc++ linked statically), with the package databases brought up to date
+      # first.
+      - name: Set up MSYS2 with its newest clang
+        uses: msys2/setup-msys2@e9898307ac31d1a803454791be09ab9973336e1c # v2.31.1
+        with:
+          msystem: mingw64
+          path-type: inherit
+          update: true
+          install: >-
+            make
+            mingw-w64-x86_64-binutils
+            mingw-w64-clang-x86_64-clang
+            mingw-w64-clang-x86_64-llvm
+
+      - name: Toolchain and host
+        run: |
+          /clang64/bin/clang++ --version | head -n 1
+          /clang64/bin/llvm-profdata --version | grep -i "llvm version"
+          command -v python
+          python --version
+          powershell -NoProfile -Command "(Get-CimInstance Win32_Processor).Name" || true
+          echo "processors: $NUMBER_OF_PROCESSORS"
+          git -C engine log -1 --format='engine: %H %s'
+
+      - name: Network
+        run: |
+          mkdir -p net
+          curl -sSfL --retry 3 -o "net/$NET_NAME" \
+            "https://github.com/$GITHUB_REPOSITORY/releases/download/$ATOMIC_NET_TAG/$ATOMIC_NET_ASSET"
+          echo "$ATOMIC_NET_SHA256  net/$NET_NAME" | sha256sum -c -
+
+      # The network is embedded, as in the Windows binaries the workers download. As
+      # in the published recipe, the clang PGO recipe replaces EXTRACXXFLAGS and does
+      # not read EXTRAPROFILEFLAGS, so the embedding flag goes in through the
+      # environment, and libc++ 23 gets back the transitive includes numa.h needs.
+      - name: Profile-guided builds A (trained on bench) and B (trained on the AtomicDB-like load)
+        env:
+          PY: python
+        run: |
+          set -eo pipefail
+          export PATH="/clang64/bin:$PATH"
+          CXXFLAGS="-DATOMIC_NNUE_EMBEDDING -D_LIBCPP_KEEP_TRANSITIVE_INCLUDES_LLVM23" \
+            bash ci/build_pgo_pair.sh engine "net/$NET_NAME" out .exe ARCH=x86-64-bmi2 COMP=clang
+          for v in A B; do
+            grep -q "llvm-profdata merge" "out/build-$v.log"
+            test "$(wc -c < "out/atomic-$v.exe")" -gt "$(wc -c < "net/$NET_NAME")"
+          done
+          grep -q "Nodes searched  : $EXPECT_BENCH" out/build-A.log
+          grep -q "PGO training load (train.tsv): 40 positions" out/build-B.log
+          if grep -q "Nodes searched  : $EXPECT_BENCH" out/build-B.log; then echo "::error::B ran the bench"; exit 1; fi
+          objdump -p out/atomic-A.exe | grep "DLL Name"
+
+      - name: What the two profiles were trained on, and how they differ
+        run: bash ci/show_profiles.sh /clang64/bin/llvm-profdata out
+
+      # The run directory holds no .nnue: a completed bench can only come from the
+      # embedded network.
+      - name: Identity of A and B (bench, fixed-node output on 200 positions)
+        run: |
+          set -eo pipefail
+          mkdir -p idrun
+          test -z "$(ls idrun/*.nnue 2>/dev/null)"
+          for v in A B; do
+            (cd idrun && printf 'bench\nquit\n' | "../out/atomic-$v.exe") > "out/bench-$v.txt" 2>&1
+            echo "$v: $(grep 'Nodes searched' "out/bench-$v.txt")"
+            grep -q "Nodes searched  : $EXPECT_BENCH" "out/bench-$v.txt"
+            python ci/identity_run.py --engine "$PWD/out/atomic-$v.exe" --fens ci/positions/identity.tsv \
+              --nodes "$IDENTITY_NODES" --hash 64 --cwd idrun --out "out/identity-$v.txt"
+          done
+          (cd out && sha256sum atomic-A.exe atomic-B.exe identity-A.txt identity-B.txt | tee sha256.txt)
+          echo "searches: $(grep -c '^bestmove' out/identity-A.txt), info lines: $(grep -c '^info depth' out/identity-A.txt)"
+          cmp out/identity-A.txt out/identity-B.txt
+          echo "identity-A.txt and identity-B.txt are byte-identical"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: bins-windows
+          path: |
+            out/atomic-A.exe
+            out/atomic-B.exe
+          if-no-files-found: error
+          compression-level: 1
+          overwrite: true
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: build-windows
+          path: |
+            out/
+            !out/atomic-A.exe
+            !out/atomic-B.exe
+          overwrite: true
+
+  measure-windows:
+    name: time windows x86-64-bmi2, runner ${{ matrix.runner }}
+    needs: build-windows
+    runs-on: windows-latest
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [1, 2, 3, 4]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: bins-windows
+          path: bins
+
+      # The run directory holds no .nnue: a completed bench with the default
+      # network can only come from the embedded one.
+      - name: Identity and speed, bench 16 1 ${{ env.BENCH_DEPTH }} default depth, then the AtomicDB-like load
+        run: |
+          set -o pipefail
+          mkdir -p run out
+          test -z "$(ls run/*.nnue bins/*.nnue 2>/dev/null)"
+          cpu=$(powershell -NoProfile -Command "(Get-CimInstance Win32_Processor).Name" | tr -d '\r')
+          echo "$cpu, $NUMBER_OF_PROCESSORS processors"
+          python --version
+          title="windows x86-64-bmi2, runner ${{ matrix.runner }}: $cpu"
+          rc=0
+          python ci/engine_check.py --title "$title" --net v1 \
+            --bin A=bins/atomic-A.exe --bin B=bins/atomic-B.exe \
+            --cwd run --expect-backend "$V1_BACKEND" --expect-bench "$EXPECT_BENCH" \
+            --depth "$BENCH_DEPTH" --rounds "$ROUNDS" \
+            --json out/check.json --md "$GITHUB_STEP_SUMMARY" | tee out/check.log || rc=1
+          python ci/engine_check.py --title "$title" --net v1 \
+            --bin A=bins/atomic-A.exe --bin B=bins/atomic-B.exe \
+            --cwd run --expect-backend "$V1_BACKEND" --expect-bench "$EXPECT_BENCH" --skip-session \
+            --load ci/positions/load.tsv --load-hash "$LOAD_HASH" --rounds "$LOAD_ROUNDS" --budget "$LOAD_BUDGET" \
+            --json out/load.json --md "$GITHUB_STEP_SUMMARY" | tee out/load.log || rc=1
+          exit $rc
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: check-windows-${{ matrix.runner }}
+          path: out/
+          overwrite: true
+
+  pool:
+    name: pooled ratios
+    needs: [measure-linux, measure-windows]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: check-*
+          path: checks
+      - name: Pool the per-round ratios of each load
+        run: |
+          set -eo pipefail
+          ls checks/*/*.json
+          echo "## bench 16 1 $BENCH_DEPTH default depth" >> "$GITHUB_STEP_SUMMARY"
+          python3 ci/pool_checks.py checks/*/check.json --md "$GITHUB_STEP_SUMMARY" --json pooled-bench.json \
+            | tee pooled-bench.md
+          echo "## AtomicDB-like load" >> "$GITHUB_STEP_SUMMARY"
+          python3 ci/pool_checks.py checks/*/load.json --md "$GITHUB_STEP_SUMMARY" --json pooled-load.json \
+            | tee pooled-load.md
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: pooled
+          path: |
+            pooled-bench.md
+            pooled-bench.json
+            pooled-load.md
+            pooled-load.json
+          overwrite: true

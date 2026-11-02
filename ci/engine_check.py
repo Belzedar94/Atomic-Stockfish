@@ -22,6 +22,17 @@ classical bench any more). For every binary given as LABEL=PATH it
 A stage that fails (a timeout, an aborted bench) is recorded as a failure and the
 next stage still runs, so the report says how far each check got.
 
+With --load FILE the timed unit is an AtomicDB-like load instead of the bench: one
+fresh engine process, Threads 1, Hash --load-hash, searches every row of FILE (a
+TSV with the columns fen, nodes, multipv and searchmoves) in order, with MultiPV set
+per search and no `ucinewgame`, so the transposition table carries over as in a
+worker. Its speed is the nodes of all searches over the wall-clock time from each
+`go` to its `bestmove`, summed. Every run of every binary must give the same
+bestmove, depth, seldepth and nodes on every row, and every search must report the
+expected backend. With --budget no round starts that would end past that many
+seconds of timing (the length of the last round is the estimate); rounds_completed
+in the report counts what was timed.
+
 A binary named with --own-search LABEL=BENCH changes the search on purpose: its
 signature must be BENCH, its session is run but not compared, and its timed benches
 must agree with each other only. Its speed is then a speed on its own tree.
@@ -34,6 +45,7 @@ Exit status 0 only if every identity check passed. Speed is reported, never judg
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import math
 import os
@@ -128,6 +140,86 @@ def bench(exe: Path, cwd: Path, setup: list[str], cmd: str, cpu: int | None, tim
     return {"ms": ms, "nodes": nodes, "nps": 1000.0 * nodes / max(ms, 1),
             "backends": sorted(set(BACKEND_RE.findall(out))),
             "searches_with_backend_line": len(BACKEND_RE.findall(out))}
+
+
+def load_rows(path: Path) -> list[tuple[str, int, int, list[str]]]:
+    """(fen, go nodes, MultiPV, searchmoves) for every row of an --load TSV."""
+    with path.open(encoding="utf-8") as f:
+        return [(r["fen"].strip(), int(r["nodes"]), int(r.get("multipv") or 1), (r.get("searchmoves") or "").split())
+                for r in csv.DictReader(f, delimiter="\t")]
+
+
+def run_load(exe: Path, cwd: Path, setup: list[str], rows: list[tuple[str, int, int, list[str]]],
+             hash_mb: int, cpu: int | None, timeout: float) -> dict:
+    """One fresh single-threaded engine process searches every row in order, without ucinewgame."""
+    proc = subprocess.Popen([str(exe)], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT, text=True, encoding="utf-8",
+                            errors="replace", cwd=str(cwd), bufsize=1, creationflags=NO_WINDOW)
+    pin(proc, cpu)
+    killer = threading.Timer(timeout, proc.kill)
+    killer.start()
+
+    def send(line: str) -> None:
+        proc.stdin.write(line + "\n")
+        proc.stdin.flush()
+
+    def read_until(token: str) -> list[str]:
+        lines = []
+        while True:
+            line = proc.stdout.readline()
+            if not line:
+                raise RuntimeError(f"{exe.name}: engine closed its output while waiting for {token}"
+                                   f" (killed after {timeout:.0f}s?)")
+            line = line.rstrip("\r\n")
+            lines.append(line)
+            if line.startswith(token):
+                return lines
+
+    seconds = 0.0
+    nodes = 0
+    positions: list[dict] = []
+    backends: set[str] = set()
+    with_backend = 0
+    try:
+        send("uci")
+        read_until("uciok")
+        send("setoption name Threads value 1")
+        send(f"setoption name Hash value {hash_mb}")
+        for line in setup:
+            send(line)
+        send("isready")
+        read_until("readyok")
+        for fen, go_nodes, multipv, searchmoves in rows:
+            send(f"setoption name MultiPV value {multipv}")
+            send(f"position fen {fen}")
+            go = f"go nodes {go_nodes}" + (" searchmoves " + " ".join(searchmoves) if searchmoves else "")
+            t0 = time.perf_counter()
+            send(go)
+            lines = read_until("bestmove")
+            dt = time.perf_counter() - t0
+            info = [m for m in (INFO_RE.match(l) for l in lines) if m]
+            found = [b for l in lines for b in BACKEND_RE.findall(l)]
+            backends.update(found)
+            with_backend += bool(found)
+            row = {"bestmove": lines[-1].split()[1] if len(lines[-1].split()) > 1 else "(none)",
+                   "depth": int(info[-1].group(1)) if info else -1,
+                   "seldepth": int(info[-1].group(2)) if info else -1,
+                   "nodes": int(info[-1].group(3)) if info else 0, "seconds": round(dt, 3)}
+            positions.append(row)
+            seconds += dt
+            nodes += row["nodes"]
+        send("quit")
+        proc.wait(timeout=60)
+    finally:
+        killer.cancel()
+        if proc.poll() is None:
+            proc.kill()
+    if proc.returncode != 0:
+        raise RuntimeError(f"{exe.name}: exit code {proc.returncode} after the load")
+    return {"ms": 1000.0 * seconds, "nodes": nodes, "nps": nodes / max(seconds, 1e-9),
+            "backends": sorted(backends), "searches_with_backend_line": with_backend,
+            "signature": tuple((p["bestmove"], p["depth"], p["seldepth"], p["nodes"]) for p in positions),
+            "positions": positions}
 
 
 def session(exe: Path, label: str, cwd: Path, setup: list[str], syzygy: str,
@@ -230,6 +322,11 @@ def main() -> int:
                     help="limit (depth or nodes per position) of the timed bench")
     ap.add_argument("--signature-limit", type=int, default=None,
                     help="signature bench `bench 16 1 <this> default <limit type>` instead of `bench`")
+    ap.add_argument("--load", type=Path, default=None,
+                    help="time this AtomicDB-like load (TSV: fen, nodes, multipv, searchmoves) instead of a bench")
+    ap.add_argument("--load-hash", type=int, default=512, help="Hash of the --load engine process")
+    ap.add_argument("--budget", type=float, default=0,
+                    help="seconds of timing after which no new round starts (0: no limit)")
     ap.add_argument("--rounds", type=int, default=8)
     ap.add_argument("--timeout", type=float, default=1800, help="seconds allowed to one bench process")
     ap.add_argument("--session-timeout", type=float, default=900, help="seconds allowed to one session")
@@ -255,6 +352,17 @@ def main() -> int:
     signature_cmd = ("bench" if a.signature_limit is None
                      else f"bench 16 1 {a.signature_limit} default {a.limit_type}")
     timed_cmd = f"bench 16 1 {a.limit} default {a.limit_type}"
+    load = load_rows(a.load) if a.load else None
+    if load:
+        budgets = [n for _, n, _, _ in load]
+        timed_cmd = (f"load {a.load.name}: {len(load)} positions, go nodes {min(budgets)}-{max(budgets)} "
+                     f"({sum(budgets)} in all), Threads 1, Hash {a.load_hash}, no ucinewgame")
+
+    def timed(exe: Path) -> dict:
+        if load:
+            return run_load(exe, a.cwd, setup, load, a.load_hash, a.cpu, a.timeout)
+        return bench(exe, a.cwd, setup, timed_cmd, a.cpu, a.timeout)
+
     failures: list[str] = []
     result: dict = {"title": a.title, "net": a.net, "evalfile": evalfile or None,
                     "expect_backend": a.expect_backend, "expect_bench": a.expect_bench,
@@ -348,13 +456,36 @@ def main() -> int:
     if a.rounds > 0:
         samples: dict[str, list[float]] = {label: [] for label, _ in bins}
         nodes_by: dict[str, set[int]] = {label: set() for label, _ in bins}
+        # --load: the (bestmove, depth, seldepth, nodes) of every row, per run
+        sig_by: dict[str, set[tuple]] = {label: set() for label, _ in bins}
         backends_seen: set[str] = set()
+        t_timing = time.time()
+        round_seconds = 0.0
+
+        def record(label: str, m: dict) -> None:
+            nodes_by[label].add(m["nodes"])
+            backends_seen.update(m["backends"])
+            if "signature" in m:
+                sig_by[label].add(m["signature"])
+                if label == ref and "load_positions" not in result:
+                    result["load_positions"] = [
+                        {"fen": fen, "go_nodes": gn, "multipv": mp, "searchmoves": " ".join(sm), **p}
+                        for (fen, gn, mp, sm), p in zip(load, m["positions"])]
+                if m["searches_with_backend_line"] != len(load):
+                    failures.append(f"{label}: {m['searches_with_backend_line']} of {len(load)} load searches "
+                                    f"reported a backend")
+
         try:
             for label, exe in bins:  # one discarded warm-up each
-                m = bench(exe, a.cwd, setup, timed_cmd, a.cpu, a.timeout)
-                nodes_by[label].add(m["nodes"])
-                backends_seen.update(m["backends"])
+                record(label, timed(exe))
             for r in range(a.rounds):
+                spent = time.time() - t_timing
+                if a.budget and r and spent + round_seconds > a.budget:
+                    print(f"budget: {spent:.0f}s of timing spent, a round takes {round_seconds:.0f}s, "
+                          f"--budget {a.budget:.0f}s: stopping after {r} rounds", flush=True)
+                    result["stopped_by_budget"] = True
+                    break
+                t_round = time.time()
                 # Rotate by r // 2 and reverse every other round: over 2 * len(bins) rounds
                 # every binary starts every position in both directions. (Rotating by r
                 # instead gives the same order in every round when there are two binaries.)
@@ -363,12 +494,12 @@ def main() -> int:
                 if r % 2:
                     order = order[::-1]
                 for label, exe in order:
-                    m = bench(exe, a.cwd, setup, timed_cmd, a.cpu, a.timeout)
-                    nodes_by[label].add(m["nodes"])
-                    backends_seen.update(m["backends"])
+                    m = timed(exe)
+                    record(label, m)
                     samples[label].append(m["nps"])
-                print(f"round {r + 1}/{a.rounds}: " + "  ".join(f"{l}={samples[l][-1]:.0f}" for l, _ in bins),
-                      flush=True)
+                round_seconds = time.time() - t_round
+                print(f"round {r + 1}/{a.rounds}: " + "  ".join(f"{l}={samples[l][-1]:.0f}" for l, _ in bins)
+                      + f"  ({round_seconds:.0f}s)", flush=True)
         except RuntimeError as exc:
             msg = str(exc).splitlines()[0]
             print(f"timed bench FAILED: {msg}", flush=True)
@@ -381,6 +512,18 @@ def main() -> int:
         for l in own:
             if len(nodes_by[l]) > 1:
                 failures.append(f"{timed_cmd}: {l}: node counts differ between runs: {sorted(nodes_by[l])}")
+        if load:
+            sigs_seen: set[tuple] = set().union(*(sig_by[l] for l, _ in bins if l not in own))
+            result["load_identical_in_every_run"] = len(sigs_seen) == 1
+            print(f"{timed_cmd}: bestmove, depth, seldepth and nodes of every search identical in every run "
+                  f"of every binary: {len(sigs_seen) == 1}", flush=True)
+            if len(sigs_seen) > 1:
+                failures.append(f"{timed_cmd}: the searches differ between runs or binaries")
+                variants = sorted(sigs_seen)
+                for i, rows in enumerate(zip(*variants)):
+                    if len(set(rows)) > 1:
+                        print(f"   first differing row {i + 1}: {rows}", flush=True)
+                        break
         if backends_seen and sorted(backends_seen) != [a.expect_backend]:
             failures.append(f"{timed_cmd}: backends {sorted(backends_seen)}, expected {a.expect_backend}")
         print(f"{timed_cmd}: nodes in every run of every binary = {sorted(nodes_seen)}"
