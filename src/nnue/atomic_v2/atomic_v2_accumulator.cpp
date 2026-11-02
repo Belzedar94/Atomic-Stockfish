@@ -183,17 +183,26 @@ void AccumulatorStack::evaluate_side(Color                     perspective,
            && !FeatureSet::requires_refresh(accumulators[base].dirtyPiece, perspective))
         --base;
 
+    const Square kingSquare = pos.square<KING>(perspective);
+
     if (!accumulators[base].computed[perspective])
     {
         refresh(perspective, pos, featureTransformer, mut_latest(), cache);
+
+        // Walk the refreshed accumulator back down to base, as upstream does: no
+        // move after base changes the king square of this perspective, so later
+        // evaluations below base start from these accumulators instead of
+        // refreshing again.
+        for (usize current = size - 1; current > base; --current)
+            update<false>(perspective, kingSquare, featureTransformer, accumulators[current],
+                          accumulators[current - 1]);
         return;
     }
 
-    const Square kingSquare = pos.square<KING>(perspective);
     // The backward scan already ruled out refreshes after base.
     for (usize current = base + 1; current < size; ++current)
-        update(perspective, kingSquare, featureTransformer, accumulators[current - 1],
-               accumulators[current]);
+        update<true>(perspective, kingSquare, featureTransformer, accumulators[current - 1],
+                     accumulators[current]);
 }
 
 void AccumulatorStack::refresh(Color                     perspective,
@@ -252,18 +261,32 @@ void AccumulatorStack::refresh(Color                     perspective,
     target.computed[perspective] = true;
 }
 
+// Forward, target.dirtyPiece is the move from source to target. Backward,
+// source.dirtyPiece is the move from target to source: the features it removed
+// (every exploded piece of a capture included) are added back and the ones it
+// added are taken out. The sums wrap the same way in both directions, so the
+// result is exactly the forward one.
+template<bool Forward>
 void AccumulatorStack::update(Color                     perspective,
                               Square                    kingSquare,
                               const FeatureTransformer& featureTransformer,
                               const AccumulatorState&   source,
                               AccumulatorState&         target) noexcept {
+    assert(source.computed[perspective] && !target.computed[perspective]);
+
     FeatureSet::RemovedIndexList removed;
     FeatureSet::AddedIndexList   added;
-    FeatureSet::append_changed_indices(perspective, kingSquare, target.dirtyPiece, removed, added);
+    FeatureSet::append_changed_indices(
+      perspective, kingSquare, Forward ? target.dirtyPiece : source.dirtyPiece, removed, added);
 
-    apply_delta(perspective, featureTransformer, source.accumulation[perspective],
-                source.psqtAccumulation[perspective], target.accumulation[perspective],
-                target.psqtAccumulation[perspective], removed, added);
+    if constexpr (Forward)
+        apply_delta(perspective, featureTransformer, source.accumulation[perspective],
+                    source.psqtAccumulation[perspective], target.accumulation[perspective],
+                    target.psqtAccumulation[perspective], removed, added);
+    else
+        apply_delta(perspective, featureTransformer, source.accumulation[perspective],
+                    source.psqtAccumulation[perspective], target.accumulation[perspective],
+                    target.psqtAccumulation[perspective], added, removed);
     target.computed[perspective] = true;
 }
 

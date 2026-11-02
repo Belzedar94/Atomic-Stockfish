@@ -103,6 +103,7 @@ class AccumulatorStack {
                  AccumulatorState&         target,
                  AccumulatorCaches&        cache) noexcept;
 
+    template<bool Forward>
     void update(Color                     perspective,
                 Square                    kingSquare,
                 const FeatureTransformer& featureTransformer,

@@ -104,6 +104,7 @@ class AccumulatorStack {
                  const FeatureTransformer& featureTransformer,
                  AccumulatorState&         target) noexcept;
 
+    template<bool Forward>
     void update(Color                     perspective,
                 Square                    ksq,
                 const FeatureTransformer& featureTransformer,

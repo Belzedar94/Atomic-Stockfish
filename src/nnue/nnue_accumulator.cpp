@@ -95,17 +95,26 @@ void AccumulatorStack::evaluate_side(Color                     perspective,
            && !FeatureSet::requires_refresh(accumulators[base].dirtyPiece, perspective))
         --base;
 
+    const Square ksq = pos.has_king(perspective) ? pos.square<KING>(perspective) : SQ_NONE;
+
     if (!accumulators[base].computed[perspective])
     {
         refresh_cached(perspective, pos, featureTransformer, cache, mut_latest());
+
+        // Walk the refreshed accumulator back down to base, as upstream does: no
+        // move after base changes the king square of this perspective, so later
+        // evaluations below base start from these accumulators instead of
+        // refreshing again.
+        for (usize current = size - 1; current > base; --current)
+            update<false>(perspective, ksq, featureTransformer, accumulators[current],
+                          accumulators[current - 1]);
         return;
     }
 
-    const Square ksq = pos.has_king(perspective) ? pos.square<KING>(perspective) : SQ_NONE;
     // The backward scan already ruled out refreshes after base.
     for (usize current = base + 1; current < size; ++current)
-        update(perspective, ksq, featureTransformer, accumulators[current - 1],
-               accumulators[current]);
+        update<true>(perspective, ksq, featureTransformer, accumulators[current - 1],
+                     accumulators[current]);
 }
 
 void AccumulatorStack::refresh_cached(Color                     perspective,
@@ -284,14 +293,23 @@ void AccumulatorStack::refresh(Color                     perspective,
     target.computed[perspective] = true;
 }
 
+// Forward, target.dirtyPiece is the move from source to target. Backward,
+// source.dirtyPiece is the move from target to source: the features it removed
+// (every exploded piece of a capture included) are added back and the ones it
+// added are taken out. The sums wrap the same way in both directions, so the
+// result is exactly the forward one.
+template<bool Forward>
 void AccumulatorStack::update(Color                     perspective,
                               Square                    ksq,
                               const FeatureTransformer& featureTransformer,
                               const AccumulatorState&   source,
                               AccumulatorState&         target) noexcept {
+    assert(source.computed[perspective] && !target.computed[perspective]);
+
     FeatureSet::RemovedIndexList removed;
     FeatureSet::AddedIndexList   added;
-    FeatureSet::append_changed_indices(perspective, ksq, target.dirtyPiece, removed, added);
+    FeatureSet::append_changed_indices(
+      perspective, ksq, Forward ? target.dirtyPiece : source.dirtyPiece, removed, added);
 
 #ifdef VECTOR
     using Tiling = LegacyAtomicAccumulatorTiling;
@@ -315,7 +333,8 @@ void AccumulatorStack::update(Color                     perspective,
             const auto* weightTile = reinterpret_cast<const vec_t*>(
               &featureTransformer.weights[index * TransformedFeatureDimensions + tileOffset]);
             for (IndexType reg = 0; reg < Tiling::NumRegs; ++reg)
-                acc[reg] = vec_sub_16(acc[reg], weightTile[reg]);
+                acc[reg] = Forward ? vec_sub_16(acc[reg], weightTile[reg])
+                                   : vec_add_16(acc[reg], weightTile[reg]);
         }
 
         for (const IndexType index : added)
@@ -324,7 +343,8 @@ void AccumulatorStack::update(Color                     perspective,
             const auto* weightTile = reinterpret_cast<const vec_t*>(
               &featureTransformer.weights[index * TransformedFeatureDimensions + tileOffset]);
             for (IndexType reg = 0; reg < Tiling::NumRegs; ++reg)
-                acc[reg] = vec_add_16(acc[reg], weightTile[reg]);
+                acc[reg] = Forward ? vec_add_16(acc[reg], weightTile[reg])
+                                   : vec_sub_16(acc[reg], weightTile[reg]);
         }
 
         for (IndexType reg = 0; reg < Tiling::NumRegs; ++reg)
@@ -347,7 +367,8 @@ void AccumulatorStack::update(Color                     perspective,
             const auto* weightTile = reinterpret_cast<const psqt_vec_t*>(
               &featureTransformer.psqtWeights[index * PSQTBuckets + tileOffset]);
             for (IndexType reg = 0; reg < Tiling::NumPsqtRegs; ++reg)
-                psqt[reg] = vec_sub_psqt_32(psqt[reg], weightTile[reg]);
+                psqt[reg] = Forward ? vec_sub_psqt_32(psqt[reg], weightTile[reg])
+                                    : vec_add_psqt_32(psqt[reg], weightTile[reg]);
         }
 
         for (const IndexType index : added)
@@ -355,7 +376,8 @@ void AccumulatorStack::update(Color                     perspective,
             const auto* weightTile = reinterpret_cast<const psqt_vec_t*>(
               &featureTransformer.psqtWeights[index * PSQTBuckets + tileOffset]);
             for (IndexType reg = 0; reg < Tiling::NumPsqtRegs; ++reg)
-                psqt[reg] = vec_add_psqt_32(psqt[reg], weightTile[reg]);
+                psqt[reg] = Forward ? vec_add_psqt_32(psqt[reg], weightTile[reg])
+                                    : vec_sub_psqt_32(psqt[reg], weightTile[reg]);
         }
 
         for (IndexType reg = 0; reg < Tiling::NumPsqtRegs; ++reg)
@@ -379,9 +401,9 @@ void AccumulatorStack::update(Color                     perspective,
     };
 
     for (const IndexType index : removed)
-        apply(index, -1);
+        apply(index, Forward ? -1 : 1);
     for (const IndexType index : added)
-        apply(index, 1);
+        apply(index, Forward ? 1 : -1);
 #endif
 
     target.computed[perspective] = true;
