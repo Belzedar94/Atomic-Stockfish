@@ -671,6 +671,13 @@ bool Position::legal(Move m) const {
     assert(color_of(pc) == us);
     assert(has_king(us) && has_king(them));
 
+    // Outside check, a quiet move of a non-king that is not the sole blocker of
+    // a slider cannot expose our king: nothing explodes, the vacated square is
+    // the only one that can open a line, and the destination can only close
+    // one. Castling is a king move and en passant a capture: neither gets here.
+    if (!stm_in_check() && type_of(pc) != KING && !capture(m) && !(blockers_for_king(us) & from))
+        return true;
+
     if (m.type_of() == CASTLING)
     {
         const Square    rfrom        = to;
@@ -1520,31 +1527,24 @@ bool Position::has_legal_quiet() const {
     const Bitboard  thirdRank    = us == WHITE ? Rank3BB : Rank6BB;
     const Bitboard  pawnsOn7     = pieces(us, PAWN) & seventhRank;
     const Bitboard  pawnsNotOn7  = pieces(us, PAWN) & ~seventhRank;
-    const Bitboard  blockers     = blockers_for_king(us);
-    const bool      inCheck      = atomic_in_check(us);
 
-    // Outside check, moving a non-king that is not the sole blocker of a
-    // slider cannot expose our king. Such a pseudo-legal quiet is therefore
-    // already a proof of mobility and avoids a full post-move attack scan in
-    // the overwhelmingly common qsearch case.
-    const auto legalNonKing = [&](Move move) {
-        return (!inCheck && !(blockers & move.from_sq())) || legal(move);
-    };
-
+    // Outside check, legal() accepts a quiet of a non-king that is not the
+    // sole blocker of a slider without a post-move attack scan, so in the
+    // overwhelmingly common qsearch case the first such quiet proves mobility.
     Bitboard singlePushes = pawn_single_push_bb(us, pawnsNotOn7) & emptySquares;
     Bitboard doublePushes = pawn_single_push_bb(us, singlePushes & thirdRank) & emptySquares;
 
     while (singlePushes)
     {
         const Square to = pop_lsb(singlePushes);
-        if (legalNonKing(Move(to - up, to)))
+        if (legal(Move(to - up, to)))
             return true;
     }
 
     while (doublePushes)
     {
         const Square to = pop_lsb(doublePushes);
-        if (legalNonKing(Move(to - up - up, to)))
+        if (legal(Move(to - up - up, to)))
             return true;
     }
 
@@ -1554,7 +1554,7 @@ bool Position::has_legal_quiet() const {
         const Square to = pop_lsb(promotions);
         // Promotion type cannot change friendly-king safety: all four choices
         // remove and occupy the same squares. One queen probe proves mobility.
-        if (legalNonKing(Move::make<PROMOTION>(to - up, to, QUEEN)))
+        if (legal(Move::make<PROMOTION>(to - up, to, QUEEN)))
             return true;
     }
 
@@ -1566,8 +1566,7 @@ bool Position::has_legal_quiet() const {
             const Square from    = pop_lsb(movers);
             Bitboard     targets = attacks_bb(pt, from, pieces()) & emptySquares;
             while (targets)
-                if (const Move move(from, pop_lsb(targets));
-                    (pt != KING && legalNonKing(move)) || (pt == KING && legal(move)))
+                if (legal(Move(from, pop_lsb(targets))))
                     return true;
         }
     }
