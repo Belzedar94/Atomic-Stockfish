@@ -1,0 +1,73 @@
+name: Re-attribute the perf samples of the AtomicDB worker profile
+
+# ci/perf_attr.py of ci/profile-1102 misread the samples recorded without call
+# graphs (perf right-aligns the comm field, so those lines start with spaces) and
+# filed conversion operators (StatsEntry::operator short) under "other". This
+# workflow runs the fixed script on the perf scripts and binaries that run
+# 41388418383 of ci/profile-1102 uploaded, with the same llvm-symbolizer. Nothing is
+# recorded again and nothing is published.
+
+on:
+  push:
+    branches:
+      - ci/profile-1102-attr
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: profile-1102-attr
+  cancel-in-progress: true
+
+env:
+  PROFILE_RUN: "41388418383"
+  LLVM_VERSION: "23"
+
+jobs:
+  attribute:
+    name: attribution of run 41388418383
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: profile-linux
+          path: prof
+          run-id: ${{ env.PROFILE_RUN }}
+          github-token: ${{ github.token }}
+      - name: Install llvm ${{ env.LLVM_VERSION }} (apt.llvm.org)
+        run: |
+          curl -sSfL --retry 3 -o "$RUNNER_TEMP/llvm.sh" https://apt.llvm.org/llvm.sh
+          sudo bash "$RUNNER_TEMP/llvm.sh" "$LLVM_VERSION" > "$RUNNER_TEMP/llvm.log" 2>&1 || { tail -n 40 "$RUNNER_TEMP/llvm.log"; exit 1; }
+          sudo apt-get install -y "llvm-$LLVM_VERSION" >> "$RUNNER_TEMP/llvm.log" 2>&1 || { tail -n 40 "$RUNNER_TEMP/llvm.log"; exit 1; }
+          "llvm-symbolizer-$LLVM_VERSION" --version | head -n 2
+      - name: Attribution
+        run: |
+          set -eo pipefail
+          mkdir -p out
+          ls -l prof prof/out prof/bins
+          for kind in self fp; do
+            bin=prof/bins/atomic-pgo-g; [ "$kind" = fp ] && bin=prof/bins/atomic-pgo-fp
+            for p in mpv1 mpv5 t4; do
+              gunzip -c "prof/out/perf-$kind-$p.script.gz" > "$RUNNER_TEMP/$kind-$p.script"
+              python3 ci/perf_attr.py --script "$RUNNER_TEMP/$kind-$p.script" --binary "$bin" --top 60 \
+                --symbolizer "llvm-symbolizer-$LLVM_VERSION" --title "$kind $p (cpu-clock)" \
+                --json "out/attr-$kind-$p.json" --md out/attr.md > "out/attr-$kind-$p.log" 2>&1 || { tail -n 30 "out/attr-$kind-$p.log"; }
+              rm -f "$RUNNER_TEMP/$kind-$p.script"
+            done
+          done
+          cat out/attr.md >> "$GITHUB_STEP_SUMMARY" || true
+          ls -l out
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: profile-linux-attr
+          path: out/
+          retention-days: 30
