@@ -3,16 +3,22 @@ name: CPU profile of the AtomicDB worker engine (clang 23 PGO, perf)
 # Profiles main 722b4735 built as the published Linux AtomicDB worker engine is
 # built (ci/worker-engine-pgo-1028): make profile-build ARCH=x86-64-avx2
 # COMP=clang CXX=clang++-23 RTLIB=compiler-rt, with the default network
-# (atomic_run3b_e202_l05.nnue, Legacy Atomic V1) embedded. A second build adds -g
-# and nothing else; its .text section is compared byte for byte with the first
-# one, and it is the binary that is recorded, so that samples can be attributed to
-# inlined functions. Both must give bench 433197 and the same worker-like session.
+# (atomic_run3b_e202_l05.nnue, Legacy Atomic V1) embedded. Three builds:
+#   atomic-pgo     the recipe;
+#   atomic-pgo-g   the recipe + -g (debug info only), compared instruction by
+#                  instruction with the recipe; sampled without call graphs, it
+#                  gives the self time of every source function, inlined ones
+#                  included;
+#   atomic-pgo-fp  the recipe + -g + frame pointers, sampled with call graphs
+#                  (perf --call-graph fp), for the accumulated shares only.
+# (Run 41386203994 showed that perf's DWARF unwinding gets no frame at all on the
+# search threads of this engine, hence the frame-pointer twin.) All three must give
+# bench 433197 and the same worker-like session.
 #
 # The load (ci/atomicdb_load.py, seeds in ci/profile_seeds.tsv) is shaped like
 # AtomicDB tasks: go nodes 3M per position, Hash 256, no ucinewgame anywhere, and
 # each seed followed by the positions after its best moves (related positions in a
-# row). 24 open positions and 16 decided ones from the mate battery. Three passes,
-# each recorded with perf (call graphs from a copy of the top of the stack):
+# row). 24 open positions and 16 decided ones from the mate battery. Three passes:
 # MultiPV 1 and MultiPV 5 with one thread, and a short MultiPV 5 pass with four
 # threads. ci/perf_attr.py attributes the samples to source functions.
 #
@@ -44,8 +50,8 @@ env:
   LLVM_VERSION: "23"
   NODES: "3000000"
   WALK: "3"
-  FREQ: "300"
-  STACK: "16384"
+  SELF_FREQ: "999"
+  INCL_FREQ: "299"
   T4_SEEDS: "open01,open02,open03,open04,open05,open06,open07,open08,W5#9p,L6-7#12p,W8-10#15p,H11-15#29p"
 
 jobs:
@@ -99,13 +105,12 @@ jobs:
           echo "$ATOMIC_NET_SHA256  engine/src/$NET_NAME" | sha256sum -c -
 
       # The recipe of the published Linux worker engine, plus the embedding flag, which
-      # the clang PGO recipe only reads from the environment (ENV_CXXFLAGS). The second
-      # build adds -g and nothing else.
-      - name: Profile-guided builds (recipe, and recipe + -g)
+      # the clang PGO recipe only reads from the environment (ENV_CXXFLAGS).
+      - name: Profile-guided builds (recipe; + -g; + -g and frame pointers)
         working-directory: engine/src
         run: |
           set -eo pipefail
-          for v in "atomic-pgo:" "atomic-pgo-g:-g"; do
+          for v in "atomic-pgo:" "atomic-pgo-g:-g" "atomic-pgo-fp:-g -fno-omit-frame-pointer -mno-omit-leaf-frame-pointer"; do
             exe=${v%%:*}; extra=${v#*:}
             rc=0
             CXXFLAGS="-DATOMIC_NNUE_EMBEDDING $extra" make -j4 profile-build ARCH=x86-64-avx2 COMP=clang \
@@ -124,116 +129,109 @@ jobs:
           done
           ls -l ../../bins
 
-      - name: The -g build has the same machine code
+      # Byte for byte first; then instruction by instruction with every address and
+      # displacement blanked out, which is what decides whether the -g binary runs the
+      # recipe's code.
+      - name: Machine code of the -g build against the recipe
         run: |
           set -eo pipefail
-          for b in atomic-pgo atomic-pgo-g; do
+          for b in atomic-pgo atomic-pgo-g atomic-pgo-fp; do
             "llvm-objcopy-$LLVM_VERSION" -O binary --only-section=.text "bins/$b" "out/$b.text"
+            "llvm-objdump-$LLVM_VERSION" -d --no-show-raw-insn --no-leading-addr -M intel --section=.text "bins/$b" \
+              | sed -E 's/0x[0-9a-f]+//g; s/<[^>]*>//g; s/[0-9a-f]{6,}//g' | grep -vE '^\s*$|file format|Disassembly of' > "out/$b.dis"
+            wc -l < "out/$b.dis"
           done
-          sha256sum out/atomic-pgo.text out/atomic-pgo-g.text | tee out/text-identity.txt
-          if cmp -s out/atomic-pgo.text out/atomic-pgo-g.text; then
-            echo "IDENTICAL .text" | tee -a out/text-identity.txt
-          else
-            echo "::warning::the -g build has a different .text"; echo "DIFFERENT .text" | tee -a out/text-identity.txt
-          fi
-          readelf -SW bins/atomic-pgo | grep -E ' \.text ' | tee -a out/text-identity.txt
-          readelf -SW bins/atomic-pgo-g | grep -E ' \.text ' | tee -a out/text-identity.txt
-          rm out/*.text
+          {
+            sha256sum out/atomic-pgo.text out/atomic-pgo-g.text out/atomic-pgo-fp.text
+            cmp -s out/atomic-pgo.text out/atomic-pgo-g.text && echo "recipe vs -g: IDENTICAL bytes" || echo "recipe vs -g: different bytes"
+            if cmp -s out/atomic-pgo.dis out/atomic-pgo-g.dis; then
+              echo "recipe vs -g: IDENTICAL instructions (addresses and displacements aside)"
+            else
+              echo "recipe vs -g: $(diff out/atomic-pgo.dis out/atomic-pgo-g.dis | grep -c '^[<>]') differing instruction lines of $(wc -l < out/atomic-pgo.dis)"
+              diff out/atomic-pgo.dis out/atomic-pgo-g.dis | head -n 40
+            fi
+            echo "recipe vs fp: $(diff out/atomic-pgo.dis out/atomic-pgo-fp.dis | grep -c '^[<>]') differing instruction lines"
+            for b in atomic-pgo atomic-pgo-g atomic-pgo-fp; do readelf -SW "bins/$b" | grep -E ' \.(text|rodata|data|bss) ' | sed "s|^|$b |"; done
+          } | tee out/text-identity.txt
+          rm -f out/*.text out/*.dis
 
-      - name: Identity of the two builds (bench, worker-like session)
+      - name: Identity of the three builds (bench, worker-like session)
         run: |
           set -eo pipefail
           test -z "$(ls run/*.nnue 2>/dev/null)"
-          python3 ci/engine_check.py --title "linux x86-64-avx2 clang $LLVM_VERSION PGO: recipe vs recipe + -g" \
-            --net v1 --bin pgo=bins/atomic-pgo --bin pgo-g=bins/atomic-pgo-g --cwd run \
+          python3 ci/engine_check.py --title "linux x86-64-avx2 clang $LLVM_VERSION PGO: recipe, + -g, + -g + frame pointers" \
+            --net v1 --bin pgo=bins/atomic-pgo --bin pgo-g=bins/atomic-pgo-g --bin pgo-fp=bins/atomic-pgo-fp --cwd run \
             --expect-backend "$V1_BACKEND" --expect-bench "$EXPECT_BENCH" --rounds 0 \
             --json out/identity.json --md "$GITHUB_STEP_SUMMARY" | tee out/identity.log
 
       - name: perf setup
         id: perf
         run: |
-          sudo sysctl -w kernel.perf_event_paranoid=-1 kernel.kptr_restrict=0 kernel.perf_event_mlock_kb=262144
+          sudo sysctl -w kernel.perf_event_paranoid=-1 kernel.kptr_restrict=0 kernel.perf_event_mlock_kb=262144 \
+            kernel.perf_event_max_stack=512
           PERF=$(ls /usr/lib/linux-tools/*/perf 2>/dev/null | head -n 1)
           if [ -z "$PERF" ] || ! "$PERF" version; then
             echo "ok=false" >> "$GITHUB_OUTPUT"; echo "::warning::perf is not usable"; exit 0
           fi
           echo "PERF=$PERF" >> "$GITHUB_ENV"
-          "$PERF" stat -e cycles:u,instructions:u -x, -- bins/atomic-pgo-g compiler > /dev/null 2> out/perf-hw-check.txt || true
-          cat out/perf-hw-check.txt
-          if grep -qE '^[0-9]+,,cycles' out/perf-hw-check.txt; then ev="cycles:u"; hw=true; else ev="cpu-clock:u"; hw=false; fi
-          echo "EVENT=$ev" >> "$GITHUB_ENV"; echo "HW=$hw" >> "$GITHUB_ENV"
-          if "$PERF" record -e "$ev" -F "$FREQ" --call-graph "dwarf,$STACK" -o "$RUNNER_TEMP/t.data" -- bins/atomic-pgo-g compiler > /dev/null 2> out/perf-record-check.txt; then
-            echo "ok=true" >> "$GITHUB_OUTPUT"; echo "event $ev, hardware counters $hw"
+          if "$PERF" record -e cpu-clock:u -F "$INCL_FREQ" --call-graph fp -o "$RUNNER_TEMP/t.data" -- bins/atomic-pgo-fp bench > /dev/null 2> out/perf-record-check.txt; then
+            "$PERF" script -i "$RUNNER_TEMP/t.data" --no-inline -F comm,tid,ip,sym,dso | head -n 60 > out/perf-fp-check.txt || true
+            echo "ok=true" >> "$GITHUB_OUTPUT"
           else
             cat out/perf-record-check.txt; echo "ok=false" >> "$GITHUB_OUTPUT"; echo "::warning::perf record failed"
           fi
 
-      - name: "Pass 1: MultiPV 1, one thread"
+      # Self time: the -g twin of the recipe, sampled without call graphs.
+      - name: "Self time: MultiPV 1, MultiPV 5 (one thread), MultiPV 5 (four threads)"
         if: steps.perf.outputs.ok == 'true'
         run: |
           set -eo pipefail
+          rec="$PERF record -e cpu-clock:u -F $SELF_FREQ"
           python3 ci/atomicdb_load.py --engine bins/atomic-pgo-g --seeds ci/profile_seeds.tsv --cwd run \
-            --nodes "$NODES" --multipv 1 --walk "$WALK" --threads 1 --out out/load-mpv1.jsonl \
-            --wrap "$PERF record -e $EVENT -F $FREQ --call-graph dwarf,$STACK -o $RUNNER_TEMP/mpv1.data --" \
-            | tee out/load-mpv1.log | tail -n 3
+            --nodes "$NODES" --multipv 1 --walk "$WALK" --out out/load-self-mpv1.jsonl \
+            --wrap "$rec -o $RUNNER_TEMP/self-mpv1.data --" | tee out/load-self-mpv1.log | tail -n 1
+          python3 ci/atomicdb_load.py --engine bins/atomic-pgo-g --seeds ci/profile_seeds.tsv --cwd run \
+            --nodes "$NODES" --multipv 5 --walk "$WALK" --out out/load-self-mpv5.jsonl \
+            --wrap "$rec -o $RUNNER_TEMP/self-mpv5.data --" | tee out/load-self-mpv5.log | tail -n 1
+          python3 ci/atomicdb_load.py --engine bins/atomic-pgo-g --seeds ci/profile_seeds.tsv --cwd run \
+            --nodes 8000000 --multipv 5 --walk 2 --threads 4 --select "$T4_SEEDS" --out out/load-self-t4.jsonl \
+            --wrap "$rec -o $RUNNER_TEMP/self-t4.data --" | tee out/load-self-t4.log | tail -n 1
 
-      - name: "Pass 2: MultiPV 5, one thread"
+      # Accumulated shares: the frame-pointer twin, sampled with call graphs.
+      - name: "Call graphs: MultiPV 1, MultiPV 5 (one thread), MultiPV 5 (four threads)"
         if: steps.perf.outputs.ok == 'true'
         run: |
           set -eo pipefail
-          python3 ci/atomicdb_load.py --engine bins/atomic-pgo-g --seeds ci/profile_seeds.tsv --cwd run \
-            --nodes "$NODES" --multipv 5 --walk "$WALK" --threads 1 --out out/load-mpv5.jsonl \
-            --wrap "$PERF record -e $EVENT -F $FREQ --call-graph dwarf,$STACK -o $RUNNER_TEMP/mpv5.data --" \
-            | tee out/load-mpv5.log | tail -n 3
-
-      - name: "Pass 3: MultiPV 5, four threads (short)"
-        if: steps.perf.outputs.ok == 'true'
-        run: |
-          set -eo pipefail
-          python3 ci/atomicdb_load.py --engine bins/atomic-pgo-g --seeds ci/profile_seeds.tsv --cwd run \
-            --nodes 8000000 --multipv 5 --walk 2 --threads 4 --select "$T4_SEEDS" --out out/load-t4.jsonl \
-            --wrap "$PERF record -e $EVENT -F $FREQ --call-graph dwarf,$STACK -o $RUNNER_TEMP/t4.data --" \
-            | tee out/load-t4.log | tail -n 3
+          rec="$PERF record -e cpu-clock:u -F $INCL_FREQ --call-graph fp"
+          python3 ci/atomicdb_load.py --engine bins/atomic-pgo-fp --seeds ci/profile_seeds.tsv --cwd run \
+            --nodes "$NODES" --multipv 1 --walk "$WALK" --out out/load-fp-mpv1.jsonl \
+            --wrap "$rec -o $RUNNER_TEMP/fp-mpv1.data --" | tee out/load-fp-mpv1.log | tail -n 1
+          python3 ci/atomicdb_load.py --engine bins/atomic-pgo-fp --seeds ci/profile_seeds.tsv --cwd run \
+            --nodes "$NODES" --multipv 5 --walk "$WALK" --out out/load-fp-mpv5.jsonl \
+            --wrap "$rec -o $RUNNER_TEMP/fp-mpv5.data --" | tee out/load-fp-mpv5.log | tail -n 1
+          python3 ci/atomicdb_load.py --engine bins/atomic-pgo-fp --seeds ci/profile_seeds.tsv --cwd run \
+            --nodes 8000000 --multipv 5 --walk 2 --threads 4 --select "$T4_SEEDS" --out out/load-fp-t4.jsonl \
+            --wrap "$rec -o $RUNNER_TEMP/fp-t4.data --" | tee out/load-fp-t4.log | tail -n 1
 
       - name: Attribution
         if: steps.perf.outputs.ok == 'true'
         run: |
           set -eo pipefail
-          for p in mpv1 mpv5 t4; do
-            d="$RUNNER_TEMP/$p.data"
-            "$PERF" report -i "$d" --no-children --no-inline -g none --sort sym --stdio --percent-limit 0.2 > "out/report-flat-$p.txt" 2> /dev/null || true
-            "$PERF" script -i "$d" --no-inline -F comm,tid,ip,sym,dso --show-mmap-events > "$RUNNER_TEMP/$p.script" 2> "out/script-$p.err" || true
-            head -c 3000 "$RUNNER_TEMP/$p.script"; echo; grep -m 3 PERF_RECORD_MMAP "$RUNNER_TEMP/$p.script" || true
-            python3 ci/perf_attr.py --script "$RUNNER_TEMP/$p.script" --binary bins/atomic-pgo-g \
-              --symbolizer "llvm-symbolizer-$LLVM_VERSION" --title "$p ($EVENT, $FREQ Hz)" \
-              --json "out/attr-$p.json" --md out/attr.md > "out/attr-$p.log" 2>&1 || { tail -n 30 "out/attr-$p.log"; }
-            gzip -c "$RUNNER_TEMP/$p.script" > "out/perf-$p.script.gz"
-            rm -f "$RUNNER_TEMP/$p.script" "$d"
+          for kind in self fp; do
+            bin=bins/atomic-pgo-g; [ "$kind" = fp ] && bin=bins/atomic-pgo-fp
+            for p in mpv1 mpv5 t4; do
+              d="$RUNNER_TEMP/$kind-$p.data"
+              "$PERF" report -i "$d" --no-children --no-inline -g none --sort sym --stdio --percent-limit 0.2 > "out/report-flat-$kind-$p.txt" 2> /dev/null || true
+              "$PERF" script -i "$d" --no-inline --max-stack 64 -F comm,tid,ip,sym,dso --show-mmap-events > "$RUNNER_TEMP/$kind-$p.script" 2> "out/script-$kind-$p.err" || true
+              python3 ci/perf_attr.py --script "$RUNNER_TEMP/$kind-$p.script" --binary "$bin" \
+                --symbolizer "llvm-symbolizer-$LLVM_VERSION" --title "$kind $p (cpu-clock)" \
+                --json "out/attr-$kind-$p.json" --md out/attr.md > "out/attr-$kind-$p.log" 2>&1 || { tail -n 30 "out/attr-$kind-$p.log"; }
+              gzip -c "$RUNNER_TEMP/$kind-$p.script" > "out/perf-$kind-$p.script.gz"
+              rm -f "$RUNNER_TEMP/$kind-$p.script" "$d"
+            done
           done
           cat out/attr.md >> "$GITHUB_STEP_SUMMARY"
           ls -l out
-
-      # Counting mode, only where the runner exposes hardware counters.
-      - name: Hardware counters (counting mode)
-        if: steps.perf.outputs.ok == 'true' && env.HW == 'true'
-        run: |
-          python3 ci/atomicdb_load.py --engine bins/atomic-pgo-g --seeds ci/profile_seeds.tsv --cwd run \
-            --nodes "$NODES" --multipv 1 --walk 2 --threads 1 --limit 12 --out out/load-stat.jsonl \
-            --wrap "$PERF stat -e cycles:u,instructions:u,branches:u,branch-misses:u,cache-references:u,cache-misses:u,L1-dcache-load-misses:u,dTLB-load-misses:u -o out/perf-stat.txt --" \
-            | tail -n 2 || true
-          cat out/perf-stat.txt || true
-
-      # Without perf: instruction counts with callgrind on a short load instead.
-      - name: callgrind fallback
-        if: steps.perf.outputs.ok != 'true'
-        run: |
-          sudo apt-get install -y valgrind > out/valgrind-install.log 2>&1
-          python3 ci/atomicdb_load.py --engine bins/atomic-pgo-g --seeds ci/profile_seeds.tsv --cwd run \
-            --nodes 1000000 --multipv 1 --walk 2 --threads 1 --limit 12 --timeout 7000 --out out/load-callgrind.jsonl \
-            --wrap "valgrind --tool=callgrind --dump-instr=yes --callgrind-out-file=$PWD/out/callgrind.out" | tail -n 2
-          callgrind_annotate --inclusive=no out/callgrind.out > out/callgrind-self.txt || true
-          callgrind_annotate --inclusive=yes out/callgrind.out > out/callgrind-incl.txt || true
-          gzip out/callgrind.out
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
@@ -242,5 +240,6 @@ jobs:
           path: |
             out/
             bins/atomic-pgo-g
+            bins/atomic-pgo-fp
           retention-days: 30
           compression-level: 6
