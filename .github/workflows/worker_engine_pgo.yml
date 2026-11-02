@@ -39,14 +39,14 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  ENGINE_SHA: 16c8f0dd643a3a249e28cc7cd31416eb8472c18d
+  ENGINE_SHA: 7f705c8f4ca1287d1afad1e03a8664327e775043
   BASE_SHA: 1adc5239500a684824b178b19be4266f6e249cc8
   ATOMIC_NET_TAG: v1.0
   ATOMIC_NET_ASSET: atomic-run3b.nnue
   ATOMIC_NET_SHA256: 99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f92a04a6
   NET_NAME: atomic_run3b_e202_l05.nnue
   SERVED_URL: https://belzedar.duckdns.org/atomicdb/engines
-  EXPECT_NNUE: "409185"
+  EXPECT_NNUE: "433197"
   BENCH_DEPTH: "18"
   ROUNDS: "10"
   # The LLVM release the Linux binary is built with (apt.llvm.org packages).
