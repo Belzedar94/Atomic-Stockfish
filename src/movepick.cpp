@@ -30,6 +30,11 @@ namespace Stockfish {
 
 namespace {
 
+// Measurement only. Always zero, but read at run time, so the blast term of the
+// capture order is computed and then dropped: the search is main's, and the
+// speed difference is the cost of computing the term.
+volatile int BlastOrderMask = 0;
+
 enum Stages {
     // generate main search moves
     MAIN_TT,
@@ -211,6 +216,7 @@ ExtMove* MovePicker::score(const MoveList<Type>& ml) {
         // ends the game and goes first.
         const Bitboard nonPawns  = pos.pieces() ^ pos.pieces(PAWN);
         const Bitboard theirKing = pos.pieces(~us, KING);
+        const int      mask      = BlastOrderMask;
 
         for (auto move : ml)
         {
@@ -220,7 +226,8 @@ ExtMove* MovePicker::score(const MoveList<Type>& ml) {
             const Square to            = m.to_sq();
             const Piece  pc            = pos.moved_piece(m);
             const Piece  capturedPiece = pos.piece_on(to);
-            int          blastValue    = int(PieceValue[capturedPiece]);
+            const int    victim        = int(PieceValue[capturedPiece]);
+            int          blastValue    = victim;
 
             // A queen promotion that captures nothing does not explode
             if (pos.capture(m))
@@ -228,24 +235,26 @@ ExtMove* MovePicker::score(const MoveList<Type>& ml) {
                 // The capturer leaves its square and explodes on the landing one
                 Bitboard blast = Attacks::attacks_bb<KING>(to) & nonPawns & ~square_bb(m.from_sq());
 
+                // No branch on the mask anywhere in the loop: a compiler that
+                // unswitched the loop on it could drop the computation again.
                 if (blast & theirKing)
+                    blastValue = std::numeric_limits<int>::max() / 32;
+                else
                 {
-                    m.value = std::numeric_limits<int>::max() / 2;
-                    continue;
-                }
+                    // En passant takes a pawn that is not on the landing square
+                    if (m.type_of() == EN_PASSANT)
+                        blastValue += PawnValue;
 
-                // En passant takes a pawn that is not on the landing square
-                if (m.type_of() == EN_PASSANT)
-                    blastValue += PawnValue;
-
-                while (blast)
-                {
-                    const Piece bp = pos.piece_on(pop_lsb(blast));
-                    blastValue += color_of(bp) == us ? -int(PieceValue[bp]) : int(PieceValue[bp]);
+                    while (blast)
+                    {
+                        const Piece bp = pos.piece_on(pop_lsb(blast));
+                        blastValue += color_of(bp) == us ? -int(PieceValue[bp]) : int(PieceValue[bp]);
+                    }
                 }
             }
 
-            m.value = captureHist[pc][to][type_of(capturedPiece)] + 7 * blastValue;
+            m.value =
+              captureHist[pc][to][type_of(capturedPiece)] + 7 * (victim + ((blastValue - victim) & mask));
         }
     }
     else
