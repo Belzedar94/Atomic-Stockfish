@@ -428,11 +428,15 @@ tests['perft vectors (Atomic and Atomic960)'] = async (context) => {
 async function measuredMemory() {
   // Chromium only; run-browser-tests.mjs enables eager measurement.
   if (!performance.measureUserAgentSpecificMemory) return null;
-  const result = await Promise.race([
-    performance.measureUserAgentSpecificMemory(),
-    sleep(20000).then(() => null),
-  ]);
-  return result?.bytes ?? null;
+  try {
+    const result = await Promise.race([
+      performance.measureUserAgentSpecificMemory(),
+      sleep(20000).then(() => null),
+    ]);
+    return result?.bytes ?? null;
+  } catch {
+    return null; // e.g. unavailable in Chromium's headless shell
+  }
 }
 
 tests['initialize/dispose cycles'] = async (context) => {

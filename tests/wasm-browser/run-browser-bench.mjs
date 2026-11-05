@@ -242,7 +242,9 @@ try {
   for (const name of browsers) {
     const type = name === 'firefox' ? firefox : chromium;
     const browser = await type.launch(
-      name === 'chromium' ? { args: ['--enable-blink-features=ForceEagerMeasureMemory'] } : {},
+      name === 'chromium'
+        ? { channel: 'chromium', args: ['--enable-blink-features=ForceEagerMeasureMemory'] }
+        : {},
     );
     const entry = { name, version: browser.version(), runs: [] };
     console.log(`${name} ${browser.version()}`);

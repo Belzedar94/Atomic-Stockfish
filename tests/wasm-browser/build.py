@@ -253,7 +253,9 @@ def build(out_dir: Path, compiler: str, debug: bool, allow_other_emscripten: boo
         )
 
     commit = node_build.git_output("rev-parse", "HEAD")
-    dirty = node_build.git_output("status", "--porcelain", "--", "src", "tests")
+    dirty = node_build.git_output(
+        "status", "--porcelain", "--untracked-files=no", "--", "src", "tests"
+    )
     manifest = {
         "schemaVersion": 1,
         "target": "browser-worker",

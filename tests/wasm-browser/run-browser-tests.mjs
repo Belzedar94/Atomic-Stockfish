@@ -107,7 +107,11 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 async function runBrowser(name, origin, context) {
   const type = name === 'firefox' ? firefox : chromium;
   const browser = await type.launch(
-    name === 'chromium' ? { args: ['--enable-blink-features=ForceEagerMeasureMemory'] } : {},
+    // The full Chromium build (not the headless shell) has
+    // measureUserAgentSpecificMemory, used by the dispose memory check.
+    name === 'chromium'
+      ? { channel: 'chromium', args: ['--enable-blink-features=ForceEagerMeasureMemory'] }
+      : {},
   );
   const browserContext = await browser.newContext();
   const requests = [];
