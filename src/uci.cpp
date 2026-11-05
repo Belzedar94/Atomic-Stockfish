@@ -91,123 +91,134 @@ void UCIEngine::init_search_update_listeners() {
 
 void UCIEngine::loop() {
     set_console_utf8();
-    std::string token, cmd;
+    std::string cmd;
 
     for (int i = 1; i < cli.argc; ++i)
         cmd += std::string(cli.argv[i]) + " ";
 
+    bool running;
     do
     {
         if (cli.argc == 1
             && !getline(std::cin, cmd))  // Wait for an input or an end-of-file (EOF) indication
             cmd = "quit";
 
-        std::istringstream is(cmd);
+        running = execute(cmd);
 
-        token.clear();  // Avoid a stale if getline() returns nothing or a blank line
-        is >> token;
+    } while (running && cli.argc <= 1);  // The command-line arguments are one-shot
+}
 
-        if (token == "quit" || token == "stop")
-            engine.stop();
+// Process one UCI command line. Returns false when the command ends the
+// session ('quit', or a hand-over to the XBoard protocol) and true otherwise.
+// loop() feeds it from stdin; embedders without a blocking stdin, such as the
+// browser worker, call it directly with one line at a time.
+bool UCIEngine::execute(std::string_view command) {
+    const std::string  cmd(command);
+    std::string        token;
+    std::istringstream is(cmd);
 
-        // The GUI sends 'ponderhit' to tell that the user has played the expected move.
-        // So, 'ponderhit' is sent if pondering was done on the same move that the user
-        // has played. The search should continue, but should also switch from pondering
-        // to the normal search.
-        else if (token == "ponderhit")
-            engine.set_ponderhit(false);
+    is >> token;
 
-        else if (token == "xboard")
-        {
-            XBoardProtocol protocol(engine);
-            protocol.loop();
-            return;
-        }
+    if (token == "quit" || token == "stop")
+        engine.stop();
 
-        else if (token == "uci")
-        {
-            sync_cout << "id name " << engine_info(true) << "\n"
-                      << engine.get_options() << sync_endl;
+    // The GUI sends 'ponderhit' to tell that the user has played the expected move.
+    // So, 'ponderhit' is sent if pondering was done on the same move that the user
+    // has played. The search should continue, but should also switch from pondering
+    // to the normal search.
+    else if (token == "ponderhit")
+        engine.set_ponderhit(false);
 
-            sync_cout << "uciok" << sync_endl;
-        }
+    else if (token == "xboard")
+    {
+        XBoardProtocol protocol(engine);
+        protocol.loop();
+        return false;
+    }
 
-        else if (token == "setoption")
-            setoption(is);
-        else if (token == "go")
-        {
-            // send info strings after the go command is sent for old GUIs and python-chess
-            print_info_string(engine.numa_config_information_as_string());
-            print_info_string(engine.thread_allocation_information_as_string());
-            go(is);
-        }
-        else if (token == "position")
-            position(is);
-        else if (token == "ucinewgame")
-            engine.search_clear();
-        else if (token == "isready")
-            sync_cout << "readyok" << sync_endl;
+    else if (token == "uci")
+    {
+        sync_cout << "id name " << engine_info(true) << "\n" << engine.get_options() << sync_endl;
+
+        sync_cout << "uciok" << sync_endl;
+    }
+
+    else if (token == "setoption")
+        setoption(is);
+    else if (token == "go")
+    {
+        // send info strings after the go command is sent for old GUIs and python-chess
+        print_info_string(engine.numa_config_information_as_string());
+        print_info_string(engine.thread_allocation_information_as_string());
+        go(is);
+    }
+    else if (token == "position")
+        position(is);
+    else if (token == "ucinewgame")
+        engine.search_clear();
+    else if (token == "isready")
+        sync_cout << "readyok" << sync_endl;
 
 #ifdef ATOMIC_DATA_GENERATOR
-        else if (token == "atomic_data_schema")
-            sync_cout << Data::atomic_data_schema_json() << sync_endl;
-        else if (token == "atomic_data_schemas")
-            sync_cout << Data::atomic_data_schemas_json() << sync_endl;
-        else if (token == "generate_training_data")
-        {
-            if (!Data::generate_training_data(engine, is))
-                std::exit(EXIT_FAILURE);
-        }
-        else if (token == "generate_atomic_v3_chunk")
-        {
-            if (!Data::generate_atomic_v3_chunk(engine, is))
-                std::exit(EXIT_FAILURE);
-        }
-        else if (token == "openbench_generate_training_data")
-        {
-            if (!Data::openbench_generate_training_data(engine, is))
-                std::exit(EXIT_FAILURE);
-        }
+    else if (token == "atomic_data_schema")
+        sync_cout << Data::atomic_data_schema_json() << sync_endl;
+    else if (token == "atomic_data_schemas")
+        sync_cout << Data::atomic_data_schemas_json() << sync_endl;
+    else if (token == "generate_training_data")
+    {
+        if (!Data::generate_training_data(engine, is))
+            std::exit(EXIT_FAILURE);
+    }
+    else if (token == "generate_atomic_v3_chunk")
+    {
+        if (!Data::generate_atomic_v3_chunk(engine, is))
+            std::exit(EXIT_FAILURE);
+    }
+    else if (token == "openbench_generate_training_data")
+    {
+        if (!Data::openbench_generate_training_data(engine, is))
+            std::exit(EXIT_FAILURE);
+    }
 #endif
 
-        // Add custom non-UCI commands, mainly for debugging purposes.
-        // These commands must not be used during a search!
-        else if (token == "flip")
-            engine.flip();
-        else if (token == "bench")
-            bench(is);
-        else if (token == BenchmarkCommand)
-            benchmark(is);
-        else if (token == "d")
-            sync_cout << engine.visualize() << sync_endl;
-        else if (token == "eval")
-            engine.trace_eval();
-        else if (token == "compiler")
-            sync_cout << compiler_info() << sync_endl;
-        else if (token == "export_net")
-        {
-            std::optional<std::filesystem::path> file;
-            std::string                          filename;
+    // Add custom non-UCI commands, mainly for debugging purposes.
+    // These commands must not be used during a search!
+    else if (token == "flip")
+        engine.flip();
+    else if (token == "bench")
+        bench(is);
+    else if (token == BenchmarkCommand)
+        benchmark(is);
+    else if (token == "d")
+        sync_cout << engine.visualize() << sync_endl;
+    else if (token == "eval")
+        engine.trace_eval();
+    else if (token == "compiler")
+        sync_cout << compiler_info() << sync_endl;
+    else if (token == "export_net")
+    {
+        std::optional<std::filesystem::path> file;
+        std::string                          filename;
 
-            if (is >> filename)
-                file = path_from_utf8(filename);
+        if (is >> filename)
+            file = path_from_utf8(filename);
 
-            engine.save_network(file);
-        }
-        else if (token == "--help" || token == "help" || token == "--license" || token == "license")
-            sync_cout
-              << "\nAtomic-Stockfish is a specialized Atomic Chess engine derived from Stockfish."
-                 "\nIt is released as free software licensed under the GNU GPLv3 License."
-                 "\nAtomic-Stockfish is normally used with a graphical user interface (GUI) and implements"
-                 "\nthe UCI and XBoard/CECP protocols to communicate with a GUI, an API, etc."
-                 "\nFor any further information, visit https://github.com/official-stockfish/Stockfish#readme"
-                 "\nor read the corresponding README.md and Copying.txt files distributed along with this program.\n"
-              << sync_endl;
-        else if (!token.empty() && token[0] != '#')
-            sync_cout << "Unknown command: '" << cmd << "'. Type help for more information."
-                      << sync_endl;
+        engine.save_network(file);
+    }
+    else if (token == "--help" || token == "help" || token == "--license" || token == "license")
+        sync_cout
+          << "\nAtomic-Stockfish is a specialized Atomic Chess engine derived from Stockfish."
+             "\nIt is released as free software licensed under the GNU GPLv3 License."
+             "\nAtomic-Stockfish is normally used with a graphical user interface (GUI) and implements"
+             "\nthe UCI and XBoard/CECP protocols to communicate with a GUI, an API, etc."
+             "\nFor any further information, visit https://github.com/official-stockfish/Stockfish#readme"
+             "\nor read the corresponding README.md and Copying.txt files distributed along with this program.\n"
+          << sync_endl;
+    else if (!token.empty() && token[0] != '#')
+        sync_cout << "Unknown command: '" << cmd << "'. Type help for more information."
+                  << sync_endl;
 
-    } while (token != "quit" && cli.argc <= 1);  // The command-line arguments are one-shot
+    return token != "quit";
 }
 
 Search::LimitsType UCIEngine::parse_limits(std::istream& is) {
