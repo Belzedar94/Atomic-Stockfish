@@ -1,0 +1,14 @@
+{
+  "name": "atomic-stockfish-browser-worker-tests",
+  "private": true,
+  "type": "module",
+  "description": "Browser tests and benchmarks for the Atomic-Stockfish Web Worker build",
+  "scripts": {
+    "test": "node run-browser-tests.mjs",
+    "bench": "node run-browser-bench.mjs"
+  },
+  "devDependencies": {
+    "fairy-stockfish-nnue.wasm": "1.1.12",
+    "playwright": "1.64.1"
+  }
+}
