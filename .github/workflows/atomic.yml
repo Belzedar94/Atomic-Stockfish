@@ -1324,6 +1324,41 @@ jobs:
             --v3-net "$RUNNER_TEMP/atomic-v3.nnue" \
             --v3-sha256 "$ATOMIC_SYNTHETIC_V3_NNUE_SHA256"
 
+  browser-wasm:
+    name: Browser Web Worker NNUE WASM
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.12'
+      - name: Build the browser-worker target
+        run: >-
+          docker run --rm
+          --volume "$PWD:/src"
+          --workdir /src
+          emscripten/emsdk:4.0.10@sha256:90b757eb11fa9a0e3ce4d2d9f76d932a56018e4accc37b5a28b2783751e60eb7
+          python3 tests/wasm-browser/build.py
+          --out-dir build/wasm-browser-ci
+      - name: Install Playwright, its browsers and the rules oracle
+        working-directory: tests/wasm-browser
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium firefox
+          python -m pip install -r requirements.txt
+      - name: Browser lifecycle tests in Chromium and Firefox
+        run: |
+          python tests/create_synthetic_zero_nnue.py --output "$RUNNER_TEMP/atomic-zero.nnue"
+          node tests/wasm-browser/run-browser-tests.mjs \
+            --engine build/wasm-browser-ci \
+            --net "$RUNNER_TEMP/atomic-zero.nnue" \
+            --net-sha256 "$ATOMIC_SYNTHETIC_NNUE_SHA256" \
+            --fixtures "$RUNNER_TEMP/wasm-browser-fixtures" \
+            --python python
+
   legacy-pipeline:
     name: Pinned Legacy Atomic V1 pipeline
     runs-on: ubuntu-24.04

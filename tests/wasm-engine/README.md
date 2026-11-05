@@ -59,3 +59,8 @@ virtual filesystem (or a C++ memory entry point). It also needs COOP/COEP header
 for `SharedArrayBuffer` because the search engine uses pthreads. The lightweight
 Board WASM target is separate; silently bundling the network into that artifact
 would duplicate it and break the external SHA-pinned release contract.
+
+That browser target now exists separately: `tests/wasm-browser` builds the
+same source inventory for a Web Worker, with a postMessage protocol, an
+external SHA-256-verified network loader and its own browser tests. This Node
+artifact is unchanged by it.

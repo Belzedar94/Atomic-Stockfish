@@ -38,6 +38,10 @@
 #include <type_traits>
 #include <vector>
 
+#ifdef ATOMIC_BROWSER_WORKER
+    #include <emscripten/html5.h>  // emscripten_date_now()
+#endif
+
 #if !defined(NO_PREFETCH) && (defined(_MSC_VER) || defined(__INTEL_COMPILER))
     #include <immintrin.h>
 #endif
@@ -166,9 +170,17 @@ void dbg_clear();
 using TimePoint = std::chrono::milliseconds::rep;  // A value in milliseconds
 static_assert(sizeof(TimePoint) == sizeof(i64), "TimePoint should be 64 bits");
 inline TimePoint now() {
+#ifdef ATOMIC_BROWSER_WORKER
+    // In a browser every search thread is a Web Worker with its own monotonic
+    // time origin, and those origins drift apart by hundreds of milliseconds.
+    // The search start is stamped on one worker and checked on another, so
+    // the browser build uses the wall clock, which all workers share.
+    return TimePoint(emscripten_date_now());
+#else
     return std::chrono::duration_cast<std::chrono::milliseconds>(
              std::chrono::steady_clock::now().time_since_epoch())
       .count();
+#endif
 }
 
 inline std::vector<std::string_view> split(std::string_view s, std::string_view delimiter) {
