@@ -60,9 +60,20 @@ struct DirtyThreat {
 };
 
 // Upstream bound: a non-castling move changes at most 80 features, castling
-// at most 36. Atomic captures never fill this list (they refresh).
+// at most 36. Atomic captures are bounded by CaptureThreatBudget below.
+// One put/remove changes at most 8 outgoing + 16 incoming + 8 discovered
+// threats (upstream bound).
+inline constexpr usize MaxThreatsPerPieceUpdate = 32;
+inline constexpr usize DirtyThreatCapacity      = 96;
+#ifndef ATOMIC_SF_CAPTURE_BUDGET
+    #define ATOMIC_SF_CAPTURE_BUDGET 96
+#endif
+// Above this many changed threat features a capture refreshes instead.
+inline constexpr usize CaptureThreatBudget = ATOMIC_SF_CAPTURE_BUDGET;
+static_assert(CaptureThreatBudget <= DirtyThreatCapacity);
+
 struct DirtyThreats {
-    ValueList<DirtyThreat, 96> list;
+    ValueList<DirtyThreat, DirtyThreatCapacity> list;
     bool                       refresh = false;
 };
 

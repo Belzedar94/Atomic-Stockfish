@@ -527,14 +527,51 @@ void compute_dirty_threats(const Position& after, const DirtyPiece& dp, DirtyThr
     dts.list    = {};
     dts.refresh = false;
 
-    // Every Atomic capture (en passant included) blasts at least the capturer.
-    if (dp.atomicBlast.size() || dp.requiresRefresh)
+    if (dp.requiresRefresh)
     {
         dts.refresh = true;
         return;
     }
 
     ThreatBoard board(after);
+
+    // Every Atomic capture (en passant included) blasts at least the capturer.
+    // Whatever disappears is removed one piece at a time: the capturer from its
+    // origin square, the captured piece, and every other blasted piece. The
+    // capturer never survives, so its stop on the arrival square cancels out.
+    // Any order of exact single-piece updates gives the exact total delta.
+    // If the list might overflow (or the delta exceeds the budget beyond which a
+    // refresh is cheaper) the ply is refreshed instead.
+    if (dp.atomicBlast.size())
+    {
+        const Square arrival = dp.to != SQ_NONE ? dp.to : dp.add_sq;
+
+        // Rebuild the board before the move.
+        board.raw_put(dp.pc, dp.from);
+        board.raw_put(dp.remove_pc, dp.remove_sq);
+        for (const auto& blasted : dp.atomicBlast)
+            if (blasted.square != arrival)
+                board.raw_put(blasted.pc, blasted.square);
+
+        auto remove_checked = [&](Square s) {
+            if (dts.list.size() + MaxThreatsPerPieceUpdate > CaptureThreatBudget)
+                return false;
+            board.remove(s, dts);
+            return true;
+        };
+
+        bool ok = remove_checked(dp.from) && remove_checked(dp.remove_sq);
+        for (const auto& blasted : dp.atomicBlast)
+            if (ok && blasted.square != arrival)
+                ok = remove_checked(blasted.square);
+
+        if (!ok)
+        {
+            dts.list    = {};
+            dts.refresh = true;
+        }
+        return;
+    }
 
     if (dp.remove_sq != SQ_NONE)
     {
