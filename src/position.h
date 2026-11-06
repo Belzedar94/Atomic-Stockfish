@@ -116,6 +116,7 @@ class Position {
     template<typename... PieceTypes>
     Bitboard pieces(Color c, PieceTypes... pts) const;
     Piece    piece_on(Square s) const;
+    const std::array<Piece, SQUARE_NB>& piece_array() const { return board; }
     Square   ep_square() const;
     bool     empty(Square s) const;
     template<PieceType Pt>

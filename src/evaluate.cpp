@@ -120,7 +120,9 @@ Value Eval::evaluate(const Eval::NNUE::AnyNetwork& network,
         // a data-generation-only mode.
         v = Detail::atomic_nnue_value_from_raw(rawPsqt, rawPositional);
     else if (network.backend() == NNUE::NetworkBackend::AtomicNNUEV2
-             || network.backend() == NNUE::NetworkBackend::AtomicNNUEV3)
+             || network.backend() == NNUE::NetworkBackend::AtomicNNUEV3
+             || network.backend() == NNUE::NetworkBackend::AtomicSFN0
+             || network.backend() == NNUE::NetworkBackend::AtomicSFN1)
     {
         // Modern Atomic networks are trained directly in Atomic engine
         // units. The Legacy COMMONER material proxy, entertainment blend,

@@ -18,11 +18,13 @@
 #include <memory>
 #include <new>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <type_traits>
 #include <utility>
 
 #include "../types.h"
+#include "atomic_sf/sf_network.h"
 #include "atomic_v2/backend.h"
 #include "atomic_v3/incremental_backend.h"
 #include "atomic_v3/simd_isa.h"
@@ -44,9 +46,11 @@ using AccumulatorState  = ::Stockfish::Eval::NNUE::AccumulatorState;
 enum class NetworkBackend : u8 {
     LegacyAtomicV1,
     AtomicNNUEV2,
-    AtomicNNUEV3
+    AtomicNNUEV3,
+    AtomicSFN0,
+    AtomicSFN1
 };
-inline constexpr usize NetworkBackendCount = 3;
+inline constexpr usize NetworkBackendCount = 5;
 
 [[nodiscard]] constexpr std::string_view backend_name(NetworkBackend backend) noexcept {
     switch (backend)
@@ -57,6 +61,10 @@ inline constexpr usize NetworkBackendCount = 3;
         return "AtomicNNUEV2";
     case NetworkBackend::AtomicNNUEV3 :
         return "AtomicNNUEV3";
+    case NetworkBackend::AtomicSFN0 :
+        return AtomicSF::Network<false>::display_name();
+    case NetworkBackend::AtomicSFN1 :
+        return AtomicSF::Network<true>::display_name();
     }
     return "Unknown Atomic NNUE backend";
 }
@@ -107,6 +115,8 @@ class AnyNetwork {
         LegacyAtomicV1::Network legacy;
         AtomicV2::Network       atomicV2;
         AtomicV3::Network       atomicV3;
+        AtomicSF::Network<false> sfN0;
+        AtomicSF::Network<true>  sfN1;
 
         Storage() :
             legacy() {}
@@ -118,6 +128,9 @@ class AnyNetwork {
     void activate_legacy() noexcept;
     void activate_v2() noexcept;
     void activate_v3() noexcept;
+    void activate_sf(bool threats) noexcept;
+    void destroy_active() noexcept;
+    bool try_load_sf(std::istream& stream, std::string& description);
 
     friend class AnyAccumulator;
 };
@@ -147,6 +160,12 @@ class AnyAccumulator {
         case NetworkBackend::AtomicNNUEV3 :
             storage_.atomicV3.reset();
             return;
+        case NetworkBackend::AtomicSFN0 :
+            storage_.sfN0.stack.reset();
+            return;
+        case NetworkBackend::AtomicSFN1 :
+            storage_.sfN1.stack.reset();
+            return;
         }
         assert(false);
     }
@@ -160,6 +179,10 @@ class AnyAccumulator {
             return storage_.atomicV2.stack.push();
         case NetworkBackend::AtomicNNUEV3 :
             return storage_.atomicV3.stack.push();
+        case NetworkBackend::AtomicSFN0 :
+            return storage_.sfN0.stack.push();
+        case NetworkBackend::AtomicSFN1 :
+            return storage_.sfN1.stack.push();
         }
         assert(false);
         return storage_.legacy.stack.push();
@@ -177,8 +200,21 @@ class AnyAccumulator {
         case NetworkBackend::AtomicNNUEV3 :
             storage_.atomicV3.stack.pop();
             return;
+        case NetworkBackend::AtomicSFN0 :
+            storage_.sfN0.stack.pop();
+            return;
+        case NetworkBackend::AtomicSFN1 :
+            storage_.sfN1.stack.pop();
+            return;
         }
         assert(false);
+    }
+
+    // Called after Position::do_move() for the latest push(). Only the
+    // Full_Threats backend needs the resulting position (threat deltas).
+    void after_move(const Position& pos) noexcept {
+        if (backend_ == NetworkBackend::AtomicSFN1)
+            storage_.sfN1.stack.after_move(pos);
     }
 
     void rebind(const AnyNetwork& network) noexcept {
@@ -202,6 +238,14 @@ class AnyAccumulator {
         case NetworkBackend::AtomicNNUEV3 :
             storage_.atomicV3.rebind(network.storage_.atomicV3);
             return;
+        case NetworkBackend::AtomicSFN0 :
+            storage_.sfN0.stack.reset();
+            storage_.sfN0.caches.clear(network.storage_.sfN0);
+            return;
+        case NetworkBackend::AtomicSFN1 :
+            storage_.sfN1.stack.reset();
+            storage_.sfN1.caches.clear(network.storage_.sfN1);
+            return;
         }
         assert(false);
     }
@@ -212,6 +256,22 @@ class AnyAccumulator {
     [[nodiscard]] const LegacyAtomicV1::AccumulatorState& latest() const noexcept {
         assert(backend_ == NetworkBackend::LegacyAtomicV1);
         return storage_.legacy.stack.latest();
+    }
+
+    // Debug: hash of the latest accumulator (both perspectives, PSQT included)
+    // for the AtomicSF backends; 0 for the others.
+    [[nodiscard]] usize debug_latest_hash() const noexcept {
+        auto hashState = [](const AtomicSF::Accumulator& a) {
+            usize h = 0;
+            hash_combine(h, get_raw_data_hash(a.accumulation));
+            hash_combine(h, get_raw_data_hash(a.psqtAccumulation));
+            return h;
+        };
+        if (backend_ == NetworkBackend::AtomicSFN0)
+            return hashState(storage_.sfN0.stack.latest());
+        if (backend_ == NetworkBackend::AtomicSFN1)
+            return hashState(storage_.sfN1.stack.latest());
+        return 0;
     }
 
     [[nodiscard]] const AtomicV2::AccumulatorState& v2_latest() const noexcept {
@@ -260,10 +320,23 @@ class AnyAccumulator {
         AtomicV3::IncrementalStack stack;
     };
 
+    template<bool Threats>
+    struct AtomicSFState {
+        explicit AtomicSFState(const AtomicSF::Network<Threats>& network) :
+            caches(network) {
+            stack.reset();
+        }
+
+        AtomicSF::AccumulatorCaches         caches;
+        AtomicSF::AccumulatorStack<Threats> stack;
+    };
+
     union Storage {
-        LegacyState   legacy;
-        AtomicV2State atomicV2;
-        AtomicV3State atomicV3;
+        LegacyState          legacy;
+        AtomicV2State        atomicV2;
+        AtomicV3State        atomicV3;
+        AtomicSFState<false> sfN0;
+        AtomicSFState<true>  sfN1;
 
         Storage() {}
         ~Storage() {}
@@ -284,6 +357,12 @@ class AnyAccumulator {
         case NetworkBackend::AtomicNNUEV3 :
             ::new (static_cast<void*>(&storage_.atomicV3)) AtomicV3State(network.storage_.atomicV3);
             return;
+        case NetworkBackend::AtomicSFN0 :
+            ::new (static_cast<void*>(&storage_.sfN0)) AtomicSFState<false>(network.storage_.sfN0);
+            return;
+        case NetworkBackend::AtomicSFN1 :
+            ::new (static_cast<void*>(&storage_.sfN1)) AtomicSFState<true>(network.storage_.sfN1);
+            return;
         }
         assert(false);
     }
@@ -299,6 +378,12 @@ class AnyAccumulator {
             return;
         case NetworkBackend::AtomicNNUEV3 :
             storage_.atomicV3.~AtomicV3State();
+            return;
+        case NetworkBackend::AtomicSFN0 :
+            storage_.sfN0.~AtomicSFState<false>();
+            return;
+        case NetworkBackend::AtomicSFN1 :
+            storage_.sfN1.~AtomicSFState<true>();
             return;
         }
         assert(false);
@@ -327,6 +412,12 @@ inline NetworkOutput AnyNetwork::evaluate(const Position& pos, AnyAccumulator& a
         return {static_cast<Value>(output.psqtDifference / OutputScale),
                 static_cast<Value>(output.scaledOutput / OutputScale)};
     }
+    case NetworkBackend::AtomicSFN0 :
+        return storage_.sfN0.evaluate(pos, accumulator.storage_.sfN0.stack,
+                                      accumulator.storage_.sfN0.caches);
+    case NetworkBackend::AtomicSFN1 :
+        return storage_.sfN1.evaluate(pos, accumulator.storage_.sfN1.stack,
+                                      accumulator.storage_.sfN1.caches);
     }
     assert(false);
     return {};
@@ -352,6 +443,12 @@ inline RawNetworkOutput AnyNetwork::evaluate_raw(const Position& pos,
             std::abort();
         return {output.psqtDifference, output.scaledOutput};
     }
+    case NetworkBackend::AtomicSFN0 :
+        return storage_.sfN0.evaluate_raw(pos, accumulator.storage_.sfN0.stack,
+                                          accumulator.storage_.sfN0.caches);
+    case NetworkBackend::AtomicSFN1 :
+        return storage_.sfN1.evaluate_raw(pos, accumulator.storage_.sfN1.stack,
+                                          accumulator.storage_.sfN1.caches);
     }
     assert(false);
     return {};
@@ -400,12 +497,18 @@ inline NnueEvalTrace AnyNetwork::trace_evaluate(const Position& pos,
         }
         return trace;
     }
+    case NetworkBackend::AtomicSFN0 :
+        return storage_.sfN0.trace_evaluate(pos, accumulator.storage_.sfN0.stack,
+                                            accumulator.storage_.sfN0.caches);
+    case NetworkBackend::AtomicSFN1 :
+        return storage_.sfN1.trace_evaluate(pos, accumulator.storage_.sfN1.stack,
+                                            accumulator.storage_.sfN1.caches);
     }
     assert(false);
     return {};
 }
 
-static_assert(NetworkBackendCount == 3);
+static_assert(NetworkBackendCount == 5);
 static_assert(std::is_trivially_copyable_v<AnyNetwork>);
 static_assert(std::is_trivially_copy_constructible_v<AnyNetwork>);
 static_assert(std::is_trivially_move_constructible_v<AnyNetwork>);
@@ -413,6 +516,7 @@ static_assert(std::is_trivially_destructible_v<AnyNetwork>);
 static_assert(sizeof(AnyNetwork) >= sizeof(LegacyAtomicV1::Network));
 static_assert(sizeof(AnyNetwork) >= sizeof(AtomicV2::Network));
 static_assert(sizeof(AnyNetwork) >= sizeof(AtomicV3::Network));
+static_assert(sizeof(AnyNetwork) >= sizeof(AtomicSF::Network<true>));
 
 }  // namespace Stockfish::Eval::NNUE
 

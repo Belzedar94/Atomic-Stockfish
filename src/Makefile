@@ -98,6 +98,7 @@ SRCS = atomic_init.cpp attacks.cpp benchmark.cpp bitboard.cpp evaluate.cpp main.
 	nnue/nnue_accumulator.cpp nnue/nnue_misc.cpp nnue/nnue_dispatcher.cpp nnue/network.cpp \
 	nnue/atomic_v2/atomic_v2_accumulator.cpp nnue/atomic_v2/atomic_v2_network.cpp \
 	nnue/features/half_ka_v2_atomic.cpp \
+	nnue/atomic_sf/sf_features.cpp nnue/atomic_sf/sf_network.cpp \
 	engine.cpp score.cpp memory.cpp
 
 ATOMIC_V3_RUNTIME_SRCS = nnue/atomic_v3/hm_oracle.cpp nnue/atomic_v3/capture_pair.cpp \
@@ -117,6 +118,7 @@ HEADERS = atomic_init.h atomic_version.h attacks.h benchmark.h bitboard.h evalua
 		nnue/atomic_v2/network.h nnue/atomic_v2/nnz_helper.h \
 		nnue/atomic_v2/layers/affine_transform_sparse_input.h \
 		nnue/atomic_v2/layers/sqr_clipped_relu.h \
+		nnue/atomic_sf/sf_features.h nnue/atomic_sf/sf_network.h \
 		nnue/atomic_v3/orientation.h nnue/atomic_v3/hm_oracle.h \
 		nnue/atomic_v3/capture_pair.h nnue/atomic_v3/king_blast_ep.h \
 		nnue/atomic_v3/blast_ring.h nnue/atomic_v3/full_refresh.h \
@@ -371,7 +373,7 @@ else
 	ATOMIC_V3_WIRE_TEST_CPPFLAGS :=
 endif
 
-VPATH = api:syzygy:nnue:nnue/features:nnue/atomic_v2:nnue/atomic_v3
+VPATH = api:syzygy:nnue:nnue/features:nnue/atomic_v2:nnue/atomic_v3:nnue/atomic_sf
 
 ### ==========================================================================
 ### Section 2. High-level Configuration

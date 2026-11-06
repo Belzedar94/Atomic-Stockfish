@@ -35,8 +35,8 @@ void report_incompatible(const std::function<void(std::string_view)>& onVerify,
         return;
 
     const std::string message =
-      "ERROR: Use NNUE is enabled, but a compatible Legacy Atomic V1, AtomicNNUEV2, or "
-      "AtomicNNUEV3 "
+      "ERROR: Use NNUE is enabled, but a compatible Legacy Atomic V1, AtomicNNUEV2, "
+      "AtomicNNUEV3 or AtomicSF "
       "network is not available.\n"
       "ERROR: The network file "
       + path.string()
@@ -67,7 +67,7 @@ std::vector<fs::path> requested_candidates(const fs::path& rootDirectory,
 
 }  // namespace
 
-void AnyNetwork::activate_legacy() noexcept {
+void AnyNetwork::destroy_active() noexcept {
     switch (backend_)
     {
     case NetworkBackend::LegacyAtomicV1 :
@@ -79,41 +79,57 @@ void AnyNetwork::activate_legacy() noexcept {
     case NetworkBackend::AtomicNNUEV3 :
         storage_.atomicV3.~Network();
         break;
+    case NetworkBackend::AtomicSFN0 :
+        storage_.sfN0.~Network();
+        break;
+    case NetworkBackend::AtomicSFN1 :
+        storage_.sfN1.~Network();
+        break;
     }
+}
+
+void AnyNetwork::activate_sf(bool threats) noexcept {
+    destroy_active();
+    if (threats)
+    {
+        ::new (static_cast<void*>(&storage_.sfN1)) AtomicSF::Network<true>{};
+        backend_ = NetworkBackend::AtomicSFN1;
+    }
+    else
+    {
+        ::new (static_cast<void*>(&storage_.sfN0)) AtomicSF::Network<false>{};
+        backend_ = NetworkBackend::AtomicSFN0;
+    }
+}
+
+bool AnyNetwork::try_load_sf(std::istream& stream, std::string& description) {
+    const auto kind = AtomicSF::probe_header(stream);
+    if (!kind)
+        return false;
+
+    activate_sf(*kind);
+    std::string error;
+    const bool  ok = *kind ? storage_.sfN1.load(stream, description, error)
+                           : storage_.sfN0.load(stream, description, error);
+    if (!ok)
+        sync_cout << "info string AtomicSF network rejected: " << error << sync_endl;
+    return ok;
+}
+
+void AnyNetwork::activate_legacy() noexcept {
+    destroy_active();
     ::new (static_cast<void*>(&storage_.legacy)) LegacyAtomicV1::Network{};
     backend_ = NetworkBackend::LegacyAtomicV1;
 }
 
 void AnyNetwork::activate_v2() noexcept {
-    switch (backend_)
-    {
-    case NetworkBackend::LegacyAtomicV1 :
-        storage_.legacy.~Network();
-        break;
-    case NetworkBackend::AtomicNNUEV2 :
-        storage_.atomicV2.~Network();
-        break;
-    case NetworkBackend::AtomicNNUEV3 :
-        storage_.atomicV3.~Network();
-        break;
-    }
+    destroy_active();
     ::new (static_cast<void*>(&storage_.atomicV2)) AtomicV2::Network{};
     backend_ = NetworkBackend::AtomicNNUEV2;
 }
 
 void AnyNetwork::activate_v3() noexcept {
-    switch (backend_)
-    {
-    case NetworkBackend::LegacyAtomicV1 :
-        storage_.legacy.~Network();
-        break;
-    case NetworkBackend::AtomicNNUEV2 :
-        storage_.atomicV2.~Network();
-        break;
-    case NetworkBackend::AtomicNNUEV3 :
-        storage_.atomicV3.~Network();
-        break;
-    }
+    destroy_active();
     ::new (static_cast<void*>(&storage_.atomicV3)) AtomicV3::Network{};
     backend_ = NetworkBackend::AtomicNNUEV3;
 }
@@ -131,6 +147,17 @@ bool AnyNetwork::load(const fs::path& rootDirectory,
     {
         for (const fs::path& candidate : requested_candidates(rootDirectory, evalfilePath))
         {
+            {
+                std::ifstream sfStream(candidate, std::ios::binary);
+                std::string   description;
+                if (sfStream && try_load_sf(sfStream, description))
+                {
+                    evalFile.current        = requested;
+                    evalFile.netDescription = std::move(description);
+                    return true;
+                }
+            }
+
             activate_v3();
             auto v3 = AtomicV3::load_candidate(candidate, storage_.atomicV3);
             if (v3)
@@ -185,6 +212,17 @@ bool AnyNetwork::load_authenticated(std::istream&   stream,
     if (!stream.eof() && stream.fail())
         return false;
     const std::string bytes = std::move(captured).str();
+
+    {
+        std::istringstream sfStream(bytes, std::ios::binary);
+        std::string        description;
+        if (try_load_sf(sfStream, description))
+        {
+            evalFile.current        = logicalPath;
+            evalFile.netDescription = std::move(description);
+            return true;
+        }
+    }
 
     activate_v3();
     std::istringstream v3Stream(bytes, std::ios::binary);
@@ -242,6 +280,10 @@ bool AnyNetwork::save(const EvalFile& evalFile, const std::optional<fs::path>& f
     {
         if (backend_ == NetworkBackend::AtomicNNUEV2)
             saved = storage_.atomicV2.save(stream, evalFile.netDescription);
+        else if (backend_ == NetworkBackend::AtomicSFN0)
+            saved = storage_.sfN0.save(stream, evalFile.netDescription);
+        else if (backend_ == NetworkBackend::AtomicSFN1)
+            saved = storage_.sfN1.save(stream, evalFile.netDescription);
         else
             saved = bool(storage_.atomicV3.save(stream, evalFile.netDescription));
     }
@@ -267,6 +309,12 @@ usize AnyNetwork::get_content_hash() const {
         break;
     case NetworkBackend::AtomicNNUEV3 :
         hash_combine(hash, storage_.atomicV3.get_content_hash());
+        break;
+    case NetworkBackend::AtomicSFN0 :
+        hash_combine(hash, storage_.sfN0.get_content_hash());
+        break;
+    case NetworkBackend::AtomicSFN1 :
+        hash_combine(hash, storage_.sfN1.get_content_hash());
         break;
     }
     return hash;
@@ -295,6 +343,28 @@ bool AnyNetwork::verify(const std::function<void(std::string_view)>& onVerify,
                 onVerify(message);
         };
         return storage_.legacy.verify(reportLegacy, evalFile, evalfilePath);
+    }
+
+    if (backend_ == NetworkBackend::AtomicSFN0 || backend_ == NetworkBackend::AtomicSFN1)
+    {
+        const bool initialized = backend_ == NetworkBackend::AtomicSFN0
+                                 ? storage_.sfN0.initialized()
+                                 : storage_.sfN1.initialized();
+        if (!initialized)
+        {
+            report_incompatible(onVerify, evalfilePath);
+            return false;
+        }
+        if (onVerify)
+        {
+            const usize bytes = backend_ == NetworkBackend::AtomicSFN0
+                                ? sizeof(AtomicSF::Network<false>)
+                                : sizeof(AtomicSF::Network<true>);
+            onVerify("NNUE evaluation using " + std::string(backend_name()) + " "
+                     + evalfilePath.string() + " (" + std::to_string(bytes / (1024 * 1024))
+                     + "MiB, (" + std::to_string(AtomicSF::L1) + ", 32, 32, 1))");
+        }
+        return true;
     }
 
     if (backend_ == NetworkBackend::AtomicNNUEV2 && !storage_.atomicV2.initialized())

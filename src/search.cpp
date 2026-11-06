@@ -971,6 +971,7 @@ void Search::Worker::do_move(
 
     DirtyPiece& dirtyPiece = accumulator.push();
     pos.do_move(move, st, givesCheck, dirtyPiece, &active_tt(), &active_shared_history());
+    accumulator.after_move(pos);
 
 #ifndef NDEBUG
     const bool actualAtomicCheck = pos.atomic_in_check(pos.side_to_move());

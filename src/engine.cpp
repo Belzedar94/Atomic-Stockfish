@@ -32,6 +32,7 @@
 
 #include "evaluate.h"
 #include "misc.h"
+#include "movegen.h"
 #include "nnue/nnue_dispatcher.h"
 #include "nnue/nnue_common.h"
 #include "numa.h"
@@ -366,6 +367,119 @@ void Engine::trace_eval() const {
         return;
 
     sync_cout << "\n" << Eval::trace(p, *network, nnue_mode()) << sync_endl;
+}
+
+// Plays random legal Atomic games (captures, explosions, castling, promotions,
+// random take-backs) and compares, at random plies, the evaluation obtained from
+// the incrementally updated accumulator stack with one computed from scratch
+// (stack reset and Finny caches cleared). Any difference is a hard failure.
+// Usage: nnuecheck [games] [maxPlies] [seed]
+void Engine::nnue_check(std::istream& is) const {
+    int  games = 200, maxPlies = 160;
+    u64  seed  = 20261106;
+    is >> games >> maxPlies >> seed;
+    if (!seed)
+        seed = 1;
+
+    if (!verify_network())
+        return;
+
+    const Eval::NNUE::AnyNetwork& net = *network;
+
+    auto incremental = std::make_unique<Eval::NNUE::AnyAccumulator>(net);
+    auto fresh       = std::make_unique<Eval::NNUE::AnyAccumulator>(net);
+
+    static const char* const StartFens[] = {
+      "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "r3k2r/pppqbppp/2n1bn2/3pp3/3PP3/2N1BN2/PPPQBPPP/R3K2R w KQkq - 0 1",
+      "r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4",
+      "4k3/1P4P1/8/2n2b2/2N2B2/8/1p4p1/4K3 w - - 0 1",
+      "r3k2r/1P4P1/8/3qQ3/8/8/1p4p1/R3K2R w KQkq - 0 1",
+      "rnbqkbnr/ppp1p1pp/8/3pPp2/8/8/PPPP1PPP/RNBQKBNR w KQkq f6 0 3",
+    };
+
+    PRNG rng(seed);
+    u64  checks = 0, mismatches = 0, moves = 0, captures = 0, undos = 0, evalsAfterBlast = 0;
+
+    for (int g = 0; g < games && mismatches < 10; ++g)
+    {
+        StateListPtr gameStates(new std::deque<StateInfo>(1));
+        Position     gamePos;
+        const char*  fen = StartFens[g % (sizeof(StartFens) / sizeof(StartFens[0]))];
+        gamePos.set(fen, false, &gameStates->back());
+        incremental->reset();
+
+        std::vector<Move> line;
+        bool              lastWasBlast = false;
+
+        for (int ply = 0; ply < maxPlies; ++ply)
+        {
+            const bool undo = !line.empty() && rng.rand<u64>() % 100 < 15;
+            if (undo)
+            {
+                gamePos.undo_move(line.back());
+                line.pop_back();
+                incremental->pop();
+                gameStates->pop_back();
+                ++undos;
+                lastWasBlast = false;
+            }
+            else
+            {
+                MoveList<LEGAL> legal(gamePos);
+                if (!legal.size())
+                    break;
+
+                const Move m = *(legal.begin() + rng.rand<u64>() % legal.size());
+                gameStates->emplace_back();
+                DirtyPiece& dp = incremental->push();
+                gamePos.do_move(m, gameStates->back(), gamePos.gives_check(m), dp, nullptr, nullptr);
+                incremental->after_move(gamePos);
+                line.push_back(m);
+                ++moves;
+                lastWasBlast = dp.atomicBlast.size() > 0;
+                captures += lastWasBlast;
+
+                if (gamePos.is_atomic_terminal())
+                {
+                    // A king exploded: take the move back and go on.
+                    gamePos.undo_move(m);
+                    line.pop_back();
+                    incremental->pop();
+                    gameStates->pop_back();
+                    lastWasBlast = false;
+                    continue;
+                }
+            }
+
+            if (rng.rand<u64>() % 100 < 50)
+                continue;
+
+            const auto [ip, iq] = net.evaluate_raw(gamePos, *incremental);
+            fresh->rebind(net);
+            const auto [fp, fq] = net.evaluate_raw(gamePos, *fresh);
+            ++checks;
+            evalsAfterBlast += lastWasBlast;
+
+            if (ip != fp || iq != fq
+                || incremental->debug_latest_hash() != fresh->debug_latest_hash())
+            {
+                ++mismatches;
+                std::ostringstream ss;
+                ss << "nnuecheck MISMATCH game " << g << " ply " << ply << " fen " << gamePos.fen()
+                   << " incremental (" << ip << ", " << iq << ") fresh (" << fp << ", " << fq
+                   << ") line:";
+                for (Move lm : line)
+                    ss << ' ' << UCI::move(lm, false);
+                sync_cout << ss.str() << sync_endl;
+            }
+        }
+    }
+
+    sync_cout << "nnuecheck backend " << net.backend_name() << " games " << games << " moves "
+              << moves << " captures " << captures << " undos " << undos << " checks " << checks
+              << " checks_right_after_blast " << evalsAfterBlast << " mismatches " << mismatches
+              << (mismatches ? " FAIL" : " OK") << sync_endl;
 }
 
 const OptionsMap& Engine::get_options() const { return options; }

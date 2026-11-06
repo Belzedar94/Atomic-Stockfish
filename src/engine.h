@@ -109,6 +109,8 @@ class Engine {
     // utility functions
 
     void trace_eval() const;
+    // Debug: incremental vs. from-scratch NNUE evaluation over random games.
+    void nnue_check(std::istream& is) const;
 
     const OptionsMap& get_options() const;
     OptionsMap&       get_options();
