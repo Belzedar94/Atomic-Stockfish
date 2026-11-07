@@ -71,16 +71,16 @@ inline int atomic_move_count_pruning_threshold(bool improving, Depth depth) {
     return (AtomicMcpBase + depth * depth) / (3 - improving);
 }
 
-// Atomic threats make an orthodox null-move cutoff less trustworthy. Reduce
-// one ply less than modern Stockfish while preserving its depth scaling.
+// Atomic threats make the standard chess null-move cutoff less reliable.
+// Reduce one ply less than modern Stockfish while preserving its depth scaling.
 inline Depth atomic_null_move_reduction(Depth depth) {
     return AtomicNmpBase + depth / AtomicNmpDepthDiv;
 }
 
-// Orthodox main-search and qsearch capture futility price only the victim on
-// the destination square. Losing the capturer keeps that bound optimistic,
-// but unpriced collateral pieces could make it unsafe. Require a normal
-// capture with no collateral pieces of either color.
+// In standard chess, main-search and qsearch capture futility price only the
+// victim on the destination square. Losing the capturer keeps that bound
+// optimistic, but unpriced collateral pieces could make it unsafe. Require
+// a normal capture with no collateral pieces of either color.
 bool atomic_capture_futility_eligible(const Position& pos, Move move);
 
 struct PVMoves {

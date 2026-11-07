@@ -107,7 +107,7 @@ without changing the engine feature scope or weakening any gate.
    NNUE=pure` is exercised by the data-generation surface, not advertised as a
    playing mode. No V3 network is bundled or strength-endorsed by 1.0.3.
 8. Run Atomic Syzygy driver, production UCI and real-table fixtures against the
-   exact tag, including adjacent kings and six-man positions, with tablebases
+   exact tag, including connected kings and six-man positions, with tablebases
    enabled and disabled. Preserve this functional result independently of the
    stopped-and-waived OpenBench strength measurements.
 9. Run Legacy V1 and Atomic BIN V2 generation, validation, lossless decode,

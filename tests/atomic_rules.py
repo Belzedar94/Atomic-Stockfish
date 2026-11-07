@@ -121,7 +121,7 @@ PERFT_FIXTURES: tuple[PerftFixture, ...] = (
     ),
     PerftFixture(
         name="adjacent_kings_are_legal",
-        rule="adjacent kings do not attack by capture because either capture self-explodes",
+        rule="connected kings do not attack by capture because either capture self-explodes",
         fen="8/8/8/8/8/8/4k3/4K3 w - - 0 1",
         roots=root_counts("e1d1=7 e1f1=7 e1d2=7 e1f2=7"),
         forbidden=("e1e2",),
@@ -251,7 +251,7 @@ TRANSITION_FIXTURES: tuple[TransitionFixture, ...] = (
         name="direct_king_capture_after_h7h8",
         rule=(
             "capturing a KING directly uses the same terminal explosion path and "
-            "must not trigger orthodox captured-king assertions"
+            "must not trigger standard chess captured-king assertions"
         ),
         fen="7k/7R/8/8/8/8/8/K7 w - - 0 1",
         move="h7h8",

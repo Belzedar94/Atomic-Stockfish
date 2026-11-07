@@ -1366,7 +1366,7 @@ Value Search::Worker::search(
     {
         assert((ss - 1)->currentMove != Move::null());
 
-        // Atomic uses a shallower null-move reduction than orthodox chess.
+        // Atomic uses a shallower null-move reduction than in standard chess.
         Depth R = atomic_null_move_reduction(depth);
         R -= seekMate * R / 2;
         do_null_move(pos, st, ss);
@@ -2140,7 +2140,7 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
 
     // Initialize a MovePicker object for the current position. Quiescence is
     // capture-only normally, but an Atomic check requires every legal evasion.
-    // Atomic check evasions are not orthodox EVASIONS: adjacent kings are
+    // Standard chess EVASIONS do not cover Atomic: connected kings are
     // legal and an explosion can remove the checking piece. Keep checkers()
     // constant-zero for move generation, but search every capture and quiet
     // whenever the separate Atomic check predicate forbids stand-pat.

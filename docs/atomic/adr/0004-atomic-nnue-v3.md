@@ -15,7 +15,7 @@ Fairy-Stockfish years ago.
 Current official Stockfish uses horizontally mirrored HalfKAv2 together with a
 separate i8 threat slice. The dense graph remains the 1024-wide SFNNv15 head
 already implemented by V2. The useful architectural lesson is the separation
-of stable piece-square inputs from dynamic relations; the orthodox
+of stable piece-square inputs from dynamic relations; the standard chess
 `FullThreats` semantics are not suitable as the production Atomic relation
 slice. They include pawn pushes, omit collateral from Atomic explosions and do not
 distinguish a direct check, an enemy-king explosion threat and a capture that
@@ -24,7 +24,7 @@ would explode the moving side's own king.
 Community history also makes full refresh the required correctness oracle for
 Atomic NNUE. Explosions remove multiple pieces, quiet moves can open several
 sliding capture rays, en passant removes a pawn away from the explosion center,
-and adjacent kings create legal relations that do not exist in orthodox chess.
+and connected kings create legal relations that do not exist in standard chess.
 An incremental implementation is acceptable only after it is bit-identical to
 an independent full-board enumerator.
 
@@ -136,8 +136,8 @@ an independent full-board enumerator.
    CapturePair traversal order. When both
    king-offset classes are present, that center would explode both kings and
    the candidate is illegal because it is self-exploding, but remains emitted
-   because CapturePair is deliberately unfiltered. Adjacent kings and
-   their mutual king immunity are represented by HM; kings are not CP actors.
+   because CapturePair is deliberately unfiltered. HM represents connected
+   kings and their mutual immunity; kings are not CP actors.
    For every directional class, `related_king = oriented_center + delta`; for
    example, `ENEMY_KING_N` means the enemy king is one rank north of the center.
    File/rank adjacency is checked explicitly to prevent edge wrap. Enemy/own is
@@ -509,8 +509,8 @@ an independent full-board enumerator.
     bin-v2 manifests use the same canonical wire with their separate 64 MiB
     shard-list bound, and all later provenance checks consume the already
     authenticated in-memory summary rather than reopening the pathname.
-15. Keep orthodox `FullThreats` only as an ablation control. The serious order
-    is HM, then CapturePair, then KingBlast/EP, then BlastRing. Every comparison
+15. Keep standard chess `FullThreats` only as an ablation control. The order is
+    HM, then CapturePair, then KingBlast/EP, then BlastRing. Every comparison
     uses the same dataset, seed, training budget and dense head.
 16. Stage incremental execution by slice and keep it private until every event
     is bit-identical to H9.3h. The first scalar stack incrementally maintains
@@ -536,7 +536,7 @@ an independent full-board enumerator.
 
     H9.3i-b is a separate private stress target so its larger corpus cannot
     weaken or silently renumber the frozen 39-event H9.3i-a differential. Its
-    directed cases include four orthodox and eleven Atomic960 castling layouts,
+    directed cases include four standard and eleven Atomic960 castling layouts,
     bilateral en passant, bilateral quiet/capture promotions, maximum Atomic explosion geometry,
     terminal king removal with exact undo, mirror and material-bucket
     crossings, no-push null moves, lazy/deep stack restoration and network
@@ -612,7 +612,7 @@ an independent full-board enumerator.
   1,032 outputs, and then verify the per-bucket 12-to-11 king mapping in both
   accumulator and PSQT tensors.
 - Direct king target, adjacent enemy-king explosion, self-explosion, immunity
-  when kings are adjacent, simultaneous enemy-king and own-king explosions,
+  between connected kings, simultaneous enemy-king and own-king explosions,
   and geometric EP adjacent to either king. Direction goldens use center d4 and
   related square d5 to freeze `related = center + N` before mirroring variants.
 - Sole adjacent capturer, two attackers sharing a center, pawn immunity and the

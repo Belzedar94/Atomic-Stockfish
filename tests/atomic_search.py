@@ -3,7 +3,7 @@
 
 The suite protects quiet Atomic checks/evasions, every terminal-capture
 encoding accepted by ``Position::atomic_wins``, and explosive captures whose
-material cannot be bounded by orthodox main-search or qsearch futility.
+material cannot be bounded by standard chess main-search or qsearch futility.
 
 The engine evaluates with NNUE only. The expectations were recorded with the
 material-count evaluation the engine used to carry, so by default the suite

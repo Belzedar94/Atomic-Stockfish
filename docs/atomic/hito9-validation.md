@@ -169,7 +169,7 @@ orientations must be identical and the conservative aggregate bound is
 
 The frozen cross-language corpus contains 102 positions and both
 perspectives, including independent mirror branches, valid and malformed EP,
-promotion geometry, adjacent kings, self-explosion relations and an Atomic960
+promotion geometry, connected kings, self-explosion relations and an Atomic960
 layout. Its SHA-256 is
 `22ae9a6188fa0ebdd0faff9b4a23c25d25380f9b47ebc0e9da2d1b28fe2441b6`.
 The C++ selftest and Python reference additionally replay immutable inputs at
@@ -306,8 +306,8 @@ use shifts `21/7` and `19/6`; final composition is
 Every failure clears the complete public diagnostic.
 
 The frozen C++ corpus covers all eight material buckets, both sides to move,
-both king-orientation branches, valid and malformed EP, orthodox and
-Atomic960 castling layouts, captures, promotions, adjacent kings and invalid
+both king-orientation branches, valid and malformed EP, standard and
+Atomic960 castling layouts, captures, promotions, connected kings and invalid
 king/side states. It also proves immutable concurrent reads at 1, 2, 4 and 8
 threads and evaluate-then-save byte identity. Adversarial dense vectors place
 nonzero signed weights on FC0, FC1 and FC2 block boundaries, exercise the

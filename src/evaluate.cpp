@@ -106,8 +106,8 @@ Value Eval::evaluate(const Eval::NNUE::AnyNetwork& network,
 
     assert(!pos.checkers());
 
-    // Modern Stockfish optimism belongs to its current orthodox net/search
-    // calibration and must not leak into the legacy Atomic V1 contract.
+    // Modern Stockfish calibrates optimism for standard chess. It must not
+    // leak into the legacy Atomic V1 contract.
     (void) optimism;
 
     Value v;

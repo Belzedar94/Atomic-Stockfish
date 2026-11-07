@@ -471,7 +471,8 @@ void Position::set_check_squares() const {
     st->checkSquares.fill(0);
 
     // Atomic legality is checked against the complete post-move position.
-    // The orthodox check-square shortcut cannot model explosions or adjacent kings.
+    // The standard chess check-square shortcut cannot model explosions or
+    // connected kings.
     if (!has_king(~sideToMove))
         return;
 
@@ -731,7 +732,7 @@ bool Position::legal(Move m) const {
     if (!(occupied & theirKing))
         return true;
 
-    // Adjacent kings are mutually immune in Atomic chess: capturing either
+    // Connected kings are mutually immune in Atomic chess: capturing either
     // king would explode the attacker as well.
     if (attacks_bb<KING>(ourKing) & theirKing)
         return true;
@@ -922,7 +923,7 @@ bool Position::gives_check(Move m) const {
     if (!(occupied & theirKing) || !(occupied & ourKing))
         return false;
 
-    // Adjacent kings are mutually immune in Atomic chess, including from all
+    // Connected kings are mutually immune in Atomic chess, including from all
     // other nominal attacks on either king.
     if (attacks_bb<KING>(ourKing) & theirKing)
         return false;
@@ -1188,7 +1189,7 @@ void Position::do_move(Move                      m,
 
             // The modern FullThreats accumulator cannot represent a nine-piece
             // Atomic delta. Its replacement is introduced with LegacyAtomicV1;
-            // avoid overflowing the orthodox dirty-threat buffer meanwhile.
+            // avoid overflowing Stockfish's dirty-threat buffer meanwhile.
             remove_piece(bsq);
         }
     }
@@ -1262,7 +1263,7 @@ void Position::undo_move(Move m) {
     assert(empty(from) || m.type_of() == CASTLING);
 
     // Restore pieces removed by the explosion first, including the capturing
-    // piece on the destination square. This allows the orthodox undo path below
+    // piece on the destination square. This allows the usual undo path below
     // to move it back and then restore the originally captured piece.
     for (u8 i = 0; i < st->atomicExplosionCount; ++i)
     {

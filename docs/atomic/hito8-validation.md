@@ -314,7 +314,7 @@ bit-compatible, and the playing signature remains exactly `338376`.
 
 ## H8.3a - Compact Atomic search state
 
-H8.3a removes the zero-only orthodox `checkersBB`, the unconsumed
+H8.3a removes the zero-only standard chess `checkersBB`, the unconsumed
 `pinners[COLOR_NB]`, and three unused `checkSquares` entries from `StateInfo`.
 The x64 layout falls from 208 to 160 bytes (-48 bytes, -23.1%) while the copied
 prefix remains exactly 64 bytes. `Position::checkers()` remains constant-zero,

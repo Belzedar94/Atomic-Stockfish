@@ -222,7 +222,7 @@ constexpr Value PieceValue[PIECE_NB] = {
 // Fairy-Stockfish scales middlegame capture values in variants with capture explosions by
 // value * 7000 / (7000 + value). Atomic pawns first receive the historical
 // 3/2 bonus used by the legacy evaluator. These constants are part of the
-// Atomic search contract and deliberately differ from orthodox PieceValue.
+// Atomic search contract and deliberately differ from PieceValue in standard chess.
 constexpr Value AtomicCapturePieceValue[PIECE_NB] = {
   VALUE_ZERO, 301, 702, 738, 1079, 1862, VALUE_ZERO, VALUE_ZERO,
   VALUE_ZERO, 301, 702, 738, 1079, 1862, VALUE_ZERO, VALUE_ZERO};

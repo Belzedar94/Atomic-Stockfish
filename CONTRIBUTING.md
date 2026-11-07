@@ -106,8 +106,9 @@ C++ changes should follow the style in [`.clang-format`](.clang-format). Running
   additional pieces removed, not the capturer or the captured piece.
 - **Check** and **explosion threat** are distinct. A capture next to the king
   can threaten a king explosion even when the king is not in check.
-- Use **adjacent kings**, not “touching kings” or “connected kings,” for the
-  board position. Use **Atomic960** for Atomic played with Chess960 castling.
+- Use **connected kings** for kings on neighboring squares. Use **standard
+  chess** for the non-variant ruleset and **Atomic960** for Atomic played
+  with Chess960 castling.
 - Use **50-move rule** for the rule and **halfmove clock** for its counter.
 - In NNUE documentation, use **geometric capture candidate** when move
   legality has not been checked; do not call it a legal capture.

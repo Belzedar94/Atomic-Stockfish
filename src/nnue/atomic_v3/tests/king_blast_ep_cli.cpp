@@ -361,7 +361,7 @@ void test_direct_capture_self_explosion_and_dedup() {
     expect(emit_king_blast_ep(touching, WHITE, touchingWhite) == CapturePairError::None
              && emit_king_blast_ep(touching, BLACK, touchingBlack) == CapturePairError::None
              && touchingWhite.size == 0 && touchingBlack.size == 0,
-           "adjacent kings alone emit no KBR row because kings are never CP actors");
+           "connected kings alone emit no KBR row because kings are never CP actors");
 }
 
 void test_en_passant_and_malformed_metadata() {

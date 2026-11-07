@@ -38,7 +38,7 @@ board-construction flag.
 No NNUE network or third-party tablebase is embedded in or redistributed with
 the release. `EvalFile` accepts authenticated compatible Legacy Atomic V1,
 AtomicNNUEV2 or AtomicNNUEV3 files. `SyzygyPath` points at Atomic tablebases;
-orthodox Syzygy files are rejected by the Atomic domain checks. No V3 network
+standard chess Syzygy files are rejected by the Atomic domain checks. No V3 network
 is bundled or endorsed as a release candidate.
 
 The strongest frozen validation network was

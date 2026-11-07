@@ -39,7 +39,7 @@ Modern Stockfish's main-search capture futility prices only the victim on the
 destination square. In Atomic that can be an unsafe lower estimate when the
 explosion also removes opposing non-pawns; en passant has no victim on the
 destination square at all. The specialized guard therefore retains the
-orthodox pruning only for normal captures whose explosion removes no collateral
+standard chess pruning only for normal captures whose explosion removes no collateral
 pieces. It excludes the capturer's origin square and adjacent pawns, which are
 immune to the explosion.
 
@@ -59,7 +59,7 @@ complete logs are identified below.
 
 The same destination-victim estimate also guarded qsearch futility. Block 3
 reuses the reviewed Atomic capture-futility eligibility rule there, preserving
-en passant and captures that remove collateral pieces from the orthodox bound.
+en passant and captures that remove collateral pieces from the standard chess bound.
 That block passed its then-current correctness, pipeline, speed and normative
 strength gates against the exact immutable artifact identified below. It is
 historical block-local evidence; block 4 is the current milestone candidate.

@@ -1359,7 +1359,7 @@ def verify_named_semantics(
     ):
         raise DifferentialFailure("a king leaked from the dedicated king slice")
     if not any(row.raw_collateral == capture_pair.square("e5") for row in adjacent_kings):
-        raise DifferentialFailure("non-king collateral beside adjacent kings was lost")
+        raise DifferentialFailure("non-king collateral beside connected kings was lost")
 
     white_one = positions["valid-white-ep-one-origin"]
     for perspective in capture_pair.COLORS:
