@@ -81,7 +81,7 @@ KingBlastEpError project_king_blast_ep_trusted(const CapturePairSnapshot& snapsh
                                               relationClass))
         {
             // The center case was handled only through a CP target KING, so
-            // this branch can add directional enemy-king blast relations only.
+            // this branch can add directional enemy-king explosion relations only.
             if (relationClass != KingBlastEpRelationClass::EnemyKingCenter
                 && !activate(active, anyActive, capturePair.orientedCenter,
                              capturePair.actorRelation, relationClass))

@@ -403,8 +403,9 @@ struct DirtyRecord {
     Square addSquare       = SQ_NONE;
     Piece  removePiece     = NO_PIECE;
     Piece  addPiece        = NO_PIECE;
-    std::array<DirtyPiece::AtomicBlastPiece, DirtyPiece::MAX_ATOMIC_BLAST_PIECES> blast{};
-    usize                                                                         blastSize = 0;
+    std::array<DirtyPiece::AtomicExplosionPiece, DirtyPiece::MAX_ATOMIC_EXPLOSION_PIECES>
+          explosion{};
+    usize explosionSize = 0;
 };
 
 DirtyRecord record_dirty(const DirtyPiece& dirty) {
@@ -418,9 +419,9 @@ DirtyRecord record_dirty(const DirtyPiece& dirty) {
     result.addSquare       = dirty.add_sq;
     result.removePiece     = dirty.remove_sq == SQ_NONE ? NO_PIECE : dirty.remove_pc;
     result.addPiece        = dirty.add_sq == SQ_NONE ? NO_PIECE : dirty.add_pc;
-    result.blastSize       = dirty.atomicBlast.size();
-    for (usize index = 0; index < result.blastSize; ++index)
-        result.blast[index] = dirty.atomicBlast[int(index)];
+    result.explosionSize   = dirty.atomicExplosion.size();
+    for (usize index = 0; index < result.explosionSize; ++index)
+        result.explosion[index] = dirty.atomicExplosion[int(index)];
     return result;
 }
 
@@ -514,20 +515,20 @@ void dump_event(const EventDescription&      event,
               << "dirty.remove_piece=" << int(event.dirty.removePiece) << '\n'
               << "dirty.add_square=" << int(event.dirty.addSquare) << '\n'
               << "dirty.add_piece=" << int(event.dirty.addPiece) << '\n'
-              << "dirty.atomic_blast_size=" << event.dirty.blastSize << '\n'
+              << "dirty.atomic_blast_size=" << event.dirty.explosionSize << '\n'
               << "dirty.atomic_blast_pieces=";
-    for (usize index = 0; index < event.dirty.blastSize; ++index)
+    for (usize index = 0; index < event.dirty.explosionSize; ++index)
     {
         if (index)
             std::cout << ',';
-        std::cout << int(event.dirty.blast[index].pc);
+        std::cout << int(event.dirty.explosion[index].pc);
     }
     std::cout << '\n' << "dirty.atomic_blast_squares=";
-    for (usize index = 0; index < event.dirty.blastSize; ++index)
+    for (usize index = 0; index < event.dirty.explosionSize; ++index)
     {
         if (index)
             std::cout << ',';
-        std::cout << int(event.dirty.blast[index].square);
+        std::cout << int(event.dirty.explosion[index].square);
     }
     std::cout << '\n';
     print_hm_delta(diagnostic.hmDelta);
@@ -952,8 +953,8 @@ void run_special_moves(const Network& network) {
                              const IncrementalDiagnostic&, const IncrementalDiagnostic&) {
                               require(position.ep_square() == SQ_NONE, "en-passant-child",
                                       position.fen(), "EP square survived the move");
-                              require(dirty.present && dirty.blastSize != 0, "en-passant-child",
-                                      position.fen(), "Atomic EP produced no blast delta");
+                              require(dirty.present && dirty.explosionSize != 0, "en-passant-child",
+                                      position.fen(), "Atomic EP produced no explosion delta");
                           });
 
     run_special_roundtrip(
@@ -970,7 +971,7 @@ void run_special_moves(const Network& network) {
       network, "atomic-explosion", "7k/8/8/2pBn3/3r4/2PQN3/8/K7 w - - 0 1", "d3d4",
       [](const Position& position, const DirtyRecord& dirty, const IncrementalDiagnostic&,
          const IncrementalDiagnostic&) {
-          require(dirty.blastSize >= 3, "atomic-explosion-child", position.fen(),
+          require(dirty.explosionSize >= 3, "atomic-explosion-child", position.fen(),
                   "multi-piece Atomic explosion was not represented in DirtyPiece");
           require(position.has_king(WHITE) && position.has_king(BLACK), "atomic-explosion-child",
                   position.fen(), "non-terminal explosion unexpectedly removed a king");

@@ -12,7 +12,7 @@ referee or the UCI gameplay controller.
 The first implementation demonstrated three scientific failure modes:
 
 1. `AtomicBoard.outcome(claim_draw=True)` differs from the repository's
-   `Atomic::outcome()` contract for prospective rule-50/repetition claims and
+   `Atomic::outcome()` contract for prospective 50-move rule and repetition claims and
    insufficient material.
 2. applying options through private `Protocol._setoption()` changes the live
    configuration but not every `python-chess` `target_config` entry;

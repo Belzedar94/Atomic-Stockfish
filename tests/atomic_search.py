@@ -199,7 +199,7 @@ SEARCH_CASES = (
     # enough to still search the tactical defense: the load-bearing assertion is
     # that the engine picks g7g5 rather than the block-3 f7f6. The reply pinned
     # after it is White's answer at this depth: spsa90 moved it from d2d4 to
-    # d2d3 by taking AtomicNmpDepthDiv from 3 to 4, and the blast-check guard on
+    # d2d3 by taking AtomicNmpDepthDiv from 3 to 4, and the explosion-threat guard on
     # child-node futility pruning moved it back to d2d4.
     SearchCase(
         name="Atomic null-move reduction searches the tactical defense",

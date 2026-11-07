@@ -737,10 +737,10 @@ void run_move_fixture(const Network&             network,
     DirtyPiece& dirty = stack->push();
     position.do_move(move, states[1], position.gives_check(move), dirty, nullptr, nullptr);
     require(
-      fixture.blastSize < 0 || static_cast<int>(dirty.atomicBlast.size()) == fixture.blastSize,
+      fixture.blastSize < 0 || static_cast<int>(dirty.atomicExplosion.size()) == fixture.blastSize,
       {0, std::string(fixture.label) + "-child", position.fen(), std::string(fixture.uci)},
       "directed fixture Atomic blast size mismatch: expected=" + std::to_string(fixture.blastSize)
-        + " actual=" + std::to_string(dirty.atomicBlast.size()));
+        + " actual=" + std::to_string(dirty.atomicExplosion.size()));
 
     auto child = std::make_unique<IncrementalDiagnostic>();
     evaluate_state(

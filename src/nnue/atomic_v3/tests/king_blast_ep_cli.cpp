@@ -291,7 +291,7 @@ void test_constants_directions_and_indexing() {
            "local/physical endpoints and invalid index domains are exact");
 }
 
-void test_direct_blast_self_blast_and_dedup() {
+void test_direct_capture_self_explosion_and_dedup() {
     const CapturePairSnapshot direct =
       make_snapshot({{SQ_H1, W_KING}, {SQ_D4, B_KING}, {SQ_F3, W_KNIGHT}});
     KingBlastEpEmission directEmission{};
@@ -314,7 +314,7 @@ void test_direct_blast_self_blast_and_dedup() {
                              KingBlastEpRelationClass::EnemyKingCenter)
              && find_feature(directAndOwnEmission, SQ_D4, CapturePairActorRelation::Own,
                              KingBlastEpRelationClass::OwnKingSE),
-           "direct enemy-king capture and adjacent own-king self-blast coexist");
+           "direct enemy-king capture and an adjacent own-king explosion coexist");
 
     const CapturePairSnapshot twoAttackers = make_snapshot(
       {{SQ_H1, W_KING}, {SQ_D5, B_KING}, {SQ_C2, W_KNIGHT}, {SQ_F3, W_KNIGHT}, {SQ_D4, B_PAWN}});
@@ -337,7 +337,7 @@ void test_direct_blast_self_blast_and_dedup() {
                              KingBlastEpRelationClass::EnemyKingN)
              && find_feature(bothKingsEmission, SQ_D4, CapturePairActorRelation::Own,
                              KingBlastEpRelationClass::OwnKingSE),
-           "one capture center may encode simultaneous enemy blast and own self-blast");
+           "one capture center may encode simultaneous enemy-king and own-king explosions");
 
     const CapturePairSnapshot bothRelations = make_snapshot({{SQ_F3, W_KING},
                                                              {SQ_E6, B_KING},
@@ -361,7 +361,7 @@ void test_direct_blast_self_blast_and_dedup() {
     expect(emit_king_blast_ep(touching, WHITE, touchingWhite) == CapturePairError::None
              && emit_king_blast_ep(touching, BLACK, touchingBlack) == CapturePairError::None
              && touchingWhite.size == 0 && touchingBlack.size == 0,
-           "touching kings alone emit no KBR row because kings are never CP actors");
+           "adjacent kings alone emit no KBR row because kings are never CP actors");
 }
 
 void test_en_passant_and_malformed_metadata() {
@@ -442,7 +442,7 @@ void test_illegal_candidates_promotions_and_projection_seam() {
     expect(emit_king_blast_ep(selfBlast, WHITE, selfBlastEmission) == CapturePairError::None
              && find_feature(selfBlastEmission, SQ_E5, CapturePairActorRelation::Own,
                              KingBlastEpRelationClass::OwnKingS),
-           "an illegal self-blasting CP candidate remains visible to KBR");
+           "CapturePair candidates that would explode their own king remain visible to KBR");
 
     const CapturePairSnapshot promotion =
       make_snapshot({{SQ_H1, W_KING}, {SQ_E7, B_KING}, {SQ_G7, W_PAWN}, {SQ_F8, B_BISHOP}});
@@ -752,7 +752,7 @@ void test_concurrent_reentrancy_and_position_adapter() {
 
 void run_tests() {
     test_constants_directions_and_indexing();
-    test_direct_blast_self_blast_and_dedup();
+    test_direct_capture_self_explosion_and_dedup();
     test_en_passant_and_malformed_metadata();
     test_illegal_candidates_promotions_and_projection_seam();
     test_orientation_order_bounds_and_errors();

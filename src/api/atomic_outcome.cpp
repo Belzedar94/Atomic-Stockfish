@@ -47,13 +47,13 @@ bool has_insufficient_material(Color color, const Position& pos) {
     const Bitboard otherPieces = pos.pieces() ^ pos.pieces(KING) ^ allBishops;
 
     // A color-bound piece needs access to both square colors, or a non-bishop
-    // helper of either color that can become an Atomic blast target.
+    // helper of either color that can become the target of an atomic capture.
     if (pos.pieces(color, BISHOP)
         && (((allBishops & DarkSquareBB) && (allBishops & ~DarkSquareBB)) || otherPieces))
         return false;
 
     // A lone knight cannot win K+N v K. Any second non-king piece (friendly or
-    // enemy) can provide the additional mating/blast mechanism.
+    // enemy) can make mate or a king explosion possible.
     if (pos.pieces(color, KNIGHT) && popcount(pos.pieces() ^ pos.pieces(KING)) >= 2)
         return false;
 

@@ -74,8 +74,8 @@ Community history adds two Atomic-specific constraints:
    - `Use NNUE=pure` remains data-generation-only and returns the raw
      `(PSQT + positional) / 16` result;
    - Legacy `true` keeps its historical blend, royal `COMMONER` material proxy,
-     Atomic960 correction and rule-50 damping unchanged;
-   - V2 `true` uses its direct result, Atomic960 correction and rule-50 damping,
+     Atomic960 correction and halfmove-clock damping unchanged;
+   - V2 `true` uses its direct result, Atomic960 correction and halfmove-clock damping,
      but never the Legacy blend or material proxy.
 
 9. The trainer gets a separate `atomic_v2` package.  V1 checkpoints are not
@@ -97,7 +97,7 @@ attribute gains to a modern Atomic feature representation.
 
 The first serious new network is separately versioned AtomicNNUEV3.  V3 keeps
 the proven SFNNv15 head while experimentally adding horizontally mirrored
-HalfKAv2Atomic and blast-aware capture, collateral, en-passant and king
+HalfKAv2Atomic and explosion-aware capture, collateral, en-passant and king
 relations.  V1, V2 and V3 retain independent file versions and hashes so every
 ablation remains reproducible and no compatible network is reinterpreted.
 

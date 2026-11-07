@@ -43,13 +43,13 @@ struct SharedHistories;
 
 struct StateInfo {
 
-    static constexpr usize MAX_ATOMIC_BLAST_PIECES = DirtyPiece::MAX_ATOMIC_BLAST_PIECES;
-    static constexpr usize CHECK_SQUARE_NB         = usize(QUEEN) - usize(PAWN) + 1;
+    static constexpr usize MAX_ATOMIC_EXPLOSION_PIECES = DirtyPiece::MAX_ATOMIC_EXPLOSION_PIECES;
+    static constexpr usize CHECK_SQUARE_NB             = usize(QUEEN) - usize(PAWN) + 1;
     static_assert(CHECK_SQUARE_NB == 5);
 
     static constexpr usize check_square_index(PieceType pt) { return usize(pt) - usize(PAWN); }
 
-    struct AtomicBlastPiece {
+    struct AtomicExplosionPiece {
         Piece  piece;
         Square square;
     };
@@ -67,15 +67,15 @@ struct StateInfo {
     bool   atomicOpponentInCheck;
 
     // Not copied when making a move (will be recomputed anyhow)
-    Key                                                   key;
-    StateInfo*                                            previous;
-    Bitboard                                              blockersForKing[COLOR_NB];
-    std::array<Bitboard, CHECK_SQUARE_NB>                 checkSquares;
-    Piece                                                 capturedPiece;
-    std::array<AtomicBlastPiece, MAX_ATOMIC_BLAST_PIECES> atomicBlast;
-    u8                                                    atomicBlastCount;
-    int                                                   repetition;
-    bool                                                  stmInCheck;
+    Key                                                           key;
+    StateInfo*                                                    previous;
+    Bitboard                                                      blockersForKing[COLOR_NB];
+    std::array<Bitboard, CHECK_SQUARE_NB>                         checkSquares;
+    Piece                                                         capturedPiece;
+    std::array<AtomicExplosionPiece, MAX_ATOMIC_EXPLOSION_PIECES> atomicExplosion;
+    u8                                                            atomicExplosionCount;
+    int                                                           repetition;
+    bool                                                          stmInCheck;
 };
 
 
@@ -154,7 +154,7 @@ class Position {
     bool  atomic_in_check(Color c) const;
     bool  stm_in_check() const;
     bool  atomic_wins(Move m) const;
-    bool  under_blast_threat() const;
+    bool  under_explosion_threat() const;
     bool  has_legal_quiet() const;
     bool  has_legal_move() const;
     Piece moved_piece(Move m) const;

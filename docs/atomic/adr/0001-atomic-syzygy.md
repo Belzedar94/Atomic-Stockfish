@@ -70,7 +70,7 @@ regressions for the defects found during this audit:
 
 - The PR assigned the real WDL magic to DTZ and the real DTZ magic to WDL,
   causing valid Atomic tables to be rejected as corrupt.
-- It added the connected-kings index but retained the orthodox `462` group
+- It added an index that allows adjacent kings but retained the orthodox `462` group
   multiplier. Atomic tables require `518`; the wrong value reads incorrect
   offsets for material classes with repeated pieces.
 - It did not stop before probing a terminal Atomic position with a missing king.
@@ -83,12 +83,12 @@ regressions for the defects found during this audit:
 
 - Header, magic, suffix, truncated-file, corrupt-file, missing-path, and mixed
   orthodox/Atomic directory tests.
-- Explicit swapped-magic and `462`-versus-`518` connected-kings regressions.
+- Explicit swapped-magic and `462`-versus-`518` index-size regressions.
 - Deterministic table registration and material keys across at least two fresh
   processes and all supported compilers.
 - WDL and DTZ fixtures covering both sides to move, immediate explosions,
   adjacent kings, captures that explode a king, zeroing captures, pawn moves,
-  en passant, promotions, rule-50 boundaries, and symmetric piece encodings.
+  en passant, promotions, 50-move rule boundaries, and symmetric piece encodings.
 - Differential results against MV-SF plus a frozen corpus produced from the
   Lichess `/atomic` API. Online access is not required to execute the suite.
 - Root probing, interior probing, `tbhits`, move ordering, score conversion, and

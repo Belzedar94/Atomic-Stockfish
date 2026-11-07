@@ -197,7 +197,7 @@ Position::set(const string& fenStr, bool isChess960, StateInfo* si) {
 
    5) Halfmove clock. This is the number of halfmoves since the last pawn advance
       or capture. This is used to determine if a draw can be claimed under the
-      fifty-move rule.
+      50-move rule.
 
    6) Fullmove number. The number of the full move. It starts at 1, and is
       incremented after Black's move.
@@ -415,7 +415,7 @@ Position::set(const string& fenStr, bool isChess960, StateInfo* si) {
     // 5-6. Halfmove clock and fullmove number
     ss >> std::skipws >> st->rule50 >> gamePly;
 
-    // Normally values larger than 99 would be pointless but we do support ignoring 50 move rule for TB purposes.
+    // Tablebase analysis can ignore the 50-move rule and use a clock above 99.
     // Limit at 2**15 as it's used multiplicativly with position evaluation during search.
     if (st->rule50 < 0 || st->rule50 > 32767)
         return PositionSetError("Unsupported position. Rule50 counter out of range.");
@@ -715,8 +715,8 @@ bool Position::legal(Move m) const {
     {
         // The capturing piece and the captured piece always disappear. Pawns
         // on adjacent squares are immune; every adjacent non-pawn explodes.
-        const Bitboard blast = to | (attacks_bb<KING>(to) & (pieces() ^ pieces(PAWN)));
-        occupied &= ~blast;
+        const Bitboard explosion = to | (attacks_bb<KING>(to) & (pieces() ^ pieces(PAWN)));
+        occupied &= ~explosion;
     }
 
     const Square ourKing   = type_of(pc) == KING ? to : square<KING>(us);
@@ -758,18 +758,16 @@ bool Position::atomic_wins(Move m) const {
     if (!capture(m) || !has_king(~sideToMove))
         return false;
 
-    const Square blastCenter = m.to_sq();
-    const Square theirKing   = square<KING>(~sideToMove);
+    const Square explosionCenter = m.to_sq();
+    const Square theirKing       = square<KING>(~sideToMove);
 
-    return blastCenter == theirKing || bool(attacks_bb<KING>(blastCenter) & theirKing);
+    return explosionCenter == theirKing || bool(attacks_bb<KING>(explosionCenter) & theirKing);
 }
 
-// Tests whether the side to move is under a "blast check": an enemy capture on
-// a square next to our king detonates the king and ends the game at once, so
-// any friendly piece adjacent to our king that an enemy non-king piece attacks
-// is a mate threat. The enemy king cannot deliver it, and neither can a capture
-// whose blast would take the enemy king down with ours.
-bool Position::under_blast_threat() const {
+// Detect an explosion threat: an enemy capture on a square next to our king
+// would explode it and end the game. The enemy king cannot deliver the threat,
+// and neither can a capture that would explode both kings.
+bool Position::under_explosion_threat() const {
 
     const Color us = sideToMove;
 
@@ -913,8 +911,8 @@ bool Position::gives_check(Move m) const {
         {
             // The capturing piece always disappears. Adjacent pawns survive;
             // every adjacent non-pawn is removed before check is evaluated.
-            const Bitboard blast = to | (attacks_bb<KING>(to) & (pieces() ^ pieces(PAWN)));
-            occupied &= ~blast;
+            const Bitboard explosion = to | (attacks_bb<KING>(to) & (pieces() ^ pieces(PAWN)));
+            occupied &= ~explosion;
             checker = NO_PIECE;
         }
     }
@@ -929,7 +927,7 @@ bool Position::gives_check(Move m) const {
     if (attacks_bb<KING>(ourKing) & theirKing)
         return false;
 
-    // Existing pieces can give a discovered check after the move or blast.
+    // Existing pieces can give a discovered check after the move or its explosion.
     // Mask the moved origins explicitly because Chess960 can reoccupy one of
     // those squares with the other castling piece.
     if (attackers_to(theirKing, occupied) & pieces(us) & occupied & ~vacated)
@@ -966,7 +964,7 @@ void Position::do_move(Move                      m,
     std::memcpy(&newSt, st, offsetof(StateInfo, key));
     newSt.previous            = st;
     st                        = &newSt;
-    st->atomicBlastCount      = 0;
+    st->atomicExplosionCount  = 0;
     st->atomicOpponentInCheck = false;
     st->stmInCheck            = givesCheck;
 
@@ -988,7 +986,7 @@ void Position::do_move(Move                      m,
     dp.to              = to;
     dp.add_sq          = SQ_NONE;
     dp.requiresRefresh = false;
-    dp.atomicBlast     = {};
+    dp.atomicExplosion = {};
 
     assert(color_of(pc) == us);
     assert(captured == NO_PIECE || color_of(captured) == (m.type_of() != CASTLING ? them : us));
@@ -1045,7 +1043,7 @@ void Position::do_move(Move                      m,
         st->materialKey ^=
           Zobrist::psq[captured][8 + pieceCount[captured] - (m.type_of() != EN_PASSANT)];
 
-        // Reset rule 50 counter
+        // Reset the halfmove clock
         st->rule50 = 0;
     }
     else
@@ -1115,7 +1113,7 @@ void Position::do_move(Move                      m,
         // Update pawn hash key
         st->pawnKey ^= Zobrist::psq[pc][from] ^ Zobrist::psq[pc][to];
 
-        // Reset rule 50 draw counter
+        // Reset the halfmove clock
         st->rule50 = 0;
     }
 
@@ -1153,19 +1151,19 @@ void Position::do_move(Move                      m,
     // delta so undo does not need a generic variant state.
     if (captured)
     {
-        Bitboard blast = (to | (attacks_bb<KING>(to) & (pieces() ^ pieces(PAWN)))) & pieces();
+        Bitboard explosion = (to | (attacks_bb<KING>(to) & (pieces() ^ pieces(PAWN)))) & pieces();
 
-        assert(!(blast & pieces(us, KING)) && "Atomic capture may not explode own king");
+        assert(!(explosion & pieces(us, KING)) && "Atomic capture may not explode own king");
 
-        while (blast)
+        while (explosion)
         {
-            const Square bsq = pop_lsb(blast);
+            const Square bsq = pop_lsb(explosion);
             const Piece  bpc = piece_on(bsq);
             const Color  bc  = color_of(bpc);
 
-            assert(st->atomicBlastCount < StateInfo::MAX_ATOMIC_BLAST_PIECES);
-            st->atomicBlast[st->atomicBlastCount++] = {bpc, bsq};
-            dp.atomicBlast.push_back({bpc, bsq});
+            assert(st->atomicExplosionCount < StateInfo::MAX_ATOMIC_EXPLOSION_PIECES);
+            st->atomicExplosion[st->atomicExplosionCount++] = {bpc, bsq};
+            dp.atomicExplosion.push_back({bpc, bsq});
 
             k ^= Zobrist::psq[bpc][bsq];
             st->materialKey ^= Zobrist::psq[bpc][8 + pieceCount[bpc] - 1];
@@ -1195,7 +1193,7 @@ void Position::do_move(Move                      m,
         }
     }
 
-    // The blast changes the position key, material keys, and correction-history
+    // The explosion changes the position key, material keys, and correction-history
     // keys after the ordinary move update, so publish and prefetch only once the
     // complete Atomic position has been formed.
     if (tt)
@@ -1263,17 +1261,17 @@ void Position::undo_move(Move m) {
 
     assert(empty(from) || m.type_of() == CASTLING);
 
-    // Restore every by-catch piece first. This also restores the capturing
-    // piece on the destination square, allowing the orthodox undo path below
+    // Restore pieces removed by the explosion first, including the capturing
+    // piece on the destination square. This allows the orthodox undo path below
     // to move it back and then restore the originally captured piece.
-    for (u8 i = 0; i < st->atomicBlastCount; ++i)
+    for (u8 i = 0; i < st->atomicExplosionCount; ++i)
     {
-        const auto& blasted = st->atomicBlast[i];
-        assert(empty(blasted.square));
-        put_piece(blasted.piece, blasted.square);
+        const auto& removed = st->atomicExplosion[i];
+        assert(empty(removed.square));
+        put_piece(removed.piece, removed.square);
     }
 
-    if (st->atomicBlastCount)
+    if (st->atomicExplosionCount)
         pc = piece_on(to);
 
     if (m.type_of() == PROMOTION)
@@ -1438,12 +1436,12 @@ bool Position::see_ge(Move m, int threshold) const {
 
     const Color    us        = color_of(pc);
     const Bitboard fromTo    = from | to;
-    Bitboard       blast     = ((attacks_bb<KING>(to) & ~pieces(PAWN)) | fromTo) & pieces();
+    Bitboard       explosion = ((attacks_bb<KING>(to) & ~pieces(PAWN)) | fromTo) & pieces();
     int            result    = 0;
     const bool     isCapture = capture(m);
 
     // A quiet move may be captured explosively. Use the least valuable legal
-    // non-king attacker; an attacker inside the blast has no material cost.
+    // non-king attacker; an attacker inside the explosion has no material cost.
     if (!isCapture)
     {
         Bitboard attackers   = attackers_to(to, pieces() ^ fromTo) & pieces(~us) & ~pieces(KING);
@@ -1452,8 +1450,9 @@ bool Position::see_ge(Move m, int threshold) const {
         while (attackers)
         {
             const Square s = pop_lsb(attackers);
-            minAttacker =
-              std::min(minAttacker, (blast & s) ? 0 : int(AtomicCapturePieceValue[piece_on(s)]));
+            const int    attackerCost =
+              (explosion & s) ? 0 : int(AtomicCapturePieceValue[piece_on(s)]);
+            minAttacker = std::min(minAttacker, attackerCost);
         }
 
         if (minAttacker == VALUE_INFINITE)
@@ -1465,20 +1464,20 @@ bool Position::see_ge(Move m, int threshold) const {
     bool explodesOurKing   = false;
     bool explodesTheirKing = false;
 
-    while (blast)
+    while (explosion)
     {
-        const Piece blastPiece = piece_on(pop_lsb(blast));
+        const Piece explosionPiece = piece_on(pop_lsb(explosion));
 
-        if (type_of(blastPiece) == KING)
+        if (type_of(explosionPiece) == KING)
         {
-            if (color_of(blastPiece) == us)
+            if (color_of(explosionPiece) == us)
                 explodesOurKing = true;
             else
                 explodesTheirKing = true;
         }
 
-        result += color_of(blastPiece) == us ? -int(AtomicCapturePieceValue[blastPiece])
-                                             : int(AtomicCapturePieceValue[blastPiece]);
+        const int pieceValue = AtomicCapturePieceValue[explosionPiece];
+        result += color_of(explosionPiece) == us ? -pieceValue : pieceValue;
     }
 
     if (isCapture)
@@ -1505,7 +1504,7 @@ bool Position::see_ge(Move m, int threshold) const {
     return result >= threshold;
 }
 
-// Tests whether the position is drawn by 50-move rule
+// Tests whether the position is drawn by the 50-move rule
 // or by repetition. It does not detect stalemates.
 bool Position::is_draw(int ply) const {
 

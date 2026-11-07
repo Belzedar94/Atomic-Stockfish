@@ -85,8 +85,8 @@ Value Eval::Detail::atomic_nnue_value_from_scaled(i64 scaled) noexcept {
 Value Eval::Detail::atomic_nnue_value_from_raw(i32 rawPsqt, i32 rawPositional) noexcept {
     // V3's authenticated numeric domain permits the complete i32 range for
     // each raw component. Sum in i64, then enter the ordinary evaluation
-    // domain before Chess960/rule-50 corrections so neither the addition nor
-    // damp_for_atomic_rule50() can overflow.
+    // domain before applying Atomic960 correction or halfmove-clock damping.
+    // Neither the addition nor damp_for_atomic_rule50() can overflow.
     const i64 scaled = (i64(rawPsqt) + i64(rawPositional)) / 16;
     return atomic_nnue_value_from_scaled(scaled);
 }
@@ -116,8 +116,8 @@ Value Eval::evaluate(const Eval::NNUE::AnyNetwork& network,
 
     if (mode == UseNNUEMode::Pure)
         // Pure is the raw selected network result: no compatibility
-        // scaling, Chess960 correction, or fifty-move damping. It remains
-        // a data-generation-only mode.
+        // scaling, Atomic960 correction, or halfmove-clock damping. It is
+        // reserved for data generation.
         v = Detail::atomic_nnue_value_from_raw(rawPsqt, rawPositional);
     else if (network.backend() == NNUE::NetworkBackend::AtomicNNUEV2
              || network.backend() == NNUE::NetworkBackend::AtomicNNUEV3)

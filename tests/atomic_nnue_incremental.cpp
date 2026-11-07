@@ -232,7 +232,7 @@ struct Fixture {
     bool             chess960;
     bool             refreshWhite;
     bool             refreshBlack;
-    usize            atomicBlastCount;
+    usize            atomicExplosionCount;
     usize            removedCount;
     usize            addedCount;
 };
@@ -246,7 +246,7 @@ constexpr std::array FixedFixtures = {
   Fixture{"explosion-with-bycatch", "7k/8/8/2pBn3/3r4/2PQN3/8/K7 w - - 0 1", "d3d4", false, false,
           false, 4, 5, 0},
   Fixture{"maximum-nine-piece-blast", "7k/8/8/2nnn3/2nrn3/2nnnN2/8/K7 w - - 0 1", "f3d4", false,
-          false, false, DirtyPiece::MAX_ATOMIC_BLAST_PIECES, 10, 0},
+          false, false, DirtyPiece::MAX_ATOMIC_EXPLOSION_PIECES, 10, 0},
   Fixture{"en-passant", "7k/8/2N1b3/2ppP3/8/8/8/K7 w - d6 0 2", "e5d6", false, false, false, 3, 4,
           0},
   Fixture{"promotion", "7k/P7/8/8/8/8/8/K7 w - - 0 1", "a7a8q", false, false, false, 0, 1, 1},
@@ -294,10 +294,10 @@ u64 run_fixed_fixture(const Fixture& fixture, const NNUE::AnyNetwork& network) {
     if (dirtyPiece.requiresRefresh)
         fail(context, "move set the global full-refresh flag");
 
-    if (dirtyPiece.atomicBlast.size() != fixture.atomicBlastCount)
-        fail(context, "unexpected Atomic blast delta size: expected="
-                        + std::to_string(fixture.atomicBlastCount)
-                        + " got=" + std::to_string(dirtyPiece.atomicBlast.size()));
+    if (dirtyPiece.atomicExplosion.size() != fixture.atomicExplosionCount)
+        fail(context, "unexpected Atomic explosion delta size: expected="
+                        + std::to_string(fixture.atomicExplosionCount)
+                        + " got=" + std::to_string(dirtyPiece.atomicExplosion.size()));
 
     NNUE::Features::HalfKAv2Atomic::RemovedIndexList removed;
     NNUE::Features::HalfKAv2Atomic::AddedIndexList   added;

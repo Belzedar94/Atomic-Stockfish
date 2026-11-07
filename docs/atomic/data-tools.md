@@ -78,8 +78,8 @@ rights and all four rook origins, en-passant square, side-to-move score/result,
 flags and Atomic960 mode. Global, shard and local indexes, `ply`, and the
 32-bit move wire are decimal strings. The move also exposes named from/to/type
 and promotion fields; for castling, `to` deliberately remains the rook origin
-stored by Atomic BIN V2. `score_stm` remains an exact JSON int32, while the
-bounded rule-50/fullmove values remain JSON integers.
+stored by Atomic BIN V2. `score_stm` remains an exact JSON int32, while
+the bounded halfmove clock and fullmove number remain JSON integers.
 
 ## Validation result and errors
 

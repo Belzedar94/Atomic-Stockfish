@@ -114,7 +114,7 @@ class AccumulatorStack {
     usize                                 size = 1;
 };
 
-static_assert(FeatureSet::MaxRemovedDimensions == 2 + DirtyPiece::MAX_ATOMIC_BLAST_PIECES);
+static_assert(FeatureSet::MaxRemovedDimensions == 2 + DirtyPiece::MAX_ATOMIC_EXPLOSION_PIECES);
 
 }  // namespace Stockfish::Eval::NNUE::AtomicV2
 

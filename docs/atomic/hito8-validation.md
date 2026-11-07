@@ -68,8 +68,8 @@ The source-equivalent release BMI2 candidate passed:
   `0x8742E39B793C46AB`.
 - A 10,000-position differential against frozen Fairy-Stockfish: 10,000/10,000
   accepted, maximum `Use NNUE=true` delta 0, and maximum pure trace delta
-  0.005. The separately reported rule-50 oracle diagnostic reached 0.740 in
-  866 rule-50-damped positions; it is not an accumulator mismatch.
+  0.005. The separately reported halfmove-clock damping diagnostic reached 0.740 in
+  866 positions with halfmove-clock damping; it is not an accumulator mismatch.
 
 The debug/assert build independently passed 63/63 C++ tests, 34/34 API tests,
 all perft and 19 focused rule cases, both 16/16 search corpora, and an
@@ -342,7 +342,7 @@ The measured source commit is
   241,087 full-refresh comparisons, zero capture-forced refreshes, and state
   signature `0x8742E39B793C46AB`.
 - Frozen-Fairy differential 10,000/10,000, maximum playing delta 0, maximum
-  pure-trace delta 0.005, and 866 rule-50-damped positions.
+  pure-trace delta 0.005, and 866 positions with halfmove-clock damping.
 - Playing signature remains exactly `338376`.
 
 The new C++ corpus exhausts every legal move in 11 focused positions (166

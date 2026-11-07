@@ -1525,8 +1525,8 @@ void Tablebases::init(const std::string& paths) {
         MapA1D1D4[s] = code++;
 
     // MapKK[] retains the orthodox 462-position map for the common decoder
-    // initialization. Atomic pawnless tables use the connected-king formula in
-    // do_probe_table() instead.
+    // initialization. Atomic pawnless tables use an index that allows adjacent
+    // kings in do_probe_table() instead.
     //
     // It encodes legal positions of two non-adjacent kings where
     // the first is in the a1-d1-d4 triangle. If the first king is on the a1-d4

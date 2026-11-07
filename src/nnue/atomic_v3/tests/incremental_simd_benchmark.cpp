@@ -293,7 +293,7 @@ std::unique_ptr<PreparedCase> prepare_case(const Network& network, const CaseSpe
     const Move move = require_move(position, spec);
     position.do_move(move, states[1], position.gives_check(move), result->dirty, nullptr, nullptr);
     result->child     = make_capture_pair_snapshot(position);
-    result->blastSize = result->dirty.atomicBlast.size();
+    result->blastSize = result->dirty.atomicExplosion.size();
     require(result->blastSize >= spec.minimumBlast && result->blastSize <= spec.maximumBlast,
             "unexpected blast size for " + std::string(spec.name));
     require(bool(evaluate_scalar(network, result->child, result->childFresh)),

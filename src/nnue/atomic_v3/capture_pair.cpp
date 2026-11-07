@@ -287,7 +287,7 @@ CapturePairError Detail::emit_capture_pairs_from_hm(const CapturePairSnapshot& s
 
     // EP is optional feature metadata, not a precondition for evaluating the
     // placement. A malformed center must fail closed for the EP tail while
-    // leaving every occupancy pseudocapture intact.
+    // leaving every geometric capture candidate intact.
     const bool epActive = valid_ep_metadata(snapshot);
 
     result.orientation = hm.orientation;

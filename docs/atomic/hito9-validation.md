@@ -147,8 +147,8 @@ MinGW, ASan, UBSan, TSan and Valgrind, plus the Python 3.9/3.12 matrix. H9.3e
 does not enter the playing network or search path, so it deliberately has no
 Elo/OpenBench claim; strength testing begins only after a trained combined V3
 backend can alter engine decisions. Community-history evidence used to select
-the pawn, bycatch, EP and threat regressions is recorded separately under
-`docs/atomic/evidence/hito9-3e-blast-ring/` and is non-normative.
+pawn immunity, collateral removal, en passant and explosion threat regressions
+is non-normative and lives in `docs/atomic/evidence/hito9-3e-blast-ring/`.
 
 ## H9.3f scalar full-refresh composition oracle
 
@@ -169,7 +169,7 @@ orientations must be identical and the conservative aggregate bound is
 
 The frozen cross-language corpus contains 102 positions and both
 perspectives, including independent mirror branches, valid and malformed EP,
-promotion geometry, touching kings, self-blast relations and an Atomic960
+promotion geometry, adjacent kings, self-explosion relations and an Atomic960
 layout. Its SHA-256 is
 `22ae9a6188fa0ebdd0faff9b4a23c25d25380f9b47ebc0e9da2d1b28fe2441b6`.
 The C++ selftest and Python reference additionally replay immutable inputs at
@@ -307,7 +307,7 @@ Every failure clears the complete public diagnostic.
 
 The frozen C++ corpus covers all eight material buckets, both sides to move,
 both king-orientation branches, valid and malformed EP, orthodox and
-Atomic960 castling layouts, captures, promotions, touching kings and invalid
+Atomic960 castling layouts, captures, promotions, adjacent kings and invalid
 king/side states. It also proves immutable concurrent reads at 1, 2, 4 and 8
 threads and evaluate-then-save byte identity. Adversarial dense vectors place
 nonzero signed weights on FC0, FC1 and FC2 block boundaries, exercise the
@@ -476,7 +476,7 @@ SSE4.1 and AVX2. The 65,536-operation release signature
 supporting evidence and are not labelled exact-head runs.
 
 The representative local benchmark measures quiet, capture, promotion,
-en-passant and maximum-blast transitions with one warm-up and five alternating
+en-passant and maximum-explosion transitions with one warm-up and five alternating
 trials. It reports raw samples and medians without a hard timing threshold.
 The latest exactness-qualified AVX2 run reported aggregate ratio `0.968590`;
 it is report-only and establishes no V3 speed improvement.

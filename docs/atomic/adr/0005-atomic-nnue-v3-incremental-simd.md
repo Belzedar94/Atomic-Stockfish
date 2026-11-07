@@ -59,7 +59,7 @@ the wire layout or weaken the full-refresh oracle.
    an object-code audit of signed i16-to-i64 widening plus 64-bit add/sub.
 8. CI gates exactness, fail-closed behavior and generated instructions; it does
    not gate on noisy timing. A separate local benchmark covers quiet, capture,
-   promotion, en-passant and maximum nine-piece-blast transitions with one
+   promotion, en-passant and maximum nine-piece explosion transitions with one
    warm-up and five order-alternating trials. It reports raw samples, medians
    and ratios without a hard speed threshold.
 9. At H9.3j-b this implementation remains private and excluded from product
