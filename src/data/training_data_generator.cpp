@@ -1121,7 +1121,7 @@ class Generator {
                 failure = std::move(message);
         }
         finished.store(true, std::memory_order_relaxed);
-        threads.stop = true;
+        threads.request_stop();
     }
 
     const std::string& next_opening() {
@@ -1252,7 +1252,7 @@ class Generator {
             if (index >= params.count)
             {
                 finished.store(true, std::memory_order_relaxed);
-                threads.stop = true;
+                threads.request_stop();
                 return true;
             }
 
@@ -1261,7 +1261,7 @@ class Generator {
             {
                 failure = result.message;
                 finished.store(true, std::memory_order_relaxed);
-                threads.stop = true;
+                threads.request_stop();
                 return true;
             }
 
@@ -1282,7 +1282,7 @@ class Generator {
             if (done >= params.count)
             {
                 finished.store(true, std::memory_order_relaxed);
-                threads.stop = true;
+                threads.request_stop();
                 return true;
             }
         }
@@ -2166,7 +2166,7 @@ class AtomicV3Generator {
         }
 
         cancelled.store(true, std::memory_order_relaxed);
-        threads.stop = true;
+        threads.request_stop();
         pendingCv.notify_all();
         for (usize i = 0; i < workerCount; ++i)
             threads.wait_on_thread(i);

@@ -147,6 +147,9 @@ class ThreadPool {
     Thread*                get_best_thread() const;
     void                   start_searching();
     void                   wait_for_search_finished() const;
+    void                   wait_for_search_release(bool infinite);
+    void                   request_stop();
+    void                   set_ponder(bool enabled);
 
     std::vector<usize> get_bound_thread_to_numa_node() const;
     std::vector<usize> get_bound_thread_count_by_numa_node() const;
@@ -154,6 +157,8 @@ class ThreadPool {
 
     void ensure_network_replicated();
 
+    // While workers are running, set stop through request_stop() so the
+    // main worker wakes even if it has already finished searching.
     std::atomic_bool stop, increaseDepth;
 
     auto cbegin() const noexcept { return threads.cbegin(); }
@@ -164,6 +169,8 @@ class ThreadPool {
     auto empty() const noexcept { return threads.empty(); }
 
    private:
+    std::mutex                          searchReleaseMutex;
+    std::condition_variable             searchReleaseCv;
     StateListPtr                         setupStates;
     std::vector<std::unique_ptr<Thread>> threads;
     std::vector<NumaIndex>               boundThreadToNumaNode;
