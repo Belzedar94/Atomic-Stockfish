@@ -164,7 +164,7 @@ bool Engine::go(Search::LimitsType& limits) {
     threads.start_thinking(options, pos, states, limits);
     return true;
 }
-void Engine::stop() { threads.stop = true; }
+void Engine::stop() { threads.request_stop(); }
 
 void Engine::search_clear() {
     wait_for_search_finished();
@@ -261,7 +261,7 @@ void Engine::set_tt_size(usize mb) {
     tt.resize(mb, threads);
 }
 
-void Engine::set_ponderhit(bool b) { threads.main_manager()->ponder = b; }
+void Engine::set_ponderhit(bool b) { threads.set_ponder(b); }
 
 // network related
 
