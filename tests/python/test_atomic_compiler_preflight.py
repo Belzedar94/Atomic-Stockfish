@@ -4,6 +4,7 @@ import ast
 import io
 import json
 from pathlib import Path
+import queue
 import subprocess
 import sys
 from types import SimpleNamespace
@@ -655,6 +656,36 @@ def test_uci_engine_close_reaps_child_after_pipe_error(pipe_error):
     assert not process.killed
 
 
+def test_uci_engine_kills_child_without_waiting_another_search_timeout():
+    class UnresponsiveProcess:
+        def __init__(self):
+            self.stdin = io.StringIO()
+            self.returncode = None
+            self.waits = []
+
+        def poll(self):
+            return self.returncode
+
+        def wait(self, timeout=None):
+            self.waits.append(timeout)
+            if self.returncode is None:
+                raise subprocess.TimeoutExpired("engine", timeout)
+            return self.returncode
+
+        def kill(self):
+            self.returncode = -9
+
+    process = UnresponsiveProcess()
+    engine = object.__new__(bench_compare.UciEngine)
+    engine.process = process
+    engine.timeout = 60.0
+    engine.close()
+
+    assert process.stdin.getvalue() == "quit\n"
+    assert process.returncode == -9
+    assert len(process.waits) == 2 and max(process.waits) <= 2
+
+
 def test_bench_nnue_preflight_accepts_candidate_marker_emitted_on_go(tmp_path):
     net = (tmp_path / "atomic.nnue").resolve()
     commands = []
@@ -678,6 +709,21 @@ def test_bench_nnue_preflight_accepts_candidate_marker_emitted_on_go(tmp_path):
     engine.verify_nnue(net)
 
     assert commands == ["position startpos", "go nodes 1"]
+
+
+def test_bench_search_timeout_is_not_extended_by_progress(monkeypatch):
+    engine = object.__new__(bench_compare.UciEngine)
+    engine.label = "candidate"
+    engine.timeout = 1.0
+    engine.lines = queue.Queue()
+    engine.lines.put("info depth 10")
+    engine.lines.put("info depth 11")
+    engine.lines.put("bestmove b2b3")
+    clock = iter((0.0, 0.1, 0.7, 1.1))
+    monkeypatch.setattr(bench_compare, "monotonic", lambda: next(clock))
+
+    with pytest.raises(TimeoutError, match=r"candidate timed out after 1s.*info depth 11"):
+        engine.read_until(lambda line: line.startswith("bestmove "))
 
 
 def test_bench_infrastructure_failure_exits_two(tmp_path, monkeypatch, capsys):
