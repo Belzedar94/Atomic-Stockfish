@@ -201,7 +201,7 @@ void test_checked_squares_and_optional_draws() {
 
     TestPosition adjacent("8/8/kK6/8/8/8/Q7/8 b - - 0 1");
     expect(adjacent.valid && Atomic::checked_squares(adjacent.position) == 0,
-           "checked.adjacent-kings", "adjacent Atomic kings must be mutually immune");
+           "checked.adjacent-kings", "connected kings must be mutually immune in Atomic");
 
     TestPosition fifty("r6k/8/8/8/8/8/8/R6K w - - 100 1");
     const auto   ignored = Atomic::outcome(fifty.position, false);

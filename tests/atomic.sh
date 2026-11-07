@@ -53,7 +53,7 @@ grep -Fxq 'option name UCI_Variant type combo default atomic var atomic' <<<"$pr
 [[ "$(grep -Ec '^option name UCI_Variant ' <<<"$protocol_output")" -eq 1 ]] \
     || fail "UCI_Variant must be advertised exactly once"
 if grep -Eq '^option name (UCI_Elo|UCI_ShowWDL|UCI_LimitStrength)' <<<"$protocol_output"; then
-    fail "orthodox Elo and WDL options must not be exposed"
+    fail "standard chess Elo and WDL options must not be exposed"
 fi
 grep -Fxq 'option name SyzygyProbeLimit type spin default 6 min 0 max 6' <<<"$protocol_output" \
     || fail "Atomic Syzygy must be exposed with a six-piece limit"
@@ -85,7 +85,7 @@ if grep -Eq '^[A-Za-z_][A-Za-z0-9_]*,-?[0-9]+,-?[0-9]+,-?[0-9]+,' <<<"$protocol_
 fi
 
 # The engine evaluates with NNUE only. With a network, `eval` must stop at the
-# Atomic terminal instead of entering an orthodox two-king evaluator. Without
+# Atomic terminal instead of entering the standard chess evaluator. Without
 # one, it must report the missing network rather than evaluate anything.
 terminal_eval_output="$({
     if [[ -n "$PERFT_NET" ]]; then
@@ -100,7 +100,7 @@ terminal_eval_output="$({
 } | "$ENGINE")"
 if [[ -n "$PERFT_NET" ]]; then
     grep -Fq 'Final evaluation: none (Atomic terminal)' <<<"$terminal_eval_output" \
-        || fail "terminal eval must not enter an orthodox two-king evaluator"
+        || fail "terminal eval must not enter the standard chess evaluator"
 else
     grep -Fq 'network is not available' <<<"$terminal_eval_output" \
         || fail "eval without a network must report the missing network"

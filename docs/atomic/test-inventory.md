@@ -17,7 +17,7 @@ pipeline and full Node UCI/NNUE WASM launcher. The development-only
 
 | Surface | Migrated coverage | Current evidence |
 | --- | --- | --- |
-| C++ Atomic rules/state | Atomic SEE, explosion deltas, terminal captures, en passant, promotions, castling/Atomic960, repetition, rule 50, UCI moves, Atomic move-count thresholds, null-move reductions, capture-futility eligibility and capture-prefilter invariants | `88/88` PASS lines and terminal success marker |
+| C++ Atomic rules/state | Atomic SEE, explosion deltas, terminal captures, en passant, promotions, castling/Atomic960, repetition, 50-move rule, UCI moves, Atomic move-count thresholds, null-move reductions, capture-futility eligibility and capture-prefilter invariants | `88/88` PASS lines and terminal success marker |
 | Shared C++ board API | SAN, outcomes, checked pieces, material, FEN validation and Atomic960 | `34/34` PASS lines and terminal success marker |
 | Historical Python API | Frozen Fairy `test.py` contracts | `22/22`; two removed-variant APIs are classified, not skipped |
 | Extended Python API | Fixtures, perft, errors, transactional calls, wheel layout, concurrent independent calls and pipeline/source contracts | Hito 4 lifecycle subset: `60 passed`; exact-head complete `tests/python`: `1420 passed`; sdist-to-wheel import and PEP 561 discovery passed |
@@ -26,13 +26,13 @@ pipeline and full Node UCI/NNUE WASM launcher. The development-only
 | ES-module Board WASM | Full Atomic binding/lifecycle suite | `58` fixtures passed |
 | Cross-surface parity | Exact native/Python/CommonJS/ESM results | `40` shared fixtures; `25` native UCI intersections |
 | Move generation | Eight historical Atomic/Atomic960 vectors plus focused rule/transition corpus | eight exact perfts and `19/19` focused checks |
-| UCI search | Quiet Atomic checks/evasions, preserved analysis checks, mate-before-rule-50, stalemate ordering, terminal explosions, preservation of explosive captures in main search/qsearch and the Atomic NMP tactical-defense fixture | `16/16` with NNUE disabled and with the frozen network loaded |
+| UCI search | Quiet Atomic checks/evasions, preserved analysis checks, checkmate before the 50-move rule, stalemate ordering, terminal explosions, preservation of explosive captures in main search/qsearch and the Atomic NMP tactical-defense fixture | `16/16` with NNUE disabled and with the frozen network loaded |
 | Comparison provenance | Stockfish/Fairy compiler-output parsing, bitness/ISA/debug-mode mismatch rejection, canonical immutable assets including every loaded psutil Python/native module, exact playing-net smoke, fail-fast workers/watchdog and process cleanup | combined LOS/compiler units `92/92` |
 | XBoard/CECP | Atomic-only negotiation, clocks, state edits, analyze, playother, hard/easy and live ponder cancellation/promotion | complete protocol suite passed |
 | Search repeatability | Two-position Atomic NNUE corpus over increasing node budgets | `12/12`; signature `338376` |
 | Legacy Atomic NNUE | `false`, `true`, `pure`, invalid/truncated recovery, transactional load and byte-exact export | mode contract passed; network SHA-256 pinned |
 | Pipeline reproducibility | Normative `atomic-schema.json`, Atomic-owned generation, thin tools validation/conversion, exact tools/trainer capability handshake, machine-readable sibling commits, tracked clean-build recipes, strict build manifests, exact HEAD/clean-tree/artifact pre/postflight, authenticated Git identity, pinned Python runtime/dependency provenance, locked strong-local fixture and trainer-generated synthetic CI fixture | Legacy strong-local passed with tools `521f8410`, trainer `350a28f2` and data hash `d95f5180...`. The current real `atomic-bin-v2` CI gate authenticates tools merge `450049ee` and trainer merge `3a19c16f`, both with engine `420c9f35`; it requires an explicit strong-local or synthetic-CI network profile, generates disjoint 128-position train/validation datasets, performs exactly one CPU update, serializes, reimports and loads the result in the playing engine. The older `40d2db22`/`3e5651a9` pass remains historical evidence only. |
-| Atomic Syzygy | Atomic magics/suffixes, connected-kings domain 518, multi-directory paths, real 3-6-man WDL/DTZ, root/interior, six-man limit 5/6, five-position oracle/tbhit analysis, Atomic960 eligibility and recoverable paths | same-checkout Makefile driver, 13 fixture headers/hashes, driver `5/5` and production UCI suite with NNUE false/true are established. OpenBench IDs 37–42 provide six positive point estimates across same-binary classical/NNUE STC/LTC plus the requested Fairy NNUE comparison; the owner stopped and accepted them after healthcheck. The canonical evidence explicitly records that none completed 2,000 games or has `passed=true`, and does not claim aggregate `6/6` LOS. Exact-tag functional conformance remains a release gate. |
+| Atomic Syzygy | Atomic magics/suffixes, 518-entry index allowing connected kings, multi-directory paths, real 3-6-man WDL/DTZ, root/interior, six-man limit 5/6, five-position oracle/tbhit analysis, Atomic960 eligibility and recoverable paths | same-checkout Makefile driver, 13 fixture headers/hashes, driver `5/5` and production UCI suite with NNUE false/true are established. OpenBench IDs 37–42 provide six positive point estimates across same-binary classical/NNUE STC/LTC plus the requested Fairy NNUE comparison; the owner stopped and accepted them after healthcheck. The canonical evidence explicitly records that none completed 2,000 games or has `passed=true`, and does not claim aggregate `6/6` LOS. Exact-tag functional conformance remains a release gate. |
 | Full engine UCI/NNUE WASM | Interactive Node launcher, external NNUE, true/pure, perft, terminal positions and pthread operation | integration passed; all four artifact hashes match the reproducible manifest |
 
 The boundary between structural FEN validation and legal-game-history
@@ -48,8 +48,8 @@ strength disposition is an owner waiver over stopped positive measurements and
 must not be presented as a completed LOS or fixed-game gate.
 
 The inherited upstream `Stockfish` workflow is retained only for upstream
-`sf_*` tags. It is not an Atomic release authority: its embedded orthodox-net,
-`stockfish` binary-name, orthodox bench, matetrack and game-harness assumptions
+`sf_*` tags. It is not an Atomic release authority: its embedded standard chess network,
+`stockfish` binary-name, standard chess benchmark, matetrack and game-harness assumptions
 are not applicable to this specialized engine. Atomic release tags instead run
 the `Atomic CI` matrix and the exact-tag release workflow, which cover the
 native protocols, Python, CommonJS/ESM, Board WASM, UCI/NNUE WASM, sanitizers,
@@ -63,7 +63,7 @@ NNUE backends, data pipeline and Atomic Syzygy surfaces listed above.
 | `tests/perft.sh` | Preserve the eight exact Atomic/Atomic960 vectors and add explosion, check, en-passant, promotion, castling-rights, mate, stalemate and transition fixtures. |
 | Protocol tests | Retain applicable UCI behavior and implement the complete Atomic XBoard/CECP surface. UCCI and USI are excluded protocols. |
 | `tests/reprosearch.sh` | Use a fixed Atomic corpus and positively load the frozen network. |
-| `tests/signature.sh` | Use the multi-position Atomic benchmark corpus, never an orthodox default bench. |
+| `tests/signature.sh` | Use the multi-position Atomic benchmark corpus, never a default standard chess benchmark. |
 | Instrumented runtime | Exercise UCI, XBoard, threads and all NNUE modes; ASan, UBSan, TSan and Valgrind remain separate platform jobs. |
 | `tests/js/test.js` | Account for all 58 source `describe` contracts and run the applicable Atomic API through CommonJS and ES modules. |
 | Python packaging | Import the exact requested `pyffish` artifact, run historical and extended tests, and exercise concurrent calls. |

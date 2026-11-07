@@ -6,10 +6,10 @@
 ## Context
 
 Fairy-Stockfish accepts structurally valid Atomic FENs in which the side to
-move attacks the opposing king. Such a position need not represent the next
-state of an orthodox legal-game history, but it is a valid analysis input and
-is required by fixtures for direct king captures, adjacent explosions, and
-other terminal Atomic transitions.
+move attacks the opposing king. Such a position need not be reachable in a
+legal game of standard chess. It is valid for Atomic analysis and required by
+fixtures for direct king captures, adjacent explosions, and other terminal
+Atomic transitions.
 
 For example, both `4k3/8/8/1B6/8/8/8/4K3 w - - 0 1` and the direct-capture
 fixture `7k/7R/8/8/8/8/8/K7 w - - 0 1` remain valid analysis inputs. The

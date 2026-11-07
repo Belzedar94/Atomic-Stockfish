@@ -968,7 +968,7 @@ Ret do_probe_table(const Position& pos, T* entry, WDLScore wdl, ProbeState* resu
     // But this way the TB is going to have 64*64*64 = 262144 positions, with
     // lots of positions being equivalent (because they are mirrors of each
     // other) and lots of positions being invalid (two pieces on one square,
-    // adjacent kings, etc.).
+    // connected kings, etc.).
     // Usually the first step is to take the wK and bK together. There are just
     // 462 ways legal and not-mirrored ways to place the wK and bK on the board.
     // Once we have placed the wK and bK, there are 62 squares left for the wR
@@ -1015,9 +1015,9 @@ Ret do_probe_table(const Position& pos, T* entry, WDLScore wdl, ProbeState* resu
     }
     else
     {
-        // Atomic kings may be adjacent. Encode every non-overlapping king pair
+        // Atomic allows connected kings. Encode every non-overlapping king pair
         // after board symmetry reduction (518 configurations), rather than the
-        // 462 non-adjacent pairs used by orthodox Syzygy.
+        // 462 non-adjacent pairs used by standard chess Syzygy.
         int adjust = squares[1] > squares[0];
 
         if (off_A1H8(squares[0]))
@@ -1524,9 +1524,9 @@ void Tablebases::init(const std::string& paths) {
     for (auto s : diagonal)
         MapA1D1D4[s] = code++;
 
-    // MapKK[] retains the orthodox 462-position map for the common decoder
-    // initialization. Atomic pawnless tables use the connected-king formula in
-    // do_probe_table() instead.
+    // MapKK[] retains the 462-position standard chess map for common decoder
+    // initialization. Atomic pawnless tables use an index that allows
+    // connected kings in do_probe_table() instead.
     //
     // It encodes legal positions of two non-adjacent kings where
     // the first is in the a1-d1-d4 triangle. If the first king is on the a1-d4

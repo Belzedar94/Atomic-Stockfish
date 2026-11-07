@@ -51,7 +51,7 @@ large variant matrix:
 - the `pyffish` Python API;
 - CommonJS and ES-module JavaScript APIs;
 - lightweight Board WebAssembly and a Node UCI/NNUE WebAssembly engine;
-- Legacy Atomic NNUE V1, AtomicNNUEV2 and AtomicNNUEV3 networks;
+- Legacy Atomic V1, AtomicNNUEV2 and AtomicNNUEV3 networks;
 - Atomic Syzygy WDL/DTZ tables (`.atbw` and `.atbz`).
 
 UCCI, USI and non-Atomic variants are outside the release contract.

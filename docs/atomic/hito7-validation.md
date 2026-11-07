@@ -216,7 +216,7 @@ dataset format even though the playing engine can represent a terminal
 exploded king.
 
 `atomic-bin-v2-tests` covers exact header/record goldens, normal, en-passant,
-all promotions, orthodox castling, the Atomic960 `c1b1` wire, Atomic960 with
+all promotions, standard castling, the Atomic960 `c1b1` wire, Atomic960 with
 no rights, clock/count/file-size boundaries and corrupt reserved, enum, king,
 rook-origin, EP and move combinations. Adapter decoding reconstructs a strict
 canonical FEN and requires the move in `MoveList<LEGAL>`. Python separately

@@ -114,14 +114,14 @@ PERFT_FIXTURES: tuple[PerftFixture, ...] = (
     ),
     PerftFixture(
         name="self_explosion_is_illegal",
-        rule="Rxd2 is illegal because the blast on d2 would remove the white king on c1",
+        rule="Rxd2 is illegal because the explosion on d2 would remove the white king on c1",
         fen="7k/8/8/8/8/8/3r4/2KR4 w - - 0 1",
         roots=root_counts("d1e1=17 d1f1=17 d1g1=15 d1h1=3 c1b1=17"),
         forbidden=("d1d2",),
     ),
     PerftFixture(
         name="adjacent_kings_are_legal",
-        rule="adjacent kings do not attack by capture because either capture self-explodes",
+        rule="connected kings do not attack by capture because either capture self-explodes",
         fen="8/8/8/8/8/8/4k3/4K3 w - - 0 1",
         roots=root_counts("e1d1=7 e1f1=7 e1d2=7 e1f2=7"),
         forbidden=("e1e2",),
@@ -235,7 +235,7 @@ TRANSITION_FIXTURES: tuple[TransitionFixture, ...] = (
     ),
     TransitionFixture(
         name="capture_promotion_after_g7h8q",
-        rule="promotion choice does not survive an Atomic capture blast",
+        rule="promotion choice does not survive an atomic capture explosion",
         fen="k5br/6P1/8/8/8/8/8/K7 w - - 0 1",
         move="g7h8q",
         expected_fen="k7/8/8/8/8/8/8/K7 b - - 0 1",
@@ -251,7 +251,7 @@ TRANSITION_FIXTURES: tuple[TransitionFixture, ...] = (
         name="direct_king_capture_after_h7h8",
         rule=(
             "capturing a KING directly uses the same terminal explosion path and "
-            "must not trigger orthodox captured-king assertions"
+            "must not trigger standard chess captured-king assertions"
         ),
         fen="7k/7R/8/8/8/8/8/K7 w - - 0 1",
         move="h7h8",

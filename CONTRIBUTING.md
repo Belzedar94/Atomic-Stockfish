@@ -100,6 +100,22 @@ that evidence in the pull request.
 C++ changes should follow the style in [`.clang-format`](.clang-format). Running
 `make format` from `src` applies it for you.
 
+### Atomic terminology
+
+- **Explosion** is the effect of a capture. **Collateral pieces** are the
+  additional pieces removed, not the capturer or the captured piece.
+- **Check** and **explosion threat** are distinct. A capture next to the king
+  can threaten a king explosion even when the king is not in check.
+- Use **connected kings** for kings on neighboring squares. Use **standard
+  chess** for the non-variant ruleset and **Atomic960** for Atomic played
+  with Chess960 castling.
+- Use **50-move rule** for the rule and **halfmove clock** for its counter.
+- In NNUE documentation, use **geometric capture candidate** when move
+  legality has not been checked; do not call it a legal capture.
+
+Keep published API names, protocol options, file-format identifiers, and
+historical evidence unchanged.
+
 ## License
 
 By contributing you agree that your contributions are licensed under the GNU

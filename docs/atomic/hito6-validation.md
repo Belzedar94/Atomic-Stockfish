@@ -39,16 +39,16 @@ Modern Stockfish's main-search capture futility prices only the victim on the
 destination square. In Atomic that can be an unsafe lower estimate when the
 explosion also removes opposing non-pawns; en passant has no victim on the
 destination square at all. The specialized guard therefore retains the
-orthodox pruning only for normal captures whose blast ring has no non-pawn
-bycatch. It excludes the capturer's origin square and adjacent pawns, which are
+standard chess pruning only for normal captures whose explosion removes no collateral
+pieces. It excludes the capturer's origin square and adjacent pawns, which are
 immune to the explosion.
 
 Six direct C++ cases cover a normal capture (including capturer exclusion),
-pawn immunity, non-pawn bycatch, en passant, capture-promotion and a quiet move.
-Two depth-two UCI regressions pin the previously pruned `e6d5` non-pawn blast
-and `e4d3` en passant blast in both classical and frozen-NNUE modes. Block 3
-evaluates the qsearch counterpart separately so its correctness, selectivity,
-speed and strength remain attributable.
+pawn immunity, collateral pieces, en passant, capture-promotion and a quiet move.
+Two depth-two UCI regressions pin the previously pruned `e6d5` capture with
+collateral pieces and the `e4d3` en passant explosion in both classical and
+frozen-NNUE modes. Block 3 evaluates the qsearch counterpart separately so its
+correctness, selectivity, speed and strength remain attributable.
 
 The block-2 signature is `379531`, up from block 1's `347633`, because the
 engine searches explosive tactical replies that the unsafe bound discarded.
@@ -59,13 +59,14 @@ complete logs are identified below.
 
 The same destination-victim estimate also guarded qsearch futility. Block 3
 reuses the reviewed Atomic capture-futility eligibility rule there, preserving
-en passant and captures with non-pawn blast bycatch from the orthodox bound.
+en passant and captures that remove collateral pieces from the standard chess bound.
 That block passed its then-current correctness, pipeline, speed and normative
 strength gates against the exact immutable artifact identified below. It is
 historical block-local evidence; block 4 is the current milestone candidate.
 
 The immutable block-2 artifact `CB35D5` fails both new depth-one regressions:
-it prunes the `e6d5` non-pawn blast and the `e4d3` en passant blast in qsearch.
+it prunes both the `e6d5` capture with collateral pieces and the `e4d3` en
+passant explosion in qsearch.
 The final candidate passes `15/15` search regressions with NNUE disabled and
 with the frozen network loaded. Three independent signature runs produced
 `380061` each time; this is the block-3 Atomic signature.
@@ -249,7 +250,7 @@ runner passed native UCI and XBoard, Python, CommonJS, ES module, both WASM
 surfaces, Syzygy, NNUE modes, reproducibility, perft and protocol coverage. The
 full Hito 5 runner additionally passed exactly 1,000,000 incremental NNUE
 operations and the 10,000-position Fairy differential corpus. That corpus now
-contains a hard rule-50 split: `866` post-boundary positions require a neutral
+contains a hard split at the 50-move rule threshold: `866` post-boundary positions require a neutral
 candidate trace and the C++ gate proves an exact internal zero, while Fairy's
 historical post-boundary final value is retained only as diagnostic telemetry.
 
@@ -275,7 +276,7 @@ The incremental test completed exactly 1,000,000 operations with 18,761
 captures, zero forced refreshes and 241,087 full-refresh comparisons. The
 10,000-position Fairy differential completed `10000/10000` on corpus SHA-256
 `46C96F405BC15D468D94BC1E2186B577CE55128832E1108066581D35037FA2DE`;
-the dedicated rule-50 units passed `3/3`, including all 866 post-boundary
+the dedicated 50-move rule tests passed `3/3`, including all 866 post-boundary
 positions in the fixed corpus.
 
 The reproducible NNUE WASM build produced a 103,600-byte JavaScript loader

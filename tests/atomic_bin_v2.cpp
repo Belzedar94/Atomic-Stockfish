@@ -281,8 +281,8 @@ void test_special_move_vectors() {
 
     auto castle       = sample(Move::make<CASTLING>(SQ_E1, SQ_H1));
     castle.fen        = "r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1";
-    auto castleRecord = encoded(castle, "orthodox castling record encodes");
-    expect(read_u32(castleRecord, 52) == 0x000031C4, "orthodox castling targets rook origin");
+    auto castleRecord = encoded(castle, "standard castling record encodes");
+    expect(read_u32(castleRecord, 52) == 0x000031C4, "standard castling targets rook origin");
 }
 
 void test_atomic960_and_no_rights_mode() {
@@ -488,7 +488,7 @@ void test_adapter_fail_closed_and_zero_output() {
     auto adjacentKings = sample(Move(SQ_E1, SQ_D1));
     adjacentKings.fen  = "8/8/8/8/8/8/4k3/4K3 w - - 0 1";
     expect(bool(Data::encode_atomic_bin_v2(adjacentKings, record)),
-           "Atomic-adjacent kings are supported");
+           "connected kings are supported in Atomic");
 
     const auto good                        = encoded(sample(), "decode reset base record encodes");
     auto       bad                         = good;

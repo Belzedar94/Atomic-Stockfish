@@ -111,9 +111,9 @@ bool Search::atomic_capture_futility_eligible(const Position& pos, Move move) {
     if (move.type_of() != NORMAL || !pos.capture_stage(move))
         return false;
 
-    const Bitboard nonPawnBycatch = Attacks::attacks_bb<KING>(move.to_sq()) & pos.pieces()
-                                  & ~pos.pieces(PAWN) & ~square_bb(move.from_sq());
-    return !nonPawnBycatch;
+    const Bitboard collateral = Attacks::attacks_bb<KING>(move.to_sq()) & pos.pieces()
+                              & ~pos.pieces(PAWN) & ~square_bb(move.from_sq());
+    return !collateral;
 }
 
 namespace {
@@ -1342,11 +1342,11 @@ Value Search::Worker::search(
         return qsearch<NonPV>(pos, ss, alpha, beta);
 
     // Step 8. Futility pruning: child node
-    // The depth condition is important for mate finding. A blast check is a
-    // check: the static evaluation is not an upper bound on a position whose
-    // every continuation can be answered by detonating our king.
+    // The depth condition is important for mate finding. Treat an explosion
+    // threat like check: static evaluation does not account for an immediate
+    // explosion of our king.
     if (!ss->ttPv && depth < (seekMate ? 6 : 19) && eval >= beta && (!ttData.move || ttCapture)
-        && !is_loss(beta) && !is_win(eval) && !pos.under_blast_threat())
+        && !is_loss(beta) && !is_win(eval) && !pos.under_explosion_threat())
     {
         Value futilityMult = std::min(40 + depth * 4, 80);
         futilityMult -= 20 * !ss->ttHit;
@@ -1366,7 +1366,7 @@ Value Search::Worker::search(
     {
         assert((ss - 1)->currentMove != Move::null());
 
-        // Atomic uses a shallower null-move reduction than orthodox chess.
+        // Atomic uses a shallower null-move reduction than in standard chess.
         Depth R = atomic_null_move_reduction(depth);
         R -= seekMate * R / 2;
         do_null_move(pos, st, ss);
@@ -2140,7 +2140,7 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
 
     // Initialize a MovePicker object for the current position. Quiescence is
     // capture-only normally, but an Atomic check requires every legal evasion.
-    // Atomic check evasions are not orthodox EVASIONS: adjacent kings are
+    // Standard chess EVASIONS do not cover Atomic: connected kings are
     // legal and an explosion can remove the checking piece. Keep checkers()
     // constant-zero for move generation, but search every capture and quiet
     // whenever the separate Atomic check predicate forbids stand-pat.
