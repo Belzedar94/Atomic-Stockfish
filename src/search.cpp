@@ -316,12 +316,11 @@ void Search::Worker::start_searching() {
     // the UCI protocol states that we shouldn't print the best move before the
     // GUI sends a "stop" or "ponderhit" command. We therefore simply wait here
     // until the GUI sends one of those commands.
-    while (!threads.stop && (main_manager()->ponder || limits.infinite))
-    {}  // Busy wait for a stop or a ponder reset
+    threads.wait_for_search_release(limits.infinite);
 
     // Stop the threads if not already stopped (also raise the stop if
     // "ponderhit" just reset threads.ponder)
-    threads.stop = true;
+    threads.request_stop();
 
     // Wait until all threads have finished
     threads.wait_for_search_finished();
@@ -873,7 +872,7 @@ bool Search::Worker::iterative_deepening() {
         // Have we found a "mate in x" after a completed iteration?
         if (limits.mate && !threads.stop && is_mate_or_mated(rootMoves[0].score)
             && VALUE_MATE - std::abs(rootMoves[0].score) <= 2 * limits.mate)
-            threads.stop = true;
+            threads.request_stop();
 
         if (!mainThread)
             continue;
@@ -930,7 +929,7 @@ bool Search::Worker::iterative_deepening() {
                 if (mainThread->ponder)
                     mainThread->stopOnPonderhit = true;
                 else
-                    threads.stop = true;
+                    threads.request_stop();
             }
             else
                 threads.increaseDepth = mainThread->ponder || elapsedTime <= totalTime * 0.50;
@@ -2489,7 +2488,7 @@ void SearchManager::check_time(Search::Worker& worker) {
     if ((worker.limits.use_time_management() && (elapsed > tm.maximum() || stopOnPonderhit))
         || (worker.limits.movetime && elapsed >= worker.limits.movetime)
         || (worker.limits.nodes && worker.threads.nodes_searched() >= worker.limits.nodes))
-        worker.threads.stop = true;
+        worker.threads.request_stop();
 }
 
 // Used to correct and extend PVs for moves that have a TB (but not a mate) score.

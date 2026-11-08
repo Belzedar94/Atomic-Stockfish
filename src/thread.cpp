@@ -417,6 +417,34 @@ void ThreadPool::start_searching() {
             th->start_searching();
 }
 
+// The main worker has finished its iterations but the GUI still owns the
+// decision to release bestmove. Updates and the wait share a mutex so a
+// stop/ponderhit arriving just before the worker parks cannot be lost.
+void ThreadPool::wait_for_search_release(bool infinite) {
+    const auto released = [&] { return stop || (!infinite && !main_manager()->ponder); };
+    if (!released())
+    {
+        std::unique_lock lock(searchReleaseMutex);
+        searchReleaseCv.wait(lock, released);
+    }
+}
+
+void ThreadPool::request_stop() {
+    {
+        std::lock_guard lock(searchReleaseMutex);
+        stop = true;
+    }
+    searchReleaseCv.notify_one();
+}
+
+void ThreadPool::set_ponder(bool enabled) {
+    {
+        std::lock_guard lock(searchReleaseMutex);
+        main_manager()->ponder = enabled;
+    }
+    if (!enabled)
+        searchReleaseCv.notify_one();
+}
 
 // Wait for non-main threads
 void ThreadPool::wait_for_search_finished() const {
