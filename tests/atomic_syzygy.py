@@ -143,7 +143,7 @@ def test_source_contract() -> None:
     ]
     require(
         "pos.checkers()" not in dtz_mate_paths,
-        "DTZ mate detection must not consult the intentionally empty orthodox checker bitboard",
+        "DTZ mate detection must not consult the intentionally empty standard chess checker bitboard",
     )
     require(
         dtz_mate_paths.count("pos.atomic_in_check(pos.side_to_move())") == 2,
@@ -232,7 +232,7 @@ def test_connected_king_domain() -> None:
             indexes.add(index)
 
     require(indexes == set(range(518)), "connected king formula must cover exactly 0..517")
-    print("PASS connected kings: exact contiguous 518-index domain (not orthodox 462)")
+    print("PASS connected kings: exact contiguous 518-index domain (not 462 for standard chess)")
 
 
 def validate_table_fixtures(tables: Path) -> None:
@@ -338,10 +338,10 @@ def test_real_probes(driver: Path, tables: Path) -> None:
         "rule50-aware root probe did not preserve quiet mate DTZ=1",
     )
 
-    # Adjacent kings force the 518-state pivot. The authoritative result is draw.
+    # Connected kings force the 518-state pivot. The authoritative result is draw.
     connected = run_driver(driver, tables, "8/8/8/8/8/8/NkN5/1K6 w - - 0 1")
     assert_probe(connected, wdl=0, dtz=0)
-    require(connected.root_in_tb, "adjacent-king KNNvK root probe failed")
+    require(connected.root_in_tb, "KNNvK with connected kings: root probe failed")
 
     # Missing kings are terminal records, not material-table lookups.
     stm_exploded = run_driver(driver, tables, "8/8/8/8/8/8/2K5/8 b - - 0 1")

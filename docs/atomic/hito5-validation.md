@@ -268,13 +268,13 @@ marker documented above. Its NNUE-specific evidence was:
 
 - exactly `1,000,000` random actions: `500,000` makes and `500,000` undos;
 - `18,761` Atomic captures and `capture-forced-refresh=0`;
-- fixed coverage of direct king capture, the maximum nine-piece blast delta
+- fixed coverage of direct king capture, the maximum nine-piece explosion delta
   and Fairy-compatible feature anchor zero after the black king explodes;
 - `241,087` comparisons against a fresh accumulator;
 - perspective-local refreshes: white `62,282`, black `177,921`;
 - diagnostic differential `10,000/10,000` with corpus SHA-256
   `46C96F405BC15D468D94BC1E2186B577CE55128832E1108066581D35037FA2DE`;
-- rule-50 differential units `3/3`; the fixed corpus exercised `866`
+- 50-move rule differential tests `3/3`; the fixed corpus exercised `866`
   positions at or beyond 100 reversible plies, with the candidate's displayed
   normal evaluation neutral in every case and exact internal zero proved by
   the C++ gate;

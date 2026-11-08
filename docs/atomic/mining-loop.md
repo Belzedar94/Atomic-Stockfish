@@ -242,7 +242,7 @@ For each move it:
 7. advances the move and checks the expected next state.
 
 Extraction preserves, rather than filters away, captures, checks, evasions,
-post-explosion states, en-passant, promotions, king-blast threats and terminal
+post-explosion states, en-passant, promotions, king explosion threats and terminal
 boundaries. Filters such as minimum ply are configuration, never hidden
 defaults. Rejections have stable reason codes and source coordinates.
 
@@ -251,7 +251,7 @@ Recommended Atomic strata include:
 - quiet;
 - check or forced evasion;
 - capture or immediate post-explosion;
-- direct king-blast threat;
+- direct king explosion threat;
 - promotion or en-passant;
 - low-material/tablebase-eligible.
 

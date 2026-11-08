@@ -42,7 +42,7 @@ corrected behavior.
 
 Hito 6 subsequently changed the signature to `347633` through the independently
 gated Atomic move-count pruning block. The second Hito 6 search block, which
-protects explosive captures from orthodox futility pruning, moved it again to
+protects explosive captures from standard chess futility pruning, moved it again to
 `379531`; both values remain historical block artifacts. The third block extends
 the same safety rule to qsearch and moved it to `380061`. The preliminary fourth
 block uses a shallower Atomic null-move reduction and moves the live signature
@@ -52,7 +52,7 @@ above remains the immutable historical Hito 4 closeout record.
 
 The historical Syzygy driver below predates commit `92154082` and is retained
 only as provenance for the original 11-fixture closeout. It is not accepted by
-the current 13-fixture suite: its orthodox checker test reports DTZ 2 for a
+the current 13-fixture suite: its standard chess checker test reports DTZ 2 for a
 quiet Atomic mate whose normative DTZ is 1. Current validation builds
 `src/atomic-syzygy-driver` from the same checkout via the Makefile target; the
 runner uses that sibling artifact by default.

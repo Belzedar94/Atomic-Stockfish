@@ -38,7 +38,7 @@ static_assert(offsetof(StateInfo, key)
 static_assert(offsetof(StateInfo, key) < offsetof(StateInfo, previous));
 static_assert(Eval::NNUE::FeatureSet::MaxActiveDimensions == 32);
 static_assert(Eval::NNUE::FeatureSet::MaxRemovedDimensions
-              == 2 + DirtyPiece::MAX_ATOMIC_BLAST_PIECES);
+              == 2 + DirtyPiece::MAX_ATOMIC_EXPLOSION_PIECES);
 static_assert(Eval::NNUE::FeatureSet::MaxAddedDimensions == 2);
 static_assert(sizeof(Eval::NNUE::FeatureSet::AddedIndexList)
               < sizeof(Eval::NNUE::FeatureSet::RemovedIndexList));
@@ -54,10 +54,10 @@ struct SeeCase {
 };
 
 constexpr std::array<SeeCase, 9> SeeCases = {{
-  {"enemy bycatch", "7k/8/8/8/3pq3/2P5/8/K7 w - - 0 1", SQ_C3, SQ_D4, 1861},
-  {"friendly bycatch", "7k/8/8/8/3q4/2P1Q3/8/K7 w - - 0 1", SQ_C3, SQ_D4, -302},
+  {"enemy collateral piece", "7k/8/8/8/3pq3/2P5/8/K7 w - - 0 1", SQ_C3, SQ_D4, 1861},
+  {"friendly collateral piece", "7k/8/8/8/3q4/2P1Q3/8/K7 w - - 0 1", SQ_C3, SQ_D4, -302},
   {"adjacent pawns immune", "7k/8/8/3p4/2PPP3/2N5/8/K7 w - - 0 1", SQ_C3, SQ_D5, -402},
-  {"attacker inside blast", "7k/8/8/3r4/8/8/8/K2Q4 w - - 0 1", SQ_D1, SQ_D4, -783},
+  {"attacker inside explosion", "7k/8/8/3r4/8/8/8/K2Q4 w - - 0 1", SQ_D1, SQ_D4, -783},
   {"opponent declines quiet capture", "k7/8/8/3rq3/8/8/3P4/7K w - - 0 1", SQ_D2, SQ_D4, 0},
   {"king excluded as quiet attacker", "K7/8/8/8/8/8/8/4N2k w - - 0 1", SQ_E1, SQ_G2, 0},
   {"opponent king explodes", "6rk/8/8/8/8/8/8/K5R1 w - - 0 1", SQ_G1, SQ_G8, VALUE_MATE},
@@ -186,7 +186,7 @@ bool expect_atomic_gives_check() {
       {"quiet discovered check", "R2B3k/8/8/8/8/8/8/K7 w - - 0 1", Move(SQ_D8, SQ_C7), false, true},
       {"capturer explosion removes checker", "8/p6k/8/8/8/8/8/R6K w - - 0 1", Move(SQ_A1, SQ_A7),
        false, false},
-      {"capture blast discovers check", "R2n3k/8/8/8/8/8/8/K2R4 w - - 0 1", Move(SQ_D1, SQ_D8),
+      {"capture explosion discovers check", "R2n3k/8/8/8/8/8/8/K2R4 w - - 0 1", Move(SQ_D1, SQ_D8),
        false, true},
       {"en passant discovers check", "8/8/8/R2pP2k/8/8/8/K7 w - d6 0 1",
        Move::make<EN_PASSANT>(SQ_E5, SQ_D6), false, true},
@@ -194,7 +194,7 @@ bool expect_atomic_gives_check() {
        Move::make<PROMOTION>(SQ_G7, SQ_G8, QUEEN), false, true},
       {"castling rook gives check", "5k2/8/8/8/8/8/8/4K2R w K - 0 1",
        Move::make<CASTLING>(SQ_E1, SQ_H1), false, true},
-      {"adjacent kings suppress discovered check", "R4K1k/8/8/8/8/8/8/8 w - - 0 1",
+      {"connected kings suppress discovered check", "R4K1k/8/8/8/8/8/8/8 w - - 0 1",
        Move(SQ_F8, SQ_G7), false, false},
       {"analysis check survives unrelated quiet", "4k3/8/8/1B6/8/8/8/4K3 w - - 0 1",
        Move(SQ_E1, SQ_D1), false, true},
@@ -247,7 +247,7 @@ bool expect_non_orthodox_atomic_evasions() {
 
     const std::array<EvasionCase, 2> tests = {{
       {"quiet Atomic check evasion", "7k/8/8/8/8/8/7R/K7 b - - 1 1", Move(SQ_H8, SQ_G7)},
-      {"promotion blast removes checking rook", "rn5k/2P5/8/8/8/8/8/K7 w - - 0 1",
+      {"promotion explosion removes checking rook", "rn5k/2P5/8/8/8/8/8/K7 w - - 0 1",
        Move::make<PROMOTION>(SQ_C7, SQ_B8, QUEEN)},
     }};
 
@@ -383,9 +383,9 @@ bool expect_gives_check_matches_child() {
       {"terminal king explosion", "7k/7R/8/8/8/8/8/K7 w - - 0 1", false},
       {"en passant", "8/8/8/R2pP2k/8/8/8/K7 w - d6 0 1", false},
       {"promotion", "7k/6P1/8/8/8/8/8/K7 w - - 0 1", false},
-      {"orthodox-layout castling", "5k2/8/8/8/8/8/8/4K2R w K - 0 1", false},
+      {"castling in the standard layout", "5k2/8/8/8/8/8/8/4K2R w K - 0 1", false},
       {"discovered check", "R2B3k/8/8/8/8/8/8/K7 w - - 0 1", false},
-      {"adjacent kings", "R4K1k/8/8/8/8/8/8/8 w - - 0 1", false},
+      {"connected kings", "R4K1k/8/8/8/8/8/8/8 w - - 0 1", false},
       {"Atomic960 king on g1", "5k2/8/8/8/8/8/8/6KR w H - 0 1", true},
       {"Atomic960 rook on f1", "5k2/8/8/8/8/8/8/4KR2 w F - 0 1", true},
       {"Atomic960 king on f1", "5k2/8/8/8/8/8/8/5K1R w H - 0 1", true},
@@ -483,7 +483,7 @@ bool expect_nnue_index_list_bounds() {
         std::string_view fen;
         std::string_view move;
         bool             chess960;
-        usize            blastCount;
+        usize            explosionCount;
         usize            removedCount;
         usize            addedCount;
         usize            activeAfter;
@@ -491,7 +491,7 @@ bool expect_nnue_index_list_bounds() {
 
     constexpr std::array<IndexListCase, 6> tests = {{
       {"maximum capture", "7k/8/8/2nnn3/2nrn3/2nnnN2/8/K7 w - - 0 1", "f3d4", false,
-       DirtyPiece::MAX_ATOMIC_BLAST_PIECES, 10, 0, 2},
+       DirtyPiece::MAX_ATOMIC_EXPLOSION_PIECES, 10, 0, 2},
       {"maximum en passant", "7k/2n1n3/2n1n3/2npP3/8/8/8/K7 w - d6 0 2", "e5d6", false, 6, 7, 0, 2},
       {"maximum capture promotion", "2nrn2k/2nnP3/8/8/8/8/8/K7 w - - 0 1", "e7d8q", false, 5, 6, 0,
        2},
@@ -532,7 +532,7 @@ bool expect_nnue_index_list_bounds() {
         FeatureSet::append_changed_indices(perspective, pos.square<KING>(perspective), dirtyPiece,
                                            removed, added);
 
-        bool matches = dirtyPiece.atomicBlast.size() == test.blastCount
+        bool matches = dirtyPiece.atomicExplosion.size() == test.explosionCount
                     && removed.size() == test.removedCount && added.size() == test.addedCount;
         for (Color activePerspective : {WHITE, BLACK})
         {
@@ -544,7 +544,7 @@ bool expect_nnue_index_list_bounds() {
         if (!matches)
         {
             std::cerr << "FAIL NNUE index lists " << test.name
-                      << ": blast=" << dirtyPiece.atomicBlast.size()
+                      << ": explosion=" << dirtyPiece.atomicExplosion.size()
                       << " removed=" << removed.size() << " added=" << added.size()
                       << " active=" << popcount(pos.pieces()) << '\n';
             ok = false;
@@ -580,10 +580,10 @@ bool expect_make_undo_state() {
       {"capture promotion state", "k5br/6P1/8/8/8/8/8/K7 w - - 0 1",
        Move::make<PROMOTION>(SQ_G7, SQ_H8, QUEEN), false},
       {"direct king capture state", "7k/7R/8/8/8/8/8/K7 w - - 0 1", Move(SQ_H7, SQ_H8), false},
-      {"blast clears castling state", "6k1/8/8/8/8/8/1r6/RN2K2R b KQ - 0 1", Move(SQ_B2, SQ_B1),
+      {"explosion clears castling state", "6k1/8/8/8/8/8/1r6/RN2K2R b KQ - 0 1", Move(SQ_B2, SQ_B1),
        false},
       {"double push en passant key", "7k/8/8/8/3p4/8/4P3/K7 w - - 0 1", Move(SQ_E2, SQ_E4), false},
-      {"orthodox-layout Atomic castling", "7k/8/8/8/8/8/8/R3K2R w KQ - 0 1",
+      {"Atomic castling in the standard layout", "7k/8/8/8/8/8/8/R3K2R w KQ - 0 1",
        Move::make<CASTLING>(SQ_E1, SQ_H1), false},
       {"Atomic960 castling", "7k/8/8/8/8/8/8/1RK5 w Q - 0 1", Move::make<CASTLING>(SQ_C1, SQ_B1),
        true},
@@ -852,7 +852,7 @@ bool expect_atomic_capture_futility_eligibility() {
     constexpr std::array<EligibilityCase, 6> tests = {{
       {"normal victim only", "7k/8/8/8/3p4/2B5/8/K7 w - - 0 1", "c3d4", true},
       {"adjacent pawn survives", "7k/8/8/8/3pP3/2B5/8/K7 w - - 0 1", "c3d4", true},
-      {"non-pawn explosion bycatch", "7k/8/8/8/3pR3/2B5/8/K7 w - - 0 1", "c3d4", false},
+      {"explosion removes a collateral piece", "7k/8/8/8/3pR3/2B5/8/K7 w - - 0 1", "c3d4", false},
       {"en passant", "7k/8/8/3pP3/8/8/8/K7 w - d6 0 1", "e5d6", false},
       {"capture promotion", "k5br/6P1/8/8/8/8/8/K7 w - - 0 1", "g7h8q", false},
       {"quiet normal move", "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", "e2e4",

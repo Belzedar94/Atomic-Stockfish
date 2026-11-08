@@ -260,7 +260,7 @@ std::string render_atomic_data_tools_decode_record(const AtomicBinV2DecodedRecor
     append_decimal_string(output, moveWire);
     output += R"(,"from":)" + json_string(square_name(fields.move.from));
     // Atomic BIN V2 intentionally stores a castling rook origin in `to`, not
-    // the king's orthodox UCI destination square.
+    // the king's UCI destination square in standard chess.
     output += R"(,"to":)" + json_string(square_name(fields.move.to));
     output += R"(,"type":)" + json_string(move_type_name(fields.move.type));
     output += R"(,"promotion":)" + json_string(promotion_name(fields.move.promotion));

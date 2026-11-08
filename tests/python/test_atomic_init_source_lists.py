@@ -194,7 +194,7 @@ def test_legacy_atomic_feature_index_lists_use_reachable_bounds():
 
     for contract in (
         "MaxActiveDimensions  = 32",
-        "MaxRemovedDimensions = 2 + DirtyPiece::MAX_ATOMIC_BLAST_PIECES",
+        "MaxRemovedDimensions = 2 + DirtyPiece::MAX_ATOMIC_EXPLOSION_PIECES",
         "MaxAddedDimensions   = 2",
         "using ActiveIndexList",
         "using RemovedIndexList",

@@ -412,7 +412,7 @@ void test_normal_captures_targets_and_blockers() {
     CapturePairEmission pawnPushEmission{};
     expect(emit_capture_pairs(pawnPush, WHITE, pawnPushEmission) == CapturePairError::None
              && !find_feature(pawnPushEmission, SQ_E2, SQ_E3),
-           "an occupied pawn push square is not a CapturePair pseudocapture");
+           "an occupied pawn push square is not a geometric capture candidate");
 
     bool allTargets = true;
     for (IndexType target = 0; target < CapturePairNormalTargetClasses; ++target)
@@ -470,16 +470,17 @@ void test_normal_captures_targets_and_blockers() {
     const CapturePairSnapshot pinned = make_snapshot(
       {{SQ_E1, W_KING}, {SQ_A8, B_KING}, {SQ_E2, W_ROOK}, {SQ_E8, B_ROOK}, {SQ_H2, B_PAWN}});
     CapturePairEmission pinnedEmission{};
-    expect(emit_capture_pairs(pinned, WHITE, pinnedEmission) == CapturePairError::None
-             && find_feature(pinnedEmission, SQ_E2, SQ_H2),
-           "occupancy pseudocaptures retain pinned actors without move-legality filtering");
+    expect(
+      emit_capture_pairs(pinned, WHITE, pinnedEmission) == CapturePairError::None
+        && find_feature(pinnedEmission, SQ_E2, SQ_H2),
+      "geometric capture candidates include moves by pinned pieces without move-legality filtering");
 
     const CapturePairSnapshot selfBlast =
       make_snapshot({{SQ_D4, W_KING}, {SQ_H8, B_KING}, {SQ_F3, W_KNIGHT}, {SQ_E5, B_PAWN}});
     CapturePairEmission selfBlastEmission{};
     expect(emit_capture_pairs(selfBlast, WHITE, selfBlastEmission) == CapturePairError::None
              && find_feature(selfBlastEmission, SQ_F3, SQ_E5),
-           "occupancy pseudocaptures retain Atomic self-blasting candidates");
+           "geometric capture candidates include captures that would explode the capturer's king");
 }
 
 void test_en_passant() {

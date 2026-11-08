@@ -1,4 +1,4 @@
-# ADR 0004: Design AtomicNNUEV3 as a blast-aware SFNNv15 backend
+# ADR 0004: Design AtomicNNUEV3 as an explosion-aware SFNNv15 backend
 
 - Status: accepted; wire v1 frozen; private scalar, incremental, SIMD and trajectory backends implemented; runtime dispatch and serialization promoted in H9.3n; production scanning and controlled training remain pending
 - Date: 2026-07-14
@@ -15,16 +15,16 @@ Fairy-Stockfish years ago.
 Current official Stockfish uses horizontally mirrored HalfKAv2 together with a
 separate i8 threat slice. The dense graph remains the 1024-wide SFNNv15 head
 already implemented by V2. The useful architectural lesson is the separation
-of stable piece-square inputs from dynamic relations; the orthodox
+of stable piece-square inputs from dynamic relations; the standard chess
 `FullThreats` semantics are not suitable as the production Atomic relation
-slice. They include pawn pushes, omit Atomic blast collateral and do not
+slice. They include pawn pushes, omit collateral from Atomic explosions and do not
 distinguish a direct check, an enemy-king explosion threat and a capture that
 would explode the moving side's own king.
 
 Community history also makes full refresh the required correctness oracle for
 Atomic NNUE. Explosions remove multiple pieces, quiet moves can open several
 sliding capture rays, en passant removes a pawn away from the explosion center,
-and touching kings create legal relations that do not exist in orthodox chess.
+and connected kings create legal relations that do not exist in standard chess.
 An incremental implementation is acceptable only after it is bit-identical to
 an independent full-board enumerator.
 
@@ -71,8 +71,8 @@ an independent full-board enumerator.
    Coalesce all 1,032 outputs first, then apply the 12-to-11 mapping. The first
    1,024 outputs become accumulator weights and the last eight become PSQT, so
    factorization and king-plane merging are byte-identical for both tensors.
-5. `AtomicCapturePair` records occupancy-based pseudocaptures, not legal moves.
-   It deliberately retains pinned, checked and self-blasting candidates so the
+5. `AtomicCapturePair` records geometric capture candidates, not legal moves.
+   It deliberately retains pinned, checked and self-exploding candidates so the
    network can learn why they are unusable. Kings are excluded as actors, pawn
    pushes are absent, sliders stop at the first blocker, and EP uses a compact
    cold tail rather than a normal victim class. Its 3,332 directed geometric
@@ -113,7 +113,7 @@ an independent full-board enumerator.
    14-edge table. A failure emits no EP feature and supplies no EP candidate to
    downstream slices, while normal CP enumeration continues. Static evaluation
    does not reconstruct the prior move. Once these metadata checks pass, pins,
-   check evasion and self-blast remain deliberately unfiltered.
+   check evasion and self-explosion remain deliberately unfiltered.
 
    A pawn capture onto its promotion rank activates one PAWN-actor relation,
    not one row per promotion choice. A piece already promoted on the board is
@@ -126,8 +126,8 @@ an independent full-board enumerator.
    slices.
 6. `AtomicKingBlastEP` is a boolean set over 64 centers, two actor relations
    and 18 frozen classes relative to the capture actor: enemy king at the
-   center, eight enemy-king blast offsets, eight actor-own-king/self-blast
-   offsets and an EP marker. Its local index is
+   center, eight enemy-king explosion offsets, eight self-explosion offsets
+   and an EP marker. Its local index is
    `((oriented_center * 2 + actor_rel) * 18 + class)`, spanning 0 through
    2,303; physical rows are 62,540 through 64,843. The full rectangle is
    serialized without holes, while off-board directional rows remain inactive.
@@ -135,9 +135,9 @@ an independent full-board enumerator.
    Emission is the sorted, unique boolean union, so its result never depends on
    CapturePair traversal order. When both
    king-offset classes are present, that center would explode both kings and
-   the candidate is illegal because it is self-blasting, but remains emitted
-   because CapturePair is deliberately unfiltered. Touching kings and
-   their mutual king immunity are represented by HM; kings are not CP actors.
+   the candidate is illegal because it is self-exploding, but remains emitted
+   because CapturePair is deliberately unfiltered. HM represents connected
+   kings and their mutual immunity; kings are not CP actors.
    For every directional class, `related_king = oriented_center + delta`; for
    example, `ENEMY_KING_N` means the enemy king is one rank north of the center.
    File/rank adjacency is checked explicitly to prevent edge wrap. Enemy/own is
@@ -149,14 +149,15 @@ an independent full-board enumerator.
    Malformed EP metadata is not a global CP error: normal CP/KBR projection is
    preserved and only the EP tail and marker are absent. The marker may coexist
    with either king-offset class. `ENEMY_KING_CENTER`
-   is instead restricted to a normal CP target `KING`; it describes a direct
-   enemy-king pseudocapture target, not a legal-check predicate.
+   is instead restricted to a normal CP target `KING`. This class represents a
+   geometric capture candidate that targets the enemy king directly; it does
+   not test for check.
 
    KingBlastEP calls CapturePair once and projects that exact output. It does
    not construct candidates from attack maps, legal move generation or an
    independent EP read. CP errors propagate with an empty output, including
    missing-king terminal snapshots that the engine adjudicates before NNUE.
-   Pinned, checked, self-blasting and otherwise illegal candidates stay present
+   Pinned, checked, self-exploding and otherwise illegal candidates stay present
    because this is a learned relation, not a legality filter. The maximum of 35
    active rows follows from 17 king relations per actor relation (nine enemy
    center/neighbor positions plus eight own neighbors), twice, plus one EP
@@ -203,16 +204,16 @@ an independent full-board enumerator.
    neither relation applies another transform. Spatially,
    `collateral_square = oriented_center + delta`; `N` means one rank north,
    with explicit file/rank edge checks. Current N, B, R and Q pieces activate
-   their class because the blast removes them. An adjacent pawn instead
+   their class because the explosion removes them. An adjacent pawn instead
    activates `ADJACENT_PAWN_SURVIVES`, because pawns are immune to collateral
-   blast. An adjacent king emits no ring row because KingBlastEP owns all king
+   explosion. An adjacent king emits no ring row because KingBlastEP owns all king
    relations. Current snapshot type is authoritative, including promoted
    pieces; promotion choices never multiply a relation.
 
    For EP, the landing square is the center. The off-center captured pawn at
    `center - (actor_rel == OWN ? 8 : -8)`, equivalently the orientation of
    `raw_ep_center - pawn_push(actual_actor_color)`, is always excluded because
-   it is removed before the blast. This exclusion holds even when the group has
+   it is removed before the explosion. This exclusion holds even when the group has
    two origins. Malformed EP contributes no EP candidate while successful
    normal CP groups and their ring projection remain unchanged. A CP error maps
    to an empty BlastRing result with no partial projection; king-absent
@@ -508,8 +509,8 @@ an independent full-board enumerator.
     bin-v2 manifests use the same canonical wire with their separate 64 MiB
     shard-list bound, and all later provenance checks consume the already
     authenticated in-memory summary rather than reopening the pathname.
-15. Keep orthodox `FullThreats` only as an ablation control. The serious order
-    is HM, then CapturePair, then KingBlast/EP, then BlastRing. Every comparison
+15. Keep standard chess `FullThreats` only as an ablation control. The order is
+    HM, then CapturePair, then KingBlast/EP, then BlastRing. Every comparison
     uses the same dataset, seed, training budget and dense head.
 16. Stage incremental execution by slice and keep it private until every event
     is bit-identical to H9.3h. The first scalar stack incrementally maintains
@@ -535,8 +536,8 @@ an independent full-board enumerator.
 
     H9.3i-b is a separate private stress target so its larger corpus cannot
     weaken or silently renumber the frozen 39-event H9.3i-a differential. Its
-    directed cases include four orthodox and eleven Atomic960 castling layouts,
-    bilateral en passant, bilateral quiet/capture promotions, maximum Atomic blast geometry,
+    directed cases include four standard and eleven Atomic960 castling layouts,
+    bilateral en passant, bilateral quiet/capture promotions, maximum Atomic explosion geometry,
     terminal king removal with exact undo, mirror and material-bucket
     crossings, no-push null moves, lazy/deep stack restoration and network
     reset/mismatch recovery. Deterministic legal trajectories cover both
@@ -610,8 +611,8 @@ an independent full-board enumerator.
 - Numeric HM goldens must activate the bucket and virtual rows, coalesce all
   1,032 outputs, and then verify the per-bucket 12-to-11 king mapping in both
   accumulator and PSQT tensors.
-- Direct king target, adjacent enemy blast, own self-blast, touching-king
-  immunity, simultaneous enemy/own blast classes that make a capture illegal,
+- Direct king target, adjacent enemy-king explosion, self-explosion, immunity
+  between connected kings, simultaneous enemy-king and own-king explosions,
   and geometric EP adjacent to either king. Direction goldens use center d4 and
   related square d5 to freeze `related = center + N` before mirroring variants.
 - Sole adjacent capturer, two attackers sharing a center, pawn immunity and the

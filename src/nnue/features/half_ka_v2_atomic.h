@@ -41,7 +41,7 @@ class HalfKAv2Atomic {
     static constexpr IndexType Dimensions            = SQUARE_NB * PieceSquareDimensions;
 
     static constexpr IndexType MaxActiveDimensions  = 32;
-    static constexpr IndexType MaxRemovedDimensions = 2 + DirtyPiece::MAX_ATOMIC_BLAST_PIECES;
+    static constexpr IndexType MaxRemovedDimensions = 2 + DirtyPiece::MAX_ATOMIC_EXPLOSION_PIECES;
     static constexpr IndexType MaxAddedDimensions   = 2;
 
     using ActiveIndexList  = ValueList<IndexType, MaxActiveDimensions>;
@@ -68,7 +68,7 @@ class HalfKAv2Atomic {
 
 static_assert(HalfKAv2Atomic::Dimensions == 45056);
 static_assert(HalfKAv2Atomic::MaxActiveDimensions == 32);
-static_assert(HalfKAv2Atomic::MaxRemovedDimensions == 2 + DirtyPiece::MAX_ATOMIC_BLAST_PIECES);
+static_assert(HalfKAv2Atomic::MaxRemovedDimensions == 2 + DirtyPiece::MAX_ATOMIC_EXPLOSION_PIECES);
 static_assert(HalfKAv2Atomic::MaxAddedDimensions == 2);
 static_assert(sizeof(HalfKAv2Atomic::AddedIndexList) < sizeof(HalfKAv2Atomic::RemovedIndexList));
 static_assert(sizeof(HalfKAv2Atomic::RemovedIndexList) < sizeof(HalfKAv2Atomic::ActiveIndexList));

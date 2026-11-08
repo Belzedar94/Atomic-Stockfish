@@ -612,7 +612,7 @@ std::string UCIEngine::format_score(const Score& s) {
 // without treatment of mate and similar special scores.
 int UCIEngine::to_cp(Value v, const Position& pos) {
     // Legacy Atomic V1 uses Fairy-Stockfish's fixed pawn normalization. The
-    // orthodox Stockfish WDL fit is neither calibrated nor meaningful here.
+    // Stockfish WDL fit for standard chess is not calibrated for Atomic.
     // AtomicNNUEV3 trace components may use substantially more than the
     // ordinary bounded search-value domain. Widen before multiplying so the
     // diagnostic contribution table remains defined for every authenticated

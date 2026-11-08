@@ -219,10 +219,10 @@ constexpr Value PieceValue[PIECE_NB] = {
   VALUE_ZERO, PawnValue, KnightValue, BishopValue, RookValue, QueenValue, VALUE_ZERO, VALUE_ZERO,
   VALUE_ZERO, PawnValue, KnightValue, BishopValue, RookValue, QueenValue, VALUE_ZERO, VALUE_ZERO};
 
-// Fairy-Stockfish scales middlegame capture values in blast variants by
+// Fairy-Stockfish scales middlegame capture values in variants with capture explosions by
 // value * 7000 / (7000 + value). Atomic pawns first receive the historical
 // 3/2 bonus used by the legacy evaluator. These constants are part of the
-// Atomic search contract and deliberately differ from orthodox PieceValue.
+// Atomic search contract and deliberately differ from PieceValue in standard chess.
 constexpr Value AtomicCapturePieceValue[PIECE_NB] = {
   VALUE_ZERO, 301, 702, 738, 1079, 1862, VALUE_ZERO, VALUE_ZERO,
   VALUE_ZERO, 301, 702, 738, 1079, 1862, VALUE_ZERO, VALUE_ZERO};
@@ -300,9 +300,9 @@ enum Rank : u8 {
 
 // Keep track of what a move changes on the board (used by NNUE)
 struct DirtyPiece {
-    static constexpr usize MAX_ATOMIC_BLAST_PIECES = 9;
+    static constexpr usize MAX_ATOMIC_EXPLOSION_PIECES = 9;
 
-    struct AtomicBlastPiece {
+    struct AtomicExplosionPiece {
         Piece  pc;
         Square square;
     };
@@ -320,7 +320,7 @@ struct DirtyPiece {
     // Atomic captures can remove the capturing piece plus every adjacent
     // non-pawn. Keep those removals as a bounded NNUE delta so that HalfKAv2
     // only needs a full refresh when its perspective king changes.
-    ValueList<AtomicBlastPiece, MAX_ATOMIC_BLAST_PIECES> atomicBlast;
+    ValueList<AtomicExplosionPiece, MAX_ATOMIC_EXPLOSION_PIECES> atomicExplosion;
 };
 
     #define ENABLE_INCR_OPERATORS_ON(T) \

@@ -57,7 +57,7 @@ enum class BlastRingDirection : u8 {
 };
 
 // Non-pawns adjacent to an atomic capture center explode. Adjacent pawns are
-// immune to the blast and therefore use an explicit survival class.
+// immune to the explosion and therefore use an explicit survival class.
 enum class BlastRingCollateralClass : u8 {
     Knight,
     Bishop,

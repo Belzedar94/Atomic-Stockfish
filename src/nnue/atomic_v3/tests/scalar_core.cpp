@@ -487,11 +487,11 @@ u64 test_success_corpus(const Network& network) {
       {"7k/3b4/8/2RPp3/8/8/8/K7 w - d6 0 1", false, "validated en-passant capture geometry"},
       {"7k/3b4/8/2R1P3/8/8/8/K7 w - d6 0 1", false,
        "malformed EP metadata omitted without rejecting normal captures"},
-      {"r3k2r/8/8/3Qb3/8/8/8/R3K2R w KQkq - 0 1", false, "castling-related orthodox state"},
+      {"r3k2r/8/8/3Qb3/8/8/8/R3K2R w KQkq - 0 1", false, "position with standard castling rights"},
       {"r1k4r/8/8/3Qb3/8/8/8/R1K4R w AHah - 0 1", true, "Atomic960 castling-related state"},
       {"5brk/6P1/6N1/8/8/8/8/K7 w - - 0 1", false, "capture and promotion-ready tactical state"},
       {"6Qk/8/6N1/8/8/8/8/K7 b - - 0 1", false, "post-promotion piece state"},
-      {"8/8/8/8/3Kk3/8/8/8 w - - 0 1", false, "Atomic touching-kings state"},
+      {"8/8/8/8/3Kk3/8/8/8 w - - 0 1", false, "Atomic position with connected kings"},
       {"7k/8/8/8/3K4/8/8/q7 w - - 0 1", false, "left-half king horizontal-mirror branch"},
       {"k7/8/8/8/4K3/8/8/7q w - - 0 1", false, "right-half king identity branch"},
     }};
