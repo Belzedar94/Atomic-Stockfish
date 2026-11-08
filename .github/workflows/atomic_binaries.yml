@@ -54,6 +54,12 @@ jobs:
             comp: gcc
             shell: bash
             ext: ""
+          - runner: ubuntu-latest
+            os: linux
+            arch: x86-64-sse41-popcnt
+            comp: gcc
+            shell: bash
+            ext: ""
           - runner: windows-latest
             os: windows
             arch: x86-64-bmi2
@@ -206,7 +212,8 @@ jobs:
             echo "| Network | \`$ATOMIC_NET_ASSET\` from [$ATOMIC_NET_TAG](https://github.com/$GITHUB_REPOSITORY/releases/tag/$ATOMIC_NET_TAG), embedded |"
             echo
             echo "Pick the binary matching your CPU: \`x86-64-bmi2\` for anything from"
-            echo "Haswell/Zen 3 onwards, \`x86-64-avx2\` as the safer fallback."
+            echo "Haswell/Zen 3 onwards, \`x86-64-avx2\` as the safer fallback,"
+            echo "and \`x86-64-sse41-popcnt\` (Linux) for older CPUs without AVX2."
             echo
             echo "The network is inside the binary, so no companion file is needed:"
             echo "every build here is benched from a directory with no \`.nnue\` in it."
