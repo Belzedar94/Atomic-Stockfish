@@ -1,6 +1,7 @@
 # ADR 0006: Publish distributed AtomicNNUEV3 datasets through an acyclic evidence chain
 
-- Status: accepted; H9.3l-a contract, H9.3l-b audited producer, controlled non-publication bootstrap training and final tools pin are merged; publication campaign evidence remains pending
+- Status: archived (2026-11-11). The V3 dataset publication campaign never ran. The `generate_atomic_v3_chunk` producer, its schemas and validator were removed from the tree and kept in the `archive/pre-cleanup-20261111` tag. OpenBench DATAGEN keeps using `openbench_generate_training_data` (ADR 0007), which is unchanged.
+- Original status: accepted; H9.3l-a contract, H9.3l-b audited producer, controlled non-publication bootstrap training and final tools pin are merged; publication campaign evidence remains pending
 - Date: 2026-07-16
 
 ## Implementation status

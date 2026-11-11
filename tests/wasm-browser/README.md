@@ -250,8 +250,8 @@ Nothing is downloaded before `initialize`: creating the worker fetches only
 
 The reference network is `atomic_run3b_e202_l05.nnue` (47,721,376 bytes,
 SHA-256 `99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f92a04a6`).
-Legacy Atomic V1 (`0x7AF32F20`), AtomicNNUEV2 (`0xA70C0002`) and AtomicNNUEV3
-(`0xA70C0003`) networks are accepted. Serve the network with long-lived cache
+Legacy Atomic V1 (`0x7AF32F20`) and AtomicNNUEV2 (`0xA70C0002`) networks are
+accepted. Serve the network with long-lived cache
 headers; the worker does not cache it itself.
 
 ## Position and search lifecycle
@@ -389,8 +389,8 @@ from a real page in Chromium and Firefox through the protocol above and
 covers: rejection of non-isolated pages; no download before `initialize`;
 initialization with progress and SHA-256 verification (with and without
 `Content-Length`); rejection of a wrong hash, a missing file, malformed
-requests, and corrupt, truncated and incompatible networks; AtomicNNUEV2 and
-AtomicNNUEV3 networks; `uci`, `isready`, `xboard`; `position startpos` and
+requests, and corrupt, truncated and incompatible networks; AtomicNNUEV2
+networks; `uci`, `isready`, `xboard`; `position startpos` and
 `position fen`; Atomic and Atomic960 positions; `go depth`, `go movetime`,
 `go infinite` with `isready` during the search and `stop`; MultiPV 1-5; 40
 rapid position/stop/go/setoption changes with stale-output and ordering

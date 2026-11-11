@@ -330,7 +330,6 @@ def run(engine: Path, timeout: float, eval_file: Path | None, search_net: Path) 
             if not any(
                 "NNUE evaluation using Legacy Atomic V1" in line
                 or "NNUE evaluation using AtomicNNUEV2" in line
-                or "NNUE evaluation using AtomicNNUEV3" in line
                 for line in nnue_output
             ):
                 raise AssertionError(
@@ -508,8 +507,8 @@ def main() -> int:
         "--eval-file",
         type=Path,
         help=(
-            "optional authenticated Legacy Atomic V1, AtomicNNUEV2 or "
-            "AtomicNNUEV3 fixture used for a CECP search"
+            "optional authenticated Legacy Atomic V1 or AtomicNNUEV2 "
+            "fixture used for a CECP search"
         ),
     )
     args = parser.parse_args()

@@ -14,7 +14,6 @@ if str(TESTS_DIR) not in sys.path:
 
 import legacy_pipeline_build_manifest as build_manifest
 import legacy_pipeline_e2e as pipeline
-import run_hito5
 import data_generator
 
 
@@ -85,13 +84,12 @@ def test_manifest_oracle_rejects_invalid_ci_pin(
         data_generator.current_repository_commit()
 
 
-def test_private_v3_histories_use_the_canonical_worker_baseline() -> None:
+def test_generator_search_uses_the_canonical_worker_baseline() -> None:
     history = (TESTS_DIR.parent / "src" / "history.h").read_text(encoding="utf-8")
     search = (TESTS_DIR.parent / "src" / "search.cpp").read_text(encoding="utf-8")
     generator = (
         TESTS_DIR.parent / "src" / "data" / "training_data_generator.cpp"
     ).read_text(encoding="utf-8")
-    tt = (TESTS_DIR.parent / "src" / "tt.cpp").read_text(encoding="utf-8")
     makefile = (TESTS_DIR.parent / "src" / "Makefile").read_text(encoding="utf-8")
 
     assert "void clear_for_search(usize threadIdx, usize numaTotal)" in history
@@ -99,20 +97,9 @@ def test_private_v3_histories_use_the_canonical_worker_baseline() -> None:
     assert "pawnHistory.clear_range(-1262, threadIdx, numaTotal);" in history
     assert "h.fill(-552);" in history
     assert "clear_for_new_game(sharedHistory, numaThreadIdx, numaTotal);" in search
-    tt_reset = generator.index("privateTt.clear_for_single_owner();")
-    history_reset = generator.index("worker.clear_training_game(privateHistory);")
-    first_search = generator.index("worker.training_search(position, evalRequest);", tt_reset)
-    assert tt_reset < first_search
-    assert history_reset < first_search
-    assert "privateTt.clear(threads);" not in generator
-    assert "generation8 = 0;" in tt
-    assert "clusterCount * sizeof(Cluster)" in tt
     tt_rule = makefile.index("atomic_data_generator_tt.o: tt.cpp")
     next_rule = makefile.index("atomic_data_generator_training_data_generator.o:", tt_rule)
     assert "-DATOMIC_DATA_GENERATOR" in makefile[tt_rule:next_rule]
-    assert "privateHistories.back()->clear_for_search(0, 1);" not in generator
-    assert "void Search::Worker::clear_training_game(SharedHistories& privateHistories)" in search
-    assert "clear_for_new_game(privateHistories, 0, 1);" in search
     # The LMR log scale stopped being a literal when the search constants became
     # tunable for the SPSA campaign. The reset formula is pinned through the
     # tunable and the converged spsa90 default is pinned next to it, so the pair
@@ -142,12 +129,7 @@ def test_data_generator_object_manifest_is_target_isolated() -> None:
 
     filtered = re.search(r"\$\(filter-out\s+([^,]+),\s*\$\(OBJS\)\)", objects)
     assert filtered is not None
-    assert set(filtered.group(1).split()) == {
-        "uci.o",
-        "search.o",
-        "tt.o",
-        "$(ATOMIC_V3_RUNTIME_OBJS)",
-    }
+    assert set(filtered.group(1).split()) == {"uci.o", "search.o", "tt.o"}
 
     for target_specific in (
         "atomic_data_generator_uci.o",
@@ -155,39 +137,6 @@ def test_data_generator_object_manifest_is_target_isolated() -> None:
         "atomic_data_generator_tt.o",
     ):
         assert objects.split().count(target_specific) == 1
-
-    # The normal runtime objects are removed from OBJS before this explicit
-    # list is appended. This prevents duplicate linkage while keeping the
-    # generator on the same V3 implementation as the playing engine.
-    for runtime_object in (
-        "atomic_v3_hm_oracle.o",
-        "atomic_v3_capture_pair.o",
-        "atomic_v3_king_blast_ep.o",
-        "atomic_v3_blast_ring.o",
-        "atomic_v3_full_refresh.o",
-        "atomic_v3_numeric.o",
-        "atomic_v3_wire_network.o",
-        "atomic_v3_scalar_backend.o",
-        "atomic_v3_simd_isa.o",
-        "atomic_v3_incremental_simd_kernels.o",
-        "atomic_v3_incremental_backend.o",
-    ):
-        assert objects.split().count(runtime_object) == 1
-
-
-def test_v3_private_cleanup_is_checked_before_success_marker() -> None:
-    generator = (
-        TESTS_DIR.parent / "src" / "data" / "training_data_generator.cpp"
-    ).read_text(encoding="utf-8")
-    final_cleanup = generator.rindex(
-        "if (DataResult cleanup = cleanupPrivate(); !cleanup)"
-    )
-    completion = generator.index('"INFO: generate_atomic_v3_chunk finished.\\n"')
-    assert final_cleanup < completion
-    assert "publication completed but private staging cleanup failed" in generator[
-        final_cleanup:completion
-    ]
-    assert "return false;" in generator[final_cleanup:completion]
 
 
 @pytest.mark.parametrize(
@@ -412,132 +361,3 @@ def test_fixture_measurement_is_restricted_to_synthetic_profile() -> None:
         ]
     )
     assert args.measure_synthetic_fixture is True
-
-
-@pytest.mark.parametrize("mode", ("release", "smoke"))
-@pytest.mark.parametrize("missing_index", range(10))
-def test_hito5_rejects_each_incomplete_pipeline_set(
-    missing_index: int, mode: str
-) -> None:
-    complete = tuple(
-        "a" * 40 if index == 9 else Path(f"input-{index}")
-        for index in range(10)
-    )
-    incomplete = list(complete)
-    incomplete[missing_index] = None
-    with pytest.raises(run_hito5.GateFailure, match="all four clean-build"):
-        run_hito5.validate_pipeline_configuration(tuple(incomplete), mode)
-
-
-def test_hito5_release_requires_all_ten_pipeline_inputs() -> None:
-    complete = tuple(
-        "a" * 40 if index == 9 else Path(f"input-{index}")
-        for index in range(10)
-    )
-    run_hito5.validate_pipeline_configuration(complete, "release")
-    with pytest.raises(run_hito5.GateFailure, match="release mode requires"):
-        run_hito5.validate_pipeline_configuration((None,) * 10, "release")
-
-
-def test_hito5_smoke_may_omit_the_complete_pipeline_set() -> None:
-    run_hito5.validate_pipeline_configuration((None,) * 10, "smoke")
-    with pytest.raises(run_hito5.GateFailure, match="expected ten"):
-        run_hito5.validate_pipeline_configuration((None,) * 9, "smoke")
-
-
-def test_hito5_rejects_non_exact_pipeline_atomic_commit() -> None:
-    complete = [Path(f"input-{index}") for index in range(10)]
-    complete[-1] = "abc"
-    with pytest.raises(run_hito5.GateFailure, match="40 hexadecimal"):
-        run_hito5.validate_pipeline_configuration(tuple(complete), "release")
-
-
-def test_hito5_forwards_the_exact_cross_repository_command() -> None:
-    paths = {
-        name: Path(name)
-        for name in (
-            "tools",
-            "trainer",
-            "native",
-            "generator",
-            "tools.json",
-            "trainer.json",
-            "atomic.json",
-            "generator.json",
-            "source.nnue",
-            "atomic-root",
-        )
-    }
-    command = run_hito5.build_pipeline_e2e_command(
-        python="python-fixture",
-        tools_engine=paths["tools"],
-        trainer_root=paths["trainer"],
-        native=paths["native"],
-        atomic_data_generator=paths["generator"],
-        tools_build_manifest=paths["tools.json"],
-        trainer_build_manifest=paths["trainer.json"],
-        atomic_build_manifest=paths["atomic.json"],
-        atomic_data_generator_build_manifest=paths["generator.json"],
-        atomic_root=paths["atomic-root"],
-        atomic_commit="a" * 40,
-        source_net=paths["source.nnue"],
-    )
-    assert command == [
-        "python-fixture",
-        str(run_hito5.REPO_ROOT / "tests" / "legacy_pipeline_e2e.py"),
-        "--profile",
-        "strong-local",
-        "--tools-engine",
-        "tools",
-        "--trainer-root",
-        "trainer",
-        "--engine",
-        "native",
-        "--atomic-data-generator",
-        "generator",
-        "--tools-build-manifest",
-        "tools.json",
-        "--trainer-build-manifest",
-        "trainer.json",
-        "--atomic-build-manifest",
-        "atomic.json",
-        "--atomic-data-generator-build-manifest",
-        "generator.json",
-        "--atomic-root",
-        "atomic-root",
-        "--atomic-commit",
-        "a" * 40,
-        "--source-net",
-        "source.nnue",
-    ]
-
-
-def test_hito5_accepts_a_distinct_manifest_authenticated_pipeline_engine() -> None:
-    args = run_hito5.parse_args(
-        [
-            "--native",
-            "release-candidate.exe",
-            "--net",
-            "legacy.nnue",
-            "--pyffish",
-            "pyffish.pyd",
-            "--cjs",
-            "ffish.js",
-            "--esm",
-            "ffish.mjs",
-            "--tables",
-            "tables",
-            "--wasm-wrapper",
-            "atomic-stockfish-nnue-node.mjs",
-            "--pipeline-atomic-engine",
-            "atomic-stockfish-pipeline.exe",
-            "--pipeline-atomic-root",
-            "atomic-build-root",
-            "--pipeline-atomic-commit",
-            "a" * 40,
-        ]
-    )
-    assert args.native == Path("release-candidate.exe")
-    assert args.pipeline_atomic_engine == Path("atomic-stockfish-pipeline.exe")
-    assert args.pipeline_atomic_root == Path("atomic-build-root")
-    assert args.pipeline_atomic_commit == "a" * 40

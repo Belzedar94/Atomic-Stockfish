@@ -102,32 +102,20 @@ def test_native_generator_and_nnue_wasm_link_all_atomic_backends_and_dispatcher(
         "nnue/nnue_dispatcher.cpp",
         "nnue/atomic_v2/atomic_v2_accumulator.cpp",
         "nnue/atomic_v2/atomic_v2_network.cpp",
-        "nnue/atomic_v3/hm_oracle.cpp",
-        "nnue/atomic_v3/capture_pair.cpp",
-        "nnue/atomic_v3/king_blast_ep.cpp",
-        "nnue/atomic_v3/blast_ring.cpp",
-        "nnue/atomic_v3/full_refresh.cpp",
-        "nnue/atomic_v3/numeric.cpp",
-        "nnue/atomic_v3/wire_network.cpp",
-        "nnue/atomic_v3/scalar_backend.cpp",
-        "nnue/atomic_v3/simd_isa.cpp",
-        "nnue/atomic_v3/incremental_simd_kernels.cpp",
-        "nnue/atomic_v3/incremental_backend.cpp",
     )
     for relative in runtime_sources:
         assert relative in makefile
         assert f"'{relative}'" in wasm_build
         assert (ROOT / "src" / relative).exists()
 
-    assert (
-        "VPATH = api:syzygy:nnue:nnue/features:nnue/atomic_v2:nnue/atomic_v3"
-        in makefile
-    )
+    assert "VPATH = api:syzygy:nnue:nnue/features:nnue/atomic_v2" in makefile
     generator = makefile.split("ATOMIC_DATA_GENERATOR_OBJS =", 1)[1].split(
         "ifeq ($(target_windows),yes)", 1
     )[0]
-    for source in runtime_sources[3:]:
-        assert "atomic_v3_" + Path(source).stem + ".o" in generator
+    # The generator links the playing engine's objects (minus its own
+    # uci/search/tt), so it gets the same NNUE backends.
+    assert "$(filter-out uci.o search.o tt.o,$(OBJS))" in generator
+    assert "nnue/atomic_v3" not in makefile
 
     isolated = (
         "nnue/atomic_v2/layers/affine_transform_sparse_input.h",
@@ -139,7 +127,7 @@ def test_native_generator_and_nnue_wasm_link_all_atomic_backends_and_dispatcher(
         assert (ROOT / "src" / relative).exists()
 
 
-def test_python_and_commonjs_esm_remain_rules_bindings_beside_full_v3_wasm():
+def test_python_and_commonjs_esm_remain_rules_bindings_beside_full_nnue_wasm():
     setup = (ROOT / "setup.py").read_text(encoding="utf-8")
     makefile_js = (ROOT / "src" / "Makefile_js").read_text(encoding="utf-8")
     workflow = (ROOT / ".github/workflows/atomic.yml").read_text(encoding="utf-8")
@@ -148,11 +136,11 @@ def test_python_and_commonjs_esm_remain_rules_bindings_beside_full_v3_wasm():
     # UCI evaluation. The complete Node UCI artifact is the NNUE WASM surface.
     for rules_graph in (setup, makefile_js):
         assert "nnue/nnue_dispatcher.cpp" not in rules_graph
-        assert "nnue/atomic_v3/" not in rules_graph
+        assert "nnue/atomic_v2/" not in rules_graph
     assert "python test.py" in workflow
     assert "npm test" in workflow
     assert "tests/wasm-engine/run-dual-backend-tests.mjs" in workflow
-    assert "--v3-net" in workflow
+    assert "--v2-net" in workflow
 
 
 def test_atomic_state_info_only_stores_live_check_metadata():

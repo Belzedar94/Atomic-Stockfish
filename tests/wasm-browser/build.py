@@ -297,9 +297,8 @@ def build(out_dir: Path, compiler: str, debug: bool, allow_other_emscripten: boo
         "supportedNetworkBackends": [
             "Legacy Atomic V1",
             "AtomicNNUEV2",
-            "AtomicNNUEV3",
         ],
-        "networkFileVersions": ["0x7AF32F20", "0xA70C0002", "0xA70C0003"],
+        "networkFileVersions": ["0x7AF32F20", "0xA70C0002"],
         "referenceNetwork": {
             "name": "atomic_run3b_e202_l05.nnue",
             "bytes": 47721376,

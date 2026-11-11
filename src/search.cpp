@@ -1037,14 +1037,6 @@ void Search::Worker::clear() {
 }
 
 
-#ifdef ATOMIC_DATA_GENERATOR
-void Search::Worker::clear_training_game(SharedHistories& privateHistories) {
-    clear_for_new_game(privateHistories, 0, 1);
-    lowPlyHistory.fill(100);
-}
-#endif
-
-
 // Main search function for both PV and non-PV nodes
 template<NodeType nodeType>
 Value Search::Worker::search(

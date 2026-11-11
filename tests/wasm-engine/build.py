@@ -213,9 +213,8 @@ def build(out_dir: Path, compiler: str, debug: bool) -> None:
         "supportedNetworkBackends": [
             "Legacy Atomic V1",
             "AtomicNNUEV2",
-            "AtomicNNUEV3",
         ],
-        "networkFileVersions": ["0x7AF32F20", "0xA70C0002", "0xA70C0003"],
+        "networkFileVersions": ["0x7AF32F20", "0xA70C0002"],
         "stdinPump": {
             "command": "isready",
             "response": "readyok",

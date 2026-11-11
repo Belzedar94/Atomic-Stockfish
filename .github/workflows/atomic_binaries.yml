@@ -2,8 +2,7 @@ name: Atomic binaries
 
 # Every merge to main leaves downloadable binaries: one artifact per build and
 # a rolling prerelease that is overwritten on each push. Separate from
-# atomic.yml (the correctness gate) and from atomic-release.yml (the
-# reproducible, tag-driven release).
+# atomic.yml (the correctness gate).
 
 on:
   push:

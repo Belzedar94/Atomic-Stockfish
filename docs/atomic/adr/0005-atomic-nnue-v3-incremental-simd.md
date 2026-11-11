@@ -1,6 +1,7 @@
 # ADR 0005: Vectorize only AtomicNNUEV3 incremental HM row application
 
-- Status: accepted and implemented for H9.3j-b; reviewed-head PR #40 merged as `933f331e8a8b9ab9c89f5e107d341240e4a3bdad` from head `9387ea45fb020e62682328ace169de1aaad3e835`; promoted to production by H9.3n
+- Status: archived (2026-11-11) together with AtomicNNUEV3 (ADR 0004); the code is in the `archive/pre-cleanup-20261111` tag.
+- Original status: accepted and implemented for H9.3j-b; reviewed-head PR #40 merged as `933f331e8a8b9ab9c89f5e107d341240e4a3bdad` from head `9387ea45fb020e62682328ace169de1aaad3e835`; promoted to production by H9.3n
 - Date: 2026-07-15
 
 ## Context

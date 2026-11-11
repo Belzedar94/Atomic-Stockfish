@@ -8,10 +8,8 @@ the frozen rules and playing-strength reference.
 > [!NOTE]
 > Version 1.0.3 is the first stable, strength-qualified release. The earlier
 > `v1.0.0`, `v1.0.1` and `v1.0.2` tags are failed prepublication candidates
-> and have no release assets.
-> Release assets include a machine-readable provenance manifest and
-> `SHA256SUMS`; NNUE networks and Atomic Syzygy files remain external and are not
-> silently downloaded.
+> and have no release assets. Every merge to `main` also publishes binaries in
+> the rolling `rolling-main` prerelease.
 
 ## Development
 
@@ -36,8 +34,11 @@ that does not implement the rule at all is not a meaningful measurement, so
 those changes land on correctness evidence instead: perft counts and parity
 runs against the reference.
 
-Releases are tags with attached binaries, produced by
-[`.github/workflows/atomic-release.yml`](.github/workflows/atomic-release.yml).
+Every merge to `main` publishes binaries to the rolling `rolling-main`
+prerelease ([`.github/workflows/atomic_binaries.yml`](.github/workflows/atomic_binaries.yml)).
+`scripts/build_atomic_native_release.sh` builds a versioned native release
+archive. The reproducible, tag-driven release pipeline used for 1.0 was
+archived; it lives in the `archive/pre-cleanup-20261111` tag.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the practical details.
 
@@ -51,7 +52,7 @@ large variant matrix:
 - the `pyffish` Python API;
 - CommonJS and ES-module JavaScript APIs;
 - lightweight Board WebAssembly and a Node UCI/NNUE WebAssembly engine;
-- Legacy Atomic NNUE V1, AtomicNNUEV2 and AtomicNNUEV3 networks;
+- Legacy Atomic NNUE V1 and AtomicNNUEV2 networks;
 - Atomic Syzygy WDL/DTZ tables (`.atbw` and `.atbz`).
 
 UCCI, USI and non-Atomic variants are outside the release contract.
@@ -62,7 +63,7 @@ Atomic-Stockfish evaluates with NNUE only: it has no classical evaluation, so
 it needs a network to search. `make build` and `make profile-build` download the
 default network (see [Native build](#native-build)) and embed it in the
 binary, which then needs no companion file. Set `EvalFile` to use another
-compatible Legacy Atomic V1, AtomicNNUEV2 or AtomicNNUEV3 network. `Use NNUE`
+compatible Legacy Atomic V1 or AtomicNNUEV2 network. `Use NNUE`
 selects how the network result is used:
 
 ```text
@@ -88,9 +89,11 @@ release. The frozen development reference used by the validation gates remains
 `99DC67EABF26A64FAEECA3A88B4C38597A840B8D4A874B9F2CF658C6F92A04A6`.
 Neither file is committed to this repository.
 
-AtomicNNUEV3 is a supported runtime format, but version 1.0 does not bundle or
-endorse a V3 release-candidate network. The owner-capped sequential four-run V3
-bootstrap campaign remains explicitly non-publication evidence.
+AtomicNNUEV2 is kept as a loadable format: the search, rules, XBoard, Syzygy
+and bindings test suites use a deterministic material-only V2 network as their
+evaluation oracle. The AtomicNNUEV3 format and its tooling were archived in the
+`archive/pre-cleanup-20261111` tag; the idea worth keeping from it is noted in
+[`docs/atomic/v3-relations-note.md`](docs/atomic/v3-relations-note.md).
 
 ## Native build
 
@@ -128,9 +131,9 @@ commit date and short SHA taken from git. Without git it falls back to the
 compile date and `nogit`, or to the commit that OpenBench passes as
 `GIT_SHA_FULL`. The source tree carries no release number: a release build
 passes it, for example `make -j build ARCH=x86-64-bmi2 ATOMIC_VERSION=1.0.4`,
-and reports `Atomic-Stockfish 1.0.4`. The release workflow passes its
-`RELEASE_VERSION` to every asset it builds this way; a release rebuilt from its
-source archive needs the same `ATOMIC_VERSION`. `setup.py` and the WebAssembly
+and reports `Atomic-Stockfish 1.0.4`. `scripts/build_atomic_native_release.sh`
+passes its version this way; a release rebuilt from its source archive needs
+the same `ATOMIC_VERSION`. `setup.py` and the WebAssembly
 builds read `ATOMIC_VERSION` from the environment, and the bindings report the
 same name as the engine.
 
@@ -188,50 +191,19 @@ The full Node UCI/NNUE WebAssembly build is documented in
 [`tests/wasm-engine/README.md`](tests/wasm-engine/README.md). Its generated
 `.mjs` launcher is the supported entrypoint; the generated runtime glue is not.
 
-## Atomic match-mining E00
-
-The experimental E00 source battery compares the current best V3 network
-directly with the authenticated legacy `run3b` champion. It is separate from
-the official 1B DATAGEN campaign and must not modify or consume that campaign's
-queue, workers or contracts.
-
-The result-bearing path uses direct UCI, a freshly built exact-source native
-Atomic referee and verifier, deterministic color-swapped schedules,
-create-new artifacts and a final commit receipt. Its frozen public wire is
-`atomic-e00-game-v3`, `atomic-e00-execution-receipt-v3`,
-`atomic-e00-engine-evidence-v3` and `atomic-e00-runtime-manifest-v2`; the
-deterministic schedule remains v1.
-
-No scientific E00 execution is authorized from an uncommitted worktree.
-After an independent zero-P0/P1 audit, use only the post-commit runbook linked
-from:
-
-- [`docs/atomic/e00-source-contract.md`](docs/atomic/e00-source-contract.md);
-- [`docs/atomic/e00-direct-uci-referee-design.md`](docs/atomic/e00-direct-uci-referee-design.md);
-- [`docs/atomic/e00-launch7-prepare-smoke-runbook.md`](docs/atomic/e00-launch7-prepare-smoke-runbook.md);
-- [`docs/atomic/e00-launch7-full-runbook.md`](docs/atomic/e00-launch7-full-runbook.md).
-
-The older commands in
-[`docs/atomic/evidence/mining-loop-v1/README.md`](docs/atomic/evidence/mining-loop-v1/README.md)
-are an immutable historical Launch1/Launch2 record, not an executable current
-runbook.
-
-The one-pair `Threads=1` smoke must be resource-gated, exit zero with byte-empty
-stderr and authenticate fully before the fixed 84-pair battery can start. The
-user-managed OpenBench worker remains stopped throughout this plan.
-
 ## Validation
 
-The release-oriented Hito 4 runner requires explicit native, Python,
-JavaScript, tablebase and WASM artifacts. It covers C++ units, `test.py`,
-extended Python tests, CommonJS, ES modules, both WASM surfaces, XBoard, Atomic
-Syzygy, NNUE modes, perft, reproducibility and the Atomic search signature.
+Every pull request runs `.github/workflows/atomic.yml`. Its "Production
+engine" job tests what OpenBench and the AtomicDB workers run: the default
+build with the network `make net` fetches, its bench against the `Bench:` line
+of the commit history (`tests/signature.sh`), the LegacyAtomicV1
+incremental-accumulator gate with that network, and a fixed-node battery of
+proven mates (`tests/atomic_mate_battery.py`). The other jobs cover the rules,
+the data generator and its OpenBench bundle, sanitizers, Valgrind, the bindings
+and the WebAssembly builds.
 
-See [`docs/atomic/hito4-validation.md`](docs/atomic/hito4-validation.md) for the
-exact invocation and reproduced artifact hashes. The migration inventory is in
-[`docs/atomic/test-inventory.md`](docs/atomic/test-inventory.md), and cumulative
-search evidence is in
-[`docs/atomic/hito6-validation.md`](docs/atomic/hito6-validation.md).
+The Hito validation runners, the evidence logs they produced and the E00
+match-mining harness were archived in the `archive/pre-cleanup-20261111` tag.
 
 The final project gate is stricter than functional correctness:
 
