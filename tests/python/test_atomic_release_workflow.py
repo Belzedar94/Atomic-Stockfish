@@ -299,7 +299,7 @@ def test_windows_fingerprint_capture_is_real_cibuildwheel_and_cannot_publish() -
         assert forbidden not in capture
 
 
-def test_release_pr_reproduces_real_windows_wheel_and_frozen_fingerprint() -> None:
+def test_release_pr_reproduces_sdist_and_linux_wheel_without_image_pins() -> None:
     text = release_pr_workflow()
     assert "pull_request:" in text
     assert "paths:" in text
@@ -325,8 +325,7 @@ def test_release_pr_reproduces_real_windows_wheel_and_frozen_fingerprint() -> No
     ):
         assert f"      - {dependency}\n" in trigger
     source = job(text, "source_sdist", "linux_wheel")
-    linux = job(text, "linux_wheel", "windows_wheel")
-    gate = text.split("  windows_wheel:\n", 1)[1]
+    linux = text.split("  linux_wheel:\n", 1)[1]
     assert "ref: ${{ github.event.pull_request.head.sha }}" in source
     assert "EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}" in source
     assert 'test "$commit" = "$EXPECTED_HEAD"' in source
@@ -357,29 +356,12 @@ def test_release_pr_reproduces_real_windows_wheel_and_frozen_fingerprint() -> No
     assert "name: release-pr-linux-wheel" in linux
     assert "setup.py sdist" not in linux
     assert "git archive" not in linux
-    assert "needs: source_sdist" in gate
-    assert "runs-on: windows-2022" in gate
-    assert "python-version: '3.12.10'" in gate
-    assert "atomic_verify_release_asset.py" in gate
-    assert "name: release-pr-source" in gate
-    assert "for build_id in a b c d; do" in gate
-    assert "scripts/build_atomic_python_wheel_release.sh" in gate
-    assert 'windows "${sdists[0]}"' in gate
-    assert '"build/wheelhouse-$build_id" "build/cibw-cache-$build_id"' in gate
-    assert "docs/atomic/windows-wheel-fingerprint-v2.json" in gate
-    assert "WINDOWS_WHEEL_FINGERPRINT_SHA256" in gate
-    assert "WINDOWS_WHEEL_IMAGE_VERSION" in gate
-    assert "for build_id in b c d; do" in gate
-    assert 'cmp "${first[0]}" "${candidate[0]}"' in gate
-    assert "python -m abi3audit --strict" in gate
-    assert "test_wheel_layout.py" in gate
-    assert "Preserve all Windows reproducibility evidence" in gate
-    assert "if: always()" in gate
-    assert "diagnostic-pr-windows-repro-${{ github.run_attempt }}" in gate
-    assert "build/wheelhouse-*/*.whl" in gate
-    assert "name: release-pr-windows-wheel" in gate
-    for forbidden in ("contents: write", "gh release", "releases/", "draft=false"):
-        assert forbidden not in text
+    # The exact Windows wheel only reproduces on the retired hosted image
+    # its frozen fingerprint names, so pull requests do not compare it.
+    assert "windows_wheel:" not in text
+    assert "WINDOWS_WHEEL_IMAGE_VERSION" not in text
+    assert "runs-on: windows" not in text
+
 
 
 def test_exact_tag_controllers_are_isolated_on_the_windows_containment_runner() -> None:

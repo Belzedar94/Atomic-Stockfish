@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""Run the LegacyAtomicV1 incremental-accumulator gate with the frozen net.
+"""Run the LegacyAtomicV1 incremental-accumulator gate with a known network.
 
 The wrapper owns the artifact-integrity check so the C++ gate can concentrate
-on accumulator correctness.  It refuses to execute with a renamed or modified
-network, then passes the absolute path to the test binary.
+on accumulator correctness.  It refuses to execute with a network whose
+SHA-256 it does not know, then passes the absolute path to the test binary.
+The state signature hashes accumulators and evaluations, so each network has
+its own expected signature for the default profiles.
 """
 
 from __future__ import annotations
@@ -17,10 +19,17 @@ import sys
 from pathlib import Path
 
 
+# run3b (atomic_run3b_e202_l05.nnue), the historical frozen reference network.
 FROZEN_NET_SHA256 = "99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f92a04a6"
+# atomic-ft3b-1p2B.nnue, the default network `make net` fetches and embeds.
+DEFAULT_NET_SHA256 = "a32645ea6749c2500119bd53b55cc5baf2f6c502659f247e5e5ca4f26ea48e29"
 DEFAULT_PROFILES = {
-    "smoke": (4_096, 1, "DDB8196C6A0BE4A8"),
-    "release": (1_000_000, 1_024, "8742E39B793C46AB"),
+    "smoke": (4_096, 1),
+    "release": (1_000_000, 1_024),
+}
+NETWORK_SIGNATURES = {
+    FROZEN_NET_SHA256: {"smoke": "DDB8196C6A0BE4A8", "release": "8742E39B793C46AB"},
+    DEFAULT_NET_SHA256: {"smoke": "E00F263D3974195F", "release": "CDAEB5F2E9FEEA"},
 }
 FINAL_SENTINEL_RE = re.compile(
     r"^LegacyAtomicV1 incremental gate passed: "
@@ -56,6 +65,7 @@ def validate_gate_output(
     mode: str,
     operations: int,
     full_refresh_interval: int,
+    net_sha256: str = FROZEN_NET_SHA256,
 ) -> str:
     """Validate the final C++ sentinel and return its state signature."""
 
@@ -94,7 +104,8 @@ def validate_gate_output(
             f"child reported capture-forced-refresh={forced_refresh}, expected 0"
         )
 
-    default_operations, default_interval, default_signature = DEFAULT_PROFILES[mode]
+    default_operations, default_interval = DEFAULT_PROFILES[mode]
+    default_signature = NETWORK_SIGNATURES[net_sha256][mode]
     if operations == default_operations and full_refresh_interval == default_interval:
         if signature != default_signature:
             raise GateOutputError(
@@ -129,12 +140,12 @@ def main() -> int:
         raise SystemExit(f"LegacyAtomicV1 network not found: {net}")
 
     actual_sha = sha256(net)
-    if actual_sha != FROZEN_NET_SHA256:
+    if actual_sha not in NETWORK_SIGNATURES:
         raise SystemExit(
-            "LegacyAtomicV1 network SHA-256 mismatch:\n"
-            f"  expected: {FROZEN_NET_SHA256.upper()}\n"
-            f"  actual:   {actual_sha.upper()}\n"
-            f"  file:     {net}"
+            "LegacyAtomicV1 network SHA-256 is not a known gate network:\n"
+            f"  known:  {', '.join(sha.upper() for sha in NETWORK_SIGNATURES)}\n"
+            f"  actual: {actual_sha.upper()}\n"
+            f"  file:   {net}"
         )
 
     command = [str(binary), "--net", str(net), "--mode", args.mode]
@@ -147,7 +158,7 @@ def main() -> int:
             raise SystemExit("--full-refresh-interval must be positive")
         command.extend(("--full-refresh-interval", str(args.full_refresh_interval)))
 
-    default_operations, default_interval, _ = DEFAULT_PROFILES[args.mode]
+    default_operations, default_interval = DEFAULT_PROFILES[args.mode]
     effective_operations = (
         args.operations if args.operations is not None else default_operations
     )
@@ -163,7 +174,7 @@ def main() -> int:
         startup["creationflags"] = subprocess.CREATE_NO_WINDOW
 
     print(
-        "LegacyAtomicV1 frozen network verified: "
+        "LegacyAtomicV1 gate network verified: "
         f"SHA-256={actual_sha.upper()} mode={args.mode}",
         flush=True,
     )
@@ -196,6 +207,7 @@ def main() -> int:
             mode=args.mode,
             operations=effective_operations,
             full_refresh_interval=effective_interval,
+            net_sha256=actual_sha,
         )
     except GateOutputError as error:
         print(f"incremental gate output validation failed: {error}", file=sys.stderr)
