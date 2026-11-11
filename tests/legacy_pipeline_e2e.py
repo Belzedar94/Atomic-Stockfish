@@ -68,7 +68,7 @@ LEGACY_NNUE_LOAD_PREFIX = "info string NNUE evaluation using Legacy Atomic V1 "
 ATOMIC_PURE_OPTION = "option name Use NNUE type combo default true var true var pure"
 ATOMIC_PURE_LOAD_SUFFIX = " (45MiB, (45056, 1024, 16, 32, 1))"
 ATOMIC_DATA_GENERATOR_MARKER_RE = re.compile(
-    r"^Atomic data-generator tests passed fixtures=7 "
+    r"^Atomic data-generator tests passed fixtures=8 "
     r"data_sha256=([0-9A-F]{64}) net_sha256=([0-9A-F]{64})$"
 )
 ATOMIC_DATA_GENERATOR_BASIC_SHA256 = {

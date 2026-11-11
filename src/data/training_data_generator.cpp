@@ -83,10 +83,10 @@ constexpr int              MaximumGeneratedPly = 4096;
 // above eval_limit for ResignPlies consecutive plies; mate scores are played
 // out. A score-based draw needs every score of the last DrawPlies plies within
 // DrawScoreLimit (8 centipawns in UCI units) once the game is DrawMinPly long.
-constexpr int ResignPlies    = 16;
-constexpr int DrawMinPly     = 80;
-constexpr int DrawPlies      = 16;
-constexpr int DrawScoreLimit = 16;
+constexpr int              ResignPlies    = 16;
+constexpr int              DrawMinPly     = 80;
+constexpr int              DrawPlies      = 16;
+constexpr int              DrawScoreLimit = 16;
 constexpr std::string_view LegacyAtomicV1SchemaSha256 =
   "acca0f551f1c012c31a6c727dedccaebb7b5ebbc46810edb87e31bb208d5abe1";
 // Preserve the historical direct-mapped 64M-key deduplication table. Reducing
@@ -155,8 +155,8 @@ enum class GameEnd : int {
 };
 
 constexpr std::string_view GameEndNames[] = {
-  "explosion",  "checkmate", "stalemate",     "insufficient",   "fifty_move", "repetition",
-  "max_ply",    "draw_score", "resign_score", "tablebase_win", "no_move"};
+  "explosion", "checkmate",  "stalemate",    "insufficient",  "fifty_move", "repetition",
+  "max_ply",   "draw_score", "resign_score", "tablebase_win", "no_move"};
 static_assert(std::size(GameEndNames) == usize(GameEnd::Count));
 
 GameEnd game_end_from_termination(Atomic::Termination termination) {
@@ -1142,8 +1142,7 @@ class Generator {
         std::ostringstream summary;
         summary << "INFO: game ends:";
         for (usize i = 0; i < usize(GameEnd::Count); ++i)
-            summary << ' ' << GameEndNames[i] << '='
-                    << gameEnds[i].load(std::memory_order_relaxed);
+            summary << ' ' << GameEndNames[i] << '=' << gameEnds[i].load(std::memory_order_relaxed);
         return summary.str();
     }
     const std::vector<AtomicBinV2ShardMetadata>& atomic_bin_v2_shards() const noexcept {
@@ -1280,8 +1279,7 @@ class Generator {
         if (resolutionSource == TrainingResolutionSource::MAX_PLY)
             return {true, std::nullopt, GameEnd::MaxPly};
 
-        if (params.adjudicateDrawsByScore && ply >= DrawMinPly
-            && scores.size() >= usize(DrawPlies))
+        if (params.adjudicateDrawsByScore && ply >= DrawMinPly && scores.size() >= usize(DrawPlies))
         {
             const bool quiet = std::all_of(scores.end() - DrawPlies, scores.end(), [](int score) {
                 return std::abs(score) <= DrawScoreLimit;

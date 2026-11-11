@@ -263,7 +263,7 @@ def test_strong_profile_requires_external_source() -> None:
 
 def atomic_generator_marker(source_hash: str, data_hash: str) -> str:
     return (
-        "Atomic data-generator tests passed fixtures=7 "
+        "Atomic data-generator tests passed fixtures=8 "
         f"data_sha256={data_hash.upper()} net_sha256={source_hash.upper()}"
     )
 
