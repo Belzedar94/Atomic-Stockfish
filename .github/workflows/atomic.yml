@@ -38,8 +38,10 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
       # Upstream Stockfish's reference lookup: the newest commit (merge commits
-      # included) whose message carries a `Bench: N` line.
+      # included) whose message carries a `Bench: N` line. It relies on
+      # pipefail, which `shell: bash` enables and the default shell does not.
       - name: Extract the bench number from the commit history
+        shell: bash
         run: |
           for hash in $(git rev-list -100 HEAD); do
             benchref=$(git show -s $hash | tac | grep -m 1 -o -x '[[:space:]]*\b[Bb]ench[ :]\+[1-9][0-9]\{5,7\}\b[[:space:]]*' | sed 's/[^0-9]//g') && break || true
