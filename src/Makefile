@@ -2339,7 +2339,7 @@ endif  # UNIVERSAL_BUILD
 # which drop it, so the binary came out without the network and failed its
 # bench once OpenBench moved it (a clang 23 worker, 27-Oct-2026).
 
-OPENBENCH_NET = atomic_run3b_e202_l05.nnue
+OPENBENCH_NET = atomic-ft3b-1p2B.nnue
 
 ifeq ($(OS),Windows_NT)
     OPENBENCH_COMP = mingw
