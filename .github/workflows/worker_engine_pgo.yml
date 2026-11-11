@@ -542,8 +542,11 @@ jobs:
           compression-level: 0
 
   macos:
-    name: macos apple-silicon (clang, Xcode 15.4)
-    runs-on: macos-14
+    # macos-14 is no longer offered (11-Nov-2026: "The configuration 'macos-14-arm64-us-default'
+    # is not supported"), so macos-15 with Xcode 16.4; the Makefile keeps -mmacosx-version-min=11,
+    # checked below, so the binary still runs where the earlier ones did.
+    name: macos apple-silicon (clang, Xcode 16.4)
+    runs-on: macos-15
     timeout-minutes: 60
     defaults:
       run:
@@ -585,7 +588,7 @@ jobs:
 
       - name: Toolchain and host
         run: |
-          if [ -d /Applications/Xcode_15.4.app ]; then sudo xcode-select -s /Applications/Xcode_15.4.app; fi
+          if [ -d /Applications/Xcode_16.4.app ]; then sudo xcode-select -s /Applications/Xcode_16.4.app; fi
           xcodebuild -version | tr '\n' ' '; echo
           clang++ --version | head -n 2
           sysctl -n machdep.cpu.brand_string
@@ -661,6 +664,7 @@ jobs:
           otool -L "out/$NEW_FILE" | tee out/new.dylibs
           otool -L "served/$SERVED_FILE" | tee out/served.dylibs
           otool -l "out/$NEW_FILE" | grep -A4 LC_BUILD_VERSION | tee out/new.buildversion
+          grep -q "minos 11.0" out/new.buildversion
           codesign -dv "out/$NEW_FILE" 2>&1 | tee out/new.codesign
           (cd out && shasum -a 256 "$NEW_FILE" plain | tee sha256.txt)
 
