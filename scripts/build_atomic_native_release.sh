@@ -78,6 +78,8 @@ umask 022
 # Do not allow caller-provided build or archive flags to alter release bytes.
 unset CXXFLAGS CPPFLAGS LDFLAGS DEPENDFLAGS EXTRACXXFLAGS EXTRALDFLAGS
 unset MAKEFLAGS MFLAGS TAR_OPTIONS XZ_DEFAULTS XZ_OPT ZIPOPT
+# Release assets carry no network: embed=no keeps `make build` from fetching
+# and embedding the default one, so the bytes do not depend on a download.
 
 if [[ "$platform" == linux ]]; then
     require_command g++
@@ -89,7 +91,7 @@ if [[ "$platform" == linux ]]; then
         || die "Linux release packaging requires GNU tar"
 
     make -C src -j2 ARCH="$architecture" COMP=gcc ATOMIC_VERSION="$version" \
-        GIT_SHA= GIT_SHA_FULL= GIT_DATE= build
+        GIT_SHA= GIT_SHA_FULL= GIT_DATE= embed=no build
     engine=src/atomic-stockfish
     extension=tar.xz
 else
@@ -105,7 +107,7 @@ else
     fi
 
     make -C src -j2 ARCH="$architecture" COMP=mingw COMPCXX="$CXX" ATOMIC_VERSION="$version" \
-        GIT_SHA= GIT_SHA_FULL= GIT_DATE= build
+        GIT_SHA= GIT_SHA_FULL= GIT_DATE= embed=no build
     engine=src/atomic-stockfish.exe
     extension=zip
 fi

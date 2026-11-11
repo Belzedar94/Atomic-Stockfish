@@ -30,8 +30,9 @@ class Position;
 namespace Eval {
 
 // Legacy Atomic V1 networks are selected by their header and architecture, not
-// by a Stockfish-style filename hash. Releases keep the net external until its
-// redistribution rights are explicitly confirmed.
+// by a Stockfish-style filename hash. The default network is published as a
+// release asset of this repository; `make build` and `make profile-build` fetch
+// it (NNUE_NET_* in src/Makefile, which must name this file) and embed it.
 #define EvalFileDefaultName "atomic-ft3b-1p2B.nnue"
 
 // Atomic-Stockfish evaluates with NNUE only. True is the playing mode; Pure is

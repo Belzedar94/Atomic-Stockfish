@@ -72,10 +72,23 @@ endif
 PREFIX = /usr/local
 BINDIR = $(PREFIX)/bin
 
+### Default network. evaluate.h's EvalFileDefaultName names the file; it is
+### published as a release asset of this repository, and `make net` fetches it
+### into src/ and checks its SHA-256. Bump NNUE_NET_TAG and NNUE_NET_SHA256
+### together with EvalFileDefaultName whenever the default network changes
+### (tests/python/test_default_net_contract.py checks that they agree).
+NNUE_NET_NAME   := $(shell sed -n 's/^.define EvalFileDefaultName "\([^"]*\)".*/\1/p' evaluate.h)
+NNUE_NET_TAG    = net-ft3b-1p2B
+NNUE_NET_SHA256 = a32645ea6749c2500119bd53b55cc5baf2f6c502659f247e5e5ca4f26ea48e29
+NNUE_NET_URL    = https://github.com/Belzedar94/Atomic-Stockfish/releases/download/$(NNUE_NET_TAG)/$(NNUE_NET_NAME)
+NET_SH_ENV      = NET_NAME='$(NNUE_NET_NAME)' NET_URL='$(NNUE_NET_URL)' \
+		NET_SHA256='$(NNUE_NET_SHA256)' EVALFILE='$(EVALFILE)'
+
 ### Built-in benchmark for PGO builds. The engine evaluates with NNUE only, so
 ### the bench profiles the search and the NNUE code when a network is embedded
-### or found under its default name. The Atomic NNUE is external, so there may
-### be none: the bench then reports "Bench aborted" and nothing is profiled.
+### or found under its default name. profile-build fetches the default network
+### first (see `net`), but with embed=no there may be none: the bench then
+### reports "Bench aborted" and nothing is profiled.
 PGOBENCH = printf 'bench\nquit\n' | $(RUN_PREFIX) ./$(EXE)
 
 ### A profile-build whose bench found no network still completes, but neither
@@ -86,8 +99,8 @@ PGO_NETWORK_CHECK = \
 		echo "" >&2; \
 		echo "WARNING: the profiling run found no NNUE network, so neither the search nor" >&2; \
 		echo "the NNUE code was profiled. This binary will be much slower than a plain" >&2; \
-		echo "'make build'. Put the network in src/ under its default name (see README)," >&2; \
-		echo "or embed it, and run profile-build again." >&2; \
+		echo "'make build'. Run 'make net' (or put the network in src/ under its default" >&2; \
+		echo "name, see README) and run profile-build again." >&2; \
 	fi
 
 ### Source and object files
@@ -416,6 +429,7 @@ VPATH = api:syzygy:nnue:nnue/features:nnue/atomic_v2:nnue/atomic_v3
 # lasx = yes/no       --- -mlasx             --- Use Loongson Advanced SIMD eXtension
 # relaxedsimd = y/n   --- -mrelaxed-simd     --- Use WebAssembly relaxed SIMD extension
 # syzygy = yes/no     --- -DNO_TABLEBASES    --- Support Syzygy tablebase probing
+# embed = yes/no      --- -DATOMIC_NNUE_EMBEDDING --- Fetch the default network on build/profile-build and embed it
 #
 # Note that Makefile is space sensitive, so when adding new architectures
 # or modifying existing flags, you have to make sure there are no extra spaces
@@ -483,6 +497,7 @@ lsx = no
 lasx = no
 relaxedsimd = no
 syzygy = yes
+embed = yes
 STRIP = strip
 
 ifneq ($(shell which clang-format-20 2> /dev/null),)
@@ -1188,6 +1203,23 @@ ifeq ($(arch),wasm32)
 	endif
 endif
 
+### Embed the default network. build and profile-build run `net` first, so the
+### sub-make that compiles the engine finds the file in src/ and incbin embeds
+### it. Without the file (embed=no, or a target that does not fetch it) the
+### binary carries no network and loads one through EvalFile. network.o depends
+### on the file so that fetching or replacing it re-embeds it.
+NET_DEPENDENCY =
+NNUE_EMBED_DEPS =
+ifeq ($(embed),yes)
+ifneq ($(arch),wasm32)
+	NET_DEPENDENCY = net
+ifneq ($(wildcard $(NNUE_NET_NAME)),)
+	CXXFLAGS += -DATOMIC_NNUE_EMBEDDING
+	NNUE_EMBED_DEPS = $(NNUE_NET_NAME)
+endif
+endif
+endif
+
 ### 3.7 pext
 ifeq ($(pext),yes)
 	CXXFLAGS += -DUSE_PEXT
@@ -1363,7 +1395,7 @@ help:
 	echo "atomic-bin-v2-manifest-reader-tests > build and run strict V2 sidecar parser tests" && \
 	echo "atomic-bin-v2-reader-tests > build and run authenticated streaming V2 reader tests" && \
 	echo "macos-lipo              > macOS x86-64 + Apple silicon universal binary" && \
-	echo "net                     > Download the default nnue nets" && \
+	echo "net                     > Download and verify the default nnue net" && \
 	echo "strip                   > Strip executable" && \
 	echo "install                 > Install executable" && \
 	echo "clean                   > Clean up" && \
@@ -1456,10 +1488,10 @@ analyze: config-sanity objclean
 	$(MAKE) -k ARCH=$(ARCH) COMP=$(COMP) $(OBJS)
 
 ifeq ($(UNIVERSAL_BUILD),false)
-build: config-sanity
+build: $(NET_DEPENDENCY) config-sanity
 	$(MAKE) -j$(BUILD_JOBS) ARCH=$(ARCH) COMP=$(COMP) all
 
-profile-build: config-sanity objclean profileclean
+profile-build: $(NET_DEPENDENCY) config-sanity objclean profileclean
 	@echo ""
 	@echo "Step 1/4. Building instrumented executable ..."
 	$(MAKE) -j$(BUILD_JOBS) ARCH=$(ARCH) COMP=$(COMP) $(profile_make)
@@ -1585,11 +1617,12 @@ universalclean:
 	@rm -rf $(TEMP_DIR)
 	@rm -f universal/network_dump.inc
 
-# Legacy Atomic V1 networks are intentionally external. The engine validates
-# their header and architecture at runtime; this target never downloads or
-# silently redistributes a network.
+# Fetch the default network (NNUE_NET_*) into src/ and verify its SHA-256. An
+# existing valid file is kept, an invalid one is fetched again. With EVALFILE
+# (OpenBench) that file is copied under the default name instead and nothing is
+# downloaded.
 net:
-	@echo "Atomic NNUE networks are external; set EvalFile to a compatible Legacy Atomic V1 .nnue file."
+	@$(NET_SH_ENV) $(SHELL) ../scripts/net.sh
 
 format:
 	$(CLANG-FORMAT) -i $(SRCS) $(ATOMIC_DATA_GENERATOR_SRCS) $(ATOMIC_DATA_TOOLS_SRCS) $(ATOMIC_V3_HM_ORACLE_SRCS) $(ATOMIC_V3_CAPTURE_PAIR_SRCS) $(ATOMIC_V3_KING_BLAST_EP_SRCS) $(ATOMIC_V3_BLAST_RING_SRCS) $(ATOMIC_V3_FULL_REFRESH_SRCS) $(ATOMIC_V3_NUMERIC_SRCS) $(ATOMIC_V3_WIRE_SRCS) $(ATOMIC_V3_SCALAR_SRCS) $(ATOMIC_V3_INCREMENTAL_SRCS) $(ATOMIC_V3_INCREMENTAL_STRESS_SRCS) $(ATOMIC_V3_INCREMENTAL_SIMD_KERNEL_SRCS) $(ATOMIC_V3_INCREMENTAL_SIMD_BENCHMARK_SRCS) $(ATOMIC_V3_SIMD_SRCS) $(OTHER_SRCS) $(HEADERS) $(ATOMIC_DATA_GENERATOR_HEADERS) $(ATOMIC_DATA_TOOLS_HEADERS) $(ATOMIC_V3_HM_ORACLE_HEADERS) $(ATOMIC_V3_CAPTURE_PAIR_HEADERS) $(ATOMIC_V3_KING_BLAST_EP_HEADERS) $(ATOMIC_V3_BLAST_RING_HEADERS) $(ATOMIC_V3_FULL_REFRESH_HEADERS) $(ATOMIC_V3_NUMERIC_HEADERS) $(ATOMIC_V3_WIRE_HEADERS) $(ATOMIC_V3_SCALAR_HEADERS) $(ATOMIC_V3_INCREMENTAL_HEADERS) $(ATOMIC_V3_SIMD_HEADERS) -style=file
@@ -1599,6 +1632,8 @@ format:
 ### ==========================================================================
 
 all: $(EXE) .depend
+
+network.o: $(NNUE_EMBED_DEPS)
 
 data-generator: config-sanity $(ATOMIC_DATA_GENERATOR_EXE)
 
@@ -1616,7 +1651,7 @@ DATAGEN_PGO_RUN  = printf '%s\n' 'bench' \
 	'generate_training_data depth 6 count 3000 seed 1 eval_limit 10000 random_multi_pv 4 random_multi_pv_depth 4 output_file_name $(DATAGEN_PGO_OUT) data_format bin' \
 	'quit' | $(RUN_PREFIX) ./$(ATOMIC_DATA_GENERATOR_EXE)
 
-data-generator-profile-build: config-sanity objclean profileclean
+data-generator-profile-build: $(NET_DEPENDENCY) config-sanity objclean profileclean
 	@rm -f $(DATAGEN_PGO_OUT)
 	@echo ""
 	@echo "Step 1/4. Building instrumented generator ..."
@@ -2306,7 +2341,7 @@ $(TEMP_DIR):
 
 # Download nnue files once in src/ (reused by every sub-arch via --embed-dir).
 $(NET_SENTINEL): | $(TEMP_DIR)
-	@cd $(CURDIR) && $(SHELL) ../scripts/net.sh $(EMBED_DIR_SUPPORTED)
+	@cd $(CURDIR) && $(NET_SH_ENV) $(SHELL) ../scripts/net.sh $(EMBED_DIR_SUPPORTED)
 	@touch $@
 
 $(NNUE_EMBED_OBJ): $(UNIVERSAL_SRC_DIR)/nnue_embed.cpp $(NET_SENTINEL) | $(TEMP_DIR)
