@@ -31,10 +31,28 @@
 #include "nnue/nnue_dispatcher.h"
 #include "nnue/nnue_misc.h"
 #include "position.h"
+#include "tune.h"
 #include "types.h"
 #include "nnue/nnue_accumulator.h"
 
 namespace Stockfish {
+
+// SPSA block 1 (tuning branch only). Defaults are the values main
+// ships; a tune=yes build with these defaults searches the same tree.
+namespace {
+TUNABLE_INT EvalScaleBase     = 903;
+TUNABLE_INT EvalScalePawn     = 32;
+TUNABLE_INT EvalScaleNpm      = 32;
+TUNABLE_INT EvalEntertainment = 7;
+TUNABLE_INT EvalOptimismScale = 0;
+}
+#ifdef ATOMIC_TUNE_SEARCH
+TUNE(SetRange(600, 1300), EvalScaleBase);
+TUNE(SetRange(0, 80), EvalScalePawn);
+TUNE(SetRange(0, 80), EvalScaleNpm);
+TUNE(SetRange(-20, 40), EvalEntertainment);
+TUNE(SetRange(-200, 600), EvalOptimismScale);
+#endif
 
 namespace {
 
@@ -106,10 +124,6 @@ Value Eval::evaluate(const Eval::NNUE::AnyNetwork& network,
 
     assert(!pos.checkers());
 
-    // Modern Stockfish optimism belongs to its current orthodox net/search
-    // calibration and must not leak into the legacy Atomic V1 contract.
-    (void) optimism;
-
     Value v;
 
     const auto [rawPsqt, rawPositional] = network.evaluate_raw(pos, accumulator);
@@ -136,7 +150,7 @@ Value Eval::evaluate(const Eval::NNUE::AnyNetwork& network,
     {
         const int deltaNpm =
           std::abs(int(pos.non_pawn_material(WHITE) - pos.non_pawn_material(BLACK)));
-        const int entertainment = deltaNpm <= BishopValue - KnightValue ? 7 : 0;
+        const int entertainment = deltaNpm <= BishopValue - KnightValue ? EvalEntertainment : 0;
         const int blendedRaw =
           ((128 - entertainment) * rawPsqt + (128 + entertainment) * rawPositional) / 128;
 
@@ -146,8 +160,12 @@ Value Eval::evaluate(const Eval::NNUE::AnyNetwork& network,
         // historical material proxy locally for Legacy Atomic V1 scaling.
         const int legacyNpm =
           int(pos.non_pawn_material()) + LegacyAtomicRoyalValue * pos.count<KING>();
-        const int scale = 903 + 32 * pos.count<PAWN>() + 32 * legacyNpm / 1024;
+        const int scale = EvalScaleBase + EvalScalePawn * pos.count<PAWN>()
+                        + EvalScaleNpm * legacyNpm / 1024;
         v               = Value((blendedRaw / 16) * scale / 1024);
+        // Search optimism (137 * avg / (|avg| + 81), side to move) was computed
+        // and discarded. 0 keeps the historical contract exactly.
+        v += optimism * EvalOptimismScale / 1024;
 
         if (pos.is_chess960())
             v += fix_frc(pos);
