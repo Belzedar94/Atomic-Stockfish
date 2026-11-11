@@ -46,6 +46,22 @@ jobs:
       - name: Build portable x86-64
         working-directory: src
         run: make -j2 ARCH=x86-64 COMP=${{ matrix.comp }} COMPCXX=${{ matrix.cxx }} build
+      # `make build` fetches the published default network and embeds it. Bench
+      # from a directory holding no .nnue, so a completed search can only come
+      # from the embedded copy; bench returns 0 even when the search never
+      # started, so the node count is the gate.
+      - name: Default build embeds the published network
+        run: |
+          embedcheck="$RUNNER_TEMP/embedcheck"
+          rm -rf "$embedcheck"
+          mkdir "$embedcheck"
+          cp src/atomic-stockfish "$embedcheck/"
+          cd "$embedcheck"
+          test -z "$(ls ./*.nnue 2>/dev/null)"
+          ./atomic-stockfish bench > bench.log 2>&1
+          tail -n 4 bench.log
+          grep -q "NNUE evaluation using" bench.log
+          grep -Eq 'Nodes searched[[:space:]]*:[[:space:]]*[1-9][0-9]*' bench.log
       - name: Network-free UCI and XBoard release smoke
         run: python3 tests/release_protocol_smoke.py --engine src/atomic-stockfish
       - name: C++ rule and shared-API units
@@ -1230,6 +1246,7 @@ jobs:
           tests/python/test_atomic_syzygy_uci.py
           tests/python/test_atomic_compiler_preflight.py
           tests/python/test_atomic_debug_ci_contract.py
+          tests/python/test_default_net_contract.py
           tests/python/test_atomic_training_data_schema.py
           tests/python/test_atomic_bin_v2_schema.py
           tests/python/test_atomic_bin_v2_manifest_schema.py

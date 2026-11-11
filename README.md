@@ -58,11 +58,12 @@ UCCI, USI and non-Atomic variants are outside the release contract.
 
 ## Neural network
 
-NNUE files are external artifacts and are never downloaded or embedded by the
-native build. Atomic-Stockfish evaluates with NNUE only: it has no classical
-evaluation, so it needs a network to search. Set `EvalFile` to a compatible
-Legacy Atomic V1, AtomicNNUEV2 or AtomicNNUEV3 network. `Use NNUE` selects how
-the network result is used:
+Atomic-Stockfish evaluates with NNUE only: it has no classical evaluation, so
+it needs a network to search. `make build` and `make profile-build` download the
+default network (see [Native build](#native-build)) and embed it in the
+binary, which then needs no companion file. Set `EvalFile` to use another
+compatible Legacy Atomic V1, AtomicNNUEV2 or AtomicNNUEV3 network. `Use NNUE`
+selects how the network result is used:
 
 ```text
 setoption name Use NNUE value true
@@ -77,13 +78,15 @@ like any value outside the list, it is ignored and NNUE stays on.
 
 An incompatible or missing network stops `go`, `bench` and `eval` with an
 explicit error, and `go` answers `bestmove (none)`; `go perft` needs no
-network. The default network (`EvalFileDefaultName`, the one embedded by the
-OpenBench and rolling builds) is `atomic-ft3b-1p2B.nnue`, identified by SHA-256
-`A32645EA6749C2500119BD53B55CC5BAF2F6C502659F247E5E5CA4F26EA48E29`. The frozen
-development reference used by the validation gates remains
+network. The default network (`EvalFileDefaultName`) is `atomic-ft3b-1p2B.nnue`,
+identified by SHA-256
+`A32645EA6749C2500119BD53B55CC5BAF2F6C502659F247E5E5CA4F26EA48E29` and published
+as the asset of the
+[`net-ft3b-1p2B`](https://github.com/Belzedar94/Atomic-Stockfish/releases/tag/net-ft3b-1p2B)
+release. The frozen development reference used by the validation gates remains
 `atomic_run3b_e202_l05.nnue`, identified by SHA-256
 `99DC67EABF26A64FAEECA3A88B4C38597A840B8D4A874B9F2CF658C6F92A04A6`.
-Neither file is distributed in this repository.
+Neither file is committed to this repository.
 
 AtomicNNUEV3 is a supported runtime format, but version 1.0 does not bundle or
 endorse a V3 release-candidate network. The owner-capped sequential four-run V3
@@ -101,15 +104,23 @@ make -j build ARCH=x86-64-bmi2
 ```
 
 The resulting executable is `atomic-stockfish` (or
-`atomic-stockfish.exe` on Windows).
+`atomic-stockfish.exe` on Windows), with the default network embedded.
+
+Like upstream Stockfish, the build first runs `make net`: it downloads the
+default network into `src` with `curl` or `wget`, checks its SHA-256 and keeps
+it there for later builds. A file already in `src` under the default name is
+reused when its SHA-256 matches, and downloaded again when it does not; a
+download that fails or does not match never replaces it. Without network
+access, put the file in `src` yourself, or build with `embed=no` for a binary
+without a network that loads one through `EvalFile` (run `make clean` when
+switching between the two). `make -j EVALFILE=<network>`, the OpenBench
+invocation, embeds the given network instead and downloads nothing.
 
 `make -j profile-build ARCH=x86-64-bmi2` adds profile-guided optimization. Its
-profiling run is a bench, and the engine can only search when it can load a
-network, so place the network in `src` under its default name first; to embed
-it as well, GCC and MinGW builds need `EXTRAPROFILEFLAGS=-DATOMIC_NNUE_EMBEDDING`,
-because `profile-build` replaces `EXTRACXXFLAGS` in its sub-builds. Without a
-network the build still completes, but it ends with a warning: nothing of the
-search was profiled, so that binary is much slower than a plain `make build`.
+profiling run is a bench, which searches with the embedded network. With
+`embed=no` and no network in `src`, the build still completes, but it ends with
+a warning: nothing of the search was profiled, so that binary is much slower
+than a plain `make build`.
 
 Every build names itself in `id name`, the same way upstream Stockfish does. A
 development build reports `Atomic-Stockfish dev-YYYYMMDD-<commit>`, with the
