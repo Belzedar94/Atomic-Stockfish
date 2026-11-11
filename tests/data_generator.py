@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import struct
 import subprocess
 import sys
 import tempfile
@@ -106,6 +107,7 @@ if hashlib.sha256(GOLDEN_V40_CANARY_COMMAND.encode()).hexdigest() != (
 
 START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 CASTLING_FEN = "r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1"
+MATE_IN_ONE_FEN = "7k/6p1/8/8/8/8/8/K5Q1 w - - 0 1"
 
 # Exact 64-byte historical PackedSfen prefixes from the Fairy oracle fixture
 # in tests/legacy_atomic_v1.cpp. They let the integration test prove which
@@ -1035,6 +1037,38 @@ def main(argv: Sequence[str] | None = None) -> int:
             actual=minus_one_sha256,
             unresolved=unresolved_hashes,
         )
+
+        # A mate score must not end the game before the position is written.
+        # White mates in one by exploding the black king (Qxg7); the record
+        # carries the mate score and the real result of the played-out game.
+        mate_book = root / "mate-book.epd"
+        mate_book.write_bytes((MATE_IN_ONE_FEN + "\n").encode("utf-8"))
+        mate_output_path = root / "mate.bin"
+        mate_output = run_engine(
+            generator,
+            (
+                *setup_commands(net),
+                generation_command(
+                    mate_output_path, records=1, write_max_ply=4, book=mate_book
+                ),
+                "quit",
+            ),
+            expect_success=True,
+            timeout=60.0,
+        )
+        if "INFO: generate_training_data finished." not in mate_output:
+            raise AssertionError(f"mate fixture did not finish:\n{mate_output}")
+        if "explosion=1" not in mate_output:
+            raise AssertionError(f"mate fixture did not end by explosion:\n{mate_output}")
+        mate_data = assert_dataset(mate_output_path, 1)
+        mate_score, _mate_move, mate_ply, mate_result = struct.unpack_from(
+            "<hHHb", mate_data, 64
+        )
+        if mate_score < 31000 or mate_ply != 0 or mate_result != 1:
+            raise AssertionError(
+                "mate fixture record lost its mate score or result: "
+                f"score={mate_score} ply={mate_ply} result={mate_result}"
+            )
 
         # One record per game makes two records cross exactly one game boundary.
         # Variable depth and one random move make the inherited RNG state affect
@@ -1976,7 +2010,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         print(
             "Atomic data-generator tests passed "
-            f"fixtures=7 data_sha256={data_sha256} net_sha256={net_sha256}"
+            f"fixtures=8 data_sha256={data_sha256} net_sha256={net_sha256}"
         )
     return 0
 

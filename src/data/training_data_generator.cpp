@@ -79,7 +79,14 @@ constexpr u64              ReportEvery         = 5000;
 constexpr u64              MinimumShardRecords = 200000;
 constexpr u64              MaximumShardFiles   = 100000;
 constexpr int              MaximumGeneratedPly = 4096;
-constexpr int              LegacyKnownWin      = 10000;
+// Self-play adjudication. A score-based resignation needs the same side at or
+// above eval_limit for ResignPlies consecutive plies; mate scores are played
+// out. A score-based draw needs every score of the last DrawPlies plies within
+// DrawScoreLimit (8 centipawns in UCI units) once the game is DrawMinPly long.
+constexpr int              ResignPlies    = 16;
+constexpr int              DrawMinPly     = 80;
+constexpr int              DrawPlies      = 16;
+constexpr int              DrawScoreLimit = 16;
 constexpr std::string_view LegacyAtomicV1SchemaSha256 =
   "acca0f551f1c012c31a6c727dedccaebb7b5ebbc46810edb87e31bb208d5abe1";
 // Preserve the historical direct-mapped 64M-key deduplication table. Reducing
@@ -130,9 +137,52 @@ struct GeneratorParams {
     bool        setRecommendedUciOptionsSeen = false;
 };
 
+// Why a self-play game stopped. Only reported on stdout, so the operator can
+// see how many games reached a real result and how many were adjudicated.
+enum class GameEnd : int {
+    Explosion,
+    Checkmate,
+    Stalemate,
+    InsufficientMaterial,
+    FiftyMoveRule,
+    Repetition,
+    MaxPly,
+    DrawByScore,
+    ResignByScore,
+    ProvenByTablebase,
+    NoBestMove,
+    Count
+};
+
+constexpr std::string_view GameEndNames[] = {
+  "explosion", "checkmate",  "stalemate",    "insufficient",  "fifty_move", "repetition",
+  "max_ply",   "draw_score", "resign_score", "tablebase_win", "no_move"};
+static_assert(std::size(GameEndNames) == usize(GameEnd::Count));
+
+GameEnd game_end_from_termination(Atomic::Termination termination) {
+    switch (termination)
+    {
+    case Atomic::Termination::AtomicExplosion :
+        return GameEnd::Explosion;
+    case Atomic::Termination::Checkmate :
+        return GameEnd::Checkmate;
+    case Atomic::Termination::Stalemate :
+        return GameEnd::Stalemate;
+    case Atomic::Termination::InsufficientMaterial :
+        return GameEnd::InsufficientMaterial;
+    case Atomic::Termination::FiftyMoveRule :
+        return GameEnd::FiftyMoveRule;
+    case Atomic::Termination::ThreefoldRepetition :
+    case Atomic::Termination::Ongoing :
+        break;
+    }
+    return GameEnd::Repetition;
+}
+
 struct GameResolution {
     bool                 terminal = false;
     std::optional<Color> winner;
+    GameEnd              reason = GameEnd::MaxPly;
 };
 
 template<typename T>
@@ -1088,6 +1138,13 @@ class Generator {
 
     u64 records_written() const { return written.load(std::memory_order_relaxed); }
     u64 draws_written() const { return draws.load(std::memory_order_relaxed); }
+    std::string game_end_summary() const {
+        std::ostringstream summary;
+        summary << "INFO: game ends:";
+        for (usize i = 0; i < usize(GameEnd::Count); ++i)
+            summary << ' ' << GameEndNames[i] << '=' << gameEnds[i].load(std::memory_order_relaxed);
+        return summary.str();
+    }
     const std::vector<AtomicBinV2ShardMetadata>& atomic_bin_v2_shards() const noexcept {
         return output.atomic_bin_v2_shards();
     }
@@ -1107,6 +1164,7 @@ class Generator {
 
     std::atomic<u64>                            written{0};
     std::atomic<u64>                            draws{0};
+    std::array<std::atomic<u64>, usize(GameEnd::Count)> gameEnds{};
     std::atomic<bool>                           finished{false};
     std::mutex                                  outputMutex;
     std::mutex                                  openingMutex;
@@ -1217,18 +1275,23 @@ class Generator {
           outcome.terminal(), outcome.termination == Atomic::Termination::InsufficientMaterial,
           params.adjudicateInsufficient, ply >= params.writeMaxPly);
         if (resolutionSource == TrainingResolutionSource::OUTCOME)
-            return {true, outcome.winner};
+            return {true, outcome.winner, game_end_from_termination(outcome.termination)};
         if (resolutionSource == TrainingResolutionSource::MAX_PLY)
-            return {true, std::nullopt};
+            return {true, std::nullopt, GameEnd::MaxPly};
 
-        if (params.adjudicateDrawsByScore && ply >= 80 && scores.size() >= 8)
+        if (params.adjudicateDrawsByScore && ply >= DrawMinPly && scores.size() >= usize(DrawPlies))
         {
-            const bool allZero =
-              std::all_of(scores.end() - 8, scores.end(), [](int score) { return score == 0; });
-            if (allZero)
-                return {true, std::nullopt};
+            const bool quiet = std::all_of(scores.end() - DrawPlies, scores.end(), [](int score) {
+                return std::abs(score) <= DrawScoreLimit;
+            });
+            if (quiet)
+                return {true, std::nullopt, GameEnd::DrawByScore};
         }
         return {};
+    }
+
+    void note_end(GameEnd reason) {
+        gameEnds[usize(reason)].fetch_add(1, std::memory_order_relaxed);
     }
 
     bool commit_game(std::vector<TrainingDataSample>& samples, std::optional<Color> winner) {
@@ -1305,6 +1368,7 @@ class Generator {
             }
 
             int        resignCounter = 0;
+            Color      resignWinner  = WHITE;
             const bool shouldResign  = rng.rand(10) > 1;
 
             std::vector<TrainingDataSample> samples;
@@ -1344,6 +1408,7 @@ class Generator {
                 if (const auto resolution = current_resolution(position, ply, scores);
                     resolution.terminal)
                 {
+                    note_end(resolution.reason);
                     commit_game(samples, resolution.winner);
                     break;
                 }
@@ -1354,23 +1419,12 @@ class Generator {
                     return;
                 }
                 if (searchResult.pv.empty())
+                {
+                    note_end(GameEnd::NoBestMove);
                     break;
+                }
 
                 const int score = searchResult.value;
-                if (std::abs(score) >= params.evalLimit)
-                {
-                    ++resignCounter;
-                    if ((shouldResign && resignCounter >= 4) || std::abs(score) >= LegacyKnownWin)
-                    {
-                        const Color winner =
-                          score > 0 ? position.side_to_move() : ~position.side_to_move();
-                        commit_game(samples, winner);
-                        break;
-                    }
-                }
-                else
-                    resignCounter = 0;
-
                 scores.push_back(score);
                 const Move bestMove = searchResult.pv[0];
                 const bool stableTarget =
@@ -1389,6 +1443,39 @@ class Generator {
                       {position.fen(), score, bestMove, ply, 0,
                        params.atomic960 ? TRAINING_DATA_CHESS960 : NO_TRAINING_DATA_FLAGS});
                 }
+
+                // Adjudicate only after the current position has been recorded,
+                // so the decisive positions themselves reach the dataset.
+                //
+                // A mate score is never adjudicated: the game is played out to
+                // the explosion or the mate, which is short and gives the real
+                // result plus the positions of the mating line. A tablebase win
+                // is a proven result and ends the game at once. Below that, a
+                // game may resign only after the same side has stayed at or
+                // above eval_limit for ResignPlies consecutive plies, so a
+                // swing from one side to the other restarts the count.
+                const Color scoreWinner =
+                  score > 0 ? position.side_to_move() : ~position.side_to_move();
+                if (is_decisive(score) && !is_mate_or_mated(score))
+                {
+                    note_end(GameEnd::ProvenByTablebase);
+                    commit_game(samples, scoreWinner);
+                    break;
+                }
+                if (!is_mate_or_mated(score) && std::abs(score) >= params.evalLimit)
+                {
+                    if (resignCounter > 0 && resignWinner != scoreWinner)
+                        resignCounter = 0;
+                    resignWinner = scoreWinner;
+                    if (++resignCounter >= ResignPlies && shouldResign)
+                    {
+                        note_end(GameEnd::ResignByScore);
+                        commit_game(samples, scoreWinner);
+                        break;
+                    }
+                }
+                else if (!is_mate_or_mated(score))
+                    resignCounter = 0;
 
                 const auto randomMove =
                   choose_random_move(worker, position, rng, flags, ply, randomMovesMade);
@@ -3273,6 +3360,7 @@ bool generate_training_data_impl(Engine&                  engine,
         print_error(error);
         return false;
     }
+    sync_cout << generator.game_end_summary() << sync_endl;
 
     const Tablebases::ProbeCounters tablebaseCounters =
       authenticatedV2 ? Tablebases::probe_counters() : Tablebases::ProbeCounters{};

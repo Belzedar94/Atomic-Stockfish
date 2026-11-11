@@ -55,11 +55,21 @@ def test_openbench_datagen_build_is_isolated_and_embeds_only_for_worker_bench():
     datagen = OPENBENCH.split("openbench-datagen:", 1)[1].split(
         "ifneq ($(strip $(EVALFILE)),)", 1
     )[0]
-    assert "data-generator EXE=atomic-openbench-playing-unused" in datagen
+    assert "data-generator-profile-build EXE=atomic-openbench-playing-unused" in datagen
     assert 'ATOMIC_DATA_GENERATOR_EXE="$(EXE)"' in datagen
     assert "ARCH=x86-64-bmi2 COMP=$(OPENBENCH_COMP)" in datagen
     assert 'cp "$(EVALFILE)" "$(OPENBENCH_NET).tmp"' in datagen
     assert "-DATOMIC_NNUE_EMBEDDING" in datagen
+
+
+def test_openbench_datagen_profile_build_profiles_the_generator():
+    recipe = MAKEFILE.split("data-generator-profile-build: ", 1)[1].split("\n\n", 1)[0]
+    assert "PROFILE_TARGET=data-generator $(profile_make)" in recipe
+    assert "$(DATAGEN_PGO_RUN) > PGOBENCH.out" in recipe
+    assert "PROFILE_TARGET=data-generator $(profile_use)" in recipe
+    run = MAKEFILE.split("DATAGEN_PGO_RUN  = ", 1)[1].split("\n\n", 1)[0]
+    assert "'bench'" in run
+    assert "generate_training_data" in run
 
 
 def test_openbench_bridge_objects_belong_only_to_generator_source_list():
