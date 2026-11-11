@@ -1445,7 +1445,7 @@ endif
 BUILD_JOBS_NPROC := $(shell nproc 2>/dev/null || sysctl -n hw.logicalcpu 2>/dev/null || echo $(NUMBER_OF_PROCESSORS))
 BUILD_JOBS ?= $(or $(OPENBENCH_BUILD_JOBS),$(firstword $(filter 1 2 3 4 5 6 7,$(BUILD_JOBS_NPROC)) 8))
 
-.PHONY: help analyze build profile-build data-generator data-generator-tests data-tools data-tools-tests atomic-data-tools-json-tests atomic-unit-tests atomic-api-tests atomic-syzygy-driver atomic-nnue-incremental-tests atomic-v2-test-fixture atomic-v2-backend-core-tests atomic-v2-incremental-tests atomic-v3-hm-oracle-tests atomic-v3-capture-pair-tests atomic-v3-king-blast-ep-tests atomic-v3-blast-ring-tests atomic-v3-full-refresh-tests atomic-v3-numeric-tests atomic-v3-wire-test-fixture atomic-v3-wire-tests atomic-v3-scalar-tests atomic-v3-incremental-tests atomic-v3-incremental-stress-tests atomic-v3-incremental-simd-kernel-tests atomic-v3-incremental-simd-tests atomic-v3-incremental-simd-stress-tests atomic-v3-incremental-simd-benchmark atomic-v3-simd-tests legacy-atomic-v1-tests atomic-bin-v2-tests atomic-bin-v2-sink-tests atomic-bin-v2-manifest-tests atomic-bin-v2-manifest-reader-tests atomic-bin-v2-reader-tests atomic-v3-trajectory-tests atomic-v3-private-staging-tests macos-lipo strip install clean net \
+.PHONY: help analyze build profile-build data-generator data-generator-profile-build data-generator-tests data-tools data-tools-tests atomic-data-tools-json-tests atomic-unit-tests atomic-api-tests atomic-syzygy-driver atomic-nnue-incremental-tests atomic-v2-test-fixture atomic-v2-backend-core-tests atomic-v2-incremental-tests atomic-v3-hm-oracle-tests atomic-v3-capture-pair-tests atomic-v3-king-blast-ep-tests atomic-v3-blast-ring-tests atomic-v3-full-refresh-tests atomic-v3-numeric-tests atomic-v3-wire-test-fixture atomic-v3-wire-tests atomic-v3-scalar-tests atomic-v3-incremental-tests atomic-v3-incremental-stress-tests atomic-v3-incremental-simd-kernel-tests atomic-v3-incremental-simd-tests atomic-v3-incremental-simd-stress-tests atomic-v3-incremental-simd-benchmark atomic-v3-simd-tests legacy-atomic-v1-tests atomic-bin-v2-tests atomic-bin-v2-sink-tests atomic-bin-v2-manifest-tests atomic-bin-v2-manifest-reader-tests atomic-bin-v2-reader-tests atomic-v3-trajectory-tests atomic-v3-private-staging-tests macos-lipo strip install clean net \
 	objclean profileclean config-sanity \
 	icx-profile-use icx-profile-make \
 	gcc-profile-use gcc-profile-make \
@@ -1601,6 +1601,39 @@ format:
 all: $(EXE) .depend
 
 data-generator: config-sanity $(ATOMIC_DATA_GENERATOR_EXE)
+
+### PGO for the isolated generator. The profiling run is the generator's own
+### bench plus a short single-threaded self-play generation, so the generator
+### loop is profiled along with the search. Both need a network: embed one
+### (ATOMIC_NNUE_EMBEDDING) or set DATAGEN_PGO_NET to a file. PGO only changes
+### code layout and inlining, never results, so the data stays identical to a
+### plain build at the same ARCH.
+DATAGEN_PGO_NET ?= $(OPENBENCH_NET)
+DATAGEN_PGO_OUT  = atomic-datagen-pgo-profile.bin
+DATAGEN_PGO_RUN  = printf '%s\n' 'bench' \
+	'setoption name EvalFile value $(DATAGEN_PGO_NET)' 'setoption name Use NNUE value pure' \
+	'setoption name Threads value 1' 'setoption name Hash value 16' \
+	'generate_training_data depth 6 count 3000 seed 1 eval_limit 10000 random_multi_pv 4 random_multi_pv_depth 4 output_file_name $(DATAGEN_PGO_OUT) data_format bin' \
+	'quit' | $(RUN_PREFIX) ./$(ATOMIC_DATA_GENERATOR_EXE)
+
+data-generator-profile-build: config-sanity objclean profileclean
+	@rm -f $(DATAGEN_PGO_OUT)
+	@echo ""
+	@echo "Step 1/4. Building instrumented generator ..."
+	$(MAKE) -j$(BUILD_JOBS) ARCH=$(ARCH) COMP=$(COMP) PROFILE_TARGET=data-generator $(profile_make)
+	@echo ""
+	@echo "Step 2/4. Running bench and a short generation for pgo-build ..."
+	$(DATAGEN_PGO_RUN) > PGOBENCH.out 2>&1
+	@rm -f $(DATAGEN_PGO_OUT)
+	tail -n 4 PGOBENCH.out
+	@echo ""
+	@echo "Step 3/4. Building optimized generator ..."
+	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) objclean
+	$(MAKE) -j$(BUILD_JOBS) ARCH=$(ARCH) COMP=$(COMP) PROFILE_TARGET=data-generator $(profile_use)
+	@echo ""
+	@echo "Step 4/4. Deleting profile data ..."
+	$(PGO_NETWORK_CHECK)
+	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) profileclean
 
 data-generator-tests: config-sanity $(ATOMIC_DATA_GENERATOR_EXE) $(EXE) $(ATOMIC_LEGACY_V1_TEST_EXE) $(ATOMIC_BIN_V2_TEST_EXE) $(ATOMIC_BIN_V2_SINK_TEST_EXE) $(ATOMIC_BIN_V2_MANIFEST_TEST_EXE) $(ATOMIC_BIN_V2_MANIFEST_READER_TEST_EXE) $(ATOMIC_BIN_V2_READER_TEST_EXE) $(ATOMIC_V3_TRAJECTORY_TEST_EXE) $(ATOMIC_V3_PRIVATE_STAGING_TEST_EXE)
 	./$(ATOMIC_LEGACY_V1_TEST_EXE)
@@ -2091,18 +2124,22 @@ atomic_data_generator_%.o: data/%.cpp $(HEADERS) $(ATOMIC_DATA_GENERATOR_HEADERS
 misc.o: misc.cpp atomic_version.h $(BUILD_SHA_FILE) $(BUILD_DATE_FILE) $(BUILD_VERSION_FILE)
 	$(strip $(CXX) $(CPPFLAGS) $(CXXFLAGS) $(if $(ATOMIC_RELEASE),-DATOMIC_VERSION=$(ATOMIC_RELEASE)) $(if $(GIT_SHA),-DGIT_SHA=$(GIT_SHA)) $(if $(GIT_DATE),-DGIT_DATE=$(GIT_DATE))) -c -o $@ $<
 
+# Target the profile recipes build: the playing engine by default, the
+# isolated generator for data-generator-profile-build.
+PROFILE_TARGET ?= all
+
 clang-profile-make:
 	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) \
 	EXTRACXXFLAGS='-fprofile-generate ' \
 	EXTRALDFLAGS=' -fprofile-generate' \
-	all
+	$(PROFILE_TARGET)
 
 clang-profile-use:
 	$(XCRUN) $(LLVM_PROFDATA) merge -output=stockfish.profdata *.profraw
 	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) \
 	EXTRACXXFLAGS='-fprofile-use=stockfish.profdata' \
 	EXTRALDFLAGS='-fprofile-use ' \
-	all
+	$(PROFILE_TARGET)
 
 # GCC stores mangled absolute object paths below profdir. MinGW compares the
 # prefix using native Windows spelling, including backslashes.
@@ -2119,7 +2156,7 @@ gcc-profile-make:
 	EXTRACXXFLAGS='-fprofile-generate=profdir $(GCC_PROFILE_PREFIX_FLAG)' \
 	EXTRACXXFLAGS+=$(EXTRAPROFILEFLAGS) \
 	EXTRALDFLAGS='-lgcov' \
-	all
+	$(PROFILE_TARGET)
 
 gcc-profile-use:
 	@test -d profdir && test -n "$$(find profdir -type f -name '*.gcda' -print -quit)" || { \
@@ -2130,20 +2167,20 @@ gcc-profile-use:
 	EXTRACXXFLAGS='-fprofile-use=profdir $(GCC_PROFILE_PREFIX_FLAG) -Werror=missing-profile -fno-peel-loops -fno-tracer' \
 	EXTRACXXFLAGS+=$(EXTRAPROFILEFLAGS) \
 	EXTRALDFLAGS='-lgcov' \
-	all
+	$(PROFILE_TARGET)
 
 icx-profile-make:
 	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) \
 	EXTRACXXFLAGS='-fprofile-instr-generate ' \
 	EXTRALDFLAGS=' -fprofile-instr-generate' \
-	all
+	$(PROFILE_TARGET)
 
 icx-profile-use:
 	$(XCRUN) $(LLVM_PROFDATA) merge -output=stockfish.profdata *.profraw
 	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) \
 	EXTRACXXFLAGS='-fprofile-instr-use=stockfish.profdata' \
 	EXTRALDFLAGS='-fprofile-use ' \
-	all
+	$(PROFILE_TARGET)
 
 .depend: $(SRCS)
 	-@$(CXX) $(DEPENDFLAGS) -MM $(SRCS) > $@ 2> /dev/null
@@ -2375,10 +2412,11 @@ else
 	@test -f "$(EVALFILE)" || { echo "ERROR: OpenBench EVALFILE does not exist: $(EVALFILE)" >&2; exit 2; }
 	@cp "$(EVALFILE)" "$(OPENBENCH_NET).tmp"
 	@mv "$(OPENBENCH_NET).tmp" "$(OPENBENCH_NET)"
-	+$(MAKE) -j$(BUILD_JOBS) data-generator EXE=atomic-openbench-playing-unused \
+	+$(MAKE) data-generator-profile-build EXE=atomic-openbench-playing-unused \
 		ATOMIC_DATA_GENERATOR_EXE="$(EXE)" CXX="$(CXX)" \
 		ARCH=x86-64-bmi2 COMP=$(OPENBENCH_COMP) \
-		EXTRACXXFLAGS='$(EXTRACXXFLAGS) -DATOMIC_NNUE_EMBEDDING'
+		ENV_CXXFLAGS='$(ENV_CXXFLAGS) -DATOMIC_NNUE_EMBEDDING' \
+		EXTRAPROFILEFLAGS='$(EXTRACXXFLAGS)'
 endif
 
 ifneq ($(strip $(EVALFILE)),)
