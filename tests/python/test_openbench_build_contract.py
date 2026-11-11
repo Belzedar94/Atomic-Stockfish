@@ -45,7 +45,7 @@ def test_openbench_forwards_worker_output_and_compiler_to_the_bmi2_build():
 
 
 def test_openbench_embeds_the_authenticated_network_under_the_canonical_name():
-    assert "OPENBENCH_NET = atomic_run3b_e202_l05.nnue" in OPENBENCH
+    assert "OPENBENCH_NET = atomic-ft3b-1p2B.nnue" in OPENBENCH
     assert 'cp "$(EVALFILE)" "$(OPENBENCH_NET).tmp"' in OPENBENCH
     assert 'mv "$(OPENBENCH_NET).tmp" "$(OPENBENCH_NET)"' in OPENBENCH
     assert "-DATOMIC_NNUE_EMBEDDING" in OPENBENCH

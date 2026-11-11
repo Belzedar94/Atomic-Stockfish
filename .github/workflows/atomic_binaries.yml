@@ -21,9 +21,9 @@ concurrency:
 env:
   # The published Atomic V1 network. Bump these three together with
   # EvalFileDefaultName in src/evaluate.h whenever the champion net changes.
-  ATOMIC_NET_TAG: v1.0
-  ATOMIC_NET_ASSET: atomic-run3b.nnue
-  ATOMIC_NET_SHA256: 99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f92a04a6
+  ATOMIC_NET_TAG: net-ft3b-1p2B
+  ATOMIC_NET_ASSET: atomic-ft3b-1p2B.nnue
+  ATOMIC_NET_SHA256: a32645ea6749c2500119bd53b55cc5baf2f6c502659f247e5e5ca4f26ea48e29
   # Tag of the rolling prerelease. Not `latest-main`: that name was published
   # once while the repository had immutable releases enabled, and GitHub keeps
   # such a tag name reserved forever — deleting the release does not free it,
@@ -97,7 +97,7 @@ jobs:
       # src/ under the canonical EvalFileDefaultName, then build with the
       # embedding flag — so the binary runs with no companion file. The
       # canonical name is read from evaluate.h rather than hardcoded, and the
-      # download is authenticated against the SHA-256 in the v1.0 release notes.
+      # download is authenticated against ATOMIC_NET_SHA256 above.
       - name: Fetch and place the Atomic network
         shell: bash
         run: |

@@ -32,7 +32,7 @@ namespace Eval {
 // Legacy Atomic V1 networks are selected by their header and architecture, not
 // by a Stockfish-style filename hash. Releases keep the net external until its
 // redistribution rights are explicitly confirmed.
-#define EvalFileDefaultName "atomic_run3b_e202_l05.nnue"
+#define EvalFileDefaultName "atomic-ft3b-1p2B.nnue"
 
 // Atomic-Stockfish evaluates with NNUE only. True is the playing mode; Pure is
 // the raw network result reserved for data generation.
