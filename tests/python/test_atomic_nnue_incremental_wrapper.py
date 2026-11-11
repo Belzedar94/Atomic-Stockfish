@@ -63,6 +63,41 @@ def test_default_profiles_require_the_frozen_signature(
     )
 
 
+@pytest.mark.parametrize(
+    ("mode", "operations", "interval", "signature"),
+    (
+        ("smoke", 4_096, 1, "E00F263D3974195F"),
+        ("release", 1_000_000, 1_024, "CDAEB5F2E9FEEA"),
+    ),
+)
+def test_default_network_has_its_own_frozen_signature(
+    mode: str, operations: int, interval: int, signature: str
+):
+    output = sentinel(mode=mode, requested=operations, signature=signature)
+    assert (
+        WRAPPER.validate_gate_output(
+            output,
+            mode=mode,
+            operations=operations,
+            full_refresh_interval=interval,
+            net_sha256=WRAPPER.DEFAULT_NET_SHA256,
+        )
+        == signature
+    )
+    with pytest.raises(WRAPPER.GateOutputError, match="signature mismatch"):
+        WRAPPER.validate_gate_output(
+            output,
+            mode=mode,
+            operations=operations,
+            full_refresh_interval=interval,
+        )
+
+
+def test_default_network_matches_the_makefile_pin():
+    makefile = (ROOT / "src" / "Makefile").read_text(encoding="utf-8")
+    assert f"NNUE_NET_SHA256 = {WRAPPER.DEFAULT_NET_SHA256}" in makefile
+
+
 def test_zero_exit_unknown_command_is_not_a_pass():
     with pytest.raises(WRAPPER.GateOutputError, match="success sentinel"):
         WRAPPER.validate_gate_output(

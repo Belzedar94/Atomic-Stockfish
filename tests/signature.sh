@@ -17,17 +17,21 @@ error()
 }
 trap 'error ${LINENO}' ERR
 
-# Obtain an Atomic-only signature with the frozen Legacy Atomic V1 network.
+# Obtain the bench signature the way the "Bench:" line of a commit message is
+# measured: with the network the default build embeds (`make build` fetches it
+# with `make net`). ATOMIC_NNUE_NET loads another network file instead.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 EXE=${EXE:-$REPO_ROOT/src/atomic-stockfish}
-NET=${ATOMIC_NNUE_NET:-$REPO_ROOT/../atomic_run3b_e202_l05.nnue}
+NET=${ATOMIC_NNUE_NET:-}
 
 [[ -x "$EXE" ]] || { echo "missing engine: $EXE" >&2; exit 2; }
-[[ -f "$NET" ]] || { echo "missing Atomic NNUE: $NET" >&2; exit 2; }
+[[ -z "$NET" || -f "$NET" ]] || { echo "missing Atomic NNUE: $NET" >&2; exit 2; }
 
 {
-  printf 'setoption name EvalFile value %s\n' "$NET"
+  if [[ -n "$NET" ]]; then
+    printf 'setoption name EvalFile value %s\n' "$NET"
+  fi
   printf 'setoption name Use NNUE value true\n'
   printf 'bench 16 1 13 default depth\n'
   printf 'quit\n'

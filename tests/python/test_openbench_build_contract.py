@@ -36,11 +36,15 @@ def test_openbench_selects_the_normative_compiler_on_windows_and_linux():
     assert mapping.groupdict() == {"windows": "mingw", "linux": "gcc"}
 
 
-def test_openbench_forwards_worker_output_and_compiler_to_the_bmi2_build():
+def test_openbench_forwards_worker_output_and_compiler_to_the_native_pgo_build():
+    # The playing-engine shim builds with PGO for the worker's own CPU, so each
+    # machine benches the binary it plays with. The worker's EXE and CXX must
+    # reach that build unchanged.
+    playing = OPENBENCH.split("\nopenbench:", 1)[1].split("\nopenbench-datagen:", 1)[0]
     assert re.search(
-        r"\+\$\(MAKE\) build EXE=\"\$\(EXE\)\" CXX=\"\$\(CXX\)\"\s*\\\s*"
-        r"ARCH=x86-64-bmi2 COMP=\$\(OPENBENCH_COMP\)",
-        OPENBENCH,
+        r"\+\$\(MAKE\) profile-build EXE=\"\$\(EXE\)\" CXX=\"\$\(CXX\)\"\s*\\\s*"
+        r"ARCH=native COMP=\$\(OPENBENCH_COMP\)",
+        playing,
     )
 
 
