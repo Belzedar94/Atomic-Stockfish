@@ -169,11 +169,6 @@ bool UCIEngine::execute(std::string_view command) {
         if (!Data::generate_training_data(engine, is))
             std::exit(EXIT_FAILURE);
     }
-    else if (token == "generate_atomic_v3_chunk")
-    {
-        if (!Data::generate_atomic_v3_chunk(engine, is))
-            std::exit(EXIT_FAILURE);
-    }
     else if (token == "openbench_generate_training_data")
     {
         if (!Data::openbench_generate_training_data(engine, is))
@@ -613,10 +608,8 @@ std::string UCIEngine::format_score(const Score& s) {
 int UCIEngine::to_cp(Value v, const Position& pos) {
     // Legacy Atomic V1 uses Fairy-Stockfish's fixed pawn normalization. The
     // orthodox Stockfish WDL fit is neither calibrated nor meaningful here.
-    // AtomicNNUEV3 trace components may use substantially more than the
-    // ordinary bounded search-value domain. Widen before multiplying so the
-    // diagnostic contribution table remains defined for every authenticated
-    // V3 component while preserving the historical integer truncation.
+    // Widen before multiplying so the diagnostic contribution table stays
+    // defined for every trace component, with the historical truncation.
     (void) pos;
     return int(i64(100) * int(v) / PawnValue);
 }

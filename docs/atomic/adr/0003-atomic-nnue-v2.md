@@ -1,6 +1,7 @@
 # ADR 0003: Add AtomicNNUEV2 as an isolated SFNNv15 backend
 
-- Status: accepted; engine implementation merged in PR #28; trained V2 strength candidate remains pending
+- Status: superseded (2026-11-11). No trained V2 network ever replaced the Legacy V1 networks in production, and the V2 strength campaign was abandoned. The V2 reader stays in the engine for one reason: the search, rules, XBoard, Syzygy and bindings test suites use a material-only V2 network as their evaluation oracle. Its training-pipeline evidence is in the `archive/pre-cleanup-20261111` tag.
+- Original status: accepted; engine implementation merged in PR #28; trained V2 strength candidate remains pending
 - Date: 2026-07-14
 
 ## Context

@@ -1,6 +1,7 @@
 # ADR 0004: Design AtomicNNUEV3 as a blast-aware SFNNv15 backend
 
-- Status: accepted; wire v1 frozen; private scalar, incremental, SIMD and trajectory backends implemented; runtime dispatch and serialization promoted in H9.3n; production scanning and controlled training remain pending
+- Status: archived (2026-11-11). No V3 network beat the V1 champion. The backend, its tooling and its evidence were removed from the tree and kept in the `archive/pre-cleanup-20261111` tag; evidence paths below refer to that tag. The relation inputs survive as a bet, see `docs/atomic/v3-relations-note.md`.
+- Original status: accepted; wire v1 frozen; private scalar, incremental, SIMD and trajectory backends implemented; runtime dispatch and serialization promoted in H9.3n; production scanning and controlled training remain pending
 - Date: 2026-07-14
 
 ## Context

@@ -83,10 +83,9 @@ Value Eval::Detail::atomic_nnue_value_from_scaled(i64 scaled) noexcept {
 }
 
 Value Eval::Detail::atomic_nnue_value_from_raw(i32 rawPsqt, i32 rawPositional) noexcept {
-    // V3's authenticated numeric domain permits the complete i32 range for
-    // each raw component. Sum in i64, then enter the ordinary evaluation
-    // domain before Chess960/rule-50 corrections so neither the addition nor
-    // damp_for_atomic_rule50() can overflow.
+    // Each raw component may use the complete i32 range. Sum in i64, then
+    // enter the ordinary evaluation domain before Chess960/rule-50 corrections
+    // so neither the addition nor damp_for_atomic_rule50() can overflow.
     const i64 scaled = (i64(rawPsqt) + i64(rawPositional)) / 16;
     return atomic_nnue_value_from_scaled(scaled);
 }
@@ -119,12 +118,11 @@ Value Eval::evaluate(const Eval::NNUE::AnyNetwork& network,
         // scaling, Chess960 correction, or fifty-move damping. It remains
         // a data-generation-only mode.
         v = Detail::atomic_nnue_value_from_raw(rawPsqt, rawPositional);
-    else if (network.backend() == NNUE::NetworkBackend::AtomicNNUEV2
-             || network.backend() == NNUE::NetworkBackend::AtomicNNUEV3)
+    else if (network.backend() == NNUE::NetworkBackend::AtomicNNUEV2)
     {
-        // Modern Atomic networks are trained directly in Atomic engine
-        // units. The Legacy COMMONER material proxy, entertainment blend,
-        // and V1 calibration scale must never leak into these backends.
+        // AtomicNNUEV2 networks are trained directly in Atomic engine units.
+        // The Legacy COMMONER material proxy, entertainment blend, and V1
+        // calibration scale must never leak into this backend.
         v = Detail::atomic_nnue_value_from_raw(rawPsqt, rawPositional);
 
         if (pos.is_chess960())

@@ -1,7 +1,7 @@
 # Atomic-Stockfish Node UCI/NNUE WebAssembly
 
 This target builds the complete Atomic search engine, including the Legacy
-Atomic V1, AtomicNNUEV2 and AtomicNNUEV3 readers, as a pthread-enabled
+Atomic V1 and AtomicNNUEV2 readers, as a pthread-enabled
 Emscripten command-line program. Networks remain external and are read at
 runtime through Node's filesystem. Each test runner authenticates its requested
 network by SHA-256.
@@ -13,8 +13,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File ..\tests\wasm-engine\build.p
 node ..\tests\wasm-engine\run-engine-tests.mjs --engine ..\build\wasm-engine\atomic-stockfish-nnue-node.mjs --net ..\atomic_run3b_e202_l05.nnue
 python ..\tests\create_synthetic_zero_nnue.py --output ..\build\wasm-engine\atomic-zero.nnue
 python ..\tests\create_synthetic_atomic_v2_nnue.py --output ..\build\wasm-engine\atomic-v2.nnue
-python ..\tests\create_synthetic_atomic_v3_nnue.py --output ..\build\wasm-engine\atomic-v3.nnue
-node ..\tests\wasm-engine\run-dual-backend-tests.mjs --engine ..\build\wasm-engine\atomic-stockfish-nnue-node.mjs --legacy-net ..\build\wasm-engine\atomic-zero.nnue --legacy-sha256 9CF054CA00B82AB53A34473DE52D1104AEDDAA19B2E7B24091B5E613AF485985 --v2-net ..\build\wasm-engine\atomic-v2.nnue --v2-sha256 4DEB05CFF79B5D5EBA51C560F64ED24224671C188B6C5DB27521033E587C87C6 --v3-net ..\build\wasm-engine\atomic-v3.nnue --v3-sha256 00E46223822D06D7927E884EEC10739BA19EF8DD82A6E262F627D361658080C2
+node ..\tests\wasm-engine\run-dual-backend-tests.mjs --engine ..\build\wasm-engine\atomic-stockfish-nnue-node.mjs --legacy-net ..\build\wasm-engine\atomic-zero.nnue --legacy-sha256 9CF054CA00B82AB53A34473DE52D1104AEDDAA19B2E7B24091B5E613AF485985 --v2-net ..\build\wasm-engine\atomic-v2.nnue --v2-sha256 4DEB05CFF79B5D5EBA51C560F64ED24224671C188B6C5DB27521033E587C87C6
 powershell -NoProfile -ExecutionPolicy Bypass -File ..\tests\wasm-engine\check-reproducible.ps1
 ```
 
@@ -39,9 +38,9 @@ pauses during active NNUE `true` and NNUE `pure` searches—and check that `go`
 fails explicitly when no network is loaded. Build products and the NNUE file
 are ignored and must not be committed.
 
-The three-backend gate additionally verifies V1/V2/V3 switching, byte-exact V3
+The dual-backend gate additionally verifies V1/V2 switching, byte-exact V2
 export/reimport, transactional rejection of a V2 file with trailing data,
-three complete V1/V2/V3 reload cycles at `Threads=1,4,2,4`, and stable
+three complete V1/V2 reload cycles at `Threads=1,4,2,4`, and stable
 process-tree RSS after warm-up. On Linux it polls the wrapper and runtime process
 tree rather than measuring only the lightweight launcher process.
 

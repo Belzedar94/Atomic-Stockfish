@@ -173,12 +173,9 @@ tests['corrupt, truncated and incompatible networks are rejected'] = async (cont
   return messages;
 };
 
-tests['AtomicNNUEV2 and AtomicNNUEV3 networks are accepted'] = async (context) => {
+tests['AtomicNNUEV2 networks are accepted'] = async (context) => {
   const backends = {};
-  for (const [name, backend] of [
-    ['v2', 'AtomicNNUEV2'],
-    ['v3', 'AtomicNNUEV3'],
-  ]) {
+  for (const [name, backend] of [['v2', 'AtomicNNUEV2']]) {
     const fixture = context.fixtures[name];
     const client = new EngineClient(WORKER);
     const ready = await client.initialize({ networkUrl: fixture.url, expectedSha256: fixture.sha256 });

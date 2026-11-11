@@ -42,12 +42,10 @@ if (manifest.schemaVersion >= 2) {
   assert.deepEqual(manifest.supportedNetworkBackends, [
     'Legacy Atomic V1',
     'AtomicNNUEV2',
-    'AtomicNNUEV3',
   ]);
   assert.deepEqual(manifest.networkFileVersions, [
     '0x7AF32F20',
     '0xA70C0002',
-    '0xA70C0003',
   ]);
 }
 const launcherArtifact = manifest.artifacts.find(

@@ -38,9 +38,7 @@ generation, explosions, Atomic check, en passant, promotions, castling rights
 and terminal results.
 
 If you touched the bindings, the README has the commands for the Python
-extension and for both JavaScript module formats. The full release-oriented
-runner is documented in
-[`docs/atomic/hito4-validation.md`](docs/atomic/hito4-validation.md).
+extension and for both JavaScript module formats.
 
 ## Testing for strength
 

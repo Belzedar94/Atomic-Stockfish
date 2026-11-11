@@ -54,8 +54,8 @@ namespace Detail {
 Value atomic_nnue_value_from_scaled(i64 scaled) noexcept;
 
 // Convert the two raw NNUE output components into the bounded engine value
-// domain. AtomicNNUEV3 authenticates each component as a full i32, so callers
-// must widen before adding them.
+// domain. Each component may use the full i32 range, so callers must widen
+// before adding them.
 Value atomic_nnue_value_from_raw(i32 rawPsqt, i32 rawPositional) noexcept;
 
 // Scale an evaluation linearly toward zero as the halfmove clock approaches

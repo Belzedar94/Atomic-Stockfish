@@ -28,7 +28,7 @@ namespace Stockfish::Data {
 DataResult encode_atomic_bin_v2(const TrainingDataSample& sample, AtomicBinV2Record& record);
 DataResult decode_atomic_bin_v2(const AtomicBinV2Record& record, TrainingDataSample& sample);
 
-// Canonical V2 primitives used by the trajectory ledger. These are additive
+// Canonical V2 primitives for single positions and moves. These are additive
 // views of the exact same encoders used by encode_atomic_bin_v2(); exposing
 // them avoids reparsing a FEN for every played move and, crucially, prevents a
 // second move-wire convention from drifting away from the frozen 64-byte

@@ -379,8 +379,6 @@ class Worker {
     // Called at instantiation to initialize reductions tables.
     // Reset histories, usually before a new game.
     void clear();
-    // Reset one generator game's worker-local and private shared search state.
-    void clear_training_game(SharedHistories&);
     // Called when the program receives the UCI 'go' command.
     // It searches from the root position and outputs the "bestmove".
     void start_searching();

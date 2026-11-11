@@ -22,7 +22,6 @@ EXPECTED_NET_SHA256 = "99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f
 NETWORK_BACKENDS = {
     0x7AF32F20: "Legacy Atomic V1",
     0xA70C0002: "AtomicNNUEV2",
-    0xA70C0003: "AtomicNNUEV3",
 }
 
 

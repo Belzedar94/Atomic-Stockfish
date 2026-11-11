@@ -52,7 +52,6 @@ namespace Data {
 struct AtomicDatagenV2Manifest;
 bool generate_training_data(Engine&, std::istream&);
 bool generate_training_data_impl(Engine&, std::istream&, AtomicDatagenV2Manifest*);
-bool generate_atomic_v3_chunk(Engine&, std::istream&);
 }
 
 class Engine {
@@ -131,7 +130,6 @@ class Engine {
     friend bool Data::generate_training_data(Engine&, std::istream&);
     friend bool
     Data::generate_training_data_impl(Engine&, std::istream&, Data::AtomicDatagenV2Manifest*);
-    friend bool Data::generate_atomic_v3_chunk(Engine&, std::istream&);
 
     const std::filesystem::path binaryDirectory;
 

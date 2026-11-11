@@ -76,7 +76,6 @@ async function prepareFixtures() {
 
   for (const [name, script] of [
     ['v2', 'create_synthetic_atomic_v2_nnue.py'],
-    ['v3', 'create_synthetic_atomic_v3_nnue.py'],
   ]) {
     const file = path.join(fixtureDir, `${name}.nnue`);
     await rm(file, { force: true }); // the generators refuse to overwrite
