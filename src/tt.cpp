@@ -45,6 +45,10 @@ namespace Stockfish {
 // value      16 bit
 // evaluation 16 bit
 //
+// Entries with a decisive value (mate or TB win/loss) store 16 more key bits in place of the
+// evaluation, so that a cluster collision cannot import a decisive score from another position.
+// A static evaluation is of little use next to a decisive value, and probes return VALUE_NONE.
+//
 // These fields are in the same order as accessed by TT::probe(), since memory is fastest sequentially.
 // Equally, the store order in save() matches this order.
 //
@@ -59,19 +63,28 @@ static constexpr u8 BOUND_MASK      = 0b11 << BOUND_SHIFT;
 static constexpr u8 PV_SHIFT        = BOUND_SHIFT + 2;
 static constexpr u8 PV_MASK         = 1 << PV_SHIFT;
 
+// The extra key bits checked for decisive entries. The cluster index uses the high key bits.
+static u16 key_check(Key k) { return u16(k >> 16); }
+
+static bool keyed_by_eval(Value v) { return std::abs(v) < VALUE_INFINITE && is_decisive(v); }
+
 struct TTEntry {
 
     // Convert internal bitfields to external types
     TTData read() const {
+        const Value v = Value(value16);
         return TTData{Move(move16),
-                      Value(value16),
-                      Value(eval16),
+                      v,
+                      keyed_by_eval(v) ? VALUE_NONE : Value(eval16),
                       Depth(DEPTH_NONE + depth8),
                       Bound((genBound8 & BOUND_MASK) >> BOUND_SHIFT),
                       bool(genBound8 & PV_MASK)};
     }
 
     bool is_occupied() const { return bool(depth8); };
+    bool matches(Key k) const {
+        return key16 == u16(k) && (!keyed_by_eval(Value(value16)) || u16(eval16) == key_check(k));
+    }
     void save(Key k, Value v, bool pv, Bound b, Depth d, Move m, Value ev, u8 curr_generation);
     u8   relative_age(const u8 curr_generation) const;
 
@@ -92,12 +105,14 @@ struct TTEntry {
 void TTEntry::save(
   Key k, Value v, bool pv, Bound b, Depth d, Move m, Value ev, u8 curr_generation) {
 
+    const bool otherKey = !matches(k);
+
     // Preserve the old ttmove if we don't have a new one
-    if (m || u16(k) != key16)
+    if (m || otherKey)
         move16 = m;
 
     // Overwrite less valuable entries (cheapest checks first)
-    if (b == BOUND_EXACT || u16(k) != key16 || d - DEPTH_NONE + 2 * pv > depth8 - 4
+    if (b == BOUND_EXACT || otherKey || d - DEPTH_NONE + 2 * pv > depth8 - 4
         || relative_age(curr_generation))
     {
         assert(d > DEPTH_NONE);
@@ -108,7 +123,7 @@ void TTEntry::save(
         depth8    = u8(d - DEPTH_NONE);
         genBound8 = u8(curr_generation | b << BOUND_SHIFT | u8(pv) << PV_SHIFT);
         value16   = i16(v);
-        eval16    = i16(ev);
+        eval16    = keyed_by_eval(v) ? i16(key_check(k)) : i16(ev);
     }
     // Secondary aging. Important for elementary mate finding.
     // (*Scaler) Secondary aging on entries relevant to singular extensions
@@ -262,11 +277,11 @@ u8 TranspositionTable::generation() const { return generation8; }
 // to be replaced later. The value of an entry is its depth minus 8 times its relative age.
 std::tuple<bool, TTData, TTWriter> TranspositionTable::probe(const Key key) const {
 
-    TTEntry* const tte   = first_entry(key);
-    const u16      key16 = u16(key);  // Use the low 16 bits as key inside the cluster
+    TTEntry* const tte = first_entry(key);
 
+    // Use the low 16 bits as key inside the cluster, plus 16 more bits for decisive entries
     for (int i = 0; i < ClusterSize; ++i)
-        if (tte[i].key16 == key16)
+        if (tte[i].matches(key))
             // This gap is the main place for read races.
             // After `read()` completes that copy is final, but may be self-inconsistent.
             return {tte[i].is_occupied(), tte[i].read(), TTWriter(&tte[i])};

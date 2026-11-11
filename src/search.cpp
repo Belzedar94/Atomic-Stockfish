@@ -826,8 +826,11 @@ bool Search::Worker::iterative_deepening() {
                 break;
         }
 
+        // A remembered mate only stands against a result of the same sign.
         const bool forgottenMate = lastBestMoveScore != -VALUE_INFINITE
                                 && is_mate_or_mated(lastBestMoveScore)
+                                && ((rootMoves[0].score > 0 && lastBestMoveScore > 0)
+                                    || (rootMoves[0].score < 0 && lastBestMoveScore < 0))
                                 && (std::abs(rootMoves[0].score) < std::abs(lastBestMoveScore)
                                     || rootMoves[0].score_is_bound());
 
