@@ -23,6 +23,17 @@ name: AtomicDB worker engines (PGO)
 # The engine source is not on this branch. It is checked out by SHA (ENGINE_SHA,
 # a main commit), so changing this workflow never changes what is built.
 #
+# Every binary embeds the default network (EvalFileDefaultName, atomic-ft3b-1p2B.nnue
+# since main 43567199): the checks run from a directory with no .nnue in it.
+#
+# The profile of every profile-guided build is trained on AtomicDB-like searches,
+# not on `bench`: make runs ci/pgo_load.py as PGOBENCH, which searches the 40
+# positions of ci/positions/train.tsv the way a worker does (go nodes 1M to 2M,
+# Hash 256, no ucinewgame, MultiPV 1 and 3, a few searchmoves), all at Threads 1
+# so the profile is reproducible (measured on ci/pgo-atomicdb-load-1102: +0.3%
+# Linux, +0.6% Windows on an AtomicDB-like load). The bench signature is then
+# checked by ci/engine_check.py, not by the training run.
+#
 # Nothing is published from here: the binaries are workflow artifacts only.
 
 on:
@@ -39,14 +50,18 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  ENGINE_SHA: 7f705c8f4ca1287d1afad1e03a8664327e775043
+  ENGINE_SHA: 435671990f41e7a9ca07da8c81538720020c4983
   BASE_SHA: 1adc5239500a684824b178b19be4266f6e249cc8
-  ATOMIC_NET_TAG: v1.0
-  ATOMIC_NET_ASSET: atomic-run3b.nnue
-  ATOMIC_NET_SHA256: 99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f92a04a6
-  NET_NAME: atomic_run3b_e202_l05.nnue
+  ATOMIC_NET_TAG: net-ft3b-1p2B
+  ATOMIC_NET_ASSET: atomic-ft3b-1p2B.nnue
+  ATOMIC_NET_SHA256: a32645ea6749c2500119bd53b55cc5baf2f6c502659f247e5e5ca4f26ea48e29
+  # EvalFileDefaultName at ENGINE_SHA: the name the network is embedded under
+  NET_NAME: atomic-ft3b-1p2B.nnue
   SERVED_URL: https://belzedar.duckdns.org/atomicdb/engines
-  EXPECT_NNUE: "433197"
+  EXPECT_NNUE: "416708"
+  # The training run of every profile-guided build (see the header).
+  TRAIN_POSITIONS: ci/positions/train.tsv
+  TRAIN_SUMMARY: "PGO training load (train.tsv): 40 positions"
   BENCH_DEPTH: "18"
   ROUNDS: "10"
   # The LLVM release the Linux binary is built with (apt.llvm.org packages).
@@ -54,7 +69,7 @@ env:
 
 jobs:
   linux:
-    name: linux x86-64-avx2 (clang 23, network on disk)
+    name: linux x86-64-avx2 (clang 23, network embedded)
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     defaults:
@@ -128,10 +143,9 @@ jobs:
       - name: Network, served binary, tablebases
         run: |
           mkdir -p run out served tb
-          curl -sSfL --retry 3 -o "run/$NET_NAME" \
+          curl -sSfL --retry 3 -o "engine/src/$NET_NAME" \
             "https://github.com/$GITHUB_REPOSITORY/releases/download/$ATOMIC_NET_TAG/$ATOMIC_NET_ASSET"
-          echo "$ATOMIC_NET_SHA256  run/$NET_NAME" | sha256sum -c -
-          cp "run/$NET_NAME" "engine/src/$NET_NAME"
+          echo "$ATOMIC_NET_SHA256  engine/src/$NET_NAME" | sha256sum -c -
           curl -sSfL --retry 3 -o "served/$SERVED_FILE" "$SERVED_URL/$SERVED_FILE"
           echo "$SERVED_SHA256  served/$SERVED_FILE" | sha256sum -c -
           chmod +x "served/$SERVED_FILE"
@@ -156,29 +170,34 @@ jobs:
       - name: Plain build of the engine branch (control)
         working-directory: engine/src
         run: |
-          make -j4 build ARCH=$ARCH COMP=gcc EXE=plain > ../../out/build-plain.log 2>&1 || { tail -n 40 ../../out/build-plain.log; exit 1; }
+          make -j4 build ARCH=$ARCH COMP=gcc EXE=plain EXTRACXXFLAGS=-DATOMIC_NNUE_EMBEDDING > ../../out/build-plain.log 2>&1 || { tail -n 40 ../../out/build-plain.log; exit 1; }
+          test "$(wc -c < plain)" -gt "$(wc -c < "$NET_NAME")"
           cp plain ../../out/plain
 
       # The Makefile links clang builds with -latomic unless RTLIB=compiler-rt, its
       # only use of RTLIB. The engine calls nothing in libatomic, but the link would
       # still record libatomic.so.1 as needed, a library the served binary does not
       # need. RTLIB=compiler-rt only drops -latomic: the runtime is still libgcc.
+      # The clang PGO recipe replaces EXTRACXXFLAGS and does not read
+      # EXTRAPROFILEFLAGS, so the embedding flag goes in through the environment.
       - name: Profile-guided build (clang ${{ env.LLVM_VERSION }})
         working-directory: engine/src
         run: |
           test -f "$NET_NAME"
           rc=0
-          make -j4 profile-build ARCH=$ARCH COMP=clang CXX="clang++-$LLVM_VERSION" RTLIB=compiler-rt EXE="$NEW_FILE" > ../../out/build-pgo.log 2>&1 || rc=$?
-          grep -E "^Step|Nodes searched|Nodes/second|Total time|WARNING|profiled|llvm-profdata" ../../out/build-pgo.log || true
+          CXXFLAGS=-DATOMIC_NNUE_EMBEDDING make -j4 profile-build ARCH=$ARCH COMP=clang CXX="clang++-$LLVM_VERSION" RTLIB=compiler-rt EXE="$NEW_FILE" \
+            PGOBENCH="python3 $GITHUB_WORKSPACE/ci/pgo_load.py --engine ./$NEW_FILE --positions $GITHUB_WORKSPACE/$TRAIN_POSITIONS" > ../../out/build-pgo.log 2>&1 || rc=$?
+          grep -E "^Step|^train |PGO training|^searches:|Nodes searched|Total time|WARNING|FAILED|profiled|llvm-profdata" ../../out/build-pgo.log || true
           if [ "$rc" -ne 0 ]; then tail -n 60 ../../out/build-pgo.log; exit "$rc"; fi
           test -x "$NEW_FILE"
           if grep -q "WARNING: the profiling run found no NNUE network" ../../out/build-pgo.log; then
             echo "::error::the PGO network warning fired"; exit 1
           fi
-          # The profiling run ends with the default bench: the NNUE signature.
-          grep -q "Nodes searched  : $EXPECT_NNUE" ../../out/build-pgo.log
+          # The training run is the AtomicDB-like load; the bench is checked later.
+          grep -q "$TRAIN_SUMMARY" ../../out/build-pgo.log
           grep -q "/usr/lib/llvm-$LLVM_VERSION/bin/llvm-profdata merge" ../../out/build-pgo.log
           grep -c -- "-fprofile-use=stockfish.profdata" ../../out/build-pgo.log
+          test "$(wc -c < "$NEW_FILE")" -gt "$(wc -c < "$NET_NAME")"
           cp "$NEW_FILE" "../../out/$NEW_FILE"
 
       - name: What the new binary needs from the system
@@ -201,19 +220,24 @@ jobs:
       - name: Reference builds (profile-guided gcc, and clang ${{ env.UBUNTU_CLANG_VERSION }})
         working-directory: engine/src
         run: |
+          train() { echo "python3 $GITHUB_WORKSPACE/ci/pgo_load.py --engine ./$1 --positions $GITHUB_WORKSPACE/$TRAIN_POSITIONS"; }
           make clean > /dev/null
-          make -j4 profile-build ARCH=$ARCH COMP=gcc EXE=gcc-pgo > ../../out/build-gcc-pgo.log 2>&1 || { tail -n 60 ../../out/build-gcc-pgo.log; exit 1; }
-          grep -q "Nodes searched  : $EXPECT_NNUE" ../../out/build-gcc-pgo.log
+          make -j4 profile-build ARCH=$ARCH COMP=gcc EXE=gcc-pgo EXTRAPROFILEFLAGS=-DATOMIC_NNUE_EMBEDDING PGOBENCH="$(train gcc-pgo)" > ../../out/build-gcc-pgo.log 2>&1 || { tail -n 60 ../../out/build-gcc-pgo.log; exit 1; }
+          grep -q "$TRAIN_SUMMARY" ../../out/build-gcc-pgo.log
           cp gcc-pgo ../../out/gcc-pgo
           ref="clang$UBUNTU_CLANG_VERSION-pgo"
           make clean > /dev/null
-          make -j4 profile-build ARCH=$ARCH COMP=clang CXX="clang++-$UBUNTU_CLANG_VERSION" RTLIB=compiler-rt EXE="$ref" > "../../out/build-$ref.log" 2>&1 || { tail -n 60 "../../out/build-$ref.log"; exit 1; }
-          grep -q "Nodes searched  : $EXPECT_NNUE" "../../out/build-$ref.log"
+          CXXFLAGS=-DATOMIC_NNUE_EMBEDDING make -j4 profile-build ARCH=$ARCH COMP=clang CXX="clang++-$UBUNTU_CLANG_VERSION" RTLIB=compiler-rt EXE="$ref" PGOBENCH="$(train "$ref")" > "../../out/build-$ref.log" 2>&1 || { tail -n 60 "../../out/build-$ref.log"; exit 1; }
+          grep -q "$TRAIN_SUMMARY" "../../out/build-$ref.log"
           grep -q "/usr/lib/llvm-$UBUNTU_CLANG_VERSION/bin/llvm-profdata merge" "../../out/build-$ref.log"
           cp "$ref" "../../out/$ref"
 
+      # The run directory holds no .nnue: a completed NNUE bench can only come from
+      # the embedded network.
       - name: Identity of the plain and profile-guided builds, and their speed
         run: |
+          set -eo pipefail
+          test -z "$(ls run/*.nnue 2>/dev/null)"
           ref="clang$UBUNTU_CLANG_VERSION-pgo"
           python3 ci/engine_check.py --title "linux $ARCH on $(lscpu | sed -n 's/^Model name: *//p' | head -n 1)" \
             --bin "plain=out/plain" --bin "gcc-pgo=out/gcc-pgo" --bin "$ref=out/$ref" \
@@ -342,14 +366,16 @@ jobs:
         run: |
           set -eo pipefail
           rc=0
-          make -j4 profile-build ARCH=$ARCH COMP=mingw EXE="$NEW_FILE" EXTRAPROFILEFLAGS=-DATOMIC_NNUE_EMBEDDING > ../../out/build-pgo.log 2>&1 || rc=$?
-          grep -E "^Step|Nodes searched|Nodes/second|Total time|WARNING|profiled" ../../out/build-pgo.log || true
+          ws=$(cygpath -m "$GITHUB_WORKSPACE")
+          make -j4 profile-build ARCH=$ARCH COMP=mingw EXE="$NEW_FILE" EXTRAPROFILEFLAGS=-DATOMIC_NNUE_EMBEDDING \
+            PGOBENCH="python $ws/ci/pgo_load.py --engine ./$NEW_FILE --positions $ws/$TRAIN_POSITIONS" > ../../out/build-pgo.log 2>&1 || rc=$?
+          grep -E "^Step|^train |PGO training|^searches:|Nodes searched|Total time|WARNING|FAILED|profiled" ../../out/build-pgo.log || true
           if [ "$rc" -ne 0 ]; then tail -n 60 ../../out/build-pgo.log; exit "$rc"; fi
           test -f "$NEW_FILE"
           if grep -q "WARNING: the profiling run found no NNUE network" ../../out/build-pgo.log; then
             echo "::error::the PGO network warning fired"; exit 1
           fi
-          grep -q "Nodes searched  : $EXPECT_NNUE" ../../out/build-pgo.log
+          grep -q "$TRAIN_SUMMARY" ../../out/build-pgo.log
           test "$(wc -c < "$NEW_FILE")" -gt "$(wc -c < "$NET_NAME")"
           cp "$NEW_FILE" "../../out/$NEW_FILE"
 
@@ -476,14 +502,16 @@ jobs:
           set -eo pipefail
           export PATH="/clang64/bin:$PATH"
           rc=0
-          CXXFLAGS="-DATOMIC_NNUE_EMBEDDING -D_LIBCPP_KEEP_TRANSITIVE_INCLUDES_LLVM23" make -j4 profile-build ARCH=$ARCH COMP=clang EXE="$NEW_FILE" > ../../out/build-pgo.log 2>&1 || rc=$?
-          grep -E "^Step|Nodes searched|Nodes/second|Total time|WARNING|profiled|llvm-profdata" ../../out/build-pgo.log || true
+          ws=$(cygpath -m "$GITHUB_WORKSPACE")
+          CXXFLAGS="-DATOMIC_NNUE_EMBEDDING -D_LIBCPP_KEEP_TRANSITIVE_INCLUDES_LLVM23" make -j4 profile-build ARCH=$ARCH COMP=clang EXE="$NEW_FILE" \
+            PGOBENCH="python $ws/ci/pgo_load.py --engine ./$NEW_FILE --positions $ws/$TRAIN_POSITIONS" > ../../out/build-pgo.log 2>&1 || rc=$?
+          grep -E "^Step|^train |PGO training|^searches:|Nodes searched|Total time|WARNING|FAILED|profiled|llvm-profdata" ../../out/build-pgo.log || true
           if [ "$rc" -ne 0 ]; then tail -n 60 ../../out/build-pgo.log; exit "$rc"; fi
           test -f "$NEW_FILE"
           if grep -q "WARNING: the profiling run found no NNUE network" ../../out/build-pgo.log; then
             echo "::error::the PGO network warning fired"; exit 1
           fi
-          grep -q "Nodes searched  : $EXPECT_NNUE" ../../out/build-pgo.log
+          grep -q "$TRAIN_SUMMARY" ../../out/build-pgo.log
           grep -c -- "-fprofile-use=stockfish.profdata" ../../out/build-pgo.log
           test "$(wc -c < "$NEW_FILE")" -gt "$(wc -c < "$NET_NAME")"
           cp "$NEW_FILE" "../../out/$NEW_FILE"
@@ -606,14 +634,15 @@ jobs:
         working-directory: engine/src
         run: |
           rc=0
-          CXXFLAGS=-DATOMIC_NNUE_EMBEDDING make -j3 profile-build ARCH=$ARCH COMP=clang EXE="$NEW_FILE" > ../../out/build-pgo.log 2>&1 || rc=$?
-          grep -E "^Step|Nodes searched|Nodes/second|Total time|WARNING|profiled|llvm-profdata" ../../out/build-pgo.log || true
+          CXXFLAGS=-DATOMIC_NNUE_EMBEDDING make -j3 profile-build ARCH=$ARCH COMP=clang EXE="$NEW_FILE" \
+            PGOBENCH="python3 $GITHUB_WORKSPACE/ci/pgo_load.py --engine ./$NEW_FILE --positions $GITHUB_WORKSPACE/$TRAIN_POSITIONS" > ../../out/build-pgo.log 2>&1 || rc=$?
+          grep -E "^Step|^train |PGO training|^searches:|Nodes searched|Total time|WARNING|FAILED|profiled|llvm-profdata" ../../out/build-pgo.log || true
           if [ "$rc" -ne 0 ]; then tail -n 60 ../../out/build-pgo.log; exit "$rc"; fi
           test -x "$NEW_FILE"
           if grep -q "WARNING: the profiling run found no NNUE network" ../../out/build-pgo.log; then
             echo "::error::the PGO network warning fired"; exit 1
           fi
-          grep -q "Nodes searched  : $EXPECT_NNUE" ../../out/build-pgo.log
+          grep -q "$TRAIN_SUMMARY" ../../out/build-pgo.log
           grep -c -- "-fprofile-use=stockfish.profdata" ../../out/build-pgo.log
           strip "$NEW_FILE"
           test "$(wc -c < "$NEW_FILE")" -gt "$(wc -c < "$NET_NAME")"
