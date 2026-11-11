@@ -556,8 +556,6 @@ jobs:
       SERVED_FILE: Atomic-Stockfish-darwin-arm64
       SERVED_SHA256: d2d2037696f63cd9210e8f8fd68e72c7c8d190aa316562e99ff4ef1beebd276a
       NEW_FILE: Atomic-Stockfish-darwin-arm64-pgo
-      # The commit the served binary was built from: 1adc5239 plus its CI workflow.
-      OLD_SHA: 6fc98b675c2e00c56c88800089f25b19f74c53c0
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -566,11 +564,6 @@ jobs:
         with:
           ref: ${{ env.ENGINE_SHA }}
           path: engine
-          persist-credentials: false
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          ref: ${{ env.OLD_SHA }}
-          path: old
           persist-credentials: false
 
       - name: Name the build after its commit
@@ -602,26 +595,14 @@ jobs:
           curl -sSfL --retry 3 -o "engine/src/$NET_NAME" \
             "https://github.com/$GITHUB_REPOSITORY/releases/download/$ATOMIC_NET_TAG/$ATOMIC_NET_ASSET"
           echo "$ATOMIC_NET_SHA256  engine/src/$NET_NAME" | shasum -a 256 -c -
-          cp "engine/src/$NET_NAME" "old/src/$NET_NAME"
           curl -sSfL --retry 3 -o "served/$SERVED_FILE" "$SERVED_URL/$SERVED_FILE"
           echo "$SERVED_SHA256  served/$SERVED_FILE" | shasum -a 256 -c -
           chmod +x "served/$SERVED_FILE"
           python3 ci/fetch_tb.py "$SERVED_URL/syzygy-345" tb
 
-      # Control: the recipe of the darwin-arm64-prebuilt branch, run again today.
-      - name: Rebuild the served binary from 6fc98b67 (plain build)
-        working-directory: old/src
-        run: |
-          make -j3 build ARCH=$ARCH COMP=clang EXE="$SERVED_FILE" EXTRACXXFLAGS=-DATOMIC_NNUE_EMBEDDING > ../../out/build-old.log 2>&1 || { tail -n 40 ../../out/build-old.log; exit 1; }
-          strip "$SERVED_FILE"
-          shasum -a 256 "$SERVED_FILE"
-          if [ "$(shasum -a 256 < "$SERVED_FILE" | cut -d' ' -f1)" = "$SERVED_SHA256" ]; then
-            echo "REPRODUCED: plain build of 6fc98b67 is byte-identical to the served binary" | tee ../../out/reproduction.txt
-          else
-            echo "NOT byte-identical to the served binary" | tee ../../out/reproduction.txt
-            ls -l "$SERVED_FILE" "../../served/$SERVED_FILE" | tee -a ../../out/reproduction.txt
-          fi
-
+      # The rebuild of the served binary from 6fc98b67 (darwin-arm64-prebuilt) is gone:
+      # it embedded the old network under its own name, and that toolchain (macos-14,
+      # Xcode 15.4) is no longer offered, so it could not reproduce the binary anyway.
       - name: Plain build of the engine branch (control)
         working-directory: engine/src
         run: |
