@@ -66,8 +66,8 @@ def test_default_profiles_require_the_frozen_signature(
 @pytest.mark.parametrize(
     ("mode", "operations", "interval", "signature"),
     (
-        ("smoke", 4_096, 1, "E00F263D3974195F"),
-        ("release", 1_000_000, 1_024, "CDAEB5F2E9FEEA"),
+        ("smoke", 4_096, 1, "BDDB89BA91BAA13C"),
+        ("release", 1_000_000, 1_024, "CEDD92A20DAC41D4"),
     ),
 )
 def test_default_network_has_its_own_frozen_signature(

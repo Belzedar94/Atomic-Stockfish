@@ -24,17 +24,19 @@ the worker's ephemeral checkout and embeds it in the executable. The resulting
 binary has no dependency on the temporary source directory or a worker-specific
 absolute path.
 
-The default network, `atomic-ft3b-1p2B.nnue`, has SHA-256
-`A32645EA6749C2500119BD53B55CC5BAF2F6C502659F247E5E5CA4F26EA48E29`.
+The default network, `atomic-ft5-0p8B.nnue`, has SHA-256
+`C8E590D82EFC3D29DFEBA37323EFD5FB094744E3561A07D58D9780C5C05DB807`.
 With that network, the deterministic bare `bench` contract is:
 
 ```text
-Bench: 416708
+Bench: 587120
 ```
 
-The frozen reference `atomic_run3b_e202_l05.nnue` (SHA-256
-`99DC67EABF26A64FAEECA3A88B4C38597A840B8D4A874B9F2CF658C6F92A04A6`), the
-previous default, gives `Bench: 433197` on the same source.
+On the same source, the previous default `atomic-ft3b-1p2B.nnue` (SHA-256
+`A32645EA6749C2500119BD53B55CC5BAF2F6C502659F247E5E5CA4F26EA48E29`) gives
+`Bench: 416708`, and the frozen reference `atomic_run3b_e202_l05.nnue`
+(SHA-256 `99DC67EABF26A64FAEECA3A88B4C38597A840B8D4A874B9F2CF658C6F92A04A6`)
+gives `Bench: 433197`.
 
 OpenBench strength tests use `Use NNUE=true`; `Use NNUE=pure` remains reserved
 for data generation. The engine evaluates with NNUE only, so there is no

@@ -33,7 +33,7 @@ namespace Eval {
 // by a Stockfish-style filename hash. The default network is published as a
 // release asset of this repository; `make build` and `make profile-build` fetch
 // it (NNUE_NET_* in src/Makefile, which must name this file) and embed it.
-#define EvalFileDefaultName "atomic-ft3b-1p2B.nnue"
+#define EvalFileDefaultName "atomic-ft5-0p8B.nnue"
 
 // Atomic-Stockfish evaluates with NNUE only. True is the playing mode; Pure is
 // the raw network result reserved for data generation.

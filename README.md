@@ -79,11 +79,11 @@ like any value outside the list, it is ignored and NNUE stays on.
 
 An incompatible or missing network stops `go`, `bench` and `eval` with an
 explicit error, and `go` answers `bestmove (none)`; `go perft` needs no
-network. The default network (`EvalFileDefaultName`) is `atomic-ft3b-1p2B.nnue`,
+network. The default network (`EvalFileDefaultName`) is `atomic-ft5-0p8B.nnue`,
 identified by SHA-256
-`A32645EA6749C2500119BD53B55CC5BAF2F6C502659F247E5E5CA4F26EA48E29` and published
+`C8E590D82EFC3D29DFEBA37323EFD5FB094744E3561A07D58D9780C5C05DB807` and published
 as the asset of the
-[`net-ft3b-1p2B`](https://github.com/Belzedar94/Atomic-Stockfish/releases/tag/net-ft3b-1p2B)
+[`net-ft5-0p8B`](https://github.com/Belzedar94/Atomic-Stockfish/releases/tag/net-ft5-0p8B)
 release. The frozen development reference used by the validation gates remains
 `atomic_run3b_e202_l05.nnue`, identified by SHA-256
 `99DC67EABF26A64FAEECA3A88B4C38597A840B8D4A874B9F2CF658C6F92A04A6`.
