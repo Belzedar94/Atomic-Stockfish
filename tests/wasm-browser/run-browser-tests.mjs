@@ -2,7 +2,7 @@
 //
 //   cd tests/wasm-browser && npm ci && npx playwright install chromium firefox
 //   node run-browser-tests.mjs --engine ../../build/wasm-browser \
-//        --net ../../src/atomic_run3b_e202_l05.nnue [--net-sha256 <hex>] \
+//        --net ../../src/atomic-ft5-0p8B.nnue [--net-sha256 <hex>] \
 //        [--browsers chromium,firefox] [--only <substring of a case name>]
 //
 // Each case runs inside a real browser page (harness/tests.mjs) and drives the
@@ -24,7 +24,7 @@ import { startServer } from './serve.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, '..', '..');
-const REFERENCE_SHA256 = '99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f92a04a6';
+const REFERENCE_SHA256 = 'c8e590d82efc3d29dfeba37323efd5fb094744e3561a07d58d9780c5c05db807';
 
 function argument(name, fallback) {
   const index = process.argv.indexOf(name);
@@ -32,7 +32,7 @@ function argument(name, fallback) {
 }
 
 const engineDir = path.resolve(argument('--engine', path.join(REPO, 'build', 'wasm-browser')));
-const netPath = path.resolve(argument('--net', path.join(REPO, 'src', 'atomic_run3b_e202_l05.nnue')));
+const netPath = path.resolve(argument('--net', path.join(REPO, 'src', 'atomic-ft5-0p8B.nnue')));
 const fixtureDir = path.resolve(argument('--fixtures', path.join(REPO, 'build', 'wasm-browser-fixtures')));
 const reportPath = argument('--report', path.join(fixtureDir, 'browser-test-report.json'));
 const browsers = argument('--browsers', 'chromium,firefox').split(',');

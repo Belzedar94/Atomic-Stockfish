@@ -300,9 +300,9 @@ def build(out_dir: Path, compiler: str, debug: bool, allow_other_emscripten: boo
         ],
         "networkFileVersions": ["0x7AF32F20", "0xA70C0002"],
         "referenceNetwork": {
-            "name": "atomic_run3b_e202_l05.nnue",
+            "name": "atomic-ft5-0p8B.nnue",
             "bytes": 47721376,
-            "sha256": "99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f92a04a6",
+            "sha256": "c8e590d82efc3d29dfeba37323efd5fb094744e3561a07d58d9780c5c05db807",
         },
         "artifacts": artifacts,
     }
