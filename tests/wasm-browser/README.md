@@ -248,8 +248,9 @@ Nothing is downloaded before `initialize`: creating the worker fetches only
 6. deletes the file. After that the network exists once, inside WASM memory,
    and the worker holds no JavaScript copy.
 
-The reference network is `atomic_run3b_e202_l05.nnue` (47,721,376 bytes,
-SHA-256 `99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f92a04a6`).
+The reference network is the engine's default, `atomic-ft5-0p8B.nnue`
+(47,721,376 bytes, SHA-256
+`c8e590d82efc3d29dfeba37323efd5fb094744e3561a07d58d9780c5c05db807`).
 Legacy Atomic V1 (`0x7AF32F20`) and AtomicNNUEV2 (`0xA70C0002`) networks are
 accepted. Serve the network with long-lived cache
 headers; the worker does not cache it itself.
@@ -362,7 +363,7 @@ The engine is not lightweight. What a user pays when they enable it:
 | | |
 |---|---|
 | Engine download | 722 kB (255 kB gzip, 201 kB brotli): worker script, runtime and WASM |
-| Network download | 47.7 MB (`atomic_run3b_e202_l05.nnue`); 26.5 MB with gzip, 22.5 MB with brotli if the server compresses it |
+| Network download | 47.7 MB (`atomic-ft5-0p8B.nnue`); 26.5 MB with gzip, 22.6 MB with brotli if the server compresses it |
 | WASM memory | 512 MiB shared memory reserved up front, fixed (no growth); the network, the hash, four 8 MiB thread stacks and the per-thread search data live in it |
 | Workers | 1 engine worker + 4 pthread workers, all started on `initialize` |
 | Main thread | nothing runs on it; the board only exchanges messages |
@@ -380,7 +381,7 @@ cd tests/wasm-browser
 npm ci
 npx playwright install chromium firefox
 python3 -m pip install -r requirements.txt
-node run-browser-tests.mjs --engine ../../build/wasm-browser --net <atomic_run3b_e202_l05.nnue>
+node run-browser-tests.mjs --engine ../../build/wasm-browser --net <atomic-ft5-0p8B.nnue>
 ```
 
 CI runs the same suite with the synthetic Legacy Atomic V1 network

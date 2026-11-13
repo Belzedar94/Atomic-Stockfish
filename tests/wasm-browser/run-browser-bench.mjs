@@ -2,7 +2,7 @@
 // Fairy-Stockfish 14 browser engine (npm fairy-stockfish-nnue.wasm, pinned in
 // package.json), in Chromium and Firefox.
 //
-//   node run-browser-bench.mjs --net ../../src/atomic_run3b_e202_l05.nnue \
+//   node run-browser-bench.mjs --net ../../src/atomic-ft5-0p8B.nnue \
 //        [--fsf-net <a Fairy-Stockfish 14 (HalfKAv2) Atomic network>] \
 //        [--engine ../../build/wasm-browser] [--out <dir>] [--runs 3]
 //
@@ -34,7 +34,7 @@ function argument(name, fallback) {
 }
 
 const engineDir = path.resolve(argument('--engine', path.join(REPO, 'build', 'wasm-browser')));
-const netPath = path.resolve(argument('--net', path.join(REPO, 'src', 'atomic_run3b_e202_l05.nnue')));
+const netPath = path.resolve(argument('--net', path.join(REPO, 'src', 'atomic-ft5-0p8B.nnue')));
 const fsfNetPath = argument('--fsf-net') ? path.resolve(argument('--fsf-net')) : null;
 const fsfDir = path.join(HERE, 'node_modules', 'fairy-stockfish-nnue.wasm');
 const outDir = path.resolve(argument('--out', path.join(REPO, 'build', 'wasm-browser-bench')));
