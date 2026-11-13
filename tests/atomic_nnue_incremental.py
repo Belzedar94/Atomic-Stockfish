@@ -21,15 +21,18 @@ from pathlib import Path
 
 # run3b (atomic_run3b_e202_l05.nnue), the historical frozen reference network.
 FROZEN_NET_SHA256 = "99dc67eabf26a64faeeca3a88b4c38597a840b8d4a874b9f2cf658c6f92a04a6"
-# atomic-ft3b-1p2B.nnue, the default network `make net` fetches and embeds.
-DEFAULT_NET_SHA256 = "a32645ea6749c2500119bd53b55cc5baf2f6c502659f247e5e5ca4f26ea48e29"
+# atomic-ft3b-1p2B.nnue, the previous default network.
+PREVIOUS_NET_SHA256 = "a32645ea6749c2500119bd53b55cc5baf2f6c502659f247e5e5ca4f26ea48e29"
+# atomic-ft5-0p8B.nnue, the default network `make net` fetches and embeds.
+DEFAULT_NET_SHA256 = "c8e590d82efc3d29dfeba37323efd5fb094744e3561a07d58d9780c5c05db807"
 DEFAULT_PROFILES = {
     "smoke": (4_096, 1),
     "release": (1_000_000, 1_024),
 }
 NETWORK_SIGNATURES = {
     FROZEN_NET_SHA256: {"smoke": "DDB8196C6A0BE4A8", "release": "8742E39B793C46AB"},
-    DEFAULT_NET_SHA256: {"smoke": "E00F263D3974195F", "release": "CDAEB5F2E9FEEA"},
+    PREVIOUS_NET_SHA256: {"smoke": "E00F263D3974195F", "release": "CDAEB5F2E9FEEA"},
+    DEFAULT_NET_SHA256: {"smoke": "BDDB89BA91BAA13C", "release": "CEDD92A20DAC41D4"},
 }
 FINAL_SENTINEL_RE = re.compile(
     r"^LegacyAtomicV1 incremental gate passed: "

@@ -77,8 +77,8 @@ BINDIR = $(PREFIX)/bin
 ### together with EvalFileDefaultName whenever the default network changes
 ### (tests/python/test_default_net_contract.py checks that they agree).
 NNUE_NET_NAME   := $(shell sed -n 's/^.define EvalFileDefaultName "\([^"]*\)".*/\1/p' evaluate.h)
-NNUE_NET_TAG    = net-ft3b-1p2B
-NNUE_NET_SHA256 = a32645ea6749c2500119bd53b55cc5baf2f6c502659f247e5e5ca4f26ea48e29
+NNUE_NET_TAG    = net-ft5-0p8B
+NNUE_NET_SHA256 = c8e590d82efc3d29dfeba37323efd5fb094744e3561a07d58d9780c5c05db807
 NNUE_NET_URL    = https://github.com/Belzedar94/Atomic-Stockfish/releases/download/$(NNUE_NET_TAG)/$(NNUE_NET_NAME)
 NET_SH_ENV      = NET_NAME='$(NNUE_NET_NAME)' NET_URL='$(NNUE_NET_URL)' \
 		NET_SHA256='$(NNUE_NET_SHA256)' EVALFILE='$(EVALFILE)'
@@ -2025,7 +2025,7 @@ endif  # UNIVERSAL_BUILD
 # which drop it, so the binary came out without the network and failed its
 # bench once OpenBench moved it (a clang 23 worker, 27-Oct-2026).
 
-OPENBENCH_NET = atomic-ft3b-1p2B.nnue
+OPENBENCH_NET = atomic-ft5-0p8B.nnue
 
 ifeq ($(OS),Windows_NT)
     OPENBENCH_COMP = mingw
