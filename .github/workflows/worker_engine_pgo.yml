@@ -23,8 +23,8 @@ name: AtomicDB worker engines (PGO)
 # The engine source is not on this branch. It is checked out by SHA (ENGINE_SHA,
 # a main commit), so changing this workflow never changes what is built.
 #
-# Every binary embeds the default network (EvalFileDefaultName, atomic-ft3b-1p2B.nnue
-# since main 43567199): the checks run from a directory with no .nnue in it.
+# Every binary embeds the default network (EvalFileDefaultName, atomic-ft5-0p8B.nnue
+# since main 0c907100): the checks run from a directory with no .nnue in it.
 #
 # The profile of every profile-guided build is trained on AtomicDB-like searches,
 # not on `bench`: make runs ci/pgo_load.py as PGOBENCH, which searches the 40
@@ -50,15 +50,15 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  ENGINE_SHA: 435671990f41e7a9ca07da8c81538720020c4983
+  ENGINE_SHA: cbc0504ae8ec7aaed28573b0593bed4735cc8c33
   BASE_SHA: 1adc5239500a684824b178b19be4266f6e249cc8
-  ATOMIC_NET_TAG: net-ft3b-1p2B
-  ATOMIC_NET_ASSET: atomic-ft3b-1p2B.nnue
-  ATOMIC_NET_SHA256: a32645ea6749c2500119bd53b55cc5baf2f6c502659f247e5e5ca4f26ea48e29
+  ATOMIC_NET_TAG: net-ft5-0p8B
+  ATOMIC_NET_ASSET: atomic-ft5-0p8B.nnue
+  ATOMIC_NET_SHA256: c8e590d82efc3d29dfeba37323efd5fb094744e3561a07d58d9780c5c05db807
   # EvalFileDefaultName at ENGINE_SHA: the name the network is embedded under
-  NET_NAME: atomic-ft3b-1p2B.nnue
+  NET_NAME: atomic-ft5-0p8B.nnue
   SERVED_URL: https://belzedar.duckdns.org/atomicdb/engines
-  EXPECT_NNUE: "416708"
+  EXPECT_NNUE: "587120"
   # The training run of every profile-guided build (see the header).
   TRAIN_POSITIONS: ci/positions/train.tsv
   TRAIN_SUMMARY: "PGO training load (train.tsv): 40 positions"
