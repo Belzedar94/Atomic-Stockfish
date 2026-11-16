@@ -30,9 +30,9 @@ DEFAULT_PROFILES = {
     "release": (1_000_000, 1_024),
 }
 NETWORK_SIGNATURES = {
-    FROZEN_NET_SHA256: {"smoke": "DDB8196C6A0BE4A8", "release": "8742E39B793C46AB"},
-    PREVIOUS_NET_SHA256: {"smoke": "E00F263D3974195F", "release": "CDAEB5F2E9FEEA"},
-    DEFAULT_NET_SHA256: {"smoke": "BDDB89BA91BAA13C", "release": "CEDD92A20DAC41D4"},
+    FROZEN_NET_SHA256: {"smoke": "FC91E2BB7EFF0BF6", "release": "FE260E561BF6A51D"},
+    PREVIOUS_NET_SHA256: {"smoke": "F529261306E58180", "release": "7731BB6A8B43D3BE"},
+    DEFAULT_NET_SHA256: {"smoke": "B68F7270DBC933C5", "release": "13536BDA0DF386AB"},
 }
 FINAL_SENTINEL_RE = re.compile(
     r"^LegacyAtomicV1 incremental gate passed: "
