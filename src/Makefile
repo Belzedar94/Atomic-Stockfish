@@ -324,7 +324,9 @@ endif
 
 optimize = yes
 debug = no
-tune = no
+# Tuning branch tune/spsa-block2: OpenBench builds with a bare `make EVALFILE=...`
+# and cannot pass tune=yes, so the branch turns it on by default. Never merge.
+tune = yes
 sanitize = none
 bits = 64
 prefetch = no
