@@ -198,6 +198,73 @@ TUNE(SetRange(50, 260), StatBonusMult);
 TUNE(SetRange(400, 1600), StatMalusMult);
 #endif
 
+// Hooks for SPSA block 2: constants no campaign has moved yet, exposed with
+// their current values. Compile-time constants unless built with tune=yes.
+namespace {
+TUNABLE_INT CorrPawnWeight    = 13345;
+TUNABLE_INT CorrMinorWeight   = 9280;
+TUNABLE_INT CorrNonPawnWeight = 11840;
+TUNABLE_INT CorrContWeight    = 8363;
+TUNABLE_INT CorrUpdateMult    = 1114;
+TUNABLE_INT AspDeltaBase      = 5;
+TUNABLE_INT AspWidenMult      = 44;
+TUNABLE_INT OptimismMult      = 137;
+TUNABLE_INT TtCutBonusMult    = 114;
+TUNABLE_INT TtCutBonusMax     = 724;
+TUNABLE_INT TtCutPrevMalus    = 2187;
+TUNABLE_INT FutMultBase       = 40;
+TUNABLE_INT ParentFutBase     = 40;
+TUNABLE_INT SeeCaptHistMult   = 34;
+TUNABLE_INT DoubleExtPv       = 201;
+TUNABLE_INT TripleExtPv       = 306;
+TUNABLE_INT LmrTtPvPvNode     = 1017;
+TUNABLE_INT LmrTtPvAboveAlpha = 838;
+TUNABLE_INT LmrTtPvDepth      = 923;
+TUNABLE_INT LmrBaseAdd        = 714;
+TUNABLE_INT LmrCutNodeNoTt    = 1059;
+TUNABLE_INT LmrAllNodeMult    = 272;
+TUNABLE_INT PostLmrContBonus  = 1415;
+TUNABLE_INT StatBonusMax      = 1572;
+TUNABLE_INT StatBonusTtMove   = 382;
+TUNABLE_INT StatMalusMax      = 2218;
+TUNABLE_INT QuietBonusScale   = 824;
+TUNABLE_INT QuietMalusScale   = 1136;
+TUNABLE_INT CaptMalusScale    = 1518;
+TUNABLE_INT QsFailHighWeight  = 481;
+}
+#ifdef ATOMIC_TUNE_SEARCH
+TUNE(SetRange(6000, 26000), CorrPawnWeight);
+TUNE(SetRange(4000, 19000), CorrMinorWeight);
+TUNE(SetRange(5000, 24000), CorrNonPawnWeight);
+TUNE(SetRange(3500, 17000), CorrContWeight);
+TUNE(SetRange(550, 2200), CorrUpdateMult);
+TUNE(SetRange(1, 12), AspDeltaBase);
+TUNE(SetRange(16, 96), AspWidenMult);
+TUNE(SetRange(60, 280), OptimismMult);
+TUNE(SetRange(50, 230), TtCutBonusMult);
+TUNE(SetRange(350, 1450), TtCutBonusMax);
+TUNE(SetRange(1000, 4400), TtCutPrevMalus);
+TUNE(SetRange(15, 80), FutMultBase);
+TUNE(SetRange(0, 100), ParentFutBase);
+TUNE(SetRange(10, 70), SeeCaptHistMult);
+TUNE(SetRange(80, 400), DoubleExtPv);
+TUNE(SetRange(120, 600), TripleExtPv);
+TUNE(SetRange(400, 2000), LmrTtPvPvNode);
+TUNE(SetRange(300, 1700), LmrTtPvAboveAlpha);
+TUNE(SetRange(400, 1850), LmrTtPvDepth);
+TUNE(SetRange(0, 1500), LmrBaseAdd);
+TUNE(SetRange(400, 2100), LmrCutNodeNoTt);
+TUNE(SetRange(100, 550), LmrAllNodeMult);
+TUNE(SetRange(600, 2800), PostLmrContBonus);
+TUNE(SetRange(800, 3100), StatBonusMax);
+TUNE(SetRange(150, 760), StatBonusTtMove);
+TUNE(SetRange(1100, 4400), StatMalusMax);
+TUNE(SetRange(400, 1600), QuietBonusScale);
+TUNE(SetRange(550, 2200), QuietMalusScale);
+TUNE(SetRange(750, 3000), CaptMalusScale);
+TUNE(SetRange(200, 900), QsFailHighWeight);
+#endif
+
 bool Search::atomic_capture_futility_eligible(const Position& pos, Move move) {
     if (move.type_of() != NORMAL || !pos.capture_stage(move))
         return false;
@@ -275,12 +342,13 @@ int correction_value(const Worker& w, const Position& pos, const Stack* const ss
     const int   bnpcv  = shared.nonpawn_correction_entry<BLACK>(pos)[us].nonPawnBlack;
     const int   cntcv =
       m.is_ok()
-          ? 8363
+          ? CorrContWeight
             * ((*(ss - 2)->continuationCorrectionHistory)[(ss - 1)->movedPiece][m.to_sq()]
                + (*(ss - 4)->continuationCorrectionHistory)[(ss - 1)->movedPiece][m.to_sq()])
           : 64549;
 
-    return 13345 * pcv + 9280 * micv + 11840 * (wnpcv + bnpcv) + cntcv;
+    return CorrPawnWeight * pcv + CorrMinorWeight * micv + CorrNonPawnWeight * (wnpcv + bnpcv)
+         + cntcv;
 }
 
 // Add correctionHistory value to raw staticEval and guarantee evaluation
@@ -611,13 +679,13 @@ Search::TrainingSearchResult Search::Worker::training_search(Position&          
             lastIterationIdxPV = rootMoves[pvIdx].previousPV;
             selDepth           = 0;
 
-            int delta =
-              5 + threadIdx % 8 + std::abs(rootMoves[pvIdx].meanSquaredScore) / AspDeltaMsqDiv;
+            int delta = AspDeltaBase + threadIdx % 8
+                      + std::abs(rootMoves[pvIdx].meanSquaredScore) / AspDeltaMsqDiv;
             Value avg   = rootMoves[pvIdx].averageScore;
             Value alpha = std::max(avg - delta, -VALUE_INFINITE);
             Value beta  = std::min(avg + delta, VALUE_INFINITE);
 
-            optimism[us]  = 137 * avg / (std::abs(avg) + 81);
+            optimism[us]  = OptimismMult * avg / (std::abs(avg) + 81);
             optimism[~us] = -optimism[us];
 
             int failedHighCnt = 0;
@@ -650,7 +718,7 @@ Search::TrainingSearchResult Search::Worker::training_search(Position&          
                 else
                     break;
 
-                delta += 44 * delta / 128;
+                delta += AspWidenMult * delta / 128;
                 assert(alpha >= -VALUE_INFINITE && beta <= VALUE_INFINITE);
             }
 
@@ -782,8 +850,8 @@ bool Search::Worker::iterative_deepening() {
             selDepth = 0;
 
             // Reset aspiration window starting size
-            delta =
-              5 + threadIdx % 8 + std::abs(rootMoves[pvIdx].meanSquaredScore) / AspDeltaMsqDiv;
+            delta = AspDeltaBase + threadIdx % 8
+                  + std::abs(rootMoves[pvIdx].meanSquaredScore) / AspDeltaMsqDiv;
             Value avg = rootMoves[pvIdx].averageScore;
             alpha     = std::max(avg - delta, -VALUE_INFINITE);
             beta      = std::min(avg + delta, VALUE_INFINITE);
@@ -796,7 +864,7 @@ bool Search::Worker::iterative_deepening() {
               && std::abs(rootMoves[pvIdx].previousScore) >= 750 + 220000 / (rootDepth * rootDepth);
 
             // Adjust optimism based on root move's averageScore
-            optimism[us]  = 137 * avg / (std::abs(avg) + 81);
+            optimism[us]  = OptimismMult * avg / (std::abs(avg) + 81);
             optimism[~us] = -optimism[us];
 
             // Start with a small aspiration window and, in the case of a fail
@@ -853,7 +921,7 @@ bool Search::Worker::iterative_deepening() {
                 else
                     break;
 
-                delta += 44 * delta / 128;
+                delta += AspWidenMult * delta / 128;
 
                 assert(alpha >= -VALUE_INFINITE && beta <= VALUE_INFINITE);
             }
@@ -1313,11 +1381,13 @@ Value Search::Worker::search(
         {
             // Bonus for a quiet ttMove that fails high
             if (!ttCapture)
-                update_quiet_histories(pos, ss, *this, ttData.move, std::min(114 * depth, 724));
+                update_quiet_histories(pos, ss, *this, ttData.move,
+                                       std::min(TtCutBonusMult * depth, TtCutBonusMax));
 
             // Extra penalty for early quiet moves of the previous ply
             if (prevSq != SQ_NONE && (ss - 1)->moveCount < 4 && !priorCapture)
-                update_continuation_histories(ss - 1, pos.piece_on(prevSq), prevSq, -2187);
+                update_continuation_histories(ss - 1, pos.piece_on(prevSq), prevSq,
+                                              -TtCutPrevMalus);
         }
 
         // Partial workaround for the graph history interaction problem
@@ -1434,7 +1504,7 @@ Value Search::Worker::search(
     if (!ss->ttPv && depth < (seekMate ? 6 : 19) && eval >= beta && (!ttData.move || ttCapture)
         && !is_loss(beta) && !is_win(eval) && !pos.under_blast_threat())
     {
-        Value futilityMult = std::min(40 + depth * 4, 80);
+        Value futilityMult = std::min(FutMultBase + depth * 4, 80);
         futilityMult -= 20 * !ss->ttHit;
         futilityMult = futilityMult * AtomicFutilityScale / 64;
 
@@ -1646,7 +1716,7 @@ moves_loop:  // When in check, search starts here
 
                 // SEE based pruning for captures and checks
                 // Avoid pruning sacrifices of our last piece for stalemate
-                int margin = SeeCaptDepthMult * depth + captHist * 34 / 1024;
+                int margin = SeeCaptDepthMult * depth + captHist * SeeCaptHistMult / 1024;
                 if (!atomicWin
                     && (alpha >= VALUE_DRAW || pos.non_pawn_material(us) != PieceValue[movedPiece])
                     && !pos.see_ge(move, -margin))
@@ -1670,7 +1740,7 @@ moves_loop:  // When in check, search starts here
 
                 Value futilityValue =
                   ss->staticEval
-                  + (40 + ParentFutNoBest * !bestMove + ParentFutLmrMult * lmrDepth
+                  + (ParentFutBase + ParentFutNoBest * !bestMove + ParentFutLmrMult * lmrDepth
                      + ParentFutAboveAlpha * (ss->staticEval > alpha))
                       * AtomicFutilityScale / 64;
 
@@ -1720,11 +1790,12 @@ moves_loop:  // When in check, search starts here
             if (value < singularBeta)
             {
                 int corrValAdj   = std::abs(correctionValue) / 194822;
-                int doubleMargin = -3 + 201 * PvNode - DoubleExtNoTtCapture * !ttCapture
+                int doubleMargin = -3 + DoubleExtPv * PvNode - DoubleExtNoTtCapture * !ttCapture
                                  - corrValAdj - 1081 * ttMoveHistory / 117824
                                  - (ss->ply > rootDepth) * 41;
-                int tripleMargin = TripleExtBase + 306 * PvNode - TripleExtNoTtCapture * !ttCapture
-                                 + 84 * ss->ttPv - corrValAdj - (ss->ply > rootDepth) * 45;
+                int tripleMargin = TripleExtBase + TripleExtPv * PvNode
+                                 - TripleExtNoTtCapture * !ttCapture + 84 * ss->ttPv - corrValAdj
+                                 - (ss->ply > rootDepth) * 45;
 
                 // No extension once this node is decided: its own TT value is beyond
                 // 1500 centipawns either way. Decisive Atomic lines are chains of only
@@ -1779,16 +1850,16 @@ moves_loop:  // When in check, search starts here
 
         // Decrease reduction for PvNodes (*Scaler)
         if (ss->ttPv)
-            r -= LmrTtPvBase + PvNode * 1017 + (ttData.value > alpha) * 838
-               + (ttData.depth >= depth) * (923 + cutNode * 955);
+            r -= LmrTtPvBase + PvNode * LmrTtPvPvNode + (ttData.value > alpha) * LmrTtPvAboveAlpha
+               + (ttData.depth >= depth) * (LmrTtPvDepth + cutNode * 955);
 
-        r += 714;  // Base reduction offset to compensate for other tweaks
+        r += LmrBaseAdd;  // Base reduction offset to compensate for other tweaks
         r -= moveCount * LmrMoveCountMult;
         r -= std::abs(correctionValue) / 26131;
 
         // Increase reduction for cut nodes
         if (cutNode)
-            r += LmrCutNode + 1059 * !ttData.move;
+            r += LmrCutNode + LmrCutNodeNoTt * !ttData.move;
 
         // Increase reduction if ttMove is a capture
         if (ttCapture)
@@ -1815,7 +1886,7 @@ moves_loop:  // When in check, search starts here
 
         // Scale up reductions for expected ALL nodes
         if (allNode)
-            r += r * 272 / (256 * depth + 285);
+            r += r * LmrAllNodeMult / (256 * depth + 285);
 
         // When seeking a mate, reduce non-checking moves more and checking moves less
         if (seekMate && r > 0)
@@ -1850,7 +1921,7 @@ moves_loop:  // When in check, search starts here
                     value = -search<NonPV>(pos, ss + 1, -(alpha + 1), -alpha, newDepth, !cutNode);
 
                 // Post LMR continuation history updates
-                update_continuation_histories(ss, movedPiece, move.to_sq(), 1415);
+                update_continuation_histories(ss, movedPiece, move.to_sq(), PostLmrContBonus);
             }
         }
 
@@ -2073,7 +2144,7 @@ moves_loop:  // When in check, search starts here
         auto bonus =
           std::clamp(int(bestValue - ss->staticEval) * depth * (bestMove ? 12 : 18) / 128,
                      -CORRECTION_HISTORY_LIMIT / 4, CORRECTION_HISTORY_LIMIT / 4);
-        update_correction_history(pos, ss, *this, 1114 * bonus / 1024);
+        update_correction_history(pos, ss, *this, CorrUpdateMult * bonus / 1024);
     }
 
     assert(bestValue > -VALUE_INFINITE && bestValue < VALUE_INFINITE);
@@ -2339,7 +2410,7 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
     }
 
     if (!is_decisive(bestValue) && bestValue > beta)
-        bestValue = (481 * bestValue + 543 * beta) / 1024;
+        bestValue = (QsFailHighWeight * bestValue + (1024 - QsFailHighWeight) * beta) / 1024;
 
     // Save gathered info in transposition table. The static evaluation
     // is saved as it was before adjustment by correction history.
@@ -2436,9 +2507,9 @@ void update_all_stats(const Position& pos,
     Piece                  movedPiece     = pos.moved_piece(bestMove);
     PieceType              capturedPiece;
 
-    int bonus = std::min(StatBonusMult * depth - 79, 1572) + 382 * (bestMove == ttMove)
-              + (ss - 1)->statScore / 30;
-    int malus = std::min(StatMalusMult * depth - 205, 2218);
+    int bonus = std::min(StatBonusMult * depth - 79, StatBonusMax)
+              + StatBonusTtMove * (bestMove == ttMove) + (ss - 1)->statScore / 30;
+    int malus = std::min(StatMalusMult * depth - 205, StatMalusMax);
 
     if (!PvNode)
         // Important: don't remove the cast to a 64-bit number else the multiplication
@@ -2447,9 +2518,9 @@ void update_all_stats(const Position& pos,
 
     if (!pos.capture_stage(bestMove))
     {
-        update_quiet_histories(pos, ss, workerThread, bestMove, bonus * 824 / 1024);
+        update_quiet_histories(pos, ss, workerThread, bestMove, bonus * QuietBonusScale / 1024);
 
-        int actualMalus = malus * 1136 / 1024;
+        int actualMalus = malus * QuietMalusScale / 1024;
         // Decrease stats for all non-best quiet moves
         for (Move move : quietsSearched)
         {
@@ -2474,7 +2545,7 @@ void update_all_stats(const Position& pos,
     {
         movedPiece    = pos.moved_piece(move);
         capturedPiece = type_of(pos.piece_on(move.to_sq()));
-        captureHistory[movedPiece][move.to_sq()][capturedPiece] << -malus * 1518 / 1024;
+        captureHistory[movedPiece][move.to_sq()][capturedPiece] << -malus * CaptMalusScale / 1024;
     }
 }
 
