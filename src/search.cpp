@@ -611,7 +611,8 @@ Search::TrainingSearchResult Search::Worker::training_search(Position&          
             lastIterationIdxPV = rootMoves[pvIdx].previousPV;
             selDepth           = 0;
 
-            int   delta = 5 + threadIdx % 8 + std::abs(rootMoves[pvIdx].meanSquaredScore) / AspDeltaMsqDiv;
+            int delta =
+              5 + threadIdx % 8 + std::abs(rootMoves[pvIdx].meanSquaredScore) / AspDeltaMsqDiv;
             Value avg   = rootMoves[pvIdx].averageScore;
             Value alpha = std::max(avg - delta, -VALUE_INFINITE);
             Value beta  = std::min(avg + delta, VALUE_INFINITE);
@@ -781,7 +782,8 @@ bool Search::Worker::iterative_deepening() {
             selDepth = 0;
 
             // Reset aspiration window starting size
-            delta     = 5 + threadIdx % 8 + std::abs(rootMoves[pvIdx].meanSquaredScore) / AspDeltaMsqDiv;
+            delta =
+              5 + threadIdx % 8 + std::abs(rootMoves[pvIdx].meanSquaredScore) / AspDeltaMsqDiv;
             Value avg = rootMoves[pvIdx].averageScore;
             alpha     = std::max(avg - delta, -VALUE_INFINITE);
             beta      = std::min(avg + delta, VALUE_INFINITE);
@@ -1296,7 +1298,8 @@ Value Search::Worker::search(
     // Hindsight adjustment of reductions based on static evaluation difference.
     if (priorReduction >= 3 && !opponentWorsening)
         depth++;
-    if (priorReduction >= 2 && depth >= 2 && ss->staticEval + (ss - 1)->staticEval > HindsightEvalSum)
+    if (priorReduction >= 2 && depth >= 2
+        && ss->staticEval + (ss - 1)->staticEval > HindsightEvalSum)
         depth--;
 
     // At non-PV nodes we check for an early TT cutoff
@@ -1435,18 +1438,21 @@ Value Search::Worker::search(
         futilityMult -= 20 * !ss->ttHit;
         futilityMult = futilityMult * AtomicFutilityScale / 64;
 
-        Value futilityMargin = futilityMult * depth
-                             - (FutImprovingMult * improving + FutOppWorseningMult * opponentWorsening) * futilityMult / 1024
-                             + std::abs(correctionValue) / 182069;
+        Value futilityMargin =
+          futilityMult * depth
+          - (FutImprovingMult * improving + FutOppWorseningMult * opponentWorsening) * futilityMult
+              / 1024
+          + std::abs(correctionValue) / 182069;
 
         if (eval - futilityMargin >= beta)
             return (FutReturnBetaWeight * beta + (1024 - FutReturnBetaWeight) * eval) / 1024;
     }
 
     // Step 9. Null move search with verification search
-    if (cutNode && ss->staticEval >= beta - NmpEvalDepthMult * depth - NmpImprovingMult * improving + NmpEvalBase
-        && !excludedMove
-        && pos.non_pawn_material(us) && ss->ply >= nmpMinPly && !is_loss(beta))
+    if (cutNode
+        && ss->staticEval
+             >= beta - NmpEvalDepthMult * depth - NmpImprovingMult * improving + NmpEvalBase
+        && !excludedMove && pos.non_pawn_material(us) && ss->ply >= nmpMinPly && !is_loss(beta))
     {
         assert((ss - 1)->currentMove != Move::null());
 
@@ -1630,9 +1636,9 @@ moves_loop:  // When in check, search starts here
                 if (!atomicWin && !givesCheck && lmrDepth < 7
                     && atomic_capture_futility_eligible(pos, move))
                 {
-                    Value futilityValue = ss->staticEval + AtomicCaptFutBase
-                                        + AtomicCaptFutLmrMult * lmrDepth
-                                        + PieceValue[capturedPiece] + CaptFutHistMult * captHist / 1024;
+                    Value futilityValue =
+                      ss->staticEval + AtomicCaptFutBase + AtomicCaptFutLmrMult * lmrDepth
+                      + PieceValue[capturedPiece] + CaptFutHistMult * captHist / 1024;
 
                     if (futilityValue <= alpha)
                         continue;
@@ -1714,11 +1720,11 @@ moves_loop:  // When in check, search starts here
             if (value < singularBeta)
             {
                 int corrValAdj   = std::abs(correctionValue) / 194822;
-                int doubleMargin = -3 + 201 * PvNode - DoubleExtNoTtCapture * !ttCapture - corrValAdj
-                                 - 1081 * ttMoveHistory / 117824 - (ss->ply > rootDepth) * 41;
+                int doubleMargin = -3 + 201 * PvNode - DoubleExtNoTtCapture * !ttCapture
+                                 - corrValAdj - 1081 * ttMoveHistory / 117824
+                                 - (ss->ply > rootDepth) * 41;
                 int tripleMargin = TripleExtBase + 306 * PvNode - TripleExtNoTtCapture * !ttCapture
-                                 + 84 * ss->ttPv - corrValAdj
-                                 - (ss->ply > rootDepth) * 45;
+                                 + 84 * ss->ttPv - corrValAdj - (ss->ply > rootDepth) * 45;
 
                 // No extension once this node is decided: its own TT value is beyond
                 // 1500 centipawns either way. Decisive Atomic lines are chains of only
@@ -2204,7 +2210,9 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
                 return VALUE_DRAW;
 
             if (!is_decisive(bestValue))
-                bestValue = (QsStandPatValueWeight * bestValue + (1024 - QsStandPatValueWeight) * beta) / 1024;
+                bestValue =
+                  (QsStandPatValueWeight * bestValue + (1024 - QsStandPatValueWeight) * beta)
+                  / 1024;
 
             if (!ss->ttHit)
                 ttWriter.write(posKey, VALUE_NONE, false, BOUND_LOWER, DEPTH_UNSEARCHED,
@@ -2347,8 +2355,7 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
 int Search::Worker::reduction(bool i, Depth d, int mn, int delta) const {
     int reductionScale = reductions[d] * reductions[mn];
     return reductionScale - delta * ReductionDeltaMult / rootDelta
-         + !i * reductionScale * ReductionNotImproving / 512
-         + LmrBaseOffset;
+         + !i * reductionScale * ReductionNotImproving / 512 + LmrBaseOffset;
 }
 
 // elapsed() returns the time elapsed since the search started. If the
@@ -2429,8 +2436,8 @@ void update_all_stats(const Position& pos,
     Piece                  movedPiece     = pos.moved_piece(bestMove);
     PieceType              capturedPiece;
 
-    int bonus =
-      std::min(StatBonusMult * depth - 79, 1572) + 382 * (bestMove == ttMove) + (ss - 1)->statScore / 30;
+    int bonus = std::min(StatBonusMult * depth - 79, 1572) + 382 * (bestMove == ttMove)
+              + (ss - 1)->statScore / 30;
     int malus = std::min(StatMalusMult * depth - 205, 2218);
 
     if (!PvNode)

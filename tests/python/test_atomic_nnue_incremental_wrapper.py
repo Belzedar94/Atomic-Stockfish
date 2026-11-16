@@ -24,7 +24,7 @@ def sentinel(
     makes: int | None = None,
     undos: int | None = None,
     forced_refresh: int = 0,
-    signature: str = "DDB8196C6A0BE4A8",
+    signature: str = "FC91E2BB7EFF0BF6",
 ) -> str:
     actual = requested if actual is None else actual
     makes = actual // 2 if makes is None else makes
@@ -44,8 +44,8 @@ def sentinel(
 @pytest.mark.parametrize(
     ("mode", "operations", "interval", "signature"),
     (
-        ("smoke", 4_096, 1, "DDB8196C6A0BE4A8"),
-        ("release", 1_000_000, 1_024, "8742E39B793C46AB"),
+        ("smoke", 4_096, 1, "FC91E2BB7EFF0BF6"),
+        ("release", 1_000_000, 1_024, "FE260E561BF6A51D"),
     ),
 )
 def test_default_profiles_require_the_frozen_signature(
@@ -66,8 +66,8 @@ def test_default_profiles_require_the_frozen_signature(
 @pytest.mark.parametrize(
     ("mode", "operations", "interval", "signature"),
     (
-        ("smoke", 4_096, 1, "BDDB89BA91BAA13C"),
-        ("release", 1_000_000, 1_024, "CEDD92A20DAC41D4"),
+        ("smoke", 4_096, 1, "B68F7270DBC933C5"),
+        ("release", 1_000_000, 1_024, "13536BDA0DF386AB"),
     ),
 )
 def test_default_network_has_its_own_frozen_signature(

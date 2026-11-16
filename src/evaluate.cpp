@@ -158,8 +158,8 @@ Value Eval::evaluate(const Eval::NNUE::AnyNetwork& network,
         // historical material proxy locally for Legacy Atomic V1 scaling.
         const int legacyNpm =
           int(pos.non_pawn_material()) + LegacyAtomicRoyalValue * pos.count<KING>();
-        const int scale = EvalScaleBase + EvalScalePawn * pos.count<PAWN>()
-                        + EvalScaleNpm * legacyNpm / 1024;
+        const int scale =
+          EvalScaleBase + EvalScalePawn * pos.count<PAWN>() + EvalScaleNpm * legacyNpm / 1024;
         v               = Value((blendedRaw / 16) * scale / 1024);
         // Search optimism (137 * avg / (|avg| + 81), side to move) used to be
         // computed and discarded; SPSA block 1 gave it a small negative weight.

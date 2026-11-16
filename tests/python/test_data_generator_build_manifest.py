@@ -102,17 +102,17 @@ def test_generator_search_uses_the_canonical_worker_baseline() -> None:
     assert "-DATOMIC_DATA_GENERATOR" in makefile[tt_rule:next_rule]
     # The LMR log scale stopped being a literal when the search constants became
     # tunable for the SPSA campaign. The reset formula is pinned through the
-    # tunable and the converged spsa90 default is pinned next to it, so the pair
-    # still nails the exact number the generator bakes in. TUNABLE_INT is the
-    # storage class from tune.h: a constant here, a UCI spin option only under
-    # `make tune=yes`, and the same 2736 either way.
+    # tunable and the current tuned default (SPSA block 1, T520) is pinned next
+    # to it, so the pair still nails the exact number the generator bakes in.
+    # TUNABLE_INT is the storage class from tune.h: a constant here, a UCI spin
+    # option only under `make tune=yes`, and the same 2719 either way.
     for local_reset in (
         "mainHistory.fill(-5);",
         "captureHistory.fill(-699);",
         "ttMoveHistory = 0;",
         "h.fill(5);",
         "reductions[i] = int(LmrLogScale / 128.0 * std::log(i));",
-        "TUNABLE_INT LmrLogScale          = 2736;",
+        "TUNABLE_INT LmrLogScale          = 2719;",
         "accumulator.rebind(network[numaAccessToken]);",
         "lowPlyHistory.fill(100);",
     ):
