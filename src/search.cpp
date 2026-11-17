@@ -265,6 +265,67 @@ TUNE(SetRange(750, 3000), CaptMalusScale);
 TUNE(SetRange(200, 900), QsFailHighWeight);
 #endif
 
+// Hooks for SPSA block 3: the search literals blocks 1 and 2 left out, with
+// their current values. Compile-time constants unless built with tune=yes.
+// The Atomic SEE piece values live in position.cpp and the move-ordering SEE
+// thresholds in movepick.cpp, next to the code that reads them.
+namespace {
+TUNABLE_INT AtomicCaptFutDepthMax = 7;
+TUNABLE_INT QsMoveCountMax        = 2;
+TUNABLE_INT FutDepthMax           = 19;
+TUNABLE_INT FutMultDepth          = 4;
+TUNABLE_INT FutMultMax            = 80;
+TUNABLE_INT FutMultNoTtHit        = 20;
+TUNABLE_INT ParentFutLmrDepthMax  = 12;
+TUNABLE_INT NmpVerifyDepth        = 16;
+TUNABLE_INT IirDepthMin           = 6;
+TUNABLE_INT ProbCutDepthReduce    = 4;
+TUNABLE_INT DoubleExtTtMoveHist   = 1081;
+TUNABLE_INT DoubleExtDeepPly      = 41;
+TUNABLE_INT TripleExtTtPv         = 84;
+TUNABLE_INT TripleExtDeepPly      = 45;
+TUNABLE_INT MultiCutHistBase      = 442;
+TUNABLE_INT LmrTtPvDepthCut       = 955;
+TUNABLE_INT LmrCutoffCntHigh      = 1079;
+TUNABLE_INT LmrCutoffCntAll       = 1143;
+TUNABLE_INT LmrShallowerMargin    = 9;
+TUNABLE_INT TtMoveHistBonus       = 792;
+TUNABLE_INT TtMoveHistMalus       = 779;
+TUNABLE_INT PriorCaptBonus        = 901;
+TUNABLE_INT StatMalusDecay        = 956;
+TUNABLE_INT CaptBonusScale        = 1366;
+TUNABLE_INT PrevEarlyMalus        = 683;
+TUNABLE_INT EvalDiffQuietMult     = 10;
+}
+#ifdef ATOMIC_TUNE_SEARCH
+TUNE(SetRange(2, 14), AtomicCaptFutDepthMax);
+TUNE(SetRange(0, 10), QsMoveCountMax);
+TUNE(SetRange(8, 30), FutDepthMax);
+TUNE(SetRange(0, 12), FutMultDepth);
+TUNE(SetRange(40, 160), FutMultMax);
+TUNE(SetRange(0, 50), FutMultNoTtHit);
+TUNE(SetRange(5, 25), ParentFutLmrDepthMax);
+TUNE(SetRange(6, 30), NmpVerifyDepth);
+TUNE(SetRange(2, 14), IirDepthMin);
+TUNE(SetRange(1, 11), ProbCutDepthReduce);
+TUNE(SetRange(0, 2500), DoubleExtTtMoveHist);
+TUNE(SetRange(0, 120), DoubleExtDeepPly);
+TUNE(SetRange(0, 200), TripleExtTtPv);
+TUNE(SetRange(0, 120), TripleExtDeepPly);
+TUNE(SetRange(0, 1000), MultiCutHistBase);
+TUNE(SetRange(300, 1900), LmrTtPvDepthCut);
+TUNE(SetRange(300, 2200), LmrCutoffCntHigh);
+TUNE(SetRange(300, 2300), LmrCutoffCntAll);
+TUNE(SetRange(0, 40), LmrShallowerMargin);
+TUNE(SetRange(300, 1600), TtMoveHistBonus);
+TUNE(SetRange(300, 1600), TtMoveHistMalus);
+TUNE(SetRange(300, 1800), PriorCaptBonus);
+TUNE(SetRange(800, 1024), StatMalusDecay);
+TUNE(SetRange(600, 2700), CaptBonusScale);
+TUNE(SetRange(250, 1400), PrevEarlyMalus);
+TUNE(SetRange(2, 30), EvalDiffQuietMult);
+#endif
+
 bool Search::atomic_capture_futility_eligible(const Position& pos, Move move) {
     if (move.type_of() != NORMAL || !pos.capture_stage(move))
         return false;
@@ -1484,7 +1545,7 @@ Value Search::Worker::search(
     if (((ss - 1)->currentMove).is_ok() && !(ss - 1)->inCheck && !priorCapture)
     {
         int evalDiff = std::clamp(-int((ss - 1)->staticEval + ss->staticEval), -183, 180) + 62;
-        mainHistory[~us][((ss - 1)->currentMove).raw()] << evalDiff * 10;
+        mainHistory[~us][((ss - 1)->currentMove).raw()] << evalDiff * EvalDiffQuietMult;
         if (!ttHit && type_of(pos.piece_on(prevSq)) != PAWN
             && ((ss - 1)->currentMove).type_of() != PROMOTION)
             active_shared_history().pawn_entry(pos)[pos.piece_on(prevSq)][prevSq] << evalDiff * 13;
@@ -1501,11 +1562,12 @@ Value Search::Worker::search(
     // The depth condition is important for mate finding. A blast check is a
     // check: the static evaluation is not an upper bound on a position whose
     // every continuation can be answered by detonating our king.
-    if (!ss->ttPv && depth < (seekMate ? 6 : 19) && eval >= beta && (!ttData.move || ttCapture)
-        && !is_loss(beta) && !is_win(eval) && !pos.under_blast_threat())
+    if (!ss->ttPv && depth < (seekMate ? 6 : FutDepthMax) && eval >= beta
+        && (!ttData.move || ttCapture) && !is_loss(beta) && !is_win(eval)
+        && !pos.under_blast_threat())
     {
-        Value futilityMult = std::min(FutMultBase + depth * 4, 80);
-        futilityMult -= 20 * !ss->ttHit;
+        Value futilityMult = std::min(FutMultBase + depth * FutMultDepth, FutMultMax);
+        futilityMult -= FutMultNoTtHit * !ss->ttHit;
         futilityMult = futilityMult * AtomicFutilityScale / 64;
 
         Value futilityMargin =
@@ -1538,7 +1600,7 @@ Value Search::Worker::search(
         // Do not return unproven mate or TB scores
         if (nullValue >= beta && !is_win(nullValue))
         {
-            if (nmpMinPly || depth < 16)
+            if (nmpMinPly || depth < NmpVerifyDepth)
                 return nullValue;
 
             assert(!nmpMinPly);  // Recursive verification is not allowed
@@ -1561,7 +1623,7 @@ Value Search::Worker::search(
     // Step 10. Internal iterative reductions
     // At sufficient depth, reduce depth for PV/Cut nodes without a TTMove.
     // (*Scaler) Making IIR more aggressive scales poorly.
-    if (!ss->followPV && !allNode && depth >= 6 && !ttData.move)
+    if (!ss->followPV && !allNode && depth >= IirDepthMin && !ttData.move)
         depth--;
 
     // Step 11. ProbCut
@@ -1579,7 +1641,7 @@ Value Search::Worker::search(
         assert(probCutBeta < VALUE_INFINITE && probCutBeta > beta);
 
         MovePicker mp(pos, ttData.move, probCutBeta - ss->staticEval, &captureHistory);
-        Depth      probCutDepth = depth - 4 - improving;
+        Depth      probCutDepth = depth - ProbCutDepthReduce - improving;
 
         while ((move = mp.next_move()) != Move::none())
         {
@@ -1703,7 +1765,7 @@ moves_loop:  // When in check, search starts here
                 int   captHist = captureHistory[movedPiece][move.to_sq()][type_of(capturedPiece)];
 
                 // Futility pruning for captures
-                if (!atomicWin && !givesCheck && lmrDepth < 7
+                if (!atomicWin && !givesCheck && lmrDepth < AtomicCaptFutDepthMax
                     && atomic_capture_futility_eligible(pos, move))
                 {
                     Value futilityValue =
@@ -1747,7 +1809,7 @@ moves_loop:  // When in check, search starts here
                 // Futility pruning: parent node
                 // (*Scaler): Generally, more frequent futility pruning
                 // scales well
-                if (!ss->inCheck && lmrDepth < 12 && futilityValue <= alpha)
+                if (!ss->inCheck && lmrDepth < ParentFutLmrDepthMax && futilityValue <= alpha)
                 {
                     if (bestValue <= futilityValue && !is_decisive(bestValue)
                         && !is_win(futilityValue))
@@ -1791,11 +1853,11 @@ moves_loop:  // When in check, search starts here
             {
                 int corrValAdj   = std::abs(correctionValue) / 194822;
                 int doubleMargin = -3 + DoubleExtPv * PvNode - DoubleExtNoTtCapture * !ttCapture
-                                 - corrValAdj - 1081 * ttMoveHistory / 117824
-                                 - (ss->ply > rootDepth) * 41;
+                                 - corrValAdj - DoubleExtTtMoveHist * ttMoveHistory / 117824
+                                 - (ss->ply > rootDepth) * DoubleExtDeepPly;
                 int tripleMargin = TripleExtBase + TripleExtPv * PvNode
-                                 - TripleExtNoTtCapture * !ttCapture + 84 * ss->ttPv - corrValAdj
-                                 - (ss->ply > rootDepth) * 45;
+                                 - TripleExtNoTtCapture * !ttCapture + TripleExtTtPv * ss->ttPv
+                                 - corrValAdj - (ss->ply > rootDepth) * TripleExtDeepPly;
 
                 // No extension once this node is decided: its own TT value is beyond
                 // 1500 centipawns either way. Decisive Atomic lines are chains of only
@@ -1819,7 +1881,7 @@ moves_loop:  // When in check, search starts here
             // subtree by returning a softbound.
             else if (value >= beta && !is_decisive(value))
             {
-                ttMoveHistory << -442 - 108 * depth;
+                ttMoveHistory << -MultiCutHistBase - 108 * depth;
                 return value;
             }
 
@@ -1851,7 +1913,7 @@ moves_loop:  // When in check, search starts here
         // Decrease reduction for PvNodes (*Scaler)
         if (ss->ttPv)
             r -= LmrTtPvBase + PvNode * LmrTtPvPvNode + (ttData.value > alpha) * LmrTtPvAboveAlpha
-               + (ttData.depth >= depth) * (LmrTtPvDepth + cutNode * 955);
+               + (ttData.depth >= depth) * (LmrTtPvDepth + cutNode * LmrTtPvDepthCut);
 
         r += LmrBaseAdd;  // Base reduction offset to compensate for other tweaks
         r -= moveCount * LmrMoveCountMult;
@@ -1867,7 +1929,8 @@ moves_loop:  // When in check, search starts here
 
         // Increase reduction if next ply has a lot of fail high
         if ((ss + 1)->cutoffCnt > 1)
-            r += LmrCutoffCntBase + 1079 * ((ss + 1)->cutoffCnt > 2) + 1143 * allNode;
+            r += LmrCutoffCntBase + LmrCutoffCntHigh * ((ss + 1)->cutoffCnt > 2)
+               + LmrCutoffCntAll * allNode;
 
         // For first picked move (ttMove) reduce reduction
         else if (move == ttData.move)
@@ -1913,7 +1976,7 @@ moves_loop:  // When in check, search starts here
                 // Adjust full-depth search based on LMR results - if the result was
                 // good enough search deeper, if it was bad enough search shallower.
                 const bool doDeeperSearch    = d < newDepth && value > bestValue + LmrDeeperMargin;
-                const bool doShallowerSearch = value < bestValue + 9;
+                const bool doShallowerSearch = value < bestValue + LmrShallowerMargin;
 
                 newDepth += doDeeperSearch - doShallowerSearch;
 
@@ -2082,7 +2145,7 @@ moves_loop:  // When in check, search starts here
         update_all_stats(pos, ss, *this, bestMove, prevSq, quietsSearched, capturesSearched, depth,
                          ttData.move, PvNode);
         if (!PvNode)
-            ttMoveHistory << (bestMove == ttData.move ? 792 : -779);
+            ttMoveHistory << (bestMove == ttData.move ? TtMoveHistBonus : -TtMoveHistMalus);
     }
 
     // Bonus for prior quiet countermove that caused the fail low
@@ -2115,7 +2178,7 @@ moves_loop:  // When in check, search starts here
     {
         Piece capturedPiece = pos.captured_piece();
         assert(capturedPiece != NO_PIECE);
-        captureHistory[(ss - 1)->movedPiece][prevSq][type_of(capturedPiece)] << 901;
+        captureHistory[(ss - 1)->movedPiece][prevSq][type_of(capturedPiece)] << PriorCaptBonus;
     }
 
     if (PvNode)
@@ -2335,7 +2398,7 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
             if (!givesCheck && move.to_sq() != prevSq && !is_loss(futilityBase)
                 && move.type_of() != PROMOTION && atomic_capture_futility_eligible(pos, move))
             {
-                if (moveCount > 2)
+                if (moveCount > QsMoveCountMax)
                     continue;
 
                 Value futilityValue = futilityBase + PieceValue[pos.piece_on(move.to_sq())];
@@ -2524,7 +2587,7 @@ void update_all_stats(const Position& pos,
         // Decrease stats for all non-best quiet moves
         for (Move move : quietsSearched)
         {
-            actualMalus = actualMalus * 956 / 1024;
+            actualMalus = actualMalus * StatMalusDecay / 1024;
             update_quiet_histories(pos, ss, workerThread, move, -actualMalus);
         }
     }
@@ -2532,13 +2595,15 @@ void update_all_stats(const Position& pos,
     {
         // Increase stats for the best move in case it was a capture move
         capturedPiece = type_of(pos.piece_on(bestMove.to_sq()));
-        captureHistory[movedPiece][bestMove.to_sq()][capturedPiece] << bonus * 1366 / 1024;
+        captureHistory[movedPiece][bestMove.to_sq()][capturedPiece]
+          << bonus * CaptBonusScale / 1024;
     }
 
     // Extra penalty for a quiet early move that was not a TT move in
     // previous ply when it gets refuted.
     if (prevSq != SQ_NONE && ((ss - 1)->moveCount == 1 + (ss - 1)->ttHit) && !pos.captured_piece())
-        update_continuation_histories(ss - 1, pos.piece_on(prevSq), prevSq, -malus * 683 / 1024);
+        update_continuation_histories(ss - 1, pos.piece_on(prevSq), prevSq,
+                                      -malus * PrevEarlyMalus / 1024);
 
     // Decrease stats for all non-best capture moves
     for (Move move : capturesSearched)

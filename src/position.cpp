@@ -60,6 +60,44 @@ constexpr std::string_view PieceToChar(" PNBRQK  pnbrqk");
 
 static constexpr Piece Pieces[] = {W_PAWN, W_KNIGHT, W_BISHOP, W_ROOK, W_QUEEN, W_KING,
                                    B_PAWN, B_KNIGHT, B_BISHOP, B_ROOK, B_QUEEN, B_KING};
+
+// Piece values used by the Atomic SEE. Fairy-Stockfish scales middlegame
+// capture values in blast variants by value * 7000 / (7000 + value). Atomic
+// pawns first receive the historical 3/2 bonus used by the legacy evaluator.
+// These constants are part of the Atomic search contract and deliberately
+// differ from orthodox PieceValue. SPSA block 3 hooks: compile-time constants
+// unless built with tune=yes (tune.h).
+TUNABLE_INT AtomicSeePawn   = 301;
+TUNABLE_INT AtomicSeeKnight = 702;
+TUNABLE_INT AtomicSeeBishop = 738;
+TUNABLE_INT AtomicSeeRook   = 1079;
+TUNABLE_INT AtomicSeeQueen  = 1862;
+
+// A default build folds the table into a constant. A tuning build rebuilds it
+// on every call, so a value changed through UCI takes effect at once.
+#ifdef ATOMIC_TUNE_SEARCH
+    #define ATOMIC_SEE_TABLE const int
+#else
+    #define ATOMIC_SEE_TABLE static constexpr int
+#endif
+inline int atomic_see_value(Piece pc) {
+    ATOMIC_SEE_TABLE values[PIECE_NB] = {
+      0, AtomicSeePawn, AtomicSeeKnight, AtomicSeeBishop, AtomicSeeRook, AtomicSeeQueen, 0, 0,
+      0, AtomicSeePawn, AtomicSeeKnight, AtomicSeeBishop, AtomicSeeRook, AtomicSeeQueen, 0, 0};
+    return values[pc];
+}
+#undef ATOMIC_SEE_TABLE
+
+// TUNE defines a dummy variable named after the line number; keeping the
+// registrations in this unnamed namespace stops them from clashing at link
+// time with a TUNE on the same line of another file.
+#ifdef ATOMIC_TUNE_SEARCH
+TUNE(SetRange(150, 600), AtomicSeePawn);
+TUNE(SetRange(350, 1400), AtomicSeeKnight);
+TUNE(SetRange(370, 1480), AtomicSeeBishop);
+TUNE(SetRange(540, 2160), AtomicSeeRook);
+TUNE(SetRange(930, 3720), AtomicSeeQueen);
+#endif
 }  // namespace
 
 
@@ -1452,8 +1490,7 @@ bool Position::see_ge(Move m, int threshold) const {
         while (attackers)
         {
             const Square s = pop_lsb(attackers);
-            minAttacker =
-              std::min(minAttacker, (blast & s) ? 0 : int(AtomicCapturePieceValue[piece_on(s)]));
+            minAttacker    = std::min(minAttacker, (blast & s) ? 0 : atomic_see_value(piece_on(s)));
         }
 
         if (minAttacker == VALUE_INFINITE)
@@ -1477,8 +1514,8 @@ bool Position::see_ge(Move m, int threshold) const {
                 explodesTheirKing = true;
         }
 
-        result += color_of(blastPiece) == us ? -int(AtomicCapturePieceValue[blastPiece])
-                                             : int(AtomicCapturePieceValue[blastPiece]);
+        result +=
+          color_of(blastPiece) == us ? -atomic_see_value(blastPiece) : atomic_see_value(blastPiece);
     }
 
     if (isCapture)
