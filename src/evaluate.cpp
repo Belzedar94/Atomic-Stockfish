@@ -40,11 +40,11 @@ namespace Stockfish {
 // Values tuned by SPSA block 1 (OpenBench T520: 300k games at 8+0.08,
 // ft5 net). Compile-time constants unless built with tune=yes (tune.h).
 namespace {
-TUNABLE_INT EvalScaleBase     = 836;
+TUNABLE_INT EvalScaleBase     = 826;
 TUNABLE_INT EvalScalePawn     = 28;
-TUNABLE_INT EvalScaleNpm      = 41;
+TUNABLE_INT EvalScaleNpm      = 45;
 TUNABLE_INT EvalEntertainment = 6;
-TUNABLE_INT EvalOptimismScale = -70;
+TUNABLE_INT EvalOptimismScale = -132;
 }
 #ifdef ATOMIC_TUNE_SEARCH
 TUNE(SetRange(600, 1300), EvalScaleBase);
