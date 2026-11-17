@@ -30,6 +30,18 @@ namespace Stockfish {
 
 namespace {
 
+// SPSA block 3 hooks: the Atomic SEE thresholds used by move ordering.
+// Compile-time constants unless built with tune=yes (tune.h).
+TUNABLE_INT MpCheckSeeMargin = 75;
+TUNABLE_INT MpGoodCaptSeeDiv = 18;
+
+// Registered inside the unnamed namespace so the line-numbered dummy variable
+// TUNE defines cannot clash with a TUNE on the same line of another file.
+#ifdef ATOMIC_TUNE_SEARCH
+TUNE(SetRange(0, 250), MpCheckSeeMargin);
+TUNE(SetRange(6, 40), MpGoodCaptSeeDiv);
+#endif
+
 enum Stages {
     // generate main search moves
     MAIN_TT,
@@ -250,7 +262,7 @@ ExtMove* MovePicker::score(const MoveList<Type>& ml) {
             value += cont5[pc][to];
 
             // bonus for checks
-            value += ((pos.check_squares(pt) & to) && pos.see_ge(m, -75)) * 16384;
+            value += ((pos.check_squares(pt) & to) && pos.see_ge(m, -MpCheckSeeMargin)) * 16384;
 
             // penalty for moving to a square threatened by a lesser piece
             // or bonus for escaping an attack by a lesser piece.
@@ -309,7 +321,7 @@ top:
 
     case GOOD_CAPTURE :
         if (select([&]() {
-                if (pos.see_ge(*cur, -cur->value / 18))
+                if (pos.see_ge(*cur, -cur->value / MpGoodCaptSeeDiv))
                     return true;
                 std::swap(*endBadCaptures++, *cur);
                 return false;

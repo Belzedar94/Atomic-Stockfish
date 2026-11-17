@@ -219,14 +219,6 @@ constexpr Value PieceValue[PIECE_NB] = {
   VALUE_ZERO, PawnValue, KnightValue, BishopValue, RookValue, QueenValue, VALUE_ZERO, VALUE_ZERO,
   VALUE_ZERO, PawnValue, KnightValue, BishopValue, RookValue, QueenValue, VALUE_ZERO, VALUE_ZERO};
 
-// Fairy-Stockfish scales middlegame capture values in blast variants by
-// value * 7000 / (7000 + value). Atomic pawns first receive the historical
-// 3/2 bonus used by the legacy evaluator. These constants are part of the
-// Atomic search contract and deliberately differ from orthodox PieceValue.
-constexpr Value AtomicCapturePieceValue[PIECE_NB] = {
-  VALUE_ZERO, 301, 702, 738, 1079, 1862, VALUE_ZERO, VALUE_ZERO,
-  VALUE_ZERO, 301, 702, 738, 1079, 1862, VALUE_ZERO, VALUE_ZERO};
-
 using Depth = int;
 
 // The following DEPTH_ constants are used for transposition table entries
