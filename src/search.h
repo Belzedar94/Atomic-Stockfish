@@ -62,9 +62,9 @@ namespace Search {
 // values the fleet paid for; they are compile-time constants here and are not
 // exposed as UCI options. A `make tune=yes` build turns them back into mutable
 // variables that search.cpp registers with TUNE. See tune.h for the mechanism.
-TUNABLE_INT AtomicMcpBase     = 8;
+TUNABLE_INT AtomicMcpBase     = 9;
 TUNABLE_INT AtomicNmpBase     = 6;
-TUNABLE_INT AtomicNmpDepthDiv = 3;
+TUNABLE_INT AtomicNmpDepthDiv = 4;
 
 // Fairy's move-count formula specialized with blast_on_capture=1 and walling=0.
 inline int atomic_move_count_pruning_threshold(bool improving, Depth depth) {

@@ -788,9 +788,9 @@ bool expect_atomic_move_count_thresholds() {
     };
 
     // (AtomicMcpBase + depth * depth) / (3 - improving), evaluated at the tuned
-    // default AtomicMcpBase = 8: 17/3, 24/3, 44/3 and 17/2, 24/2, 44/2.
+    // default AtomicMcpBase = 9: 18/3, 25/3, 45/3 and 18/2, 25/2, 45/2.
     constexpr std::array<ThresholdCase, 6> tests = {
-      {{false, 3, 5}, {false, 4, 8}, {false, 6, 14}, {true, 3, 8}, {true, 4, 12}, {true, 6, 22}}};
+      {{false, 3, 6}, {false, 4, 8}, {false, 6, 15}, {true, 3, 9}, {true, 4, 12}, {true, 6, 22}}};
 
     bool ok = true;
     for (const auto& test : tests)
@@ -818,10 +818,10 @@ bool expect_atomic_null_move_reductions() {
     };
 
     // AtomicNmpBase + depth / AtomicNmpDepthDiv, evaluated at the tuned defaults
-    // AtomicNmpBase = 6 and AtomicNmpDepthDiv = 3, so the reduction steps up
-    // every three plies.
+    // AtomicNmpBase = 6 and AtomicNmpDepthDiv = 4, so the reduction steps up
+    // every four plies.
     constexpr std::array<ReductionCase, 7> tests = {
-      {{1, 6}, {3, 7}, {6, 8}, {9, 9}, {15, 11}, {16, 11}, {18, 12}}};
+      {{1, 6}, {3, 6}, {6, 7}, {9, 8}, {15, 9}, {16, 10}, {18, 10}}};
 
     bool ok = true;
     for (const auto& test : tests)
