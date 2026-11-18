@@ -67,11 +67,11 @@ static constexpr Piece Pieces[] = {W_PAWN, W_KNIGHT, W_BISHOP, W_ROOK, W_QUEEN, 
 // These constants are part of the Atomic search contract and deliberately
 // differ from orthodox PieceValue. SPSA block 3 hooks: compile-time constants
 // unless built with tune=yes (tune.h).
-TUNABLE_INT AtomicSeePawn   = 301;
-TUNABLE_INT AtomicSeeKnight = 702;
-TUNABLE_INT AtomicSeeBishop = 738;
-TUNABLE_INT AtomicSeeRook   = 1079;
-TUNABLE_INT AtomicSeeQueen  = 1862;
+TUNABLE_INT AtomicSeePawn   = 298;
+TUNABLE_INT AtomicSeeKnight = 678;
+TUNABLE_INT AtomicSeeBishop = 747;
+TUNABLE_INT AtomicSeeRook   = 1088;
+TUNABLE_INT AtomicSeeQueen  = 1685;
 
 // A default build folds the table into a constant. A tuning build rebuilds it
 // on every call, so a value changed through UCI takes effect at once.
