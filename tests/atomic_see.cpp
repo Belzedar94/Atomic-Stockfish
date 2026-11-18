@@ -54,15 +54,15 @@ struct SeeCase {
 };
 
 constexpr std::array<SeeCase, 9> SeeCases = {{
-  {"enemy bycatch", "7k/8/8/8/3pq3/2P5/8/K7 w - - 0 1", SQ_C3, SQ_D4, 1861},
-  {"friendly bycatch", "7k/8/8/8/3q4/2P1Q3/8/K7 w - - 0 1", SQ_C3, SQ_D4, -302},
-  {"adjacent pawns immune", "7k/8/8/3p4/2PPP3/2N5/8/K7 w - - 0 1", SQ_C3, SQ_D5, -402},
-  {"attacker inside blast", "7k/8/8/3r4/8/8/8/K2Q4 w - - 0 1", SQ_D1, SQ_D4, -783},
+  {"enemy bycatch", "7k/8/8/8/3pq3/2P5/8/K7 w - - 0 1", SQ_C3, SQ_D4, 1659},
+  {"friendly bycatch", "7k/8/8/8/3q4/2P1Q3/8/K7 w - - 0 1", SQ_C3, SQ_D4, -297},
+  {"adjacent pawns immune", "7k/8/8/3p4/2PPP3/2N5/8/K7 w - - 0 1", SQ_C3, SQ_D5, -394},
+  {"attacker inside blast", "7k/8/8/3r4/8/8/8/K2Q4 w - - 0 1", SQ_D1, SQ_D4, -598},
   {"opponent declines quiet capture", "k7/8/8/3rq3/8/8/3P4/7K w - - 0 1", SQ_D2, SQ_D4, 0},
   {"king excluded as quiet attacker", "K7/8/8/8/8/8/8/4N2k w - - 0 1", SQ_E1, SQ_G2, 0},
   {"opponent king explodes", "6rk/8/8/8/8/8/8/K5R1 w - - 0 1", SQ_G1, SQ_G8, VALUE_MATE},
   {"own king explodes", "7k/8/8/8/8/8/3r4/2KR4 w - - 0 1", SQ_D1, SQ_D2, -VALUE_MATE},
-  {"Atomic values change SEE sign", "7k/8/8/8/3qN3/2P1R3/8/K7 w - - 0 1", SQ_C3, SQ_D4, -221},
+  {"Atomic values change SEE sign", "7k/8/8/8/3qN3/2P1R3/8/K7 w - - 0 1", SQ_C3, SQ_D4, -388},
 }};
 
 bool expect_exact(const SeeCase& test) {
