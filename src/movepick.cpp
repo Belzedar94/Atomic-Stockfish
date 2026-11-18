@@ -32,7 +32,7 @@ namespace {
 
 // SPSA block 3 hooks: the Atomic SEE thresholds used by move ordering.
 // Compile-time constants unless built with tune=yes (tune.h).
-TUNABLE_INT MpCheckSeeMargin = 75;
+TUNABLE_INT MpCheckSeeMargin = 77;
 TUNABLE_INT MpGoodCaptSeeDiv = 18;
 
 // Registered inside the unnamed namespace so the line-numbered dummy variable
