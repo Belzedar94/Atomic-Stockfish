@@ -29,14 +29,14 @@ The default network, `atomic-ft5-0p8B.nnue`, has SHA-256
 With that network, the deterministic bare `bench` contract is:
 
 ```text
-Bench: 659511
+Bench: 494449
 ```
 
 On the same source, the previous default `atomic-ft3b-1p2B.nnue` (SHA-256
 `A32645EA6749C2500119BD53B55CC5BAF2F6C502659F247E5E5CA4F26EA48E29`) gives
-`Bench: 526525`, and the frozen reference `atomic_run3b_e202_l05.nnue`
+`Bench: 556797`, and the frozen reference `atomic_run3b_e202_l05.nnue`
 (SHA-256 `99DC67EABF26A64FAEECA3A88B4C38597A840B8D4A874B9F2CF658C6F92A04A6`)
-gives `Bench: 620979`.
+gives `Bench: 520350`.
 
 OpenBench strength tests use `Use NNUE=true`; `Use NNUE=pure` remains reserved
 for data generation. The engine evaluates with NNUE only, so there is no
