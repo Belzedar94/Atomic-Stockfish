@@ -1,0 +1,501 @@
+{"bench": "closing-power", "set": "positions.tsv", "set_sha256": "e5405440960c0d26e52a41223b3243f6d089fcaaa2d848a74561898481e4e512", "engine": "D:\\j\\cb-engines\\asf-t527v-c5ef908f.exe", "engine_sha256": "23a8a2565383ccecdf3834b27f383aeb0fdf74f59620c9e27bfeaef3c2add4bd", "nodes": 128000000, "hash": 256, "syzygy": "D:\\atomic-syzygy\\3-4-5", "multipv": 1, "started": "2026-11-18 14:37:50"}
+{"id": "cb005", "band": "10-13", "where": "na", "value": 1049, "result": "open", "nodes": 128000181, "searched": 128000181, "score": "cp 1130", "depth": 34, "move": "f4d6", "secs": 117.9}
+{"id": "cb002", "band": "10-13", "where": "na", "value": 1025, "result": "open", "nodes": 128000596, "searched": 128000596, "score": "cp 1232", "depth": 42, "move": "d4d5", "secs": 120.6}
+{"id": "cb003", "band": "10-13", "where": "na", "value": 1042, "result": "open", "nodes": 128000603, "searched": 128000603, "score": "cp 1252", "depth": 43, "move": "f1e1", "secs": 124.3}
+{"id": "cb004", "band": "10-13", "where": "na", "value": 1044, "result": "open", "nodes": 128000364, "searched": 128000364, "score": "cp 1301", "depth": 38, "move": "e7c6", "secs": 132.9}
+{"id": "cb001", "band": "10-13", "where": "na", "value": 1010, "result": "open", "nodes": 128000026, "searched": 128000026, "score": "cp 1154", "depth": 39, "move": "g5d2", "secs": 139.0}
+{"id": "cb006", "band": "10-13", "where": "na", "value": 1053, "result": "open", "nodes": 128000036, "searched": 128000036, "score": "cp 1049", "depth": 39, "move": "f1a6", "secs": 144.1}
+{"id": "cb011", "band": "10-13", "where": "na", "value": 1081, "result": "open", "nodes": 128000209, "searched": 128000209, "score": "cp 1550", "depth": 41, "move": "b4b5", "secs": 82.3}
+{"id": "cb007", "band": "10-13", "where": "na", "value": 1055, "result": "open", "nodes": 128000459, "searched": 128000459, "score": "cp 1264", "depth": 40, "move": "e1d1", "secs": 121.2}
+{"id": "cb010", "band": "10-13", "where": "na", "value": 1069, "result": "open", "nodes": 128000429, "searched": 128000429, "score": "cp 1367", "depth": 36, "move": "h1d1", "secs": 114.4}
+{"id": "cb008", "band": "10-13", "where": "na", "value": 1056, "result": "open", "nodes": 128000001, "searched": 128000001, "score": "cp 1118", "depth": 41, "move": "e6f8", "secs": 126.9}
+{"id": "cb009", "band": "10-13", "where": "na", "value": 1061, "result": "open", "nodes": 128000399, "searched": 128000399, "score": "cp 1137", "depth": 40, "move": "c2c4", "secs": 125.7}
+{"id": "cb012", "band": "10-13", "where": "na", "value": 1095, "result": "open", "nodes": 128000164, "searched": 128000164, "score": "cp 1237", "depth": 47, "move": "b2b4", "secs": 115.1}
+{"id": "cb013", "band": "10-13", "where": "na", "value": 1097, "result": "open", "nodes": 128000118, "searched": 128000118, "score": "cp 1112", "depth": 40, "move": "f3g4", "secs": 97.6}
+{"id": "cb017", "band": "10-13", "where": "na", "value": 1131, "result": "open", "nodes": 128000553, "searched": 128000553, "score": "cp 1126", "depth": 42, "move": "d1d8", "secs": 83.8}
+{"id": "cb014", "band": "10-13", "where": "na", "value": 1112, "result": "open", "nodes": 128000024, "searched": 128000024, "score": "cp 1193", "depth": 43, "move": "b5d6", "secs": 108.1}
+{"id": "cb015", "band": "10-13", "where": "na", "value": 1120, "result": "open", "nodes": 128000409, "searched": 128000409, "score": "cp 1141", "depth": 37, "move": "h1h2", "secs": 104.5}
+{"id": "cb016", "band": "10-13", "where": "na", "value": 1122, "result": "open", "nodes": 128000128, "searched": 128000128, "score": "cp 1204", "depth": 36, "move": "e1g1", "secs": 106.8}
+{"id": "cb018", "band": "10-13", "where": "na", "value": 1146, "result": "open", "nodes": 128000574, "searched": 128000574, "score": "cp 1199", "depth": 46, "move": "e3f4", "secs": 95.2}
+{"id": "cb019", "band": "10-13", "where": "na", "value": 1151, "result": "open", "nodes": 128000463, "searched": 128000463, "score": "cp 1246", "depth": 38, "move": "e1g1", "secs": 101.3}
+{"id": "cb020", "band": "10-13", "where": "na", "value": 1169, "result": "open", "nodes": 128000500, "searched": 128000500, "score": "cp 1127", "depth": 38, "move": "c4c5", "secs": 92.7}
+{"id": "cb022", "band": "10-13", "where": "na", "value": 1187, "result": "open", "nodes": 128000148, "searched": 128000148, "score": "cp 1178", "depth": 38, "move": "b4b5", "secs": 85.2}
+{"id": "cb021", "band": "10-13", "where": "na", "value": 1184, "result": "open", "nodes": 128000117, "searched": 128000117, "score": "cp 1417", "depth": 40, "move": "b5c7", "secs": 97.0}
+{"id": "cb023", "band": "10-13", "where": "na", "value": 1191, "result": "open", "nodes": 128000399, "searched": 128000399, "score": "cp 1381", "depth": 36, "move": "h4h5", "secs": 103.1}
+{"id": "cb024", "band": "10-13", "where": "na", "value": 1200, "result": "open", "nodes": 128000160, "searched": 128000160, "score": "cp 1353", "depth": 41, "move": "g5f7", "secs": 109.6}
+{"id": "cb026", "band": "10-13", "where": "na", "value": 1223, "result": "open", "nodes": 128000317, "searched": 128000317, "score": "cp 1199", "depth": 36, "move": "g7h6", "secs": 79.2}
+{"id": "cb025", "band": "10-13", "where": "na", "value": 1204, "result": "open", "nodes": 128000433, "searched": 128000433, "score": "cp 1364", "depth": 38, "move": "f4f5", "secs": 102.1}
+{"id": "cb028", "band": "10-13", "where": "na", "value": 1254, "result": "open", "nodes": 128000471, "searched": 128000471, "score": "cp 1341", "depth": 41, "move": "f4f5", "secs": 95.2}
+{"id": "cb027", "band": "10-13", "where": "na", "value": 1253, "result": "open", "nodes": 128000506, "searched": 128000506, "score": "cp 1474", "depth": 37, "move": "a1a5", "secs": 103.3}
+{"id": "cb029", "band": "10-13", "where": "na", "value": 1255, "result": "open", "nodes": 128000526, "searched": 128000526, "score": "cp 1456", "depth": 44, "move": "b3b4", "secs": 90.4}
+{"id": "cb030", "band": "10-13", "where": "na", "value": 1258, "result": "open", "nodes": 128000752, "searched": 128000752, "score": "cp 1339", "depth": 35, "move": "e1d1", "secs": 101.2}
+{"id": "cb031", "band": "10-13", "where": "na", "value": 1280, "result": "open", "nodes": 128000553, "searched": 128000553, "score": "cp 1382", "depth": 36, "move": "f2g2", "secs": 94.7}
+{"id": "cb032", "band": "10-13", "where": "na", "value": 1287, "result": "open", "nodes": 128000476, "searched": 128000476, "score": "cp 1044", "depth": 40, "move": "g2g3", "secs": 92.0}
+{"id": "cb033", "band": "10-13", "where": "na", "value": 1288, "result": "open", "nodes": 128000249, "searched": 128000249, "score": "cp 1165", "depth": 37, "move": "g2g3", "secs": 87.4}
+{"id": "cb034", "band": "10-13", "where": "na", "value": 1288, "result": "open", "nodes": 128000001, "searched": 128000001, "score": "cp 1385", "depth": 37, "move": "f4h6", "secs": 91.6}
+{"id": "cb035", "band": "10-13", "where": "na", "value": 1288, "result": "open", "nodes": 128000641, "searched": 128000641, "score": "cp 1426", "depth": 33, "move": "c2c4", "secs": 96.1}
+{"id": "cb036", "band": "10-13", "where": "na", "value": 1288, "result": "open", "nodes": 128000410, "searched": 128000410, "score": "cp 1350", "depth": 37, "move": "a1b1", "secs": 92.7}
+{"id": "cb037", "band": "10-13", "where": "na", "value": 1289, "result": "open", "nodes": 128000271, "searched": 128000271, "score": "cp 1388", "depth": 39, "move": "d1d3", "secs": 81.9}
+{"id": "cb038", "band": "10-13", "where": "na", "value": 1290, "result": "open", "nodes": 128000689, "searched": 128000689, "score": "cp 1430", "depth": 37, "move": "f2f4", "secs": 96.4}
+{"id": "cb039", "band": "10-13", "where": "na", "value": 1290, "result": "open", "nodes": 128000127, "searched": 128000127, "score": "cp 1240", "depth": 40, "move": "f6f7", "secs": 90.8}
+{"id": "cb041", "band": "13-16", "where": "na", "value": 1300, "result": "open", "nodes": 128000505, "searched": 128000505, "score": "cp 1250", "depth": 42, "move": "g2g3", "secs": 78.1}
+{"id": "cb040", "band": "10-13", "where": "na", "value": 1292, "result": "open", "nodes": 128000329, "searched": 128000329, "score": "cp 1341", "depth": 36, "move": "c4b4", "secs": 101.1}
+{"id": "cb042", "band": "13-16", "where": "na", "value": 1300, "result": "open", "nodes": 128000396, "searched": 128000396, "score": "cp 1274", "depth": 39, "move": "d1c2", "secs": 85.7}
+{"id": "cb043", "band": "13-16", "where": "na", "value": 1300, "result": "open", "nodes": 128000054, "searched": 128000054, "score": "cp 1346", "depth": 49, "move": "f1d1", "secs": 86.5}
+{"id": "cb044", "band": "13-16", "where": "na", "value": 1301, "result": "open", "nodes": 128000732, "searched": 128000732, "score": "cp 1261", "depth": 45, "move": "f1e1", "secs": 89.6}
+{"id": "cb046", "band": "13-16", "where": "na", "value": 1303, "result": "open", "nodes": 128000276, "searched": 128000276, "score": "cp 1293", "depth": 33, "move": "a4a5", "secs": 78.7}
+{"id": "cb045", "band": "13-16", "where": "na", "value": 1302, "result": "open", "nodes": 128000111, "searched": 128000111, "score": "cp 1186", "depth": 48, "move": "h2h3", "secs": 101.7}
+{"id": "cb047", "band": "13-16", "where": "na", "value": 1303, "result": "open", "nodes": 128000038, "searched": 128000038, "score": "cp 1466", "depth": 50, "move": "f4f5", "secs": 88.6}
+{"id": "cb048", "band": "13-16", "where": "na", "value": 1304, "result": "open", "nodes": 128000276, "searched": 128000276, "score": "cp 1362", "depth": 41, "move": "f4f5", "secs": 93.6}
+{"id": "cb049", "band": "13-16", "where": "na", "value": 1306, "result": "open", "nodes": 128000599, "searched": 128000599, "score": "cp 1316", "depth": 35, "move": "c2c4", "secs": 93.0}
+{"id": "cb051", "band": "13-16", "where": "na", "value": 1311, "result": "open", "nodes": 128000790, "searched": 128000790, "score": "cp 1406", "depth": 37, "move": "d5d6", "secs": 83.6}
+{"id": "cb050", "band": "13-16", "where": "na", "value": 1308, "result": "open", "nodes": 128000185, "searched": 128000185, "score": "cp 1461", "depth": 37, "move": "g5h6", "secs": 100.9}
+{"id": "cb053", "band": "13-16", "where": "na", "value": 1312, "result": "open", "nodes": 128000301, "searched": 128000301, "score": "cp 1478", "depth": 40, "move": "b5d7", "secs": 91.2}
+{"id": "cb052", "band": "13-16", "where": "na", "value": 1312, "result": "open", "nodes": 128000592, "searched": 128000592, "score": "cp 1268", "depth": 34, "move": "b2b4", "secs": 110.0}
+{"id": "cb054", "band": "13-16", "where": "na", "value": 1320, "result": "open", "nodes": 128000085, "searched": 128000085, "score": "cp 1254", "depth": 41, "move": "d4d5", "secs": 112.8}
+{"id": "cb060", "band": "13-16", "where": "na", "value": 1338, "result": "mate", "nodes": 8588742, "searched": 8588742, "score": "mate 20", "depth": 32, "move": "h4h5", "secs": 4.8, "pv_wins": true}
+{"id": "cb055", "band": "13-16", "where": "na", "value": 1320, "result": "open", "nodes": 128000259, "searched": 128000259, "score": "cp 1538", "depth": 41, "move": "c2c4", "secs": 104.6}
+{"id": "cb057", "band": "13-16", "where": "na", "value": 1331, "result": "open", "nodes": 128000452, "searched": 128000452, "score": "cp 1334", "depth": 45, "move": "h6f4", "secs": 82.2}
+{"id": "cb056", "band": "13-16", "where": "na", "value": 1324, "result": "open", "nodes": 128000259, "searched": 128000259, "score": "cp 1395", "depth": 36, "move": "e1g1", "secs": 102.0}
+{"id": "cb058", "band": "13-16", "where": "na", "value": 1333, "result": "open", "nodes": 128000021, "searched": 128000021, "score": "cp 1462", "depth": 49, "move": "c5d7", "secs": 80.5}
+{"id": "cb059", "band": "13-16", "where": "na", "value": 1333, "result": "open", "nodes": 128000132, "searched": 128000132, "score": "cp 1455", "depth": 36, "move": "c5c6", "secs": 92.8}
+{"id": "cb061", "band": "13-16", "where": "na", "value": 1342, "result": "open", "nodes": 128000640, "searched": 128000640, "score": "cp 1475", "depth": 40, "move": "e1g1", "secs": 102.8}
+{"id": "cb062", "band": "13-16", "where": "na", "value": 1345, "result": "open", "nodes": 128000013, "searched": 128000013, "score": "cp 1392", "depth": 38, "move": "g6g7", "secs": 94.1}
+{"id": "cb064", "band": "13-16", "where": "na", "value": 1352, "result": "open", "nodes": 128000510, "searched": 128000510, "score": "cp 1623", "depth": 44, "move": "d7g7", "secs": 75.4}
+{"id": "cb065", "band": "13-16", "where": "na", "value": 1356, "result": "open", "nodes": 128000652, "searched": 128000652, "score": "cp 1435", "depth": 38, "move": "f3f4", "secs": 80.7}
+{"id": "cb063", "band": "13-16", "where": "na", "value": 1347, "result": "open", "nodes": 128000350, "searched": 128000350, "score": "cp 1382", "depth": 44, "move": "f7d8", "secs": 101.8}
+{"id": "cb066", "band": "13-16", "where": "na", "value": 1357, "result": "open", "nodes": 128000111, "searched": 128000111, "score": "cp 1364", "depth": 38, "move": "g2g3", "secs": 85.3}
+{"id": "cb069", "band": "13-16", "where": "na", "value": 1362, "result": "open", "nodes": 128000734, "searched": 128000734, "score": "cp 1440", "depth": 36, "move": "c5c6", "secs": 79.4}
+{"id": "cb067", "band": "13-16", "where": "na", "value": 1359, "result": "open", "nodes": 128000898, "searched": 128000898, "score": "cp 1105", "depth": 37, "move": "d2h2", "secs": 84.6}
+{"id": "cb068", "band": "13-16", "where": "na", "value": 1359, "result": "open", "nodes": 128000331, "searched": 128000331, "score": "cp 1597", "depth": 36, "move": "f1c4", "secs": 93.1}
+{"id": "cb071", "band": "13-16", "where": "na", "value": 1365, "result": "open", "nodes": 128000034, "searched": 128000034, "score": "cp 1565", "depth": 43, "move": "f1f6", "secs": 69.2}
+{"id": "cb070", "band": "13-16", "where": "na", "value": 1365, "result": "open", "nodes": 128000522, "searched": 128000522, "score": "cp 1165", "depth": 43, "move": "f3g4", "secs": 82.1}
+{"id": "cb072", "band": "13-16", "where": "na", "value": 1372, "result": "open", "nodes": 128000519, "searched": 128000519, "score": "cp 1623", "depth": 35, "move": "g5e6", "secs": 100.9}
+{"id": "cb075", "band": "13-16", "where": "na", "value": 1377, "result": "open", "nodes": 128000408, "searched": 128000408, "score": "cp 1455", "depth": 36, "move": "h2h4", "secs": 84.1}
+{"id": "cb074", "band": "13-16", "where": "na", "value": 1377, "result": "open", "nodes": 128000188, "searched": 128000188, "score": "cp 1465", "depth": 41, "move": "b4a5", "secs": 95.5}
+{"id": "cb073", "band": "13-16", "where": "na", "value": 1375, "result": "open", "nodes": 128000569, "searched": 128000569, "score": "cp 1516", "depth": 38, "move": "f6e8", "secs": 97.2}
+{"id": "cb076", "band": "13-16", "where": "na", "value": 1379, "result": "open", "nodes": 128000381, "searched": 128000381, "score": "cp 1368", "depth": 42, "move": "c4c5", "secs": 88.4}
+{"id": "cb077", "band": "13-16", "where": "na", "value": 1380, "result": "open", "nodes": 128000308, "searched": 128000308, "score": "cp 1361", "depth": 44, "move": "c2c4", "secs": 95.5}
+{"id": "cb078", "band": "13-16", "where": "na", "value": 1394, "result": "open", "nodes": 128001076, "searched": 128001076, "score": "cp 1571", "depth": 38, "move": "f5d7", "secs": 99.8}
+{"id": "cb080", "band": "13-16", "where": "na", "value": 1405, "result": "open", "nodes": 128000020, "searched": 128000020, "score": "cp 1612", "depth": 35, "move": "a2a4", "secs": 90.1}
+{"id": "cb079", "band": "13-16", "where": "na", "value": 1405, "result": "open", "nodes": 128000272, "searched": 128000272, "score": "cp 1411", "depth": 39, "move": "d2f3", "secs": 93.1}
+{"id": "cb082", "band": "13-16", "where": "na", "value": 1412, "result": "open", "nodes": 128000296, "searched": 128000296, "score": "cp 1457", "depth": 34, "move": "g4g5", "secs": 96.8}
+{"id": "cb081", "band": "13-16", "where": "na", "value": 1409, "result": "open", "nodes": 128000249, "searched": 128000249, "score": "cp 1660", "depth": 35, "move": "f3e5", "secs": 107.3}
+{"id": "cb083", "band": "13-16", "where": "na", "value": 1433, "result": "open", "nodes": 128000357, "searched": 128000357, "score": "cp 1606", "depth": 37, "move": "g3h4", "secs": 103.2}
+{"id": "cb084", "band": "13-16", "where": "na", "value": 1436, "result": "open", "nodes": 128000000, "searched": 128000000, "score": "cp 1712", "depth": 36, "move": "b2b4", "secs": 91.8}
+{"id": "cb085", "band": "13-16", "where": "na", "value": 1448, "result": "open", "nodes": 128000651, "searched": 128000651, "score": "cp 1471", "depth": 40, "move": "d7f8", "secs": 93.2}
+{"id": "cb086", "band": "13-16", "where": "na", "value": 1453, "result": "open", "nodes": 128000221, "searched": 128000221, "score": "cp 1711", "depth": 40, "move": "c1g5", "secs": 96.4}
+{"id": "cb088", "band": "13-16", "where": "na", "value": 1462, "result": "open", "nodes": 128000033, "searched": 128000033, "score": "cp 1643", "depth": 36, "move": "a5b6", "secs": 86.5}
+{"id": "cb089", "band": "13-16", "where": "na", "value": 1466, "result": "open", "nodes": 128000346, "searched": 128000346, "score": "cp 1687", "depth": 36, "move": "b4a4", "secs": 86.4}
+{"id": "cb087", "band": "13-16", "where": "na", "value": 1456, "result": "open", "nodes": 128000671, "searched": 128000671, "score": "cp 1661", "depth": 36, "move": "b2a3", "secs": 103.9}
+{"id": "cb090", "band": "13-16", "where": "na", "value": 1487, "result": "open", "nodes": 128000233, "searched": 128000233, "score": "cp 1864", "depth": 32, "move": "e5d6", "secs": 83.0}
+{"id": "cb091", "band": "13-16", "where": "na", "value": 1491, "result": "open", "nodes": 128000486, "searched": 128000486, "score": "cp 1435", "depth": 36, "move": "f2f3", "secs": 94.2}
+{"id": "cb093", "band": "13-16", "where": "na", "value": 1495, "result": "open", "nodes": 128000013, "searched": 128000013, "score": "cp 1536", "depth": 38, "move": "d5d6", "secs": 91.4}
+{"id": "cb092", "band": "13-16", "where": "na", "value": 1492, "result": "open", "nodes": 128000414, "searched": 128000414, "score": "cp 1586", "depth": 42, "move": "f1b5", "secs": 100.5}
+{"id": "cb095", "band": "13-16", "where": "na", "value": 1513, "result": "open", "nodes": 128000459, "searched": 128000459, "score": "cp 1669", "depth": 41, "move": "a3b5", "secs": 98.6}
+{"id": "cb094", "band": "13-16", "where": "na", "value": 1504, "result": "open", "nodes": 128000010, "searched": 128000010, "score": "cp 1750", "depth": 35, "move": "d8e6", "secs": 102.4}
+{"id": "cb096", "band": "13-16", "where": "na", "value": 1519, "result": "open", "nodes": 128000023, "searched": 128000023, "score": "cp 1841", "depth": 44, "move": "b3b8", "secs": 73.7}
+{"id": "cb098", "band": "13-16", "where": "na", "value": 1528, "result": "open", "nodes": 128000031, "searched": 128000031, "score": "cp 1643", "depth": 43, "move": "e3a7", "secs": 81.0}
+{"id": "cb097", "band": "13-16", "where": "na", "value": 1521, "result": "open", "nodes": 128000456, "searched": 128000456, "score": "cp 1921", "depth": 38, "move": "f3g5", "secs": 98.8}
+{"id": "cb099", "band": "13-16", "where": "na", "value": 1537, "result": "open", "nodes": 128000477, "searched": 128000477, "score": "cp 1643", "depth": 40, "move": "g4g5", "secs": 91.9}
+{"id": "cb100", "band": "13-16", "where": "na", "value": 1599, "result": "tb", "nodes": 90991099, "searched": 128000148, "score": "cp 19957", "depth": 50, "move": "f4g5", "secs": 86.9}
+{"id": "cb101", "band": "16-20", "where": "tree", "value": 1600, "result": "open", "nodes": 128000720, "searched": 128000720, "score": "cp 1598", "depth": 42, "move": "d4d5", "secs": 98.8}
+{"id": "cb102", "band": "16-20", "where": "tree", "value": 1605, "result": "open", "nodes": 128000098, "searched": 128000098, "score": "cp 1718", "depth": 39, "move": "f5d6", "secs": 89.8}
+{"id": "cb104", "band": "16-20", "where": "tree", "value": 1611, "result": "open", "nodes": 128000463, "searched": 128000463, "score": "cp 1186", "depth": 41, "move": "e1e8", "secs": 82.9}
+{"id": "cb103", "band": "16-20", "where": "tree", "value": 1608, "result": "open", "nodes": 128000195, "searched": 128000195, "score": "cp 1787", "depth": 38, "move": "f3g4", "secs": 96.3}
+{"id": "cb106", "band": "16-20", "where": "rest", "value": 1613, "result": "open", "nodes": 128000562, "searched": 128000562, "score": "cp 1842", "depth": 35, "move": "b3a4", "secs": 86.4}
+{"id": "cb105", "band": "16-20", "where": "rest", "value": 1613, "result": "open", "nodes": 128000958, "searched": 128000958, "score": "cp 2067", "depth": 37, "move": "e1f1", "secs": 97.7}
+{"id": "cb107", "band": "16-20", "where": "tree", "value": 1618, "result": "open", "nodes": 128000886, "searched": 128000886, "score": "cp 1750", "depth": 41, "move": "e2e4", "secs": 102.0}
+{"id": "cb108", "band": "16-20", "where": "rest", "value": 1620, "result": "open", "nodes": 128000321, "searched": 128000321, "score": "cp 1809", "depth": 38, "move": "g3h4", "secs": 104.2}
+{"id": "cb109", "band": "16-20", "where": "rest", "value": 1621, "result": "open", "nodes": 128000197, "searched": 128000197, "score": "cp 1778", "depth": 39, "move": "g5g7", "secs": 90.9}
+{"id": "cb110", "band": "16-20", "where": "tree", "value": 1624, "result": "open", "nodes": 128000267, "searched": 128000267, "score": "cp 1642", "depth": 38, "move": "f4c7", "secs": 96.7}
+{"id": "cb111", "band": "16-20", "where": "rest", "value": 1625, "result": "open", "nodes": 128000291, "searched": 128000291, "score": "cp 1727", "depth": 39, "move": "a4e8", "secs": 89.6}
+{"id": "cb112", "band": "16-20", "where": "tree", "value": 1627, "result": "open", "nodes": 128000421, "searched": 128000421, "score": "cp 2065", "depth": 39, "move": "c3b5", "secs": 101.0}
+{"id": "cb118", "band": "16-20", "where": "tree", "value": 1643, "result": "mate", "nodes": 849369, "searched": 849369, "score": "mate 12", "depth": 23, "move": "c3b4", "secs": 0.7, "pv_wins": true}
+{"id": "cb113", "band": "16-20", "where": "rest", "value": 1628, "result": "open", "nodes": 128000615, "searched": 128000615, "score": "cp 1858", "depth": 36, "move": "b2b4", "secs": 99.2}
+{"id": "cb114", "band": "16-20", "where": "tree", "value": 1632, "result": "open", "nodes": 128000608, "searched": 128000608, "score": "cp 2004", "depth": 36, "move": "h2h4", "secs": 100.3}
+{"id": "cb115", "band": "16-20", "where": "tree", "value": 1634, "result": "open", "nodes": 128000089, "searched": 128000089, "score": "cp 1802", "depth": 43, "move": "c3d5", "secs": 96.6}
+{"id": "cb116", "band": "16-20", "where": "tree", "value": 1636, "result": "open", "nodes": 128000154, "searched": 128000154, "score": "cp 1638", "depth": 42, "move": "a2a3", "secs": 93.9}
+{"id": "cb117", "band": "16-20", "where": "rest", "value": 1638, "result": "open", "nodes": 128000056, "searched": 128000056, "score": "cp 1684", "depth": 39, "move": "d4c5", "secs": 90.7}
+{"id": "cb119", "band": "16-20", "where": "rest", "value": 1647, "result": "open", "nodes": 128000146, "searched": 128000146, "score": "cp 1601", "depth": 39, "move": "e3e4", "secs": 96.5}
+{"id": "cb120", "band": "16-20", "where": "rest", "value": 1647, "result": "open", "nodes": 128000302, "searched": 128000302, "score": "cp 1712", "depth": 36, "move": "e3e4", "secs": 86.4}
+{"id": "cb121", "band": "16-20", "where": "tree", "value": 1653, "result": "open", "nodes": 128000088, "searched": 128000088, "score": "cp 1626", "depth": 35, "move": "b5c6", "secs": 93.5}
+{"id": "cb122", "band": "16-20", "where": "tree", "value": 1665, "result": "open", "nodes": 128000336, "searched": 128000336, "score": "cp 1763", "depth": 45, "move": "e2e3", "secs": 95.7}
+{"id": "cb124", "band": "16-20", "where": "rest", "value": 1681, "result": "open", "nodes": 128000314, "searched": 128000314, "score": "cp 1668", "depth": 36, "move": "f7d6", "secs": 88.4}
+{"id": "cb123", "band": "16-20", "where": "rest", "value": 1676, "result": "open", "nodes": 128000317, "searched": 128000317, "score": "cp 1923", "depth": 34, "move": "b2b3", "secs": 93.0}
+{"id": "cb126", "band": "16-20", "where": "rest", "value": 1687, "result": "tb", "nodes": 40357638, "searched": 128000152, "score": "cp 19981", "depth": 56, "move": "d1e1", "secs": 88.2}
+{"id": "cb125", "band": "16-20", "where": "rest", "value": 1686, "result": "open", "nodes": 128000038, "searched": 128000038, "score": "cp 1798", "depth": 41, "move": "c3b5", "secs": 103.3}
+{"id": "cb127", "band": "16-20", "where": "rest", "value": 1688, "result": "open", "nodes": 128000223, "searched": 128000223, "score": "cp 1730", "depth": 36, "move": "b5c6", "secs": 102.1}
+{"id": "cb129", "band": "16-20", "where": "rest", "value": 1698, "result": "open", "nodes": 128000211, "searched": 128000211, "score": "cp 1776", "depth": 46, "move": "d1h5", "secs": 87.3}
+{"id": "cb130", "band": "16-20", "where": "tree", "value": 1699, "result": "open", "nodes": 128000276, "searched": 128000276, "score": "cp 1877", "depth": 38, "move": "f3h4", "secs": 91.6}
+{"id": "cb128", "band": "16-20", "where": "tree", "value": 1693, "result": "open", "nodes": 128000063, "searched": 128000063, "score": "cp 1635", "depth": 42, "move": "e2e3", "secs": 97.5}
+{"id": "cb131", "band": "16-20", "where": "rest", "value": 1701, "result": "open", "nodes": 128000460, "searched": 128000460, "score": "cp 1958", "depth": 44, "move": "f5e4", "secs": 89.0}
+{"id": "cb132", "band": "16-20", "where": "tree", "value": 1705, "result": "open", "nodes": 128000163, "searched": 128000163, "score": "cp 1913", "depth": 34, "move": "g3h4", "secs": 103.0}
+{"id": "cb133", "band": "16-20", "where": "rest", "value": 1708, "result": "open", "nodes": 128000002, "searched": 128000002, "score": "cp 1607", "depth": 40, "move": "e2h5", "secs": 99.0}
+{"id": "cb134", "band": "16-20", "where": "tree", "value": 1709, "result": "open", "nodes": 128000747, "searched": 128000747, "score": "cp 2149", "depth": 35, "move": "f3e5", "secs": 85.6}
+{"id": "cb135", "band": "16-20", "where": "tree", "value": 1710, "result": "open", "nodes": 128000548, "searched": 128000548, "score": "cp 1810", "depth": 35, "move": "g5f6", "secs": 85.2}
+{"id": "cb136", "band": "16-20", "where": "tree", "value": 1712, "result": "open", "nodes": 128000199, "searched": 128000199, "score": "cp 1876", "depth": 40, "move": "e2e5", "secs": 83.4}
+{"id": "cb137", "band": "16-20", "where": "rest", "value": 1712, "result": "open", "nodes": 128000306, "searched": 128000306, "score": "cp 2050", "depth": 37, "move": "f1f2", "secs": 86.3}
+{"id": "cb142", "band": "16-20", "where": "rest", "value": 1732, "result": "mate", "nodes": 46453766, "searched": 46453766, "score": "mate 16", "depth": 30, "move": "e2h5", "secs": 35.7, "pv_wins": true}
+{"id": "cb138", "band": "16-20", "where": "rest", "value": 1713, "result": "open", "nodes": 128000117, "searched": 128000117, "score": "cp 1894", "depth": 38, "move": "d6f6", "secs": 82.4}
+{"id": "cb145", "band": "16-20", "where": "rest", "value": 1752, "result": "mate", "nodes": 19858957, "searched": 19858957, "score": "mate 14", "depth": 29, "move": "c5b6", "secs": 15.2, "pv_wins": true}
+{"id": "cb139", "band": "16-20", "where": "tree", "value": 1719, "result": "open", "nodes": 128000026, "searched": 128000026, "score": "cp 1900", "depth": 37, "move": "g5f7", "secs": 110.4}
+{"id": "cb140", "band": "16-20", "where": "rest", "value": 1726, "result": "open", "nodes": 128000252, "searched": 128000252, "score": "cp 1802", "depth": 41, "move": "b5a4", "secs": 100.4}
+{"id": "cb141", "band": "16-20", "where": "rest", "value": 1728, "result": "open", "nodes": 128000274, "searched": 128000274, "score": "cp 2195", "depth": 35, "move": "g4h5", "secs": 100.3}
+{"id": "cb143", "band": "16-20", "where": "rest", "value": 1735, "result": "tb", "nodes": 28373997, "searched": 128000332, "score": "cp 19975", "depth": 42, "move": "g4g5", "secs": 116.6}
+{"id": "cb144", "band": "16-20", "where": "rest", "value": 1751, "result": "open", "nodes": 128000206, "searched": 128000206, "score": "cp 1812", "depth": 37, "move": "f5f6", "secs": 116.0}
+{"id": "cb149", "band": "16-20", "where": "tree", "value": 1767, "result": "mate", "nodes": 67181628, "searched": 67181628, "score": "mate 15", "depth": 29, "move": "f7d8", "secs": 51.8, "pv_wins": true}
+{"id": "cb146", "band": "16-20", "where": "tree", "value": 1762, "result": "open", "nodes": 128000222, "searched": 128000222, "score": "cp 1764", "depth": 41, "move": "c1g5", "secs": 116.4}
+{"id": "cb147", "band": "16-20", "where": "tree", "value": 1762, "result": "open", "nodes": 128000138, "searched": 128000138, "score": "cp 1966", "depth": 37, "move": "f3g5", "secs": 109.7}
+{"id": "cb148", "band": "16-20", "where": "rest", "value": 1762, "result": "open", "nodes": 128000391, "searched": 128000391, "score": "cp 1827", "depth": 37, "move": "h2h4", "secs": 109.9}
+{"id": "cb153", "band": "16-20", "where": "rest", "value": 1776, "result": "mate", "nodes": 50492119, "searched": 50492119, "score": "mate 22", "depth": 38, "move": "b5b6", "secs": 32.8, "pv_wins": true}
+{"id": "cb156", "band": "16-20", "where": "tree", "value": 1787, "result": "mate", "nodes": 15876901, "searched": 15876901, "score": "mate 15", "depth": 25, "move": "d4d5", "secs": 12.3, "pv_wins": true}
+{"id": "cb151", "band": "16-20", "where": "tree", "value": 1769, "result": "open", "nodes": 128000169, "searched": 128000169, "score": "cp 1778", "depth": 40, "move": "d2d4", "secs": 97.2}
+{"id": "cb150", "band": "16-20", "where": "rest", "value": 1769, "result": "open", "nodes": 128000302, "searched": 128000302, "score": "cp 1905", "depth": 39, "move": "f7d6", "secs": 102.6}
+{"id": "cb158", "band": "16-20", "where": "rest", "value": 1788, "result": "mate", "nodes": 4124062, "searched": 4124062, "score": "mate 16", "depth": 26, "move": "e4e5", "secs": 3.3, "pv_wins": true}
+{"id": "cb152", "band": "16-20", "where": "rest", "value": 1772, "result": "open", "nodes": 128000418, "searched": 128000418, "score": "cp 1992", "depth": 37, "move": "f3e5", "secs": 102.6}
+{"id": "cb155", "band": "16-20", "where": "tree", "value": 1778, "result": "open", "nodes": 128000229, "searched": 128000229, "score": "cp 1927", "depth": 40, "move": "e6f4", "secs": 63.1}
+{"id": "cb154", "band": "16-20", "where": "tree", "value": 1777, "result": "open", "nodes": 128000293, "searched": 128000293, "score": "cp 2077", "depth": 40, "move": "h2h3", "secs": 97.4}
+{"id": "cb157", "band": "16-20", "where": "tree", "value": 1787, "result": "open", "nodes": 128000203, "searched": 128000203, "score": "cp 1818", "depth": 36, "move": "b5d3", "secs": 86.4}
+{"id": "cb159", "band": "16-20", "where": "rest", "value": 1790, "result": "mate", "nodes": 86915913, "searched": 86915913, "score": "mate 22", "depth": 40, "move": "d5d6", "secs": 61.4, "pv_wins": true}
+{"id": "cb165", "band": "16-20", "where": "tree", "value": 1821, "result": "mate", "nodes": 9797171, "searched": 9797171, "score": "mate 15", "depth": 26, "move": "d1f1", "secs": 5.8, "pv_wins": true}
+{"id": "cb162", "band": "16-20", "where": "tree", "value": 1801, "result": "open", "nodes": 128000095, "searched": 128000095, "score": "cp 1885", "depth": 39, "move": "f1d3", "secs": 75.5}
+{"id": "cb161", "band": "16-20", "where": "tree", "value": 1795, "result": "open", "nodes": 128000655, "searched": 128000655, "score": "cp 1972", "depth": 37, "move": "d2d4", "secs": 98.9}
+{"id": "cb160", "band": "16-20", "where": "rest", "value": 1792, "result": "open", "nodes": 128000402, "searched": 128000402, "score": "cp 2334", "depth": 35, "move": "f4f5", "secs": 102.8}
+{"id": "cb166", "band": "16-20", "where": "tree", "value": 1827, "result": "open", "nodes": 128000352, "searched": 128000352, "score": "cp 1515", "depth": 35, "move": "f1a1", "secs": 65.7}
+{"id": "cb164", "band": "16-20", "where": "rest", "value": 1809, "result": "open", "nodes": 128000226, "searched": 128000226, "score": "cp 2125", "depth": 36, "move": "f2f4", "secs": 90.2}
+{"id": "cb169", "band": "16-20", "where": "rest", "value": 1831, "result": "mate", "nodes": 60709481, "searched": 60709481, "score": "mate 18", "depth": 31, "move": "c2c3", "secs": 49.9, "pv_wins": true}
+{"id": "cb163", "band": "16-20", "where": "rest", "value": 1807, "result": "open", "nodes": 128000053, "searched": 128000053, "score": "cp 1885", "depth": 37, "move": "f4c7", "secs": 105.2}
+{"id": "cb167", "band": "16-20", "where": "tree", "value": 1830, "result": "open", "nodes": 128000270, "searched": 128000270, "score": "cp 1894", "depth": 38, "move": "g2g4", "secs": 104.9}
+{"id": "cb168", "band": "16-20", "where": "rest", "value": 1831, "result": "open", "nodes": 128000091, "searched": 128000091, "score": "cp 2430", "depth": 32, "move": "e5f6", "secs": 111.9}
+{"id": "cb170", "band": "16-20", "where": "rest", "value": 1837, "result": "open", "nodes": 128000334, "searched": 128000334, "score": "cp 1864", "depth": 37, "move": "h5g6", "secs": 91.7}
+{"id": "cb171", "band": "16-20", "where": "rest", "value": 1837, "result": "open", "nodes": 128000657, "searched": 128000657, "score": "cp 2008", "depth": 36, "move": "c3b5", "secs": 99.9}
+{"id": "cb173", "band": "16-20", "where": "tree", "value": 1843, "result": "open", "nodes": 128000740, "searched": 128000740, "score": "cp 1890", "depth": 36, "move": "d1e1", "secs": 95.5}
+{"id": "cb172", "band": "16-20", "where": "tree", "value": 1840, "result": "open", "nodes": 128000114, "searched": 128000114, "score": "cp 2190", "depth": 34, "move": "e5f6", "secs": 103.3}
+{"id": "cb179", "band": "16-20", "where": "rest", "value": 1864, "result": "mate", "nodes": 39507, "searched": 39507, "score": "mate 7", "depth": 16, "move": "c1a3", "secs": 0.1, "pv_wins": true}
+{"id": "cb175", "band": "16-20", "where": "tree", "value": 1850, "result": "open", "nodes": 128000206, "searched": 128000206, "score": "cp 2241", "depth": 27, "move": "c1g5", "secs": 82.3}
+{"id": "cb174", "band": "16-20", "where": "tree", "value": 1845, "result": "open", "nodes": 128000030, "searched": 128000030, "score": "cp 2150", "depth": 36, "move": "f2f3", "secs": 99.1}
+{"id": "cb178", "band": "16-20", "where": "tree", "value": 1853, "result": "open", "nodes": 128000491, "searched": 128000491, "score": "cp 1839", "depth": 36, "move": "h1e1", "secs": 57.9}
+{"id": "cb176", "band": "16-20", "where": "rest", "value": 1852, "result": "open", "nodes": 128000671, "searched": 128000671, "score": "cp 2109", "depth": 36, "move": "b1c3", "secs": 99.0}
+{"id": "cb177", "band": "16-20", "where": "rest", "value": 1853, "result": "open", "nodes": 128000081, "searched": 128000081, "score": "cp 2427", "depth": 36, "move": "f1c4", "secs": 100.0}
+{"id": "cb180", "band": "16-20", "where": "tree", "value": 1867, "result": "open", "nodes": 128000422, "searched": 128000422, "score": "cp 2291", "depth": 37, "move": "d7e6", "secs": 96.5}
+{"id": "cb184", "band": "16-20", "where": "rest", "value": 1893, "result": "mate", "nodes": 65287206, "searched": 65287206, "score": "mate 21", "depth": 33, "move": "c1g5", "secs": 48.9, "pv_wins": true}
+{"id": "cb181", "band": "16-20", "where": "rest", "value": 1880, "result": "open", "nodes": 128000275, "searched": 128000275, "score": "cp 2259", "depth": 37, "move": "b2a3", "secs": 91.1}
+{"id": "cb182", "band": "16-20", "where": "tree", "value": 1889, "result": "open", "nodes": 128000503, "searched": 128000503, "score": "cp 1971", "depth": 37, "move": "c2c3", "secs": 98.3}
+{"id": "cb183", "band": "16-20", "where": "rest", "value": 1892, "result": "open", "nodes": 128000069, "searched": 128000069, "score": "cp 2037", "depth": 34, "move": "d5c7", "secs": 92.8}
+{"id": "cb185", "band": "16-20", "where": "rest", "value": 1899, "result": "open", "nodes": 128000379, "searched": 128000379, "score": "cp 1864", "depth": 39, "move": "h2h4", "secs": 95.0}
+{"id": "cb186", "band": "16-20", "where": "rest", "value": 1901, "result": "open", "nodes": 128000187, "searched": 128000187, "score": "cp 2138", "depth": 42, "move": "g5f7", "secs": 92.3}
+{"id": "cb187", "band": "16-20", "where": "tree", "value": 1910, "result": "open", "nodes": 128000051, "searched": 128000051, "score": "cp 2111", "depth": 39, "move": "c1h6", "secs": 82.2}
+{"id": "cb188", "band": "16-20", "where": "tree", "value": 1912, "result": "open", "nodes": 128000448, "searched": 128000448, "score": "cp 2168", "depth": 40, "move": "f3e5", "secs": 101.2}
+{"id": "cb190", "band": "16-20", "where": "tree", "value": 1937, "result": "open", "nodes": 128000448, "searched": 128000448, "score": "cp 2079", "depth": 31, "move": "h1g1", "secs": 93.6}
+{"id": "cb189", "band": "16-20", "where": "rest", "value": 1919, "result": "open", "nodes": 128000148, "searched": 128000148, "score": "cp 2110", "depth": 35, "move": "e3f4", "secs": 103.7}
+{"id": "cb196", "band": "16-20", "where": "rest", "value": 1978, "result": "mate", "nodes": 5195837, "searched": 5195837, "score": "mate 15", "depth": 24, "move": "d1d3", "secs": 4.7, "pv_wins": true}
+{"id": "cb192", "band": "16-20", "where": "tree", "value": 1949, "result": "open", "nodes": 128000431, "searched": 128000431, "score": "cp 1951", "depth": 40, "move": "c1h6", "secs": 94.5}
+{"id": "cb191", "band": "16-20", "where": "tree", "value": 1940, "result": "open", "nodes": 128000394, "searched": 128000394, "score": "cp 2162", "depth": 36, "move": "f3g5", "secs": 102.0}
+{"id": "cb195", "band": "16-20", "where": "rest", "value": 1970, "result": "mate", "nodes": 57148416, "searched": 57148416, "score": "mate 19", "depth": 33, "move": "d3g6", "secs": 49.3, "pv_wins": true}
+{"id": "cb193", "band": "16-20", "where": "tree", "value": 1967, "result": "open", "nodes": 128000485, "searched": 128000485, "score": "cp 2384", "depth": 35, "move": "g5f7", "secs": 100.5}
+{"id": "cb194", "band": "16-20", "where": "tree", "value": 1969, "result": "open", "nodes": 128000161, "searched": 128000161, "score": "cp 2119", "depth": 36, "move": "a4b5", "secs": 98.2}
+{"id": "cb198", "band": "16-20", "where": "tree", "value": 1980, "result": "mate", "nodes": 80471357, "searched": 80471357, "score": "mate 21", "depth": 32, "move": "a1c1", "secs": 49.0, "pv_wins": true}
+{"id": "cb197", "band": "16-20", "where": "tree", "value": 1978, "result": "open", "nodes": 128000151, "searched": 128000151, "score": "cp 2015", "depth": 38, "move": "e2e4", "secs": 103.1}
+{"id": "cb204", "band": "20-25", "where": "tree", "value": 2015, "result": "mate", "nodes": 26105932, "searched": 26105932, "score": "mate 17", "depth": 39, "move": "e5d6", "secs": 19.6, "pv_wins": true}
+{"id": "cb200", "band": "16-20", "where": "rest", "value": 1985, "result": "open", "nodes": 128000565, "searched": 128000565, "score": "cp 2179", "depth": 37, "move": "g7f5", "secs": 97.4}
+{"id": "cb199", "band": "16-20", "where": "tree", "value": 1983, "result": "open", "nodes": 128000214, "searched": 128000214, "score": "cp 2251", "depth": 36, "move": "g5f7", "secs": 109.3}
+{"id": "cb201", "band": "20-25", "where": "tree", "value": 2001, "result": "open", "nodes": 128000804, "searched": 128000804, "score": "cp 2303", "depth": 38, "move": "f3e5", "secs": 101.9}
+{"id": "cb202", "band": "20-25", "where": "tree", "value": 2004, "result": "open", "nodes": 128000495, "searched": 128000495, "score": "cp 2111", "depth": 38, "move": "c3d5", "secs": 104.2}
+{"id": "cb203", "band": "20-25", "where": "rest", "value": 2011, "result": "open", "nodes": 128000104, "searched": 128000104, "score": "cp 2164", "depth": 36, "move": "e3d4", "secs": 106.4}
+{"id": "cb205", "band": "20-25", "where": "rest", "value": 2017, "result": "open", "nodes": 128000257, "searched": 128000257, "score": "cp 2331", "depth": 34, "move": "a2b3", "secs": 105.0}
+{"id": "cb210", "band": "20-25", "where": "rest", "value": 2053, "result": "mate", "nodes": 43834599, "searched": 43834599, "score": "mate 34", "depth": 43, "move": "e3e4", "secs": 36.3, "pv_wins": true}
+{"id": "cb206", "band": "20-25", "where": "rest", "value": 2019, "result": "open", "nodes": 128000943, "searched": 128000943, "score": "cp 1981", "depth": 35, "move": "c1b2", "secs": 110.5}
+{"id": "cb207", "band": "20-25", "where": "rest", "value": 2025, "result": "open", "nodes": 128000377, "searched": 128000377, "score": "cp 2082", "depth": 39, "move": "g5g7", "secs": 105.6}
+{"id": "cb208", "band": "20-25", "where": "tree", "value": 2050, "result": "open", "nodes": 128000467, "searched": 128000467, "score": "cp 2582", "depth": 37, "move": "g5f7", "secs": 120.5}
+{"id": "cb209", "band": "20-25", "where": "rest", "value": 2050, "result": "open", "nodes": 128000485, "searched": 128000485, "score": "cp 1746", "depth": 38, "move": "b5d6", "secs": 119.7}
+{"id": "cb215", "band": "20-25", "where": "tree", "value": 2087, "result": "open", "nodes": 128000017, "searched": 128000017, "score": "cp 2079", "depth": 41, "move": "g3f4", "secs": 65.1}
+{"id": "cb211", "band": "20-25", "where": "tree", "value": 2054, "result": "open", "nodes": 128000516, "searched": 128000516, "score": "cp 2261", "depth": 34, "move": "b4a5", "secs": 112.4}
+{"id": "cb212", "band": "20-25", "where": "rest", "value": 2061, "result": "open", "nodes": 128000531, "searched": 128000531, "score": "cp 2410", "depth": 34, "move": "f1c4", "secs": 117.0}
+{"id": "cb213", "band": "20-25", "where": "tree", "value": 2061, "result": "open", "nodes": 128000608, "searched": 128000608, "score": "cp 2232", "depth": 39, "move": "h2h3", "secs": 110.2}
+{"id": "cb214", "band": "20-25", "where": "tree", "value": 2061, "result": "open", "nodes": 128000263, "searched": 128000263, "score": "cp 2144", "depth": 38, "move": "d2d4", "secs": 109.5}
+{"id": "cb216", "band": "20-25", "where": "rest", "value": 2092, "result": "mate", "nodes": 66926903, "searched": 66926903, "score": "mate 15", "depth": 35, "move": "g2g3", "secs": 59.8, "pv_wins": true}
+{"id": "cb217", "band": "20-25", "where": "tree", "value": 2092, "result": "mate", "nodes": 50159613, "searched": 50159613, "score": "mate 22", "depth": 43, "move": "f4g5", "secs": 32.4, "pv_wins": true}
+{"id": "cb218", "band": "20-25", "where": "tree", "value": 2103, "result": "open", "nodes": 128000050, "searched": 128000050, "score": "cp 2272", "depth": 39, "move": "c2c3", "secs": 102.1}
+{"id": "cb219", "band": "20-25", "where": "rest", "value": 2104, "result": "open", "nodes": 128000567, "searched": 128000567, "score": "cp 2463", "depth": 31, "move": "b2f6", "secs": 98.8}
+{"id": "cb221", "band": "20-25", "where": "tree", "value": 2115, "result": "open", "nodes": 128000138, "searched": 128000138, "score": "cp 2245", "depth": 32, "move": "f1b5", "secs": 93.9}
+{"id": "cb220", "band": "20-25", "where": "tree", "value": 2110, "result": "open", "nodes": 128000562, "searched": 128000562, "score": "cp 2438", "depth": 40, "move": "c3b5", "secs": 105.3}
+{"id": "cb222", "band": "20-25", "where": "tree", "value": 2119, "result": "open", "nodes": 128000294, "searched": 128000294, "score": "cp 2683", "depth": 37, "move": "g5f7", "secs": 105.5}
+{"id": "cb223", "band": "20-25", "where": "rest", "value": 2122, "result": "open", "nodes": 128000128, "searched": 128000128, "score": "cp 2228", "depth": 36, "move": "b5c7", "secs": 109.5}
+{"id": "cb229", "band": "20-25", "where": "tree", "value": 2144, "result": "mate", "nodes": 12324005, "searched": 12324005, "score": "mate 11", "depth": 27, "move": "d1e2", "secs": 10.8, "pv_wins": true}
+{"id": "cb224", "band": "20-25", "where": "tree", "value": 2123, "result": "open", "nodes": 128000132, "searched": 128000132, "score": "cp 2136", "depth": 35, "move": "d1h5", "secs": 107.7}
+{"id": "cb225", "band": "20-25", "where": "rest", "value": 2130, "result": "open", "nodes": 128000151, "searched": 128000151, "score": "cp 2184", "depth": 34, "move": "d1c1", "secs": 106.1}
+{"id": "cb226", "band": "20-25", "where": "tree", "value": 2133, "result": "open", "nodes": 128000631, "searched": 128000631, "score": "cp 2314", "depth": 42, "move": "c3a4", "secs": 99.5}
+{"id": "cb227", "band": "20-25", "where": "rest", "value": 2133, "result": "open", "nodes": 128000016, "searched": 128000016, "score": "cp 2096", "depth": 33, "move": "f7h8", "secs": 105.4}
+{"id": "cb228", "band": "20-25", "where": "rest", "value": 2133, "result": "open", "nodes": 128000404, "searched": 128000404, "score": "cp 2123", "depth": 35, "move": "g2g3", "secs": 102.3}
+{"id": "cb230", "band": "20-25", "where": "tree", "value": 2149, "result": "open", "nodes": 128000457, "searched": 128000457, "score": "cp 2195", "depth": 38, "move": "a4b5", "secs": 100.2}
+{"id": "cb236", "band": "20-25", "where": "tree", "value": 2169, "result": "mate", "nodes": 13780007, "searched": 13780007, "score": "mate 15", "depth": 24, "move": "b5a4", "secs": 10.8, "pv_wins": true}
+{"id": "cb232", "band": "20-25", "where": "tree", "value": 2156, "result": "open", "nodes": 128000246, "searched": 128000246, "score": "cp 2512", "depth": 29, "move": "f7d8", "secs": 94.1}
+{"id": "cb231", "band": "20-25", "where": "rest", "value": 2150, "result": "open", "nodes": 128000437, "searched": 128000437, "score": "cp 2222", "depth": 35, "move": "a4a5", "secs": 106.3}
+{"id": "cb233", "band": "20-25", "where": "tree", "value": 2162, "result": "open", "nodes": 128000532, "searched": 128000532, "score": "cp 2317", "depth": 36, "move": "b1c3", "secs": 101.1}
+{"id": "cb234", "band": "20-25", "where": "tree", "value": 2162, "result": "open", "nodes": 128000093, "searched": 128000093, "score": "cp 2385", "depth": 37, "move": "f3e5", "secs": 101.8}
+{"id": "cb235", "band": "20-25", "where": "rest", "value": 2163, "result": "open", "nodes": 128000438, "searched": 128000438, "score": "cp 2357", "depth": 35, "move": "b4b5", "secs": 105.2}
+{"id": "cb237", "band": "20-25", "where": "rest", "value": 2170, "result": "open", "nodes": 128000165, "searched": 128000165, "score": "cp 2305", "depth": 32, "move": "d1d2", "secs": 107.1}
+{"id": "cb238", "band": "20-25", "where": "rest", "value": 2170, "result": "open", "nodes": 128000705, "searched": 128000705, "score": "cp 2213", "depth": 34, "move": "b4c5", "secs": 106.5}
+{"id": "cb239", "band": "20-25", "where": "rest", "value": 2175, "result": "open", "nodes": 128000173, "searched": 128000173, "score": "cp 2454", "depth": 33, "move": "f2f4", "secs": 99.4}
+{"id": "cb240", "band": "20-25", "where": "tree", "value": 2176, "result": "open", "nodes": 128000617, "searched": 128000617, "score": "cp 2275", "depth": 40, "move": "c4c5", "secs": 101.6}
+{"id": "cb241", "band": "20-25", "where": "rest", "value": 2180, "result": "open", "nodes": 128000420, "searched": 128000420, "score": "cp 2213", "depth": 35, "move": "e1g1", "secs": 107.5}
+{"id": "cb242", "band": "20-25", "where": "rest", "value": 2185, "result": "open", "nodes": 128000016, "searched": 128000016, "score": "cp 2093", "depth": 38, "move": "h3f4", "secs": 99.5}
+{"id": "cb243", "band": "20-25", "where": "tree", "value": 2186, "result": "open", "nodes": 128000404, "searched": 128000404, "score": "cp 2372", "depth": 33, "move": "h2h3", "secs": 108.7}
+{"id": "cb245", "band": "20-25", "where": "rest", "value": 2193, "result": "open", "nodes": 128000087, "searched": 128000087, "score": "cp 3939", "depth": 32, "move": "d5e6", "secs": 88.8}
+{"id": "cb244", "band": "20-25", "where": "rest", "value": 2189, "result": "open", "nodes": 128000619, "searched": 128000619, "score": "cp 2214", "depth": 33, "move": "c3d5", "secs": 101.2}
+{"id": "cb246", "band": "20-25", "where": "rest", "value": 2218, "result": "open", "nodes": 128000115, "searched": 128000115, "score": "cp 2442", "depth": 41, "move": "f1b5", "secs": 99.1}
+{"id": "cb248", "band": "20-25", "where": "rest", "value": 2225, "result": "open", "nodes": 128000573, "searched": 128000573, "score": "cp 2554", "depth": 32, "move": "f2g3", "secs": 84.2}
+{"id": "cb253", "band": "20-25", "where": "tree", "value": 2254, "result": "mate", "nodes": 9620221, "searched": 9620221, "score": "mate 17", "depth": 34, "move": "g4f5", "secs": 7.4, "pv_wins": true}
+{"id": "cb247", "band": "20-25", "where": "tree", "value": 2224, "result": "open", "nodes": 128000187, "searched": 128000187, "score": "cp 2509", "depth": 32, "move": "c3b5", "secs": 103.7}
+{"id": "cb249", "band": "20-25", "where": "tree", "value": 2228, "result": "open", "nodes": 128000249, "searched": 128000249, "score": "cp 2468", "depth": 38, "move": "e2e4", "secs": 102.7}
+{"id": "cb250", "band": "20-25", "where": "tree", "value": 2234, "result": "open", "nodes": 128000042, "searched": 128000042, "score": "cp 2350", "depth": 36, "move": "f1b5", "secs": 103.0}
+{"id": "cb251", "band": "20-25", "where": "rest", "value": 2240, "result": "open", "nodes": 128000239, "searched": 128000239, "score": "cp 2297", "depth": 33, "move": "h3f4", "secs": 101.3}
+{"id": "cb252", "band": "20-25", "where": "rest", "value": 2248, "result": "open", "nodes": 128000163, "searched": 128000163, "score": "cp 2425", "depth": 35, "move": "h3g5", "secs": 98.1}
+{"id": "cb254", "band": "20-25", "where": "rest", "value": 2254, "result": "open", "nodes": 128000207, "searched": 128000207, "score": "cp 2283", "depth": 37, "move": "e1g1", "secs": 98.3}
+{"id": "cb255", "band": "20-25", "where": "tree", "value": 2254, "result": "open", "nodes": 128000355, "searched": 128000355, "score": "cp 2311", "depth": 36, "move": "b5a6", "secs": 99.6}
+{"id": "cb256", "band": "20-25", "where": "tree", "value": 2255, "result": "open", "nodes": 128000378, "searched": 128000378, "score": "cp 2435", "depth": 31, "move": "d5c7", "secs": 98.3}
+{"id": "cb259", "band": "20-25", "where": "rest", "value": 2264, "result": "mate", "nodes": 126862402, "searched": 126862402, "score": "mate 20", "depth": 33, "move": "c1a3", "secs": 86.1, "pv_wins": true}
+{"id": "cb257", "band": "20-25", "where": "rest", "value": 2263, "result": "open", "nodes": 128000507, "searched": 128000507, "score": "cp 2328", "depth": 35, "move": "e1g1", "secs": 104.5}
+{"id": "cb258", "band": "20-25", "where": "rest", "value": 2263, "result": "open", "nodes": 128000166, "searched": 128000166, "score": "cp 2505", "depth": 31, "move": "f2f4", "secs": 104.5}
+{"id": "cb260", "band": "20-25", "where": "tree", "value": 2264, "result": "open", "nodes": 128000506, "searched": 128000506, "score": "cp 2489", "depth": 38, "move": "c3d5", "secs": 105.2}
+{"id": "cb261", "band": "20-25", "where": "tree", "value": 2275, "result": "open", "nodes": 128000522, "searched": 128000522, "score": "cp 2319", "depth": 38, "move": "a4b5", "secs": 98.1}
+{"id": "cb262", "band": "20-25", "where": "rest", "value": 2277, "result": "open", "nodes": 128000123, "searched": 128000123, "score": "cp 2471", "depth": 37, "move": "e2e4", "secs": 107.5}
+{"id": "cb268", "band": "20-25", "where": "rest", "value": 2296, "result": "mate", "nodes": 13684167, "searched": 13684167, "score": "mate 15", "depth": 26, "move": "c1h6", "secs": 10.9, "pv_wins": true}
+{"id": "cb269", "band": "20-25", "where": "tree", "value": 2300, "result": "mate", "nodes": 3757437, "searched": 3757437, "score": "mate 16", "depth": 27, "move": "h4h5", "secs": 3.1, "pv_wins": true}
+{"id": "cb263", "band": "20-25", "where": "rest", "value": 2287, "result": "open", "nodes": 128000237, "searched": 128000237, "score": "cp 2384", "depth": 34, "move": "c2c3", "secs": 105.3}
+{"id": "cb265", "band": "20-25", "where": "rest", "value": 2287, "result": "open", "nodes": 128000447, "searched": 128000447, "score": "cp 2470", "depth": 39, "move": "f4g6", "secs": 95.3}
+{"id": "cb264", "band": "20-25", "where": "rest", "value": 2287, "result": "open", "nodes": 128000588, "searched": 128000588, "score": "cp 2308", "depth": 34, "move": "e1g1", "secs": 103.7}
+{"id": "cb266", "band": "20-25", "where": "rest", "value": 2290, "result": "open", "nodes": 128000311, "searched": 128000311, "score": "cp 2281", "depth": 34, "move": "e3e4", "secs": 98.9}
+{"id": "cb267", "band": "20-25", "where": "tree", "value": 2295, "result": "open", "nodes": 128000265, "searched": 128000265, "score": "cp 2474", "depth": 35, "move": "d2d4", "secs": 105.5}
+{"id": "cb273", "band": "20-25", "where": "tree", "value": 2310, "result": "mate", "nodes": 60560607, "searched": 60560607, "score": "mate 19", "depth": 31, "move": "f3g4", "secs": 48.4, "pv_wins": true}
+{"id": "cb270", "band": "20-25", "where": "tree", "value": 2300, "result": "open", "nodes": 128000200, "searched": 128000200, "score": "cp 2594", "depth": 37, "move": "g5h7", "secs": 114.5}
+{"id": "cb277", "band": "20-25", "where": "tree", "value": 2331, "result": "mate", "nodes": 11206295, "searched": 11206295, "score": "mate 16", "depth": 30, "move": "f5e6", "secs": 10.8, "pv_wins": true}
+{"id": "cb271", "band": "20-25", "where": "rest", "value": 2301, "result": "open", "nodes": 128000196, "searched": 128000196, "score": "cp 2832", "depth": 36, "move": "e6f8", "secs": 122.7}
+{"id": "cb279", "band": "20-25", "where": "rest", "value": 2356, "result": "mate", "nodes": 180633, "searched": 180633, "score": "mate 10", "depth": 21, "move": "f7h6", "secs": 0.2, "pv_wins": true}
+{"id": "cb272", "band": "20-25", "where": "tree", "value": 2302, "result": "open", "nodes": 128000336, "searched": 128000336, "score": "cp 2511", "depth": 36, "move": "g5h7", "secs": 117.5}
+{"id": "cb274", "band": "20-25", "where": "rest", "value": 2315, "result": "open", "nodes": 128000296, "searched": 128000296, "score": "cp 2336", "depth": 33, "move": "e6f8", "secs": 106.1}
+{"id": "cb275", "band": "20-25", "where": "rest", "value": 2323, "result": "open", "nodes": 128000592, "searched": 128000592, "score": "cp 2589", "depth": 33, "move": "a3b4", "secs": 120.6}
+{"id": "cb276", "band": "20-25", "where": "rest", "value": 2328, "result": "open", "nodes": 128000080, "searched": 128000080, "score": "cp 2551", "depth": 34, "move": "e5d7", "secs": 110.9}
+{"id": "cb278", "band": "20-25", "where": "rest", "value": 2339, "result": "open", "nodes": 128000203, "searched": 128000203, "score": "cp 2419", "depth": 31, "move": "h2h3", "secs": 105.4}
+{"id": "cb280", "band": "20-25", "where": "tree", "value": 2359, "result": "open", "nodes": 128000262, "searched": 128000262, "score": "cp 2686", "depth": 32, "move": "f1b5", "secs": 103.0}
+{"id": "cb281", "band": "20-25", "where": "rest", "value": 2360, "result": "open", "nodes": 128000142, "searched": 128000142, "score": "cp 2427", "depth": 40, "move": "d1g4", "secs": 103.4}
+{"id": "cb286", "band": "20-25", "where": "tree", "value": 2388, "result": "mate", "nodes": 9941418, "searched": 9941418, "score": "mate 17", "depth": 27, "move": "g2g3", "secs": 8.3, "pv_wins": true}
+{"id": "cb282", "band": "20-25", "where": "tree", "value": 2364, "result": "open", "nodes": 128000305, "searched": 128000305, "score": "cp 2439", "depth": 36, "move": "e4f5", "secs": 103.2}
+{"id": "cb283", "band": "20-25", "where": "tree", "value": 2365, "result": "open", "nodes": 128000080, "searched": 128000080, "score": "cp 2875", "depth": 32, "move": "e4f5", "secs": 97.0}
+{"id": "cb284", "band": "20-25", "where": "tree", "value": 2367, "result": "open", "nodes": 128000572, "searched": 128000572, "score": "cp 2452", "depth": 39, "move": "d2d4", "secs": 103.5}
+{"id": "cb291", "band": "20-25", "where": "rest", "value": 2423, "result": "mate", "nodes": 11591742, "searched": 11591742, "score": "mate 18", "depth": 31, "move": "e5g7", "secs": 9.0, "pv_wins": true}
+{"id": "cb287", "band": "20-25", "where": "rest", "value": 2402, "result": "open", "nodes": 128000475, "searched": 128000475, "score": "cp 2318", "depth": 34, "move": "e6d8", "secs": 101.6}
+{"id": "cb285", "band": "20-25", "where": "tree", "value": 2375, "result": "open", "nodes": 128000326, "searched": 128000326, "score": "cp 2610", "depth": 32, "move": "d1e2", "secs": 103.9}
+{"id": "cb289", "band": "20-25", "where": "rest", "value": 2408, "result": "open", "nodes": 128000295, "searched": 128000295, "score": "cp 2498", "depth": 33, "move": "c2c4", "secs": 96.4}
+{"id": "cb288", "band": "20-25", "where": "rest", "value": 2406, "result": "open", "nodes": 128000592, "searched": 128000592, "score": "cp 2277", "depth": 38, "move": "g5h6", "secs": 107.5}
+{"id": "cb290", "band": "20-25", "where": "tree", "value": 2416, "result": "open", "nodes": 128000159, "searched": 128000159, "score": "cp 2536", "depth": 37, "move": "f4h6", "secs": 105.1}
+{"id": "cb292", "band": "20-25", "where": "rest", "value": 2433, "result": "open", "nodes": 128000592, "searched": 128000592, "score": "cp 2698", "depth": 36, "move": "a6b7", "secs": 98.5}
+{"id": "cb294", "band": "20-25", "where": "rest", "value": 2447, "result": "open", "nodes": 128000214, "searched": 128000214, "score": "cp 2480", "depth": 32, "move": "d4e5", "secs": 98.7}
+{"id": "cb293", "band": "20-25", "where": "tree", "value": 2441, "result": "open", "nodes": 128000380, "searched": 128000380, "score": "cp 2415", "depth": 37, "move": "d2d4", "secs": 100.9}
+{"id": "cb295", "band": "20-25", "where": "tree", "value": 2453, "result": "open", "nodes": 128000686, "searched": 128000686, "score": "cp 2550", "depth": 34, "move": "d2d4", "secs": 107.2}
+{"id": "cb301", "band": "25-35", "where": "tree", "value": 2503, "result": "mate", "nodes": 1483579, "searched": 1483579, "score": "mate 14", "depth": 23, "move": "h4g5", "secs": 1.2, "pv_wins": true}
+{"id": "cb296", "band": "20-25", "where": "tree", "value": 2465, "result": "open", "nodes": 128000359, "searched": 128000359, "score": "cp 2540", "depth": 32, "move": "g1h1", "secs": 103.6}
+{"id": "cb297", "band": "20-25", "where": "tree", "value": 2483, "result": "open", "nodes": 128000352, "searched": 128000352, "score": "cp 2537", "depth": 36, "move": "f1b5", "secs": 107.2}
+{"id": "cb298", "band": "20-25", "where": "rest", "value": 2484, "result": "mate", "nodes": 126536394, "searched": 126536394, "score": "mate 18", "depth": 28, "move": "c5b7", "secs": 106.2, "pv_wins": true}
+{"id": "cb299", "band": "20-25", "where": "tree", "value": 2488, "result": "open", "nodes": 128000336, "searched": 128000336, "score": "cp 2454", "depth": 42, "move": "a1a6", "secs": 101.8}
+{"id": "cb300", "band": "20-25", "where": "tree", "value": 2490, "result": "open", "nodes": 128000053, "searched": 128000053, "score": "cp 2628", "depth": 28, "move": "e2e4", "secs": 114.0}
+{"id": "cb303", "band": "25-35", "where": "tree", "value": 2511, "result": "open", "nodes": 128000431, "searched": 128000431, "score": "cp 3013", "depth": 35, "move": "a2a4", "secs": 102.5}
+{"id": "cb302", "band": "25-35", "where": "tree", "value": 2509, "result": "open", "nodes": 128000113, "searched": 128000113, "score": "cp 2828", "depth": 36, "move": "d5c7", "secs": 108.4}
+{"id": "cb308", "band": "25-35", "where": "rest", "value": 2535, "result": "mate", "nodes": 18817669, "searched": 18817669, "score": "mate 19", "depth": 32, "move": "d4e5", "secs": 14.9, "pv_wins": true}
+{"id": "cb307", "band": "25-35", "where": "rest", "value": 2529, "result": "mate", "nodes": 28234637, "searched": 28234637, "score": "mate 17", "depth": 32, "move": "d5c6", "secs": 22.9, "pv_wins": true}
+{"id": "cb305", "band": "25-35", "where": "rest", "value": 2525, "result": "open", "nodes": 128000229, "searched": 128000229, "score": "cp 2443", "depth": 34, "move": "g2b7", "secs": 85.5}
+{"id": "cb312", "band": "25-35", "where": "rest", "value": 2575, "result": "mate", "nodes": 6995486, "searched": 6995486, "score": "mate 15", "depth": 32, "move": "f3e3", "secs": 5.4, "pv_wins": true}
+{"id": "cb304", "band": "25-35", "where": "rest", "value": 2511, "result": "open", "nodes": 128000046, "searched": 128000046, "score": "cp 2643", "depth": 39, "move": "b5c7", "secs": 107.9}
+{"id": "cb309", "band": "25-35", "where": "tree", "value": 2536, "result": "mate", "nodes": 49166182, "searched": 49166182, "score": "mate 15", "depth": 31, "move": "c3d5", "secs": 38.2, "pv_wins": true}
+{"id": "cb313", "band": "25-35", "where": "tree", "value": 2578, "result": "mate", "nodes": 14963338, "searched": 14963338, "score": "mate 15", "depth": 29, "move": "f1b5", "secs": 11.7, "pv_wins": true}
+{"id": "cb306", "band": "25-35", "where": "rest", "value": 2528, "result": "open", "nodes": 128000202, "searched": 128000202, "score": "cp 2615", "depth": 34, "move": "d4d5", "secs": 100.6}
+{"id": "cb314", "band": "25-35", "where": "tree", "value": 2579, "result": "open", "nodes": 128000144, "searched": 128000144, "score": "cp 2617", "depth": 35, "move": "e6f8", "secs": 86.1}
+{"id": "cb311", "band": "25-35", "where": "tree", "value": 2565, "result": "open", "nodes": 128000412, "searched": 128000412, "score": "cp 2801", "depth": 36, "move": "e2e4", "secs": 100.8}
+{"id": "cb310", "band": "25-35", "where": "tree", "value": 2562, "result": "open", "nodes": 128000183, "searched": 128000183, "score": "cp 2887", "depth": 29, "move": "f2f3", "secs": 107.4}
+{"id": "cb315", "band": "25-35", "where": "tree", "value": 2587, "result": "open", "nodes": 128000117, "searched": 128000117, "score": "cp 2981", "depth": 39, "move": "f1b5", "secs": 89.3}
+{"id": "cb319", "band": "25-35", "where": "tree", "value": 2629, "result": "mate", "nodes": 14926725, "searched": 14926725, "score": "mate 16", "depth": 24, "move": "f5e6", "secs": 12.3, "pv_wins": true}
+{"id": "cb321", "band": "25-35", "where": "tree", "value": 2701, "result": "mate", "nodes": 9850820, "searched": 9850820, "score": "mate 16", "depth": 28, "move": "e4f6", "secs": 7.3, "pv_wins": true}
+{"id": "cb322", "band": "25-35", "where": "rest", "value": 2712, "result": "mate", "nodes": 10086857, "searched": 10086857, "score": "mate 16", "depth": 28, "move": "c3b5", "secs": 7.9, "pv_wins": true}
+{"id": "cb320", "band": "25-35", "where": "tree", "value": 2667, "result": "mate", "nodes": 26901512, "searched": 26901512, "score": "mate 16", "depth": 29, "move": "f1b5", "secs": 21.6, "pv_wins": true}
+{"id": "cb316", "band": "25-35", "where": "tree", "value": 2590, "result": "open", "nodes": 128000408, "searched": 128000408, "score": "cp 2740", "depth": 36, "move": "f3g5", "secs": 105.2}
+{"id": "cb317", "band": "25-35", "where": "rest", "value": 2594, "result": "open", "nodes": 128000247, "searched": 128000247, "score": "cp 3115", "depth": 28, "move": "c3b5", "secs": 103.8}
+{"id": "cb318", "band": "25-35", "where": "tree", "value": 2608, "result": "open", "nodes": 128000228, "searched": 128000228, "score": "cp 2837", "depth": 34, "move": "f1b5", "secs": 107.8}
+{"id": "cb325", "band": "25-35", "where": "rest", "value": 2724, "result": "mate", "nodes": 118514157, "searched": 118514157, "score": "mate 17", "depth": 29, "move": "g5h7", "secs": 91.2, "pv_wins": true}
+{"id": "cb323", "band": "25-35", "where": "tree", "value": 2716, "result": "open", "nodes": 128000400, "searched": 128000400, "score": "cp 2856", "depth": 35, "move": "d2d4", "secs": 101.0}
+{"id": "cb324", "band": "25-35", "where": "rest", "value": 2719, "result": "open", "nodes": 128000205, "searched": 128000205, "score": "cp 2847", "depth": 35, "move": "e2e4", "secs": 99.3}
+{"id": "cb331", "band": "25-35", "where": "rest", "value": 2802, "result": "mate", "nodes": 2470332, "searched": 2470332, "score": "mate 11", "depth": 23, "move": "e4f5", "secs": 2.0, "pv_wins": true}
+{"id": "cb330", "band": "25-35", "where": "tree", "value": 2801, "result": "mate", "nodes": 14624373, "searched": 14624373, "score": "mate 17", "depth": 28, "move": "e4d5", "secs": 11.8, "pv_wins": true}
+{"id": "cb333", "band": "25-35", "where": "tree", "value": 2814, "result": "mate", "nodes": 2109648, "searched": 2109648, "score": "mate 14", "depth": 23, "move": "b2a3", "secs": 1.7, "pv_wins": true}
+{"id": "cb326", "band": "25-35", "where": "tree", "value": 2782, "result": "open", "nodes": 128000389, "searched": 128000389, "score": "cp 2932", "depth": 30, "move": "e2e4", "secs": 110.0}
+{"id": "cb335", "band": "25-35", "where": "tree", "value": 2826, "result": "mate", "nodes": 3966305, "searched": 3966305, "score": "mate 11", "depth": 29, "move": "c4c5", "secs": 3.3, "pv_wins": true}
+{"id": "cb336", "band": "25-35", "where": "tree", "value": 2835, "result": "mate", "nodes": 5029298, "searched": 5029298, "score": "mate 14", "depth": 28, "move": "e2e3", "secs": 3.9, "pv_wins": true}
+{"id": "cb337", "band": "25-35", "where": "tree", "value": 2845, "result": "mate", "nodes": 1844586, "searched": 1844586, "score": "mate 14", "depth": 23, "move": "d2c3", "secs": 1.3, "pv_wins": true}
+{"id": "cb327", "band": "25-35", "where": "tree", "value": 2783, "result": "open", "nodes": 128000357, "searched": 128000357, "score": "cp 2972", "depth": 34, "move": "f1g2", "secs": 102.5}
+{"id": "cb328", "band": "25-35", "where": "tree", "value": 2797, "result": "mate", "nodes": 87195600, "searched": 87195600, "score": "mate 15", "depth": 29, "move": "d1f3", "secs": 67.0, "pv_wins": true}
+{"id": "cb338", "band": "25-35", "where": "rest", "value": 2853, "result": "mate", "nodes": 52410309, "searched": 52410309, "score": "mate 18", "depth": 33, "move": "a4b5", "secs": 41.9, "pv_wins": true}
+{"id": "cb341", "band": "25-35", "where": "rest", "value": 2866, "result": "mate", "nodes": 19176067, "searched": 19176067, "score": "mate 20", "depth": 27, "move": "d4d5", "secs": 15.1, "pv_wins": true}
+{"id": "cb342", "band": "25-35", "where": "tree", "value": 2922, "result": "mate", "nodes": 3678086, "searched": 3678086, "score": "mate 15", "depth": 23, "move": "d4c5", "secs": 3.0, "pv_wins": true}
+{"id": "cb343", "band": "25-35", "where": "tree", "value": 2924, "result": "mate", "nodes": 4756667, "searched": 4756667, "score": "mate 13", "depth": 22, "move": "f3g4", "secs": 3.3, "pv_wins": true}
+{"id": "cb332", "band": "25-35", "where": "tree", "value": 2803, "result": "open", "nodes": 128000418, "searched": 128000418, "score": "cp 2882", "depth": 34, "move": "g2g3", "secs": 99.1}
+{"id": "cb345", "band": "25-35", "where": "tree", "value": 2939, "result": "mate", "nodes": 836239, "searched": 836239, "score": "mate 14", "depth": 25, "move": "f2f4", "secs": 0.7, "pv_wins": true}
+{"id": "cb346", "band": "25-35", "where": "tree", "value": 2949, "result": "mate", "nodes": 381750, "searched": 381750, "score": "mate 11", "depth": 21, "move": "c1f4", "secs": 0.3, "pv_wins": true}
+{"id": "cb347", "band": "25-35", "where": "tree", "value": 2956, "result": "mate", "nodes": 1117406, "searched": 1117406, "score": "mate 12", "depth": 23, "move": "h6g8", "secs": 0.9, "pv_wins": true}
+{"id": "cb329", "band": "25-35", "where": "rest", "value": 2800, "result": "open", "nodes": 128000383, "searched": 128000383, "score": "cp 2984", "depth": 28, "move": "e4f5", "secs": 109.2}
+{"id": "cb334", "band": "25-35", "where": "rest", "value": 2815, "result": "open", "nodes": 128000186, "searched": 128000186, "score": "cp 2904", "depth": 33, "move": "d2d4", "secs": 97.8}
+{"id": "cb348", "band": "25-35", "where": "tree", "value": 2963, "result": "mate", "nodes": 24617269, "searched": 24617269, "score": "mate 14", "depth": 28, "move": "c2c3", "secs": 19.4, "pv_wins": true}
+{"id": "cb339", "band": "25-35", "where": "rest", "value": 2862, "result": "mate", "nodes": 106770142, "searched": 106770142, "score": "mate 8", "depth": 31, "move": "d4d5", "secs": 87.2, "pv_wins": true}
+{"id": "cb349", "band": "25-35", "where": "tree", "value": 2976, "result": "mate", "nodes": 39109258, "searched": 39109258, "score": "mate 20", "depth": 35, "move": "g2h3", "secs": 31.8, "pv_wins": true}
+{"id": "cb352", "band": "25-35", "where": "rest", "value": 3038, "result": "mate", "nodes": 761158, "searched": 761158, "score": "mate 10", "depth": 23, "move": "f4f5", "secs": 0.6, "pv_wins": true}
+{"id": "cb353", "band": "25-35", "where": "tree", "value": 3062, "result": "mate", "nodes": 4054521, "searched": 4054521, "score": "mate 13", "depth": 23, "move": "e4f5", "secs": 3.3, "pv_wins": true}
+{"id": "cb354", "band": "25-35", "where": "tree", "value": 3077, "result": "mate", "nodes": 21109185, "searched": 21109185, "score": "mate 19", "depth": 32, "move": "d1f3", "secs": 16.8, "pv_wins": true}
+{"id": "cb340", "band": "25-35", "where": "tree", "value": 2866, "result": "open", "nodes": 128000039, "searched": 128000039, "score": "cp 3186", "depth": 34, "move": "a2a4", "secs": 104.0}
+{"id": "cb357", "band": "25-35", "where": "rest", "value": 3112, "result": "mate", "nodes": 3458114, "searched": 3458114, "score": "mate 14", "depth": 28, "move": "d4c5", "secs": 2.4, "pv_wins": true}
+{"id": "cb356", "band": "25-35", "where": "rest", "value": 3087, "result": "mate", "nodes": 4276320, "searched": 4276320, "score": "mate 18", "depth": 29, "move": "c1f4", "secs": 3.4, "pv_wins": true}
+{"id": "cb359", "band": "25-35", "where": "rest", "value": 3128, "result": "mate", "nodes": 5936313, "searched": 5936313, "score": "mate 12", "depth": 28, "move": "c4c5", "secs": 4.6, "pv_wins": true}
+{"id": "cb344", "band": "25-35", "where": "tree", "value": 2928, "result": "open", "nodes": 128000644, "searched": 128000644, "score": "cp 2973", "depth": 34, "move": "f1g2", "secs": 99.8}
+{"id": "cb360", "band": "25-35", "where": "tree", "value": 3135, "result": "mate", "nodes": 34936782, "searched": 34936782, "score": "mate 11", "depth": 28, "move": "c1h6", "secs": 27.6, "pv_wins": true}
+{"id": "cb355", "band": "25-35", "where": "tree", "value": 3083, "result": "mate", "nodes": 59244978, "searched": 59244978, "score": "mate 17", "depth": 29, "move": "e4f5", "secs": 49.4, "pv_wins": true}
+{"id": "cb363", "band": "25-35", "where": "tree", "value": 3277, "result": "mate", "nodes": 207521, "searched": 207521, "score": "mate 11", "depth": 19, "move": "f7d8", "secs": 0.2, "pv_wins": true}
+{"id": "cb362", "band": "25-35", "where": "rest", "value": 3276, "result": "mate", "nodes": 3775530, "searched": 3775530, "score": "mate 14", "depth": 27, "move": "g5h6", "secs": 2.9, "pv_wins": true}
+{"id": "cb350", "band": "25-35", "where": "tree", "value": 3028, "result": "open", "nodes": 128000264, "searched": 128000264, "score": "cp 2956", "depth": 35, "move": "d2d4", "secs": 98.9}
+{"id": "cb366", "band": "25-35", "where": "tree", "value": 3293, "result": "mate", "nodes": 710887, "searched": 710887, "score": "mate 11", "depth": 24, "move": "d1a4", "secs": 0.6, "pv_wins": true}
+{"id": "cb365", "band": "25-35", "where": "tree", "value": 3280, "result": "mate", "nodes": 26372703, "searched": 26372703, "score": "mate 20", "depth": 37, "move": "b5c6", "secs": 22.3, "pv_wins": true}
+{"id": "cb351", "band": "25-35", "where": "tree", "value": 3028, "result": "open", "nodes": 128000512, "searched": 128000512, "score": "cp 3262", "depth": 35, "move": "d2d4", "secs": 94.1}
+{"id": "cb368", "band": "25-35", "where": "rest", "value": 3303, "result": "mate", "nodes": 7780594, "searched": 7780594, "score": "mate 16", "depth": 26, "move": "b4c5", "secs": 5.4, "pv_wins": true}
+{"id": "cb361", "band": "25-35", "where": "rest", "value": 3275, "result": "mate", "nodes": 68353984, "searched": 68353984, "score": "mate 16", "depth": 26, "move": "f1c4", "secs": 49.9, "pv_wins": true}
+{"id": "cb358", "band": "25-35", "where": "rest", "value": 3125, "result": "open", "nodes": 128000215, "searched": 128000215, "score": "cp 3128", "depth": 34, "move": "d2d4", "secs": 99.2}
+{"id": "cb372", "band": "25-35", "where": "rest", "value": 3362, "result": "mate", "nodes": 551751, "searched": 551751, "score": "mate 10", "depth": 19, "move": "d1d3", "secs": 0.5, "pv_wins": true}
+{"id": "cb373", "band": "25-35", "where": "tree", "value": 3363, "result": "mate", "nodes": 16024319, "searched": 16024319, "score": "mate 14", "depth": 28, "move": "c1g5", "secs": 11.4, "pv_wins": true}
+{"id": "cb371", "band": "25-35", "where": "tree", "value": 3351, "result": "mate", "nodes": 47570954, "searched": 47570954, "score": "mate 8", "depth": 28, "move": "d2d4", "secs": 36.8, "pv_wins": true}
+{"id": "cb375", "band": "25-35", "where": "tree", "value": 3372, "result": "mate", "nodes": 2315231, "searched": 2315231, "score": "mate 12", "depth": 21, "move": "d1f3", "secs": 1.5, "pv_wins": true}
+{"id": "cb364", "band": "25-35", "where": "rest", "value": 3277, "result": "open", "nodes": 128000146, "searched": 128000146, "score": "cp 3207", "depth": 31, "move": "c2c3", "secs": 100.2}
+{"id": "cb367", "band": "25-35", "where": "rest", "value": 3295, "result": "open", "nodes": 128000415, "searched": 128000415, "score": "cp 3387", "depth": 27, "move": "h2h3", "secs": 93.8}
+{"id": "cb369", "band": "25-35", "where": "tree", "value": 3307, "result": "open", "nodes": 128000579, "searched": 128000579, "score": "cp 3415", "depth": 36, "move": "d2d4", "secs": 95.6}
+{"id": "cb370", "band": "25-35", "where": "rest", "value": 3347, "result": "open", "nodes": 128000578, "searched": 128000578, "score": "cp 3085", "depth": 35, "move": "a7b8", "secs": 94.2}
+{"id": "cb376", "band": "25-35", "where": "rest", "value": 3382, "result": "open", "nodes": 128000034, "searched": 128000034, "score": "cp 3658", "depth": 32, "move": "c1b2", "secs": 88.1}
+{"id": "cb374", "band": "25-35", "where": "rest", "value": 3367, "result": "open", "nodes": 128000603, "searched": 128000603, "score": "cp 3419", "depth": 31, "move": "e3e4", "secs": 101.4}
+{"id": "cb377", "band": "25-35", "where": "tree", "value": 3393, "result": "open", "nodes": 128000270, "searched": 128000270, "score": "cp 3273", "depth": 32, "move": "d2d4", "secs": 105.6}
+{"id": "cb378", "band": "25-35", "where": "rest", "value": 3395, "result": "open", "nodes": 128000098, "searched": 128000098, "score": "cp 3500", "depth": 31, "move": "h2h3", "secs": 105.0}
+{"id": "cb379", "band": "25-35", "where": "tree", "value": 3396, "result": "open", "nodes": 128000449, "searched": 128000449, "score": "cp 3512", "depth": 33, "move": "d1d2", "secs": 110.5}
+{"id": "cb380", "band": "25-35", "where": "rest", "value": 3399, "result": "open", "nodes": 128000156, "searched": 128000156, "score": "cp 3503", "depth": 37, "move": "c3d5", "secs": 108.7}
+{"id": "cb381", "band": "25-35", "where": "rest", "value": 3401, "result": "open", "nodes": 128000528, "searched": 128000528, "score": "cp 3351", "depth": 32, "move": "e1g1", "secs": 117.0}
+{"id": "cb387", "band": "25-35", "where": "rest", "value": 3426, "result": "mate", "nodes": 2566568, "searched": 2566568, "score": "mate 6", "depth": 26, "move": "b5e8", "secs": 2.2, "pv_wins": true}
+{"id": "cb388", "band": "25-35", "where": "rest", "value": 3431, "result": "mate", "nodes": 555729, "searched": 555729, "score": "mate 10", "depth": 20, "move": "g5e7", "secs": 0.4, "pv_wins": true}
+{"id": "cb382", "band": "25-35", "where": "rest", "value": 3410, "result": "open", "nodes": 128000136, "searched": 128000136, "score": "cp 3615", "depth": 31, "move": "c2c4", "secs": 114.8}
+{"id": "cb383", "band": "25-35", "where": "tree", "value": 3410, "result": "open", "nodes": 128000472, "searched": 128000472, "score": "cp 3305", "depth": 33, "move": "f7h8", "secs": 111.3}
+{"id": "cb391", "band": "25-35", "where": "rest", "value": 3433, "result": "mate", "nodes": 4396635, "searched": 4396635, "score": "mate 12", "depth": 25, "move": "g5e7", "secs": 3.1, "pv_wins": true}
+{"id": "cb384", "band": "25-35", "where": "rest", "value": 3413, "result": "open", "nodes": 128000386, "searched": 128000386, "score": "cp 3428", "depth": 32, "move": "g1h1", "secs": 109.3}
+{"id": "cb389", "band": "25-35", "where": "rest", "value": 3432, "result": "mate", "nodes": 43102615, "searched": 43102615, "score": "mate 11", "depth": 29, "move": "c3b4", "secs": 33.6, "pv_wins": true}
+{"id": "cb385", "band": "25-35", "where": "rest", "value": 3415, "result": "open", "nodes": 128000621, "searched": 128000621, "score": "cp 3286", "depth": 27, "move": "g1h1", "secs": 101.4}
+{"id": "cb386", "band": "25-35", "where": "tree", "value": 3425, "result": "open", "nodes": 128000082, "searched": 128000082, "score": "cp 3469", "depth": 32, "move": "c1d2", "secs": 103.4}
+{"id": "cb396", "band": "25-35", "where": "rest", "value": 3476, "result": "mate", "nodes": 1098295, "searched": 1098295, "score": "mate 10", "depth": 23, "move": "c1h6", "secs": 0.8, "pv_wins": true}
+{"id": "cb392", "band": "25-35", "where": "rest", "value": 3447, "result": "mate", "nodes": 96045658, "searched": 96045658, "score": "mate 14", "depth": 29, "move": "b5c6", "secs": 73.8, "pv_wins": true}
+{"id": "cb390", "band": "25-35", "where": "rest", "value": 3433, "result": "open", "nodes": 128000402, "searched": 128000402, "score": "cp 3554", "depth": 30, "move": "h2h3", "secs": 101.2}
+{"id": "cb399", "band": "25-35", "where": "rest", "value": 3493, "result": "mate", "nodes": 29340427, "searched": 29340427, "score": "mate 16", "depth": 33, "move": "d1b3", "secs": 22.9, "pv_wins": true}
+{"id": "cb400", "band": "25-35", "where": "rest", "value": 3499, "result": "mate", "nodes": 557379, "searched": 557379, "score": "mate 11", "depth": 19, "move": "c3b4", "secs": 0.5, "pv_wins": true}
+{"id": "cb393", "band": "25-35", "where": "rest", "value": 3459, "result": "open", "nodes": 128000285, "searched": 128000285, "score": "cp 3586", "depth": 30, "move": "g2g3", "secs": 96.5}
+{"id": "cb394", "band": "25-35", "where": "rest", "value": 3469, "result": "open", "nodes": 128000201, "searched": 128000201, "score": "cp 3459", "depth": 29, "move": "d2d4", "secs": 99.6}
+{"id": "cb402", "band": "35-50", "where": "tree", "value": 3504, "result": "mate", "nodes": 11007850, "searched": 11007850, "score": "mate 12", "depth": 25, "move": "g2g4", "secs": 8.7, "pv_wins": true}
+{"id": "cb395", "band": "25-35", "where": "rest", "value": 3470, "result": "open", "nodes": 128000533, "searched": 128000533, "score": "cp 3437", "depth": 31, "move": "g1h1", "secs": 99.1}
+{"id": "cb397", "band": "25-35", "where": "rest", "value": 3481, "result": "open", "nodes": 128000246, "searched": 128000246, "score": "cp 3467", "depth": 31, "move": "e1g1", "secs": 99.8}
+{"id": "cb406", "band": "35-50", "where": "rest", "value": 3518, "result": "mate", "nodes": 6208896, "searched": 6208896, "score": "mate 12", "depth": 25, "move": "b5e8", "secs": 4.8, "pv_wins": true}
+{"id": "cb404", "band": "35-50", "where": "tree", "value": 3510, "result": "mate", "nodes": 21672536, "searched": 21672536, "score": "mate 14", "depth": 27, "move": "d2d4", "secs": 17.1, "pv_wins": true}
+{"id": "cb401", "band": "35-50", "where": "rest", "value": 3500, "result": "mate", "nodes": 51957843, "searched": 51957843, "score": "mate 18", "depth": 30, "move": "b3b4", "secs": 39.6, "pv_wins": true}
+{"id": "cb409", "band": "35-50", "where": "tree", "value": 3547, "result": "mate", "nodes": 7867056, "searched": 7867056, "score": "mate 12", "depth": 24, "move": "e4f5", "secs": 6.5, "pv_wins": true}
+{"id": "cb410", "band": "35-50", "where": "rest", "value": 3549, "result": "mate", "nodes": 64734, "searched": 64734, "score": "mate 6", "depth": 16, "move": "f5f6", "secs": 0.1, "pv_wins": true}
+{"id": "cb398", "band": "25-35", "where": "rest", "value": 3492, "result": "open", "nodes": 128000217, "searched": 128000217, "score": "cp 3461", "depth": 30, "move": "g1h1", "secs": 98.3}
+{"id": "cb408", "band": "35-50", "where": "rest", "value": 3545, "result": "mate", "nodes": 96843885, "searched": 96843885, "score": "mate 13", "depth": 30, "move": "g2g4", "secs": 73.4, "pv_wins": true}
+{"id": "cb403", "band": "35-50", "where": "tree", "value": 3505, "result": "open", "nodes": 128000226, "searched": 128000226, "score": "cp 3377", "depth": 31, "move": "c2c3", "secs": 97.9}
+{"id": "cb413", "band": "35-50", "where": "rest", "value": 3561, "result": "mate", "nodes": 10619125, "searched": 10619125, "score": "mate 10", "depth": 26, "move": "d1f3", "secs": 8.1, "pv_wins": true}
+{"id": "cb405", "band": "35-50", "where": "rest", "value": 3515, "result": "open", "nodes": 128000038, "searched": 128000038, "score": "cp 3469", "depth": 28, "move": "e3e4", "secs": 98.7}
+{"id": "cb416", "band": "35-50", "where": "tree", "value": 3583, "result": "mate", "nodes": 1182934, "searched": 1182934, "score": "mate 11", "depth": 21, "move": "b5e8", "secs": 1.1, "pv_wins": true}
+{"id": "cb417", "band": "35-50", "where": "rest", "value": 3589, "result": "mate", "nodes": 8347318, "searched": 8347318, "score": "mate 17", "depth": 26, "move": "e4e5", "secs": 5.9, "pv_wins": true}
+{"id": "cb407", "band": "35-50", "where": "rest", "value": 3542, "result": "open", "nodes": 128000043, "searched": 128000043, "score": "cp 3501", "depth": 30, "move": "h2h3", "secs": 101.8}
+{"id": "cb411", "band": "35-50", "where": "rest", "value": 3550, "result": "mate", "nodes": 108655628, "searched": 108655628, "score": "mate 17", "depth": 31, "move": "d1d2", "secs": 83.4, "pv_wins": true}
+{"id": "cb412", "band": "35-50", "where": "rest", "value": 3555, "result": "open", "nodes": 128000403, "searched": 128000403, "score": "cp 3629", "depth": 31, "move": "g2g4", "secs": 88.9}
+{"id": "cb414", "band": "35-50", "where": "rest", "value": 3567, "result": "open", "nodes": 128000075, "searched": 128000075, "score": "cp 3200", "depth": 30, "move": "e1g1", "secs": 100.7}
+{"id": "cb418", "band": "35-50", "where": "rest", "value": 3594, "result": "mate", "nodes": 117448657, "searched": 117448657, "score": "mate 12", "depth": 31, "move": "e3e4", "secs": 93.6, "pv_wins": true}
+{"id": "cb423", "band": "35-50", "where": "tree", "value": 3629, "result": "mate", "nodes": 1888452, "searched": 1888452, "score": "mate 10", "depth": 20, "move": "g6e8", "secs": 1.5, "pv_wins": true}
+{"id": "cb415", "band": "35-50", "where": "tree", "value": 3578, "result": "open", "nodes": 128000368, "searched": 128000368, "score": "cp 3545", "depth": 31, "move": "g1h1", "secs": 103.5}
+{"id": "cb419", "band": "35-50", "where": "rest", "value": 3596, "result": "open", "nodes": 128000368, "searched": 128000368, "score": "cp 3481", "depth": 30, "move": "h2h3", "secs": 104.1}
+{"id": "cb420", "band": "35-50", "where": "tree", "value": 3605, "result": "open", "nodes": 128000160, "searched": 128000160, "score": "cp 3600", "depth": 28, "move": "e1g1", "secs": 103.5}
+{"id": "cb426", "band": "35-50", "where": "rest", "value": 3668, "result": "mate", "nodes": 33893611, "searched": 33893611, "score": "mate 10", "depth": 28, "move": "d1d3", "secs": 27.2, "pv_wins": true}
+{"id": "cb428", "band": "35-50", "where": "tree", "value": 3679, "result": "mate", "nodes": 1852899, "searched": 1852899, "score": "mate 12", "depth": 24, "move": "b5e8", "secs": 1.5, "pv_wins": true}
+{"id": "cb421", "band": "35-50", "where": "rest", "value": 3610, "result": "open", "nodes": 128000504, "searched": 128000504, "score": "cp 3673", "depth": 30, "move": "g2g3", "secs": 98.9}
+{"id": "cb422", "band": "35-50", "where": "rest", "value": 3622, "result": "mate", "nodes": 83024072, "searched": 83024072, "score": "mate 17", "depth": 31, "move": "c2c4", "secs": 66.2, "pv_wins": true}
+{"id": "cb431", "band": "35-50", "where": "tree", "value": 3734, "result": "mate", "nodes": 414826, "searched": 414826, "score": "mate 12", "depth": 22, "move": "a4b5", "secs": 0.4, "pv_wins": true}
+{"id": "cb432", "band": "35-50", "where": "rest", "value": 3743, "result": "mate", "nodes": 1639020, "searched": 1639020, "score": "mate 13", "depth": 21, "move": "c3b4", "secs": 1.2, "pv_wins": true}
+{"id": "cb424", "band": "35-50", "where": "rest", "value": 3660, "result": "open", "nodes": 128000371, "searched": 128000371, "score": "cp 3773", "depth": 35, "move": "c4c5", "secs": 95.0}
+{"id": "cb434", "band": "35-50", "where": "rest", "value": 3760, "result": "mate", "nodes": 563379, "searched": 563379, "score": "mate 12", "depth": 24, "move": "g5f6", "secs": 0.4, "pv_wins": true}
+{"id": "cb425", "band": "35-50", "where": "tree", "value": 3660, "result": "open", "nodes": 128000016, "searched": 128000016, "score": "cp 4294", "depth": 30, "move": "b5e8", "secs": 100.5}
+{"id": "cb435", "band": "35-50", "where": "rest", "value": 3774, "result": "mate", "nodes": 12380975, "searched": 12380975, "score": "mate 13", "depth": 27, "move": "d7e6", "secs": 9.2, "pv_wins": true}
+{"id": "cb427", "band": "35-50", "where": "rest", "value": 3674, "result": "open", "nodes": 128000732, "searched": 128000732, "score": "cp 3659", "depth": 31, "move": "g1h1", "secs": 101.7}
+{"id": "cb438", "band": "35-50", "where": "tree", "value": 3804, "result": "mate", "nodes": 1602249, "searched": 1602249, "score": "mate 11", "depth": 24, "move": "d4d5", "secs": 1.3, "pv_wins": true}
+{"id": "cb436", "band": "35-50", "where": "tree", "value": 3784, "result": "mate", "nodes": 27039839, "searched": 27039839, "score": "mate 11", "depth": 25, "move": "c3b4", "secs": 21.7, "pv_wins": true}
+{"id": "cb429", "band": "35-50", "where": "rest", "value": 3695, "result": "open", "nodes": 128000189, "searched": 128000189, "score": "cp 3708", "depth": 28, "move": "b5e8", "secs": 98.5}
+{"id": "cb430", "band": "35-50", "where": "tree", "value": 3732, "result": "open", "nodes": 128000498, "searched": 128000498, "score": "cp 3804", "depth": 29, "move": "g2g3", "secs": 102.2}
+{"id": "cb437", "band": "35-50", "where": "tree", "value": 3804, "result": "mate", "nodes": 66064944, "searched": 66064944, "score": "mate 14", "depth": 30, "move": "g1h1", "secs": 52.5, "pv_wins": true}
+{"id": "cb433", "band": "35-50", "where": "tree", "value": 3756, "result": "open", "nodes": 128000529, "searched": 128000529, "score": "cp 3871", "depth": 31, "move": "c4c5", "secs": 100.1}
+{"id": "cb444", "band": "35-50", "where": "tree", "value": 3855, "result": "mate", "nodes": 336734, "searched": 336734, "score": "mate 11", "depth": 22, "move": "g2g3", "secs": 0.3, "pv_wins": true}
+{"id": "cb443", "band": "35-50", "where": "tree", "value": 3848, "result": "mate", "nodes": 5497487, "searched": 5497487, "score": "mate 7", "depth": 23, "move": "e4f5", "secs": 4.4, "pv_wins": true}
+{"id": "cb445", "band": "35-50", "where": "tree", "value": 3952, "result": "mate", "nodes": 4806144, "searched": 4806144, "score": "mate 14", "depth": 23, "move": "e5e6", "secs": 3.5, "pv_wins": true}
+{"id": "cb447", "band": "35-50", "where": "rest", "value": 3972, "result": "mate", "nodes": 114411, "searched": 114411, "score": "mate 7", "depth": 18, "move": "c1b2", "secs": 0.1, "pv_wins": true}
+{"id": "cb441", "band": "35-50", "where": "tree", "value": 3843, "result": "mate", "nodes": 37707766, "searched": 37707766, "score": "mate 17", "depth": 27, "move": "g1h1", "secs": 26.2, "pv_wins": true}
+{"id": "cb442", "band": "35-50", "where": "tree", "value": 3843, "result": "mate", "nodes": 32493167, "searched": 32493167, "score": "mate 9", "depth": 28, "move": "e4f5", "secs": 27.1, "pv_wins": true}
+{"id": "cb449", "band": "35-50", "where": "tree", "value": 4059, "result": "mate", "nodes": 28237317, "searched": 28237317, "score": "mate 13", "depth": 28, "move": "c5c6", "secs": 22.5, "pv_wins": true}
+{"id": "cb451", "band": "35-50", "where": "tree", "value": 4140, "result": "mate", "nodes": 360326, "searched": 360326, "score": "mate 6", "depth": 19, "move": "a4b5", "secs": 0.3, "pv_wins": true}
+{"id": "cb452", "band": "35-50", "where": "rest", "value": 4157, "result": "mate", "nodes": 475783, "searched": 475783, "score": "mate 10", "depth": 19, "move": "b2a3", "secs": 0.5, "pv_wins": true}
+{"id": "cb440", "band": "35-50", "where": "tree", "value": 3813, "result": "mate", "nodes": 103570571, "searched": 103570571, "score": "mate 8", "depth": 28, "move": "c1b2", "secs": 78.6, "pv_wins": true}
+{"id": "cb439", "band": "35-50", "where": "rest", "value": 3811, "result": "open", "nodes": 128000412, "searched": 128000412, "score": "cp 3777", "depth": 32, "move": "d2d4", "secs": 107.1}
+{"id": "cb455", "band": "35-50", "where": "rest", "value": 4424, "result": "mate", "nodes": 314561, "searched": 314561, "score": "mate 10", "depth": 18, "move": "d1d4", "secs": 0.4, "pv_wins": true}
+{"id": "cb453", "band": "35-50", "where": "rest", "value": 4187, "result": "mate", "nodes": 41622743, "searched": 41622743, "score": "mate 16", "depth": 27, "move": "d7c8", "secs": 37.8, "pv_wins": true}
+{"id": "cb456", "band": "35-50", "where": "rest", "value": 4487, "result": "mate", "nodes": 6783928, "searched": 6783928, "score": "mate 14", "depth": 25, "move": "e5d6", "secs": 6.4, "pv_wins": true}
+{"id": "cb457", "band": "35-50", "where": "rest", "value": 4614, "result": "mate", "nodes": 6587961, "searched": 6587961, "score": "mate 13", "depth": 22, "move": "g1h1", "secs": 6.4, "pv_wins": true}
+{"id": "cb454", "band": "35-50", "where": "tree", "value": 4312, "result": "mate", "nodes": 36909653, "searched": 36909653, "score": "mate 14", "depth": 27, "move": "b2b4", "secs": 36.2, "pv_wins": true}
+{"id": "cb460", "band": "35-50", "where": "tree", "value": 4935, "result": "mate", "nodes": 413810, "searched": 413810, "score": "mate 9", "depth": 21, "move": "d1f3", "secs": 0.5, "pv_wins": true}
+{"id": "cb461", "band": "50-90", "where": "tree", "value": 5022, "result": "mate", "nodes": 428418, "searched": 428418, "score": "mate 9", "depth": 20, "move": "d1a4", "secs": 0.4, "pv_wins": true}
+{"id": "cb459", "band": "35-50", "where": "tree", "value": 4868, "result": "mate", "nodes": 4110306, "searched": 4110306, "score": "mate 13", "depth": 22, "move": "c5d6", "secs": 3.7, "pv_wins": true}
+{"id": "cb463", "band": "50-90", "where": "rest", "value": 5023, "result": "mate", "nodes": 347325, "searched": 347325, "score": "mate 7", "depth": 20, "move": "c1a3", "secs": 0.4, "pv_wins": true}
+{"id": "cb458", "band": "35-50", "where": "tree", "value": 4697, "result": "mate", "nodes": 7819783, "searched": 7819783, "score": "mate 12", "depth": 24, "move": "e1g1", "secs": 7.5, "pv_wins": true}
+{"id": "cb464", "band": "50-90", "where": "rest", "value": 5123, "result": "mate", "nodes": 6738668, "searched": 6738668, "score": "mate 13", "depth": 25, "move": "b5e8", "secs": 6.3, "pv_wins": true}
+{"id": "cb466", "band": "50-90", "where": "rest", "value": 5163, "result": "mate", "nodes": 2005142, "searched": 2005142, "score": "mate 12", "depth": 21, "move": "c1d2", "secs": 1.7, "pv_wins": true}
+{"id": "cb467", "band": "50-90", "where": "rest", "value": 5188, "result": "mate", "nodes": 4962420, "searched": 4962420, "score": "mate 16", "depth": 31, "move": "c4d5", "secs": 4.1, "pv_wins": true}
+{"id": "cb468", "band": "50-90", "where": "tree", "value": 5314, "result": "mate", "nodes": 1603130, "searched": 1603130, "score": "mate 8", "depth": 21, "move": "c4c5", "secs": 1.4, "pv_wins": true}
+{"id": "cb469", "band": "50-90", "where": "rest", "value": 5351, "result": "mate", "nodes": 223742, "searched": 223742, "score": "mate 10", "depth": 18, "move": "c1b2", "secs": 0.2, "pv_wins": true}
+{"id": "cb470", "band": "50-90", "where": "tree", "value": 5397, "result": "mate", "nodes": 3372186, "searched": 3372186, "score": "mate 14", "depth": 24, "move": "d1h5", "secs": 2.6, "pv_wins": true}
+{"id": "cb465", "band": "50-90", "where": "rest", "value": 5126, "result": "mate", "nodes": 17925726, "searched": 17925726, "score": "mate 13", "depth": 29, "move": "g4g5", "secs": 14.1, "pv_wins": true}
+{"id": "cb471", "band": "50-90", "where": "rest", "value": 5402, "result": "mate", "nodes": 3774761, "searched": 3774761, "score": "mate 9", "depth": 23, "move": "e3e4", "secs": 3.0, "pv_wins": true}
+{"id": "cb473", "band": "50-90", "where": "rest", "value": 5459, "result": "mate", "nodes": 302747, "searched": 302747, "score": "mate 7", "depth": 19, "move": "a4d7", "secs": 0.3, "pv_wins": true}
+{"id": "cb474", "band": "50-90", "where": "tree", "value": 5469, "result": "mate", "nodes": 33671, "searched": 33671, "score": "mate 7", "depth": 15, "move": "d1g4", "secs": 0.1, "pv_wins": true}
+{"id": "cb475", "band": "50-90", "where": "tree", "value": 5500, "result": "mate", "nodes": 964477, "searched": 964477, "score": "mate 13", "depth": 21, "move": "d1g4", "secs": 0.8, "pv_wins": true}
+{"id": "cb476", "band": "50-90", "where": "rest", "value": 5535, "result": "mate", "nodes": 386099, "searched": 386099, "score": "mate 9", "depth": 20, "move": "d7e6", "secs": 0.4, "pv_wins": true}
+{"id": "cb477", "band": "50-90", "where": "tree", "value": 5627, "result": "mate", "nodes": 475823, "searched": 475823, "score": "mate 12", "depth": 20, "move": "f3b7", "secs": 0.4, "pv_wins": true}
+{"id": "cb472", "band": "50-90", "where": "rest", "value": 5432, "result": "mate", "nodes": 6567454, "searched": 6567454, "score": "mate 12", "depth": 26, "move": "e8f7", "secs": 4.8, "pv_wins": true}
+{"id": "cb479", "band": "50-90", "where": "rest", "value": 5752, "result": "mate", "nodes": 65174, "searched": 65174, "score": "mate 8", "depth": 17, "move": "d4e5", "secs": 0.1, "pv_wins": true}
+{"id": "cb478", "band": "50-90", "where": "tree", "value": 5697, "result": "mate", "nodes": 4872114, "searched": 4872114, "score": "mate 11", "depth": 22, "move": "c5c6", "secs": 3.6, "pv_wins": true}
+{"id": "cb481", "band": "50-90", "where": "tree", "value": 5842, "result": "mate", "nodes": 1382696, "searched": 1382696, "score": "mate 12", "depth": 24, "move": "b5e8", "secs": 1.1, "pv_wins": true}
+{"id": "cb446", "band": "35-50", "where": "rest", "value": 3969, "result": "open", "nodes": 128000154, "searched": 128000154, "score": "cp 3754", "depth": 32, "move": "e1g1", "secs": 110.5}
+{"id": "cb483", "band": "50-90", "where": "tree", "value": 6068, "result": "mate", "nodes": 1630535, "searched": 1630535, "score": "mate 10", "depth": 23, "move": "e1g1", "secs": 1.3, "pv_wins": true}
+{"id": "cb482", "band": "50-90", "where": "rest", "value": 5955, "result": "mate", "nodes": 14956150, "searched": 14956150, "score": "mate 7", "depth": 23, "move": "g6e8", "secs": 10.4, "pv_wins": true}
+{"id": "cb484", "band": "50-90", "where": "rest", "value": 6101, "result": "mate", "nodes": 5655509, "searched": 5655509, "score": "mate 12", "depth": 24, "move": "c5c6", "secs": 4.2, "pv_wins": true}
+{"id": "cb486", "band": "50-90", "where": "rest", "value": 6166, "result": "mate", "nodes": 410463, "searched": 410463, "score": "mate 8", "depth": 18, "move": "d1f3", "secs": 0.4, "pv_wins": true}
+{"id": "cb485", "band": "50-90", "where": "tree", "value": 6101, "result": "mate", "nodes": 4564172, "searched": 4564172, "score": "mate 11", "depth": 27, "move": "f1d3", "secs": 3.5, "pv_wins": true}
+{"id": "cb487", "band": "50-90", "where": "tree", "value": 6255, "result": "mate", "nodes": 2641000, "searched": 2641000, "score": "mate 8", "depth": 24, "move": "e1g1", "secs": 2.1, "pv_wins": true}
+{"id": "cb488", "band": "50-90", "where": "rest", "value": 6362, "result": "mate", "nodes": 3205451, "searched": 3205451, "score": "mate 14", "depth": 26, "move": "b5e8", "secs": 2.2, "pv_wins": true}
+{"id": "cb448", "band": "35-50", "where": "tree", "value": 4042, "result": "open", "nodes": 128000531, "searched": 128000531, "score": "cp 4162", "depth": 28, "move": "g1h1", "secs": 119.4}
+{"id": "cb450", "band": "35-50", "where": "tree", "value": 4062, "result": "open", "nodes": 128000301, "searched": 128000301, "score": "cp 3826", "depth": 24, "move": "g2g3", "secs": 116.4}
+{"id": "cb492", "band": "50-90", "where": "tree", "value": 7295, "result": "mate", "nodes": 6533375, "searched": 6533375, "score": "mate 15", "depth": 27, "move": "e4d6", "secs": 5.2, "pv_wins": true}
+{"id": "cb480", "band": "50-90", "where": "tree", "value": 5788, "result": "mate", "nodes": 53557962, "searched": 53557962, "score": "mate 11", "depth": 26, "move": "e1g1", "secs": 41.5, "pv_wins": true}
+{"id": "cb493", "band": "50-90", "where": "tree", "value": 7527, "result": "mate", "nodes": 11275069, "searched": 11275069, "score": "mate 21", "depth": 33, "move": "e1e8", "secs": 7.9, "pv_wins": true}
+{"id": "cb462", "band": "50-90", "where": "rest", "value": 5023, "result": "open", "nodes": 128000007, "searched": 128000007, "score": "cp 2979", "depth": 32, "move": "d1e2", "secs": 97.3}
+{"id": "cb489", "band": "50-90", "where": "rest", "value": 6907, "result": "open", "nodes": 128000188, "searched": 128000188, "score": "cp 1608", "depth": 38, "move": "f8f7", "secs": 67.9}
+{"id": "cb495", "band": "50-90", "where": "rest", "value": 7658, "result": "mate", "nodes": 71675549, "searched": 71675549, "score": "mate 13", "depth": 27, "move": "c5c6", "secs": 58.6, "pv_wins": true}
+{"id": "cb491", "band": "50-90", "where": "tree", "value": 7233, "result": "open", "nodes": 128000170, "searched": 128000170, "score": "cp 15147", "depth": 38, "move": "a1f1", "secs": 82.8}
+{"id": "cb499", "band": "50-90", "where": "tree", "value": 8521, "result": "mate", "nodes": 24076950, "searched": 24076950, "score": "mate 27", "depth": 44, "move": "e3e6", "secs": 15.9, "pv_wins": true}
+{"id": "cb500", "band": "50-90", "where": "rest", "value": 8829, "result": "mate", "nodes": 32721, "searched": 32721, "score": "mate 10", "depth": 18, "move": "g3f4", "secs": 0.1, "pv_wins": true}
+{"id": "cb496", "band": "50-90", "where": "rest", "value": 7707, "result": "open", "nodes": 128000333, "searched": 128000333, "score": "cp 1667", "depth": 35, "move": "h7f7", "secs": 47.8}
+{"id": "cb490", "band": "50-90", "where": "rest", "value": 7060, "result": "tb", "nodes": 78152260, "searched": 128000062, "score": "cp 19970", "depth": 44, "move": "d6d7", "secs": 105.4}
+{"id": "cb494", "band": "50-90", "where": "rest", "value": 7650, "result": "open", "nodes": 128000384, "searched": 128000384, "score": "cp 1789", "depth": 42, "move": "g8f8", "secs": 85.7}
+{"id": "cb497", "band": "50-90", "where": "rest", "value": 7723, "result": "open", "nodes": 128000349, "searched": 128000349, "score": "cp 15147", "depth": 38, "move": "e2e3", "secs": 55.4}
+{"id": "cb498", "band": "50-90", "where": "rest", "value": 8463, "result": "open", "nodes": 128000307, "searched": 128000307, "score": "cp 1325", "depth": 41, "move": "c2c4", "secs": 60.4}

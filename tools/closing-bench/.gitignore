@@ -1,0 +1,4 @@
+candidates.tsv
+results/*.lock
+results/*.log
+__pycache__/
