@@ -50,7 +50,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  ENGINE_SHA: 097b77b6419c75ebd15c553589fcebecbf3543d8
+  ENGINE_SHA: be45b9fcb62c5141913b19b8c97b685ddfb22732
   BASE_SHA: 1adc5239500a684824b178b19be4266f6e249cc8
   ATOMIC_NET_TAG: net-ft5-0p8B
   ATOMIC_NET_ASSET: atomic-ft5-0p8B.nnue
@@ -58,7 +58,7 @@ env:
   # EvalFileDefaultName at ENGINE_SHA: the name the network is embedded under
   NET_NAME: atomic-ft5-0p8B.nnue
   SERVED_URL: https://belzedar.duckdns.org/atomicdb/engines
-  EXPECT_NNUE: "569060"
+  EXPECT_NNUE: "659511"
   # The training run of every profile-guided build (see the header).
   TRAIN_POSITIONS: ci/positions/train.tsv
   TRAIN_SUMMARY: "PGO training load (train.tsv): 40 positions"
