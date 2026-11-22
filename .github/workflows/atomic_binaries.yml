@@ -47,28 +47,39 @@ jobs:
         shell: ${{ matrix.shell }}
     strategy:
       fail-fast: false
-      # isa: the x86-64 level each Linux binary may declare it needs (glibc
-      # refuses to load a binary that needs more than the CPU has).
+      # Linux builds run on a pinned image, not ubuntu-latest. Ubuntu 26.04
+      # (ubuntu-latest since November 2026) builds its glibc for x86-64-v3:
+      # its crt1.o/Scrt1.o carry ISA_1_NEEDED = v3, so every binary linked
+      # there declares v3 whatever -march says, and glibc refuses it on older
+      # CPUs. Its glibc 2.43 symbol versions would also shut out most
+      # distributions in use. 24.04 is the image atomic.yml gates on.
+      #
+      # isa: the x86-64 level each Linux binary must declare (glibc refuses
+      # to load a binary that needs more than the CPU has).
+      # ldflags: the AVX2 builds say so themselves (-z x86-64-v3), so an
+      # older CPU gets the loader's clear error instead of SIGILL mid-search.
       # emulate: a CPU model without AVX that qemu runs the bench on, for the
       # binary meant for such CPUs; the runner itself has AVX2 and would not
       # notice an AVX2 instruction in it.
       matrix:
         include:
-          - runner: ubuntu-latest
+          - runner: ubuntu-24.04
             os: linux
             arch: x86-64-bmi2
             comp: gcc
             shell: bash
             ext: ""
             isa: --exact v3
-          - runner: ubuntu-latest
+            ldflags: -Wl,-z,x86-64-v3
+          - runner: ubuntu-24.04
             os: linux
             arch: x86-64-avx2
             comp: gcc
             shell: bash
             ext: ""
             isa: --exact v3
-          - runner: ubuntu-latest
+            ldflags: -Wl,-z,x86-64-v3
+          - runner: ubuntu-24.04
             os: linux
             arch: x86-64-sse41-popcnt
             comp: gcc
@@ -128,9 +139,10 @@ jobs:
           echo "asset=$canon" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
-      # What the compiler targets when given no -march: the Makefile pins the
-      # baseline for every x86-64 ARCH, but a log of the default makes a
-      # changed runner image visible (Ubuntu 26.04's GCC defaults to v3).
+      # What the compiler targets when given no -march, and the level the
+      # system's startup files declare: the Makefile pins -march for every
+      # x86-64 ARCH, but crt1.o is linked into every binary, so a runner
+      # image built for a higher level shows up here first.
       - name: Toolchain report
         if: runner.os == 'Linux'
         run: |
@@ -138,24 +150,8 @@ jobs:
           g++ -Q --help=target 2>/dev/null | grep -E '^[[:space:]]+-m(arch|tune)=' || true
           echo | g++ -dM -E -x c++ - | grep -E '__(AVX2|SSE4_2|x86_64)__' | sort || true
           ldd --version | head -n 1
-
-      - name: ISA diagnostics (temporary)
-        if: matrix.emulate != ''
-        continue-on-error: true
-        run: |
-          set +e
-          g++ -v 2>&1 | tail -n 2
-          g++ -dumpspecs | grep -n -iE 'needed|isa'
-          for f in Scrt1.o crt1.o crti.o crtn.o crtbeginS.o crtendS.o libgcc.a libgcov.a libgcc_s.so libstdc++.so libc_nonshared.a libc.so libm.so; do
-            p=$(g++ -print-file-name=$f); echo "== $f -> $p"
-            readelf -n "$p" 2>/dev/null | grep -E 'ISA (needed|used)' | sort | uniq -c
-          done
-          cd "$RUNNER_TEMP"
-          echo 'int main(){return 0;}' > t.cpp
-          g++ -march=x86-64 -c t.cpp -o t.o; echo "== t.o"; readelf -n t.o | grep -E 'ISA'
-          g++ -march=x86-64 t.o -o t -Wl,-z,isa-level-report=all 2>&1 | head -n 40
-          echo "== t"; readelf -n t | grep -E 'ISA'
-          g++ -march=x86-64 -c t.cpp -o t2.o -v 2>&1 | grep -E 'cc1plus|/as ' | head -n 3
+          crt=$(g++ -print-file-name=Scrt1.o)
+          echo "$crt: $(readelf -n "$crt" | grep -E 'ISA needed' | sed 's/^[[:space:]]*//' || echo 'no ISA needed note')"
 
       # Profile-guided. The instrumented build plays the bench with the network
       # fetched above (the engine evaluates with NNUE only), and the final build
@@ -165,7 +161,8 @@ jobs:
         run: |
           set -o pipefail
           log="$(mktemp)"
-          make -j2 profile-build ARCH=${{ matrix.arch }} COMP=${{ matrix.comp }} \
+          LDFLAGS="${{ matrix.ldflags }}" \
+            make -j2 profile-build ARCH=${{ matrix.arch }} COMP=${{ matrix.comp }} \
             EXE="$EXE_NAME" 2>&1 | tee "$log"
           # If the profiling bench finds no network, profile-build still exits 0
           # and only warns, and what it leaves profiled nothing of the search, so
