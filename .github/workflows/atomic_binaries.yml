@@ -8,6 +8,13 @@ on:
   push:
     branches:
       - main
+  # A pull request that touches how the binaries are built builds them too
+  # (artifacts only; the rolling prerelease is published from main alone).
+  pull_request:
+    paths:
+      - src/Makefile
+      - scripts/check_elf_isa_level.py
+      - .github/workflows/atomic_binaries.yml
   workflow_dispatch:
 
 permissions:
@@ -40,6 +47,11 @@ jobs:
         shell: ${{ matrix.shell }}
     strategy:
       fail-fast: false
+      # isa: the x86-64 level each Linux binary may declare it needs (glibc
+      # refuses to load a binary that needs more than the CPU has).
+      # emulate: a CPU model without AVX that qemu runs the bench on, for the
+      # binary meant for such CPUs; the runner itself has AVX2 and would not
+      # notice an AVX2 instruction in it.
       matrix:
         include:
           - runner: ubuntu-latest
@@ -48,18 +60,22 @@ jobs:
             comp: gcc
             shell: bash
             ext: ""
+            isa: --exact v3
           - runner: ubuntu-latest
             os: linux
             arch: x86-64-avx2
             comp: gcc
             shell: bash
             ext: ""
+            isa: --exact v3
           - runner: ubuntu-latest
             os: linux
             arch: x86-64-sse41-popcnt
             comp: gcc
             shell: bash
             ext: ""
+            isa: --max v2
+            emulate: Nehalem
           - runner: windows-latest
             os: windows
             arch: x86-64-bmi2
@@ -76,6 +92,8 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
+          # The emulated bench compares against the newest `Bench:` line.
+          fetch-depth: 100
 
       - name: Set up MinGW
         if: runner.os == 'Windows'
@@ -109,6 +127,17 @@ jobs:
           echo "CANON_NET=$canon" >> "$GITHUB_ENV"
           echo "asset=$canon" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      # What the compiler targets when given no -march: the Makefile pins the
+      # baseline for every x86-64 ARCH, but a log of the default makes a
+      # changed runner image visible (Ubuntu 26.04's GCC defaults to v3).
+      - name: Toolchain report
+        if: runner.os == 'Linux'
+        run: |
+          g++ --version | head -n 1
+          g++ -Q --help=target 2>/dev/null | grep -E '^[[:space:]]+-m(arch|tune)=' || true
+          echo | g++ -dM -E -x c++ - | grep -E '__(AVX2|SSE4_2|x86_64)__' | sort || true
+          ldd --version | head -n 1
 
       # Profile-guided. The instrumented build plays the bench with the network
       # fetched above (the engine evaluates with NNUE only), and the final build
@@ -156,6 +185,52 @@ jobs:
           nodes=$(grep -oE 'Nodes searched[[:space:]]*:[[:space:]]*[0-9]+' bench.log | grep -oE '[0-9]+$' | tail -n 1)
           test -n "$nodes"
           test "$nodes" -gt 0
+
+      # glibc reads the x86-64 level a binary declares (.note.gnu.property,
+      # ISA_1_NEEDED) and refuses to start it on a CPU below that level. The
+      # runner has AVX2, so the bench above passes whatever was declared: the
+      # sse41-popcnt binary once shipped needing x86-64-v3 and failed to load
+      # on every CPU it exists for. Check the declared level, and for the
+      # pre-AVX2 binary also that no AVX instruction made it into the code.
+      - name: Check the declared x86-64 level
+        if: matrix.isa != ''
+        working-directory: src
+        run: |
+          python3 ../scripts/check_elf_isa_level.py "$EXE_NAME" ${{ matrix.isa }}
+          echo "Highest glibc symbol version required:" \
+            "$(objdump -T "$EXE_NAME" | grep -oE 'GLIBC_[0-9.]+' | sort -Vu | tail -n 1)"
+          if [ -n "${{ matrix.emulate }}" ]; then
+            objdump -d --no-show-raw-insn "$EXE_NAME" > disasm.txt
+            avx=$(grep -cE '%[yz]mm|^[[:space:]]*[0-9a-f]+:[[:space:]]+v[a-z0-9]+[[:space:]]+.*%xmm' disasm.txt || true)
+            rm -f disasm.txt
+            echo "AVX instructions in the code: $avx"
+            test "$avx" -eq 0
+          fi
+
+      - name: Extract the bench number from the commit history
+        if: matrix.emulate != ''
+        run: |
+          for hash in $(git rev-list -100 HEAD); do
+            benchref=$(git show -s $hash | tac | grep -m 1 -o -x '[[:space:]]*\b[Bb]ench[ :]\+[1-9][0-9]\{5,7\}\b[[:space:]]*' | sed 's/[^0-9]//g') && break || true
+          done
+          test -n "$benchref" || { echo "No Bench: line in the last 100 commits"; exit 1; }
+          echo "benchref=$benchref" >> "$GITHUB_ENV"
+          echo "Reference bench: $benchref (from $hash)"
+
+      # Run the binary as a CPU without AVX would: qemu's CPU model hides AVX
+      # from both the loader's level check and the instruction decoder, so a
+      # binary needing more than that CPU has fails here instead of on a user's
+      # machine. The signature proves the emulated run searched the same tree.
+      - name: Bench signature on an emulated ${{ matrix.emulate }}
+        if: matrix.emulate != ''
+        working-directory: embedcheck
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q qemu-user
+          printf '#!/bin/sh\nexec qemu-x86_64 -cpu %s "%s" "$@"\n' \
+            "${{ matrix.emulate }}" "$PWD/$EXE_NAME" > emulated
+          chmod +x emulated
+          EXE="$PWD/emulated" ../tests/signature.sh "$benchref"
 
       # The embedded network is most of the binary and does not compress, so
       # zipping it only costs upload time.

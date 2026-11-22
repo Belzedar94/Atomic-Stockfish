@@ -920,6 +920,30 @@ ifeq ($(bits),64)
 	CXXFLAGS += -DIS_64BIT
 endif
 
+### 3.4.1 x86-64 baseline
+### Each x86-64 ARCH names the extensions it may use; the -m flags below add
+### them on top of whatever the compiler targets by default. A toolchain whose
+### default is not plain x86-64 (Ubuntu 26.04's GCC targets x86-64-v3) would
+### otherwise leak AVX2 into x86-64-sse41-popcnt and stamp the binary as
+### needing x86-64-v3, which the dynamic loader then refuses on such CPUs.
+### Pin the baseline: x86-64 for the pre-AVX2 targets, x86-64-v3 for the
+### AVX2-and-up targets (every AVX2 CPU has the rest of v3). A compiler too
+### old to know x86-64-v3 (GCC < 11, Clang < 12) defaults to plain x86-64
+### anyway, so it gets that and the -m flags below.
+ifeq ($(arch),x86_64)
+	ifeq ($(comp),$(filter $(comp),gcc clang mingw icx))
+		ifeq ($(avx2),yes)
+			ifeq ($(shell echo | $(CXX) $(CXXFLAGS) -march=x86-64-v3 -x c++ -E ->/dev/null 2>&1 && echo yes),yes)
+				CXXFLAGS += -march=x86-64-v3
+			else
+				CXXFLAGS += -march=x86-64
+			endif
+		else
+			CXXFLAGS += -march=x86-64
+		endif
+	endif
+endif
+
 ### 3.5 prefetch and popcount
 ifeq ($(prefetch),yes)
 	ifeq ($(sse),yes)
