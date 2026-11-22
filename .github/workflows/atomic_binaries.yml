@@ -146,10 +146,10 @@ jobs:
       - name: Toolchain report
         if: runner.os == 'Linux'
         run: |
-          g++ --version | head -n 1
+          g++ --version | sed -n 1p
           g++ -Q --help=target 2>/dev/null | grep -E '^[[:space:]]+-m(arch|tune)=' || true
           echo | g++ -dM -E -x c++ - | grep -E '__(AVX2|SSE4_2|x86_64)__' | sort || true
-          ldd --version | head -n 1
+          ldd --version | sed -n 1p
           crt=$(g++ -print-file-name=Scrt1.o)
           echo "$crt: $(readelf -n "$crt" | grep -E 'ISA needed' | sed 's/^[[:space:]]*//' || echo 'no ISA needed note')"
 
