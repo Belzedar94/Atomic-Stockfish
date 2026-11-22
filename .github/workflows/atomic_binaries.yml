@@ -139,6 +139,24 @@ jobs:
           echo | g++ -dM -E -x c++ - | grep -E '__(AVX2|SSE4_2|x86_64)__' | sort || true
           ldd --version | head -n 1
 
+      - name: ISA diagnostics (temporary)
+        if: matrix.emulate != ''
+        continue-on-error: true
+        run: |
+          set +e
+          g++ -v 2>&1 | tail -n 2
+          g++ -dumpspecs | grep -n -iE 'needed|isa'
+          for f in Scrt1.o crt1.o crti.o crtn.o crtbeginS.o crtendS.o libgcc.a libgcov.a libgcc_s.so libstdc++.so libc_nonshared.a libc.so libm.so; do
+            p=$(g++ -print-file-name=$f); echo "== $f -> $p"
+            readelf -n "$p" 2>/dev/null | grep -E 'ISA (needed|used)' | sort | uniq -c
+          done
+          cd "$RUNNER_TEMP"
+          echo 'int main(){return 0;}' > t.cpp
+          g++ -march=x86-64 -c t.cpp -o t.o; echo "== t.o"; readelf -n t.o | grep -E 'ISA'
+          g++ -march=x86-64 t.o -o t -Wl,-z,isa-level-report=all 2>&1 | head -n 40
+          echo "== t"; readelf -n t | grep -E 'ISA'
+          g++ -march=x86-64 -c t.cpp -o t2.o -v 2>&1 | grep -E 'cc1plus|/as ' | head -n 3
+
       # Profile-guided. The instrumented build plays the bench with the network
       # fetched above (the engine evaluates with NNUE only), and the final build
       # is optimised for what that run executed. Both embed the network.
