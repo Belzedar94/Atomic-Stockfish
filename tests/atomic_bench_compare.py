@@ -20,6 +20,7 @@ from contextlib import ExitStack
 from dataclasses import dataclass
 from decimal import Decimal, ROUND_HALF_UP, localcontext
 from pathlib import Path
+from time import monotonic
 from typing import Any, Callable, Mapping, Optional, Sequence
 
 import psutil
@@ -49,6 +50,7 @@ MEASURED_REPETITIONS = 5
 NORMATIVE_NODES_PER_FEN = 100_000
 NORMATIVE_HASH_MB = 64
 NORMATIVE_SEARCH_TIMEOUT_SECONDS = 60
+SHUTDOWN_GRACE_SECONDS = 2.0
 CANDIDATE_NNUE_ARCHITECTURE_MARKER = "(45MiB, (45056, 1024, 16, 32, 1))"
 BENCHMARK_JSON_SCHEMA_VERSION = 1
 BENCHMARK_GATE = "bmi2-vs-fairy"
@@ -259,13 +261,14 @@ class UciEngine:
 
     def read_until(self, predicate: Callable[[str], bool]) -> list[str]:
         output: list[str] = []
-        while True:
+        # UCI info lines are progress, not completion. A noisy engine must
+        # not be able to extend the response deadline indefinitely.
+        deadline = monotonic() + self.timeout
+        while (remaining := deadline - monotonic()) > 0:
             try:
-                line = self.lines.get(timeout=self.timeout)
-            except queue.Empty as exc:
-                raise TimeoutError(
-                    f"{self.label} timed out; last output={output[-10:]}"
-                ) from exc
+                line = self.lines.get(timeout=remaining)
+            except queue.Empty:
+                break
             if line is None:
                 raise RuntimeError(
                     f"{self.label} exited with {self.process.poll()}; "
@@ -273,7 +276,13 @@ class UciEngine:
                 )
             output.append(line)
             if predicate(line):
-                return output
+                if monotonic() <= deadline:
+                    return output
+                break
+
+        raise TimeoutError(
+            f"{self.label} timed out after {self.timeout:g}s; last output={output[-10:]}"
+        )
 
     def ready(self) -> list[str]:
         self.send("isready")
@@ -343,6 +352,9 @@ class UciEngine:
         )
 
     def close(self) -> None:
+        # A stuck search may not read quit. Don't let shutdown add another
+        # full search timeout before escalating to kill.
+        wait_timeout = min(self.timeout, SHUTDOWN_GRACE_SECONDS)
         if self.process.poll() is None:
             try:
                 try:
@@ -350,7 +362,7 @@ class UciEngine:
                 except (BrokenPipeError, OSError, ValueError):
                     pass
                 try:
-                    self.process.wait(timeout=self.timeout)
+                    self.process.wait(timeout=wait_timeout)
                 except (subprocess.TimeoutExpired, OSError, ValueError):
                     pass
             finally:
@@ -360,7 +372,7 @@ class UciEngine:
                     except (OSError, ValueError):
                         pass
                     try:
-                        self.process.wait(timeout=self.timeout)
+                        self.process.wait(timeout=wait_timeout)
                     except (subprocess.TimeoutExpired, OSError, ValueError):
                         pass
 
