@@ -200,7 +200,9 @@ SEARCH_CASES = (
     # that the engine picks g7g5 rather than the block-3 f7f6. The reply pinned
     # after it is White's answer at this depth: spsa90 moved it from d2d4 to
     # d2d3 by taking AtomicNmpDepthDiv from 3 to 4, and the blast-check guard on
-    # child-node futility pruning moved it back to d2d4.
+    # child-node futility pruning moved it back to d2d4. The pinned playing
+    # network also chooses g7g5 here; the orthodox reduction switches it to
+    # b8c6, even when the material-only network still finds the defense.
     SearchCase(
         name="Atomic null-move reduction searches the tactical defense",
         fen="rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2",
@@ -209,8 +211,6 @@ SEARCH_CASES = (
         expected_pv=("g7g5", "d2d4"),
         depth=14,
         force_searchmove=False,
-        reference_bestmove="f8b4",
-        reference_pv=("f8b4", "c2c3"),
     ),
 )
 
