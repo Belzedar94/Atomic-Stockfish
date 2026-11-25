@@ -72,9 +72,24 @@ endif
 PREFIX = /usr/local
 BINDIR = $(PREFIX)/bin
 
-### Built-in benchmark for PGO builds. The Atomic NNUE is external, so profile
-### generation explicitly uses the self-contained classical evaluator.
-PGOBENCH = printf 'setoption name Use NNUE value false\nbench\nquit\n' | $(RUN_PREFIX) ./$(EXE)
+### Built-in benchmark for PGO builds: one engine process, two benches. The
+### first runs with the default Use NNUE=true, so the NNUE code is profiled when
+### a network is embedded or found under its default name. The Atomic NNUE is
+### external, so there may be none: that bench then reports "Bench aborted" and
+### the engine reads on. The second bench uses the self-contained classical
+### evaluator and always runs, so a build without a network profiles as before.
+PGOBENCH = printf 'bench\nsetoption name Use NNUE value false\nbench\nquit\n' | $(RUN_PREFIX) ./$(EXE)
+
+### A profile-build whose first bench found no network still completes, but its
+### NNUE code was never profiled. Say so at the end of the build, on stderr.
+PGO_NETWORK_CHECK = \
+	@if grep -q 'Bench aborted: NNUE verification failed' PGOBENCH.out 2>/dev/null; then \
+		echo "" >&2; \
+		echo "WARNING: the profiling run found no NNUE network, so the NNUE code was not" >&2; \
+		echo "profiled. With NNUE on, this binary will be much slower than a plain" >&2; \
+		echo "'make build'. Put the network in src/ under its default name (see README)," >&2; \
+		echo "or embed it, and run profile-build again." >&2; \
+	fi
 
 ### Source and object files
 SRCS = atomic_init.cpp attacks.cpp benchmark.cpp bitboard.cpp evaluate.cpp main.cpp \
@@ -1384,6 +1399,13 @@ ifneq ($(SUPPORTED_ARCH), true)
 endif
 
 
+### Cap the parallelism of the recursive sub-make: OpenBench workers invoke
+### `make -j` with no job limit, and one cc1plus per hardware thread runs a
+### many-core machine out of memory on the largest translation units. Defaults
+### to min(nproc, 8); override with BUILD_JOBS=<n> or OPENBENCH_BUILD_JOBS=<n>.
+BUILD_JOBS_NPROC := $(shell nproc 2>/dev/null || sysctl -n hw.logicalcpu 2>/dev/null || echo $(NUMBER_OF_PROCESSORS))
+BUILD_JOBS ?= $(or $(OPENBENCH_BUILD_JOBS),$(firstword $(filter 1 2 3 4 5 6 7,$(BUILD_JOBS_NPROC)) 8))
+
 .PHONY: help analyze build profile-build data-generator data-generator-tests data-tools data-tools-tests atomic-data-tools-json-tests atomic-unit-tests atomic-api-tests atomic-syzygy-driver atomic-nnue-incremental-tests atomic-v2-test-fixture atomic-v2-backend-core-tests atomic-v2-incremental-tests atomic-v3-hm-oracle-tests atomic-v3-capture-pair-tests atomic-v3-king-blast-ep-tests atomic-v3-blast-ring-tests atomic-v3-full-refresh-tests atomic-v3-numeric-tests atomic-v3-wire-test-fixture atomic-v3-wire-tests atomic-v3-scalar-tests atomic-v3-incremental-tests atomic-v3-incremental-stress-tests atomic-v3-incremental-simd-kernel-tests atomic-v3-incremental-simd-tests atomic-v3-incremental-simd-stress-tests atomic-v3-incremental-simd-benchmark atomic-v3-simd-tests legacy-atomic-v1-tests atomic-bin-v2-tests atomic-bin-v2-sink-tests atomic-bin-v2-manifest-tests atomic-bin-v2-manifest-reader-tests atomic-bin-v2-reader-tests atomic-v3-trajectory-tests atomic-v3-private-staging-tests macos-lipo strip install clean net \
 	objclean profileclean config-sanity \
 	icx-profile-use icx-profile-make \
@@ -1396,12 +1418,12 @@ analyze: config-sanity objclean
 
 ifeq ($(UNIVERSAL_BUILD),false)
 build: config-sanity
-	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) all
+	$(MAKE) -j$(BUILD_JOBS) ARCH=$(ARCH) COMP=$(COMP) all
 
 profile-build: config-sanity objclean profileclean
 	@echo ""
 	@echo "Step 1/4. Building instrumented executable ..."
-	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) $(profile_make)
+	$(MAKE) -j$(BUILD_JOBS) ARCH=$(ARCH) COMP=$(COMP) $(profile_make)
 	@echo ""
 	@echo "Step 2/4. Running benchmark for pgo-build ..."
 	$(PGOBENCH) > PGOBENCH.out 2>&1
@@ -1409,9 +1431,10 @@ profile-build: config-sanity objclean profileclean
 	@echo ""
 	@echo "Step 3/4. Building optimized executable ..."
 	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) objclean
-	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) $(profile_use)
+	$(MAKE) -j$(BUILD_JOBS) ARCH=$(ARCH) COMP=$(COMP) $(profile_use)
 	@echo ""
 	@echo "Step 4/4. Deleting profile data ..."
+	$(PGO_NETWORK_CHECK)
 	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) profileclean
 endif
 
@@ -1482,6 +1505,7 @@ else
 	@echo "Step 4/4. Extracting LTO-optimized relocatable object ..."
 	cp "$(basename $(EXE))$(LTO_OBJ_SUFFIX)" stockfish.o
 endif
+	$(PGO_NETWORK_CHECK)
 
 universal-object-nopgo: objclean universalclean
 	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) ENV_LDFLAGS='$(SAVE_TEMPS) $(NNUE_EMBED_OBJ)' all
@@ -2267,6 +2291,12 @@ endif  # UNIVERSAL_BUILD
 # by its OpenBench network SHA. Copy it to the canonical short name inside the
 # ephemeral build checkout, then embed it so the moved executable has no
 # dependency on a temporary source path.
+#
+# The embedding define goes through ENV_CXXFLAGS, which every compile of every
+# profile recipe reads. EXTRAPROFILEFLAGS only reaches the GCC recipes: with
+# CXX=clang++ the "gcc is really clang" check picks clang-profile-make/use,
+# which drop it, so the binary came out without the network and failed its
+# bench once OpenBench moved it (a clang 23 worker, 27-Oct-2026).
 
 OPENBENCH_NET = atomic_run3b_e202_l05.nnue
 
@@ -2285,9 +2315,10 @@ else
 	@test -f "$(EVALFILE)" || { echo "ERROR: OpenBench EVALFILE does not exist: $(EVALFILE)" >&2; exit 2; }
 	@cp "$(EVALFILE)" "$(OPENBENCH_NET).tmp"
 	@mv "$(OPENBENCH_NET).tmp" "$(OPENBENCH_NET)"
-	+$(MAKE) build EXE="$(EXE)" CXX="$(CXX)" \
-		ARCH=x86-64-bmi2 COMP=$(OPENBENCH_COMP) \
-		EXTRACXXFLAGS='$(EXTRACXXFLAGS) -DATOMIC_NNUE_EMBEDDING'
+	+$(MAKE) profile-build EXE="$(EXE)" CXX="$(CXX)" \
+		ARCH=native COMP=$(OPENBENCH_COMP) \
+		ENV_CXXFLAGS='$(ENV_CXXFLAGS) -DATOMIC_NNUE_EMBEDDING' \
+		EXTRAPROFILEFLAGS='$(EXTRACXXFLAGS)'
 endif
 
 # Distributed generation needs the isolated generator, not the playing-engine
@@ -2303,7 +2334,7 @@ else
 	@test -f "$(EVALFILE)" || { echo "ERROR: OpenBench EVALFILE does not exist: $(EVALFILE)" >&2; exit 2; }
 	@cp "$(EVALFILE)" "$(OPENBENCH_NET).tmp"
 	@mv "$(OPENBENCH_NET).tmp" "$(OPENBENCH_NET)"
-	+$(MAKE) data-generator EXE=atomic-openbench-playing-unused \
+	+$(MAKE) -j$(BUILD_JOBS) data-generator EXE=atomic-openbench-playing-unused \
 		ATOMIC_DATA_GENERATOR_EXE="$(EXE)" CXX="$(CXX)" \
 		ARCH=x86-64-bmi2 COMP=$(OPENBENCH_COMP) \
 		EXTRACXXFLAGS='$(EXTRACXXFLAGS) -DATOMIC_NNUE_EMBEDDING'
